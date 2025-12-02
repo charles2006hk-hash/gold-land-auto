@@ -18,7 +18,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// --- Firebase Imports ---
+// --- Firebase Imports (這些我已經幫您寫好了，請勿重複貼上) ---
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getAuth, 
@@ -44,18 +44,10 @@ import {
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// ★★★ 請將您的 Firebase Config 貼在下方 (取代空字串) ★★★
+// ★★★ 請將您的 Firebase Config 填入下方 ★★★
+// 注意：只填入引號 "" 裡面的值，不要貼上整段 import 程式碼
 // ------------------------------------------------------------------
-
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
+const YOUR_FIREBASE_CONFIG = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
   authDomain: "gold-land-auto.firebaseapp.com",
   projectId: "gold-land-auto",
@@ -65,14 +57,13 @@ const firebaseConfig = {
   measurementId: "G-DQ9N75DH5V"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-// --- 自動偵測設定 ---
+// --- 自動偵測與初始化設定 (以下程式碼不需要更動) ---
 let firebaseConfig = YOUR_FIREBASE_CONFIG;
 
-// 如果您還沒填入上面的設定，程式會嘗試抓取環境變數 (不用動這裡)
-if (!firebaseConfig.apiKey) {
+// 檢查是否已填寫設定，或是使用環境變數
+const isConfigConfigured = firebaseConfig.apiKey !== "請填入您的值" && firebaseConfig.apiKey !== "";
+
+if (!isConfigConfigured) {
   try {
     if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
       firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG);
@@ -85,13 +76,13 @@ if (!firebaseConfig.apiKey) {
 }
 
 // 1. 初始化 App
-const app = getApps().length > 0 ? getApp() : (firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
+const app = getApps().length > 0 ? getApp() : (isConfigConfigured || firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
 
-// 2. 初始化 Auth (智慧切換模式：正式站用硬碟，預覽站用記憶體)
+// 2. 初始化 Auth (智慧切換模式)
 let auth: any = null;
 if (app) {
   try {
-    // 預設嘗試使用標準儲存 (讓您可以永久登入)
+    // 優先嘗試標準模式 (支援永久登入)
     auth = getAuth(app); 
   } catch (e: any) {
     console.warn("Standard Auth Init Failed, trying fallback...", e);
@@ -104,7 +95,7 @@ if (app) {
         persistence: [browserLocalPersistence, inMemoryPersistence]
       });
     } catch (e) {
-      // 終極備案：只用記憶體 (保證不報錯，但重整會登出)
+      // 終極備案：只用記憶體
       try {
          auth = initializeAuth(app, { persistence: inMemoryPersistence });
       } catch(finalErr) {
@@ -187,7 +178,8 @@ export default function GoldLandAutoDMS() {
 
   // --- Firebase Authentication ---
   useEffect(() => {
-    if (!auth) {
+    // 若沒有 app 實例，表示設定檔未填或錯誤，停止 loading
+    if (!app || !auth) {
       setLoading(false);
       return;
     }
@@ -202,10 +194,9 @@ export default function GoldLandAutoDMS() {
       } catch (error: any) {
         console.error("Login failed:", error);
         
-        // 如果是 storage 錯誤，嘗試用記憶體模式重試 (針對預覽視窗)
+        // 如果是 storage 錯誤，嘗試用記憶體模式重試
         if (error.code === 'auth/internal-error' || error.message?.includes('storage')) {
             try {
-                // 這裡我們無法重新初始化，但可以提示使用者
                 setAuthError("Preview Mode (Storage Blocked)");
             } catch(e) {}
         } else {
@@ -480,7 +471,7 @@ export default function GoldLandAutoDMS() {
             </div>
             {user && <span className="text-[10px] opacity-50">ID: {user.uid.slice(0,6)}...</span>}
             {/* 警告提示 */}
-            {!firebaseConfig.apiKey && (
+            {!isConfigConfigured && (
               <div className="mt-2 text-[10px] text-yellow-500 border border-yellow-700 rounded p-1 flex items-center bg-slate-800 animate-pulse">
                 <AlertTriangle size={12} className="mr-1" />
                 <span className="scale-90">Please Set Config!</span>
