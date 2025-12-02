@@ -17,15 +17,15 @@ import {
   DownloadCloud
 } from 'lucide-react';
 
-// --- Firebase Imports ---
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+// --- Firebase Imports (改為標準 npm 套件引入) ---
+import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   signInAnonymously, 
   onAuthStateChanged, 
   signInWithCustomToken,
   User 
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+} from "firebase/auth";
 import { 
   getFirestore, 
   collection, 
@@ -37,13 +37,13 @@ import {
   orderBy, 
   serverTimestamp,
   writeBatch
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+} from "firebase/firestore";
 
 // --- Firebase Config & Initialization ---
 const firebaseConfig = JSON.parse(
   typeof __firebase_config !== 'undefined' 
     ? __firebase_config 
-    : '{}' // Fallback for local dev (will fail gracefully if not configured)
+    : '{}' 
 );
 
 // Initialize Firebase only if config exists to prevent crashes in non-env environments
@@ -344,8 +344,7 @@ export default function GoldLandAutoDMS() {
         </div>
       );
     }
-    // (Other templates follow similar structure - omitted for brevity but logic is handled by docType)
-    // 簡化重複代碼，其他文檔類型使用相同框架
+
     if (docType === 'invoice') {
         return (
             <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black">
