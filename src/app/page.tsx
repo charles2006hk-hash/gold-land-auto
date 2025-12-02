@@ -24,6 +24,8 @@ import {
   signInAnonymously, 
   onAuthStateChanged, 
   signInWithCustomToken,
+  setPersistence, // 新增
+  inMemoryPersistence, // 新增
   User 
 } from "firebase/auth";
 import { 
@@ -40,7 +42,6 @@ import {
 } from "firebase/firestore";
 
 // --- 解決 TypeScript 編譯錯誤的關鍵宣告 ---
-// 告訴 TypeScript 這些全域變數可能存在
 declare global {
   var __firebase_config: string | undefined;
   var __app_id: string | undefined;
@@ -48,27 +49,21 @@ declare global {
 }
 
 // --- Firebase Config & Initialization ---
-// 安全地取得設定，如果變數不存在則使用空物件
 let firebaseConfig = {};
 try {
-  // 優先檢查環境變數 (標準 Next.js 方式)
   if (process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
     firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG);
-  } 
-  // 其次檢查注入變數 (特定環境)
-  else if (typeof window !== 'undefined' && window.__firebase_config) {
+  } else if (typeof window !== 'undefined' && window.__firebase_config) {
     firebaseConfig = JSON.parse(window.__firebase_config);
   }
 } catch (e) {
   console.warn("Firebase config parsing failed:", e);
 }
 
-// 防止在沒有設定的情況下初始化導致崩潰
 const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
 const auth = app ? getAuth(app) : null;
 const db = app ? getFirestore(app) : null;
 
-// 使用環境變數或預設值
 const appId = (typeof window !== 'undefined' && window.__app_id) || 'gold-land-auto';
 
 // --- 公司資料配置 ---
@@ -83,7 +78,7 @@ const COMPANY_INFO = {
 
 // --- 類型定義 ---
 type Vehicle = {
-  id: string; // Firestore Doc ID
+  id: string;
   regMark: string;
   make: string;
   model: string;
@@ -104,7 +99,7 @@ type Customer = {
 
 type DocType = 'sales_contract' | 'purchase_contract' | 'invoice' | 'receipt';
 
-// --- 模擬資料 (用於初始化) ---
+// --- 模擬資料 ---
 const MOCK_INVENTORY = [
   { regMark: 'KG8888', make: 'Toyota', model: 'Alphard 3.5', year: '2019', chassisNo: 'AGH30-1234567', engineNo: '2GR-987654', price: 388000, status: 'In Stock' },
   { regMark: 'AB1234', make: 'Mercedes-Benz', model: 'E200 AMG', year: '2018', chassisNo: 'W213-5556666', engineNo: 'M274-111222', price: 238000, status: 'In Stock' },
@@ -122,7 +117,6 @@ const formatDate = (date: Date) => {
 
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
-  // State
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc'>('dashboard');
   const [inventory, setInventory] = useState<Vehicle[]>([]);
@@ -130,19 +124,16 @@ export default function GoldLandAutoDMS() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // 開單 State
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
   const [deposit, setDeposit] = useState<number>(0);
   const [docType, setDocType] = useState<DocType>('sales_contract');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
-  // Print Ref
   const printAreaRef = useRef<HTMLDivElement>(null);
   const handlePrint = () => { window.print(); };
 
-  // --- Firebase Authentication ---
+  // --- Firebase Authentication (修正版) ---
   useEffect(() => {
-    // 如果沒有初始化 Firebase (例如在本地且沒有設定 ENV)，則跳過
     if (!auth) {
       setLoading(false);
       return;
@@ -150,32 +141,45 @@ export default function GoldLandAutoDMS() {
 
     const initAuth = async () => {
       try {
-        // 優先使用全域注入的 token
         if (typeof window !== 'undefined' && window.__initial_auth_token) {
           await signInWithCustomToken(auth, window.__initial_auth_token);
         } else {
-          // 否則使用匿名登入
+          // 嘗試直接匿名登入
           await signInAnonymously(auth);
         }
-      } catch (error) {
-        console.error("Auth failed:", error);
+      } catch (error: any) {
+        console.warn("Standard auth failed, attempting fallback:", error);
+        
+        // 如果錯誤是因為「禁止存取儲存空間 (Access to storage is not allowed)」，則切換到記憶體模式
+        // 這通常發生在 iframe 或無痕模式中
+        if (error.code === 'auth/internal-error' || error.message?.includes('storage')) {
+          try {
+            await setPersistence(auth, inMemoryPersistence);
+            await signInAnonymously(auth);
+            console.log("Auth recovered using inMemoryPersistence");
+          } catch (retryError) {
+             console.error("Auth retry failed:", retryError);
+             setLoading(false); // 停止 loading 避免卡住
+          }
+        } else {
+          setLoading(false);
+        }
       }
     };
     
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      if (!currentUser) setLoading(false); // 如果沒有 user，也要停止 loading
     });
     return () => unsubscribe();
   }, []);
 
-  // --- Firestore Real-time Listener ---
+  // --- Firestore Listener ---
   useEffect(() => {
     if (!user || !db) return;
 
-    // 使用使用者的私人集合: artifacts/{appId}/users/{userId}/inventory
     const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
-    // 按建立時間倒序排列
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
     setLoading(true);
@@ -188,6 +192,7 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
+      // 如果 Firestore 也因為 storage 權限報錯，停止 loading 避免 UI 卡住
       setLoading(false);
     });
 
@@ -199,7 +204,7 @@ export default function GoldLandAutoDMS() {
   const handleAddVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !user) {
-        alert("無法連線至資料庫，請檢查 Firebase 設定。");
+        alert("系統離線或未登入，無法儲存資料。\n(Offline mode: Cannot save data)");
         return;
     }
 
@@ -239,14 +244,17 @@ export default function GoldLandAutoDMS() {
   };
 
   const loadDemoData = async () => {
-    if (!db || !user) return;
+    if (!db || !user) {
+        alert("系統目前離線 (Offline)，無法寫入資料庫。\n這可能是因為瀏覽器隱私設定阻擋了資料存取。");
+        return;
+    }
     if (!confirm('這將會寫入 3 筆範例資料到您的資料庫，確定嗎？')) return;
 
     const batch = writeBatch(db);
     const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
 
     MOCK_INVENTORY.forEach(car => {
-      const docRef = doc(inventoryRef); // Auto ID
+      const docRef = doc(inventoryRef);
       batch.set(docRef, { ...car, createdAt: serverTimestamp() });
     });
 
@@ -255,7 +263,7 @@ export default function GoldLandAutoDMS() {
       alert('範例資料已載入！');
     } catch (err) {
       console.error(err);
-      alert('載入失敗');
+      alert('載入失敗，請稍後再試。');
     }
   };
 
@@ -282,10 +290,7 @@ export default function GoldLandAutoDMS() {
       <div className="mb-8">
         <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2">
           <div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-gray-50 rounded-lg overflow-hidden">
-             {/* 嘗試顯示 Logo，如果沒有則顯示 Placeholder */}
              <div className="flex flex-col items-center justify-center text-gray-400 w-full h-full">
-                {/* 如果有實際 Logo，請取消註解下面這行並將 src 改為您的圖片路徑 */}
-                {/* <img src="/logo.png" alt="Gold Land Logo" className="object-contain w-full h-full" /> */}
                 <div className="flex flex-col items-center">
                     <Building2 size={32} />
                     <span className="text-[10px] mt-1">Logo</span>
