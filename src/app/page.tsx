@@ -17,7 +17,7 @@ import {
   DownloadCloud
 } from 'lucide-react';
 
-// --- Firebase Imports (改為標準 npm 套件引入) ---
+// --- Firebase Imports ---
 import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
@@ -39,18 +39,37 @@ import {
   writeBatch
 } from "firebase/firestore";
 
-// --- Firebase Config & Initialization ---
-const firebaseConfig = JSON.parse(
-  typeof __firebase_config !== 'undefined' 
-    ? __firebase_config 
-    : '{}' 
-);
+// --- 解決 TypeScript 編譯錯誤的關鍵宣告 ---
+// 告訴 TypeScript 這些全域變數可能存在
+declare global {
+  var __firebase_config: string | undefined;
+  var __app_id: string | undefined;
+  var __initial_auth_token: string | undefined;
+}
 
-// Initialize Firebase only if config exists to prevent crashes in non-env environments
+// --- Firebase Config & Initialization ---
+// 安全地取得設定，如果變數不存在則使用空物件
+let firebaseConfig = {};
+try {
+  // 優先檢查環境變數 (標準 Next.js 方式)
+  if (process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
+    firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG);
+  } 
+  // 其次檢查注入變數 (特定環境)
+  else if (typeof window !== 'undefined' && window.__firebase_config) {
+    firebaseConfig = JSON.parse(window.__firebase_config);
+  }
+} catch (e) {
+  console.warn("Firebase config parsing failed:", e);
+}
+
+// 防止在沒有設定的情況下初始化導致崩潰
 const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
 const auth = app ? getAuth(app) : null;
 const db = app ? getFirestore(app) : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'gold-land-auto';
+
+// 使用環境變數或預設值
+const appId = (typeof window !== 'undefined' && window.__app_id) || 'gold-land-auto';
 
 // --- 公司資料配置 ---
 const COMPANY_INFO = {
@@ -123,13 +142,19 @@ export default function GoldLandAutoDMS() {
 
   // --- Firebase Authentication ---
   useEffect(() => {
-    if (!auth) return;
+    // 如果沒有初始化 Firebase (例如在本地且沒有設定 ENV)，則跳過
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
 
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+        // 優先使用全域注入的 token
+        if (typeof window !== 'undefined' && window.__initial_auth_token) {
+          await signInWithCustomToken(auth, window.__initial_auth_token);
         } else {
+          // 否則使用匿名登入
           await signInAnonymously(auth);
         }
       } catch (error) {
@@ -173,7 +198,10 @@ export default function GoldLandAutoDMS() {
 
   const handleAddVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!user || !db) return;
+    if (!db || !user) {
+        alert("無法連線至資料庫，請檢查 Firebase 設定。");
+        return;
+    }
 
     const formData = new FormData(e.currentTarget);
     const newVehicle = {
@@ -199,7 +227,7 @@ export default function GoldLandAutoDMS() {
   };
 
   const deleteVehicle = async (id: string) => {
-    if (!user || !db) return;
+    if (!db || !user) return;
     if (confirm('確定要從雲端刪除此車輛資料？(此動作無法復原)')) {
       try {
         await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inventory', id));
@@ -211,7 +239,7 @@ export default function GoldLandAutoDMS() {
   };
 
   const loadDemoData = async () => {
-    if (!user || !db) return;
+    if (!db || !user) return;
     if (!confirm('這將會寫入 3 筆範例資料到您的資料庫，確定嗎？')) return;
 
     const batch = writeBatch(db);
@@ -254,9 +282,14 @@ export default function GoldLandAutoDMS() {
       <div className="mb-8">
         <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2">
           <div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-gray-50 rounded-lg overflow-hidden">
-             <div className="flex flex-col items-center justify-center text-gray-400">
-                <Building2 size={32} />
-                <span className="text-[10px] mt-1">Logo</span>
+             {/* 嘗試顯示 Logo，如果沒有則顯示 Placeholder */}
+             <div className="flex flex-col items-center justify-center text-gray-400 w-full h-full">
+                {/* 如果有實際 Logo，請取消註解下面這行並將 src 改為您的圖片路徑 */}
+                {/* <img src="/logo.png" alt="Gold Land Logo" className="object-contain w-full h-full" /> */}
+                <div className="flex flex-col items-center">
+                    <Building2 size={32} />
+                    <span className="text-[10px] mt-1">Logo</span>
+                </div>
              </div>
           </div>
           <div className="flex-1 text-right">
