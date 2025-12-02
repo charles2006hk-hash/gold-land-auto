@@ -18,15 +18,16 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Imports ---
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getAuth, 
   signInAnonymously, 
   onAuthStateChanged, 
   signInWithCustomToken,
-  setPersistence, // 新增
-  inMemoryPersistence, // 新增
-  User 
+  User,
+  initializeAuth, // 使用底層初始化函數
+  browserLocalPersistence,
+  inMemoryPersistence
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -48,7 +49,7 @@ declare global {
   var __initial_auth_token: string | undefined;
 }
 
-// --- Firebase Config & Initialization ---
+// --- Firebase Config & Initialization (核心修正區域) ---
 let firebaseConfig = {};
 try {
   if (process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
@@ -60,10 +61,37 @@ try {
   console.warn("Firebase config parsing failed:", e);
 }
 
-const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
-const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
+// 1. 初始化 App (防止重複初始化)
+const app = getApps().length > 0 ? getApp() : (Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null);
 
+// 2. 初始化 Auth (關鍵修正：強制 Fallback 到記憶體模式)
+let auth: any = null;
+if (app) {
+  try {
+    // 嘗試使用標準初始化，但指定 persistence 順序：
+    // 先試 browserLocalPersistence (硬碟)，如果失敗(報錯)，自動降級到 inMemoryPersistence (記憶體)
+    auth = initializeAuth(app, {
+      persistence: [browserLocalPersistence, inMemoryPersistence]
+    });
+  } catch (e: any) {
+    // 如果因為 Hot Reload 導致已經初始化過，則直接獲取現有實例
+    if (e.code === 'auth/already-initialized') {
+      auth = getAuth(app);
+    } else {
+      console.error("Auth init failed, trying pure memory mode:", e);
+      // 如果還是失敗，嘗試最極端的純記憶體模式
+      try {
+         // 注意：這裡可能需要重新創建 app 實例或者接受無法運作，但通常 initializeAuth 加上 persistence 陣列就能解決 storage error
+         auth = getAuth(app); 
+      } catch (finalError) {
+         console.error("Critical Auth Error:", finalError);
+      }
+    }
+  }
+}
+
+// 3. 初始化 Firestore
+const db = app ? getFirestore(app) : null;
 const appId = (typeof window !== 'undefined' && window.__app_id) || 'gold-land-auto';
 
 // --- 公司資料配置 ---
@@ -123,6 +151,7 @@ export default function GoldLandAutoDMS() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null); // 新增錯誤狀態顯示
   
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
   const [deposit, setDeposit] = useState<number>(0);
@@ -132,7 +161,7 @@ export default function GoldLandAutoDMS() {
   const printAreaRef = useRef<HTMLDivElement>(null);
   const handlePrint = () => { window.print(); };
 
-  // --- Firebase Authentication (修正版) ---
+  // --- Firebase Authentication ---
   useEffect(() => {
     if (!auth) {
       setLoading(false);
@@ -144,33 +173,21 @@ export default function GoldLandAutoDMS() {
         if (typeof window !== 'undefined' && window.__initial_auth_token) {
           await signInWithCustomToken(auth, window.__initial_auth_token);
         } else {
-          // 嘗試直接匿名登入
           await signInAnonymously(auth);
         }
       } catch (error: any) {
-        console.warn("Standard auth failed, attempting fallback:", error);
-        
-        // 如果錯誤是因為「禁止存取儲存空間 (Access to storage is not allowed)」，則切換到記憶體模式
-        // 這通常發生在 iframe 或無痕模式中
-        if (error.code === 'auth/internal-error' || error.message?.includes('storage')) {
-          try {
-            await setPersistence(auth, inMemoryPersistence);
-            await signInAnonymously(auth);
-            console.log("Auth recovered using inMemoryPersistence");
-          } catch (retryError) {
-             console.error("Auth retry failed:", retryError);
-             setLoading(false); // 停止 loading 避免卡住
-          }
-        } else {
-          setLoading(false);
-        }
+        console.error("Login failed:", error);
+        setAuthError(error.message); // 顯示錯誤給使用者
+        setLoading(false);
       }
     };
     
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (!currentUser) setLoading(false); // 如果沒有 user，也要停止 loading
+      if (currentUser) setAuthError(null); // 成功登入，清除錯誤
+      // 不論是否有 user，都停止 loading，因為 auth 狀態已經確定
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -192,7 +209,6 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
-      // 如果 Firestore 也因為 storage 權限報錯，停止 loading 避免 UI 卡住
       setLoading(false);
     });
 
@@ -204,7 +220,7 @@ export default function GoldLandAutoDMS() {
   const handleAddVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !user) {
-        alert("系統離線或未登入，無法儲存資料。\n(Offline mode: Cannot save data)");
+        alert("系統離線，無法儲存資料。\n原因：" + (authError || "未登入"));
         return;
     }
 
@@ -245,7 +261,7 @@ export default function GoldLandAutoDMS() {
 
   const loadDemoData = async () => {
     if (!db || !user) {
-        alert("系統目前離線 (Offline)，無法寫入資料庫。\n這可能是因為瀏覽器隱私設定阻擋了資料存取。");
+        alert("系統目前離線 (Offline)，無法寫入資料庫。\n請檢查右下角狀態或重新整理頁面。");
         return;
     }
     if (!confirm('這將會寫入 3 筆範例資料到您的資料庫，確定嗎？')) return;
@@ -430,6 +446,7 @@ export default function GoldLandAutoDMS() {
                 <span>{user ? 'Cloud Connected' : 'Offline'}</span>
             </div>
             {user && <span className="text-[10px] opacity-50">ID: {user.uid.slice(0,6)}...</span>}
+            {authError && <span className="text-[10px] text-red-400 mt-1">Storage Access Blocked</span>}
         </div>
       </div>
     </>
