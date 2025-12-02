@@ -14,7 +14,8 @@ import {
   Building2,
   Database,
   Loader2,
-  DownloadCloud
+  DownloadCloud,
+  AlertTriangle
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -25,7 +26,7 @@ import {
   onAuthStateChanged, 
   signInWithCustomToken,
   User,
-  initializeAuth, // 使用底層初始化函數
+  initializeAuth,
   browserLocalPersistence,
   inMemoryPersistence
 } from "firebase/auth";
@@ -42,49 +43,72 @@ import {
   writeBatch
 } from "firebase/firestore";
 
-// --- 解決 TypeScript 編譯錯誤的關鍵宣告 ---
-declare global {
-  var __firebase_config: string | undefined;
-  var __app_id: string | undefined;
-  var __initial_auth_token: string | undefined;
-}
+// ------------------------------------------------------------------
+// ★★★ 請將您的 Firebase Config 貼在下方 (取代空字串) ★★★
+// ------------------------------------------------------------------
 
-// --- Firebase Config & Initialization (核心修正區域) ---
-let firebaseConfig = {};
-try {
-  if (process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
-    firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG);
-  } else if (typeof window !== 'undefined' && window.__firebase_config) {
-    firebaseConfig = JSON.parse(window.__firebase_config);
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
+  authDomain: "gold-land-auto.firebaseapp.com",
+  projectId: "gold-land-auto",
+  storageBucket: "gold-land-auto.firebasestorage.app",
+  messagingSenderId: "817229766566",
+  appId: "1:817229766566:web:73314925fe0a4d43917967",
+  measurementId: "G-DQ9N75DH5V"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+// --- 自動偵測設定 ---
+let firebaseConfig = YOUR_FIREBASE_CONFIG;
+
+// 如果您還沒填入上面的設定，程式會嘗試抓取環境變數 (不用動這裡)
+if (!firebaseConfig.apiKey) {
+  try {
+    if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
+      firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG);
+    } else if (typeof window !== 'undefined' && (window as any).__firebase_config) {
+      firebaseConfig = JSON.parse((window as any).__firebase_config);
+    }
+  } catch (e) {
+    console.warn("No config found.");
   }
-} catch (e) {
-  console.warn("Firebase config parsing failed:", e);
 }
 
-// 1. 初始化 App (防止重複初始化)
-const app = getApps().length > 0 ? getApp() : (Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null);
+// 1. 初始化 App
+const app = getApps().length > 0 ? getApp() : (firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
 
-// 2. 初始化 Auth (關鍵修正：強制 Fallback 到記憶體模式)
+// 2. 初始化 Auth (智慧切換模式：正式站用硬碟，預覽站用記憶體)
 let auth: any = null;
 if (app) {
   try {
-    // 嘗試使用標準初始化，但指定 persistence 順序：
-    // 先試 browserLocalPersistence (硬碟)，如果失敗(報錯)，自動降級到 inMemoryPersistence (記憶體)
-    auth = initializeAuth(app, {
-      persistence: [browserLocalPersistence, inMemoryPersistence]
-    });
+    // 預設嘗試使用標準儲存 (讓您可以永久登入)
+    auth = getAuth(app); 
   } catch (e: any) {
-    // 如果因為 Hot Reload 導致已經初始化過，則直接獲取現有實例
-    if (e.code === 'auth/already-initialized') {
-      auth = getAuth(app);
-    } else {
-      console.error("Auth init failed, trying pure memory mode:", e);
-      // 如果還是失敗，嘗試最極端的純記憶體模式
+    console.warn("Standard Auth Init Failed, trying fallback...", e);
+  }
+
+  // 如果標準模式失敗 (例如在預覽視窗)，則強制使用底層初始化
+  if (!auth) {
+    try {
+      auth = initializeAuth(app, {
+        persistence: [browserLocalPersistence, inMemoryPersistence]
+      });
+    } catch (e) {
+      // 終極備案：只用記憶體 (保證不報錯，但重整會登出)
       try {
-         // 注意：這裡可能需要重新創建 app 實例或者接受無法運作，但通常 initializeAuth 加上 persistence 陣列就能解決 storage error
-         auth = getAuth(app); 
-      } catch (finalError) {
-         console.error("Critical Auth Error:", finalError);
+         auth = initializeAuth(app, { persistence: inMemoryPersistence });
+      } catch(finalErr) {
+         console.error("Auth Init Critical Error", finalErr);
       }
     }
   }
@@ -92,7 +116,7 @@ if (app) {
 
 // 3. 初始化 Firestore
 const db = app ? getFirestore(app) : null;
-const appId = (typeof window !== 'undefined' && window.__app_id) || 'gold-land-auto';
+const appId = (typeof window !== 'undefined' && (window as any).__app_id) || 'gold-land-auto';
 
 // --- 公司資料配置 ---
 const COMPANY_INFO = {
@@ -151,7 +175,7 @@ export default function GoldLandAutoDMS() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null); // 新增錯誤狀態顯示
+  const [authError, setAuthError] = useState<string | null>(null);
   
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
   const [deposit, setDeposit] = useState<number>(0);
@@ -170,14 +194,23 @@ export default function GoldLandAutoDMS() {
 
     const initAuth = async () => {
       try {
-        if (typeof window !== 'undefined' && window.__initial_auth_token) {
-          await signInWithCustomToken(auth, window.__initial_auth_token);
+        if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
+          await signInWithCustomToken(auth, (window as any).__initial_auth_token);
         } else {
           await signInAnonymously(auth);
         }
       } catch (error: any) {
         console.error("Login failed:", error);
-        setAuthError(error.message); // 顯示錯誤給使用者
+        
+        // 如果是 storage 錯誤，嘗試用記憶體模式重試 (針對預覽視窗)
+        if (error.code === 'auth/internal-error' || error.message?.includes('storage')) {
+            try {
+                // 這裡我們無法重新初始化，但可以提示使用者
+                setAuthError("Preview Mode (Storage Blocked)");
+            } catch(e) {}
+        } else {
+            setAuthError(error.message);
+        }
         setLoading(false);
       }
     };
@@ -185,8 +218,7 @@ export default function GoldLandAutoDMS() {
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser) setAuthError(null); // 成功登入，清除錯誤
-      // 不論是否有 user，都停止 loading，因為 auth 狀態已經確定
+      if (currentUser) setAuthError(null);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -196,6 +228,7 @@ export default function GoldLandAutoDMS() {
   useEffect(() => {
     if (!user || !db) return;
 
+    // 使用使用者的私人集合
     const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
@@ -220,7 +253,7 @@ export default function GoldLandAutoDMS() {
   const handleAddVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !user) {
-        alert("系統離線，無法儲存資料。\n原因：" + (authError || "未登入"));
+        alert("系統未連線 (Offline)。\n請確認您已填入正確的 Firebase Config。");
         return;
     }
 
@@ -243,7 +276,7 @@ export default function GoldLandAutoDMS() {
       alert('車輛已成功儲存至雲端！');
     } catch (error) {
       console.error("Error adding document: ", error);
-      alert('儲存失敗，請檢查網路連線。');
+      alert('儲存失敗，請檢查權限或網路。');
     }
   };
 
@@ -261,7 +294,7 @@ export default function GoldLandAutoDMS() {
 
   const loadDemoData = async () => {
     if (!db || !user) {
-        alert("系統目前離線 (Offline)，無法寫入資料庫。\n請檢查右下角狀態或重新整理頁面。");
+        alert("系統目前離線，請檢查 Firebase Config 設定。");
         return;
     }
     if (!confirm('這將會寫入 3 筆範例資料到您的資料庫，確定嗎？')) return;
@@ -279,7 +312,7 @@ export default function GoldLandAutoDMS() {
       alert('範例資料已載入！');
     } catch (err) {
       console.error(err);
-      alert('載入失敗，請稍後再試。');
+      alert('載入失敗 (Permission Denied?)，請確認 Firestore 規則是否開啟 Test Mode。');
     }
   };
 
@@ -446,7 +479,13 @@ export default function GoldLandAutoDMS() {
                 <span>{user ? 'Cloud Connected' : 'Offline'}</span>
             </div>
             {user && <span className="text-[10px] opacity-50">ID: {user.uid.slice(0,6)}...</span>}
-            {authError && <span className="text-[10px] text-red-400 mt-1">Storage Access Blocked</span>}
+            {/* 警告提示 */}
+            {!firebaseConfig.apiKey && (
+              <div className="mt-2 text-[10px] text-yellow-500 border border-yellow-700 rounded p-1 flex items-center bg-slate-800 animate-pulse">
+                <AlertTriangle size={12} className="mr-1" />
+                <span className="scale-90">Please Set Config!</span>
+              </div>
+            )}
         </div>
       </div>
     </>
