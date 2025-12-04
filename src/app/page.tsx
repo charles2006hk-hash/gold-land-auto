@@ -19,7 +19,9 @@ import {
   Users,
   Settings,
   Save,
-  LogOut
+  LogOut,
+  UserCircle,
+  ArrowRight
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -50,7 +52,7 @@ import {
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// ★★★ 預設設定 (如果代碼中沒有填寫，會由下方的 Setup Screen 處理) ★★★
+// ★★★ 預設設定 ★★★
 // ------------------------------------------------------------------
 const YOUR_FIREBASE_CONFIG = {
   apiKey: "請填入您的值",
@@ -68,19 +70,15 @@ let db: Firestore | null = null;
 
 // --- Helper: Get Config ---
 const getEffectiveConfig = () => {
-  // 1. 優先檢查是否在代碼中填寫了正確的值
   if (YOUR_FIREBASE_CONFIG.apiKey !== "請填入您的值" && YOUR_FIREBASE_CONFIG.apiKey !== "") {
     return YOUR_FIREBASE_CONFIG;
   }
-  // 2. 檢查環境變數
   if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
     try { return JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG); } catch (e) {}
   }
-  // 3. 檢查 window 全域變數
   if (typeof window !== 'undefined' && (window as any).__firebase_config) {
     try { return JSON.parse((window as any).__firebase_config); } catch (e) {}
   }
-  // 4. 最後檢查 LocalStorage (讓使用者可以在瀏覽器設定)
   if (typeof window !== 'undefined') {
     const local = localStorage.getItem('dms_firebase_config');
     if (local) {
@@ -119,7 +117,6 @@ const initFirebaseSystem = () => {
   }
 };
 
-// 嘗試立即初始化
 const isFirebaseReady = initFirebaseSystem();
 const appId = (typeof window !== 'undefined' && (window as any).__app_id) || 'gold-land-auto';
 
@@ -165,36 +162,29 @@ const MOCK_INVENTORY = [
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
-// --- Setup Component (Config Wizard) ---
+// --- Components: Config Wizard ---
 const ConfigWizard = () => {
   const [configInput, setConfigInput] = useState('');
   const [error, setError] = useState('');
 
   const handleSave = () => {
     try {
-      // 嘗試解析 JSON
       const parsed = JSON.parse(configInput);
-      if (!parsed.apiKey || !parsed.authDomain) {
-        throw new Error("設定缺少 apiKey 或 authDomain");
-      }
+      if (!parsed.apiKey || !parsed.authDomain) throw new Error("設定缺少 apiKey 或 authDomain");
       localStorage.setItem('dms_firebase_config', JSON.stringify(parsed));
       window.location.reload();
     } catch (e) {
-      // 如果不是 JSON，嘗試解析 const firebaseConfig = { ... } 格式
       const jsonMatch = configInput.match(/{[\s\S]*}/);
       if (jsonMatch) {
         try {
-          // 嘗試修復常見的 key 沒有引號的問題 (簡單的正則替換，不完美但夠用)
           const validJson = jsonMatch[0].replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2": ').replace(/'/g, '"');
           const parsed = JSON.parse(validJson);
           localStorage.setItem('dms_firebase_config', JSON.stringify(parsed));
           window.location.reload();
           return;
-        } catch(err) {
-           setError("無法解析設定格式，請確保是標準 JSON 或 Firebase Console 的 JS 物件格式。");
-        }
+        } catch(err) { setError("無法解析設定格式，請確保是標準 JSON。"); }
       } else {
-        setError("格式錯誤：請貼上包含 { apiKey: ... } 的完整設定物件。");
+        setError("格式錯誤：請貼上包含 { apiKey: ... } 的設定。");
       }
     }
   };
@@ -202,41 +192,59 @@ const ConfigWizard = () => {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg p-8 max-w-lg w-full shadow-2xl">
-        <div className="flex items-center mb-6 text-slate-800">
-          <Settings className="w-8 h-8 mr-3 text-yellow-500" />
-          <h1 className="text-2xl font-bold">系統初始化 setup</h1>
-        </div>
-        
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-          <p className="text-sm text-yellow-700">
-            檢測到系統尚未設定資料庫連線。請前往 Firebase Console 複製設定並貼上。
-          </p>
-        </div>
-
+        <div className="flex items-center mb-6 text-slate-800"><Settings className="w-8 h-8 mr-3 text-yellow-500" /><h1 className="text-2xl font-bold">系統初始化</h1></div>
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6"><p className="text-sm text-yellow-700">請貼上 Firebase Config 以連接資料庫。</p></div>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Firebase Configuration</label>
-            <textarea 
-              rows={10}
-              className="w-full p-3 border border-gray-300 rounded font-mono text-xs bg-gray-50 focus:ring-2 focus:ring-yellow-500 outline-none"
-              placeholder={'const firebaseConfig = {\n  apiKey: "AIza...",\n  authDomain: "...",\n  ...\n};'}
-              value={configInput}
-              onChange={(e) => setConfigInput(e.target.value)}
-            />
-            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
-          </div>
-
-          <button 
-            onClick={handleSave}
-            className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-slate-800 transition flex items-center justify-center"
-          >
-            <Save size={18} className="mr-2" /> 儲存並啟動系統
-          </button>
-          
-          <div className="text-xs text-gray-400 text-center mt-4">
-            設定將儲存於此瀏覽器中 (LocalStorage)。
-          </div>
+          <textarea rows={10} className="w-full p-3 border rounded text-xs bg-gray-50 font-mono" placeholder={'const firebaseConfig = {\n  apiKey: "..."\n};'} value={configInput} onChange={(e) => setConfigInput(e.target.value)} />
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+          <button onClick={handleSave} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-slate-800 flex items-center justify-center"><Save size={18} className="mr-2" /> 儲存並啟動</button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Components: Staff Login Screen ---
+const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
+  const [input, setInput] = useState('');
+  
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(input.trim()) onLogin(input.trim().toUpperCase());
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <UserCircle size={48} className="text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800">歡迎使用金田汽車系統</h1>
+          <p className="text-slate-500 text-sm mt-2">Welcome to Gold Land Auto DMS</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">請輸入您的 員工編號 / 登入名稱</label>
+            <input 
+              type="text" 
+              className="w-full p-4 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-yellow-500 outline-none transition"
+              placeholder="e.g. BOSS, SALES01, ADMIN"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              autoFocus
+            />
+            <p className="text-xs text-slate-400 mt-2">※ 此 ID 將用於識別及儲存您的資料 (Case Sensitive)</p>
+          </div>
+          
+          <button 
+            type="submit" 
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center transition transform active:scale-95 shadow-lg"
+          >
+            登入系統 <ArrowRight className="ml-2" />
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -245,6 +253,8 @@ const ConfigWizard = () => {
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
+  const [staffId, setStaffId] = useState<string | null>(null); // 新增：員工 ID
+  
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc'>('dashboard');
   const [inventory, setInventory] = useState<Vehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
@@ -260,14 +270,25 @@ export default function GoldLandAutoDMS() {
   const printAreaRef = useRef<HTMLDivElement>(null);
   const handlePrint = () => { window.print(); };
 
-  // 如果設定未完成，顯示設定引導頁面
-  if (!isFirebaseReady) {
-    return <ConfigWizard />;
-  }
+  // 1. Config Check
+  if (!isFirebaseReady) return <ConfigWizard />;
 
-  // --- Auth ---
+  // 2. Login Handling
+  const handleStaffLogin = (id: string) => {
+    setStaffId(id);
+    // 可選：儲存到 localStorage 以便下次自動登入
+    // localStorage.setItem('dms_staff_id', id); 
+  };
+
+  const handleLogout = () => {
+    if(confirm("確定要登出並切換使用者？")) {
+      setStaffId(null);
+      setInventory([]);
+    }
+  };
+
+  // 3. Auth Effect
   useEffect(() => {
-    // 建立局部變數鎖定 auth，解決 TypeScript 報錯
     const currentAuth = auth;
     if (!currentAuth) { setLoading(false); return; }
     
@@ -285,7 +306,6 @@ export default function GoldLandAutoDMS() {
       }
     };
     
-    // 監聽 Auth 狀態
     const unsubscribe = onAuthStateChanged(currentAuth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) setAuthError(null);
@@ -296,11 +316,14 @@ export default function GoldLandAutoDMS() {
     return () => unsubscribe();
   }, []);
 
-  // --- Firestore Listener (Public Path) ---
+  // 4. Firestore Listener (Depend on Staff ID)
   useEffect(() => {
-    if (!db) return;
+    if (!db || !staffId) return; // 只有在有 staffId 時才連線
 
-    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
+    // ★★★ 關鍵：使用 Staff ID 作為資料夾名稱 ★★★
+    // 路徑: artifacts/{appId}/public/data/{staffId}/inventory
+    // 這樣即使 Firebase UID 變了，只要 Staff ID 一樣，資料就找得回來
+    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory');
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
     setLoading(true);
@@ -313,18 +336,23 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
-      setAuthError("Permission Denied: 請檢查 Firebase Rules 是否已設為 true"); 
+      setAuthError("Permission Denied: 請檢查 Firebase Rules"); 
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [staffId]); // 當 staffId 改變時重新連線
+
+  // 如果還沒輸入員工編號，顯示登入畫面
+  if (!staffId) {
+    return <StaffLoginScreen onLogin={handleStaffLogin} />;
+  }
 
   // --- Actions ---
 
   const handleAddVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!db) return;
+    if (!db || !staffId) return;
 
     const formData = new FormData(e.currentTarget);
     const newVehicle = {
@@ -340,9 +368,9 @@ export default function GoldLandAutoDMS() {
     };
 
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), newVehicle);
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory'), newVehicle);
       (e.target as HTMLFormElement).reset();
-      alert('車輛已成功儲存 (Shared DB)！');
+      alert('車輛已成功儲存！');
     } catch (error) {
       console.error("Error adding document: ", error);
       alert('儲存失敗，請檢查權限。');
@@ -350,10 +378,10 @@ export default function GoldLandAutoDMS() {
   };
 
   const deleteVehicle = async (id: string) => {
-    if (!db) return;
+    if (!db || !staffId) return;
     if (confirm('確定要從雲端刪除此車輛資料？')) {
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id));
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory', id));
       } catch (error) {
         console.error("Error deleting:", error);
         alert('刪除失敗');
@@ -362,11 +390,11 @@ export default function GoldLandAutoDMS() {
   };
 
   const loadDemoData = async () => {
-    if (!db) return;
-    if (!confirm('這將會寫入範例資料到公司資料庫，確定嗎？')) return;
+    if (!db || !staffId) return;
+    if (!confirm('這將會寫入範例資料到您的帳戶，確定嗎？')) return;
 
     const batch = writeBatch(db);
-    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
+    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory');
 
     MOCK_INVENTORY.forEach(car => {
       const docRef = doc(inventoryRef);
@@ -378,12 +406,12 @@ export default function GoldLandAutoDMS() {
       alert('範例資料已載入！');
     } catch (err) {
       console.error(err);
-      alert('載入失敗，請確認 Rules 已設定為 allow write: if true');
+      alert('載入失敗');
     }
   };
 
   const resetConfig = () => {
-    if(confirm('確定要清除設定並登出？')) {
+    if(confirm('確定要清除設定並重置？')) {
       localStorage.removeItem('dms_firebase_config');
       window.location.reload();
     }
@@ -484,19 +512,22 @@ export default function GoldLandAutoDMS() {
         <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center">
             <div className="flex items-center gap-2 mb-1">
                 <div className={`w-2 h-2 rounded-full ${db ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span>{db ? 'Online' : 'Offline'}</span>
+                <span>{db ? 'System Online' : 'Offline'}</span>
             </div>
-            <div className="mt-2 flex items-center text-gray-400"><Users size={12} className="mr-1"/> Shared DB</div>
-            {/* Config Check */}
-            {!isFirebaseReady && (
-              <div className="mt-2 text-[10px] text-yellow-500 border border-yellow-700 rounded p-1 flex items-center bg-slate-800 animate-pulse">
-                <AlertTriangle size={12} className="mr-1" /> Config Missing
-              </div>
-            )}
-            {authError && <div className="mt-1 text-[9px] text-red-400 max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={authError}>{authError}</div>}
             
-            <button onClick={resetConfig} className="mt-4 flex items-center text-gray-500 hover:text-white transition">
-              <Settings size={12} className="mr-1" /> Config
+            <div className="mt-3 flex items-center justify-center space-x-2 bg-slate-800 p-2 rounded w-full">
+               <UserCircle size={14} className="text-yellow-500"/>
+               <span className="font-bold text-white truncate max-w-[80px]">{staffId}</span>
+            </div>
+
+            <button onClick={handleLogout} className="mt-2 text-[10px] flex items-center text-red-400 hover:text-red-300 transition">
+              <LogOut size={10} className="mr-1" /> 切換帳戶 (Logout)
+            </button>
+
+            {!isFirebaseReady && <div className="mt-2 text-[10px] text-yellow-500 border border-yellow-700 rounded p-1 flex items-center bg-slate-800 animate-pulse"><AlertTriangle size={12} className="mr-1" /> Config Missing</div>}
+            
+            <button onClick={resetConfig} className="mt-4 flex items-center text-gray-500 hover:text-white transition text-[10px]">
+              <Settings size={10} className="mr-1" /> Reset Config
             </button>
         </div>
       </div>
@@ -531,12 +562,12 @@ export default function GoldLandAutoDMS() {
           {activeTab === 'dashboard' && (
             <div className="space-y-6 animate-fade-in">
               <h2 className="text-2xl font-bold text-slate-800 flex items-center">
-                  業務概況
+                  業務概況 ({staffId})
                   {loading && <Loader2 className="ml-3 animate-spin text-yellow-500" />}
               </h2>
               {!loading && inventory.length === 0 && (
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between">
-                      <div className="flex items-center text-blue-800"><Database className="mr-3" /><div><p className="font-bold">資料庫是空的 (Shared DB)</p><p className="text-sm">是否載入範例資料？</p></div></div>
+                      <div className="flex items-center text-blue-800"><Database className="mr-3" /><div><p className="font-bold">目前無資料 (ID: {staffId})</p><p className="text-sm">是否載入範例資料？</p></div></div>
                       <button onClick={loadDemoData} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center text-sm"><DownloadCloud size={16} className="mr-2"/> 載入範例</button>
                   </div>
               )}
@@ -551,7 +582,7 @@ export default function GoldLandAutoDMS() {
                     <thead><tr className="border-b bg-gray-50"><th className="p-3">狀態</th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th></tr></thead>
                     <tbody>
                       {inventory.slice(0,5).map(car => (
-                        <tr key={car.id} className="border-b last:border-0 hover:bg-gray-50"><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status === 'In Stock' ? '在庫' : '已售'}</span></td><td className="p-3 font-medium">{car.regMark}</td><td className="p-3">{car.make} {car.model}</td><td className="p-3">{formatCurrency(car.price)}</td></tr>
+                        <tr key={car.id} className="border-b last:border-0 hover:bg-gray-50"><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{car.status === 'In Stock' ? '在庫' : '已售'}</span></td><td className="p-3 font-medium">{car.regMark}</td><td className="p-3">{car.make} {car.model}</td><td className="p-3">{formatCurrency(car.price)}</td></tr>
                       ))}
                     </tbody>
                   </table>
@@ -562,7 +593,7 @@ export default function GoldLandAutoDMS() {
 
           {activeTab === 'inventory' && (
             <div className="space-y-6 animate-fade-in">
-              <h2 className="text-2xl font-bold text-slate-800">車輛庫存 (Shared DB)</h2>
+              <h2 className="text-2xl font-bold text-slate-800">車輛庫存 ({staffId})</h2>
               <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm">
                 <h3 className="font-bold mb-4 flex items-center text-slate-700"><Plus size={18} className="mr-2"/> 快速入庫</h3>
                 <form onSubmit={handleAddVehicle} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
