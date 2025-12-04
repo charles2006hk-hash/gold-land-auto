@@ -19,7 +19,9 @@ import {
   Users,
   LogOut,
   UserCircle,
-  ArrowRight
+  ArrowRight,
+  Settings,
+  Save
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -251,10 +253,8 @@ export default function GoldLandAutoDMS() {
   useEffect(() => {
     if (!db || !staffId) return;
 
-    // ★★★ 路徑結構修正 ★★★
-    // 使用 5 層結構 (奇數層)，這樣才是有效的 Collection 參考
-    // artifacts / {appId} / staff / {staffId}_data / inventory
-    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_'); // 確保 ID 沒有特殊符號
+    // 路徑: artifacts / {appId} / staff / {staffId}_data / inventory
+    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_'); 
     const inventoryRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
     
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
@@ -308,7 +308,7 @@ export default function GoldLandAutoDMS() {
       alert('車輛已成功儲存！');
     } catch (error) {
       console.error("Error adding document: ", error);
-      alert('儲存失敗，請確認 Firebase Rules 已設為 true。');
+      alert('儲存失敗，請檢查權限或網路。');
     }
   };
 
@@ -348,15 +348,81 @@ export default function GoldLandAutoDMS() {
   };
 
   // --- Components ---
-  const CompanyStamp = () => (
-    <div className="absolute -top-10 left-4 w-36 h-36 border-4 border-red-600 rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-80 pointer-events-none select-none mix-blend-multiply z-10" style={{boxShadow: '0 0 0 2px rgba(220, 38, 38, 0.3)'}}>
-      <div className="w-[90%] h-[90%] border border-red-600 rounded-full flex flex-col items-center justify-center p-1">
-        <div className="text-red-600 font-bold text-center leading-tight">
-          <div className="text-[10px] scale-90 tracking-widest">GOLD LAND AUTO</div>
-          <div className="text-[14px] my-1">金田汽車</div>
-          <div className="text-[8px] mt-1 border-t border-red-600 pt-1 px-2">{formatDate(new Date())}</div>
+  
+  // 簽名與印章組件 (Signed Stamp)
+  const SignedStamp = () => (
+    <div className="relative w-[50mm] h-[30mm] flex items-center justify-center">
+      
+      {/* 1. 簽名層 (黑色，底層) - 使用 SVG 繪製模擬簽名 */}
+      <svg viewBox="0 0 200 100" className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{ overflow: 'visible' }}>
+        <defs>
+          <filter id="ink-spread">
+            <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" />
+            <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" />
+          </filter>
+        </defs>
+        {/* 模擬手寫簽名筆跡 */}
+        <path 
+          d="M20,60 C40,40 60,80 90,50 C110,30 130,70 160,40 C170,30 180,60 190,50" 
+          fill="none" 
+          stroke="black" 
+          strokeWidth="3" 
+          strokeLinecap="round" 
+          style={{ filter: 'url(#ink-spread)', opacity: 0.85 }}
+        />
+        <path 
+          d="M30,70 C60,60 120,60 180,55" 
+          fill="none" 
+          stroke="black" 
+          strokeWidth="2" 
+          strokeLinecap="round"
+          style={{ filter: 'url(#ink-spread)', opacity: 0.9 }} 
+        />
+        <path 
+          d="M50,40 Q40,80 60,70 T80,60" 
+          fill="none" 
+          stroke="black" 
+          strokeWidth="2.5" 
+          style={{ filter: 'url(#ink-spread)', opacity: 0.8 }} 
+        />
+      </svg>
+
+      {/* 2. 印章層 (藍色，22mm，上層) - 位於簽名右側，稍微重疊 */}
+      <div 
+        className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-2 w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center z-10 pointer-events-none select-none" 
+        style={{
+           color: '#2b3d90', // 原子印藍色
+           border: '2px solid #2b3d90',
+           boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', // 暈染效果
+           backgroundColor: 'rgba(43, 61, 144, 0.02)', // 極淡的印泥底色
+           mixBlendMode: 'multiply' // 讓印章蓋在簽名上時有顏色疊加效果
+        }}
+      >
+        <div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}>
+          
+          {/* 上圓弧文字: GOLD LAND AUTO */}
+          <div className="absolute w-full h-full">
+             <svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0">
+               <defs>
+                 <path id="textCircle" d="M 12, 50 A 38, 38 0 1, 1 88, 50" />
+               </defs>
+               <text fontSize="11" fontWeight="bold" fill="#2b3d90" letterSpacing="1">
+                 <textPath href="#textCircle" startOffset="50%" textAnchor="middle">GOLD LAND AUTO</textPath>
+               </text>
+             </svg>
+          </div>
+
+          {/* 中間文字 */}
+          <div className="flex flex-col items-center justify-center mt-2 z-10">
+            <span className="text-[6px] font-bold leading-none tracking-widest" style={{ textShadow: '0 0 0.5px #2b3d90' }}>金田</span>
+            <span className="text-[6px] font-bold leading-none tracking-widest mt-[1px]" style={{ textShadow: '0 0 0.5px #2b3d90' }}>汽車</span>
+          </div>
+
+          {/* 下方星號 */}
+          <div className="absolute bottom-1 text-[8px] font-bold text-[#2b3d90]">*</div>
         </div>
       </div>
+
     </div>
   );
 
@@ -406,7 +472,30 @@ export default function GoldLandAutoDMS() {
           <div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">乙、車輛資料 / Vehicle Details</h3><VehicleTable /></div>
           <div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">丙、交易款項 / Payment Details</h3><div className="text-sm space-y-3 px-2"><div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>成交價 (Vehicle Price):</span><span className="font-bold text-lg">{formatCurrency(selectedVehicle.price)}</span></div><div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>已付訂金 (Deposit Paid):</span><span className="text-lg">{formatCurrency(deposit)}</span></div><div className="flex justify-between items-end border-b-2 border-black pb-1 mt-2"><span className="font-bold">尚餘尾數 (Balance Due):</span><span className="font-bold text-xl">{formatCurrency(balance)}</span></div></div></div>
           <div className="mb-8 text-[11px] text-justify leading-relaxed text-gray-700"><h3 className="font-bold mb-1 text-sm text-black">條款及細則 / Terms & Conditions:</h3><ol className="list-decimal pl-4 space-y-1"><li>買方已親自驗收上述車輛，並確認車輛之機件性能及外觀狀況良好，同意以「現狀」成交。<br/><span className="italic text-gray-500">The Purchaser has inspected the vehicle and accepted its condition on an "as-is" basis.</span></li><li>如買方悔約，賣方有權沒收所有訂金。<br/><span className="italic text-gray-500">Deposit will be forfeited if the Purchaser fails to complete the payment.</span></li><li>賣方保證上述車輛並無涉及任何未清之財務按揭、罰款或法律訴訟。<br/><span className="italic text-gray-500">The Vendor guarantees the vehicle is free from any outstanding finance, fines, or legal encumbrances.</span></li></ol></div>
-          <div className="grid grid-cols-2 gap-16 mt-12"><div className="relative"><div className="border-t border-black pt-2 text-center"><p className="font-bold">賣方簽署及公司蓋印</p><p className="text-xs text-gray-500">Authorized Signature & Chop</p><p className="text-xs font-bold mt-1">For and on behalf of<br/>{COMPANY_INFO.name_en}</p></div><CompanyStamp /></div><div><div className="border-t border-black pt-2 text-center"><p className="font-bold">買方簽署</p><p className="text-xs text-gray-500">Purchaser Signature</p></div></div></div>
+          
+          {/* 底部簽署區域 */}
+          <div className="grid grid-cols-2 gap-16 mt-12 text-black">
+            {/* 賣方 - 黑色簽名 + 藍色原子印 (合在一起) */}
+            <div className="relative flex flex-col items-center justify-end">
+              <div className="mb-2">
+                 <SignedStamp />
+              </div>
+              <div className="border-t border-black pt-2 text-center w-full relative z-10">
+                <p className="font-bold">賣方簽署及公司蓋印</p>
+                <p className="text-xs text-gray-500">Authorized Signature & Chop</p>
+                <p className="text-xs font-bold mt-1">For and on behalf of<br/>{COMPANY_INFO.name_en}</p>
+              </div>
+            </div>
+            
+            {/* 買方 - 只有簽名線 */}
+            <div className="flex flex-col items-center justify-end">
+              <div className="h-[30mm]"></div> {/* 佔位符保持高度一致 */}
+              <div className="border-t border-black pt-2 text-center w-full">
+                <p className="font-bold">買方簽署</p>
+                <p className="text-xs text-gray-500">Purchaser Signature</p>
+              </div>
+            </div>
+          </div>
         </div>
       );
     }
@@ -421,7 +510,16 @@ export default function GoldLandAutoDMS() {
             <VehicleTable />
             {docType === 'invoice' && <div className="mt-8 border-t-2 border-black pt-4 flex justify-between items-center text-xl font-bold"><span>Total / 總數:</span><span>{formatCurrency(selectedVehicle.price)}</span></div>}
             {docType !== 'invoice' && <div className="text-center p-10 text-gray-500 italic">{docType === 'receipt' ? `Received HKD ${formatCurrency(deposit)} from ${customer.name}` : `Gold Land Auto agrees to purchase the vehicle for ${formatCurrency(selectedVehicle.price)}`}</div>}
-            <div className="mt-20 relative"><div className="border-t border-black pt-4 w-1/2 text-center"><p>Authorized Signature</p></div><CompanyStamp /></div>
+            
+            {/* 其他文件底部 */}
+            <div className="mt-20 relative text-black flex flex-col items-start">
+              <div className="mb-2 relative" style={{ left: '50px' }}>
+                 <SignedStamp />
+              </div>
+              <div className="border-t border-black pt-4 w-1/2 text-center relative z-10">
+                <p>Authorized Signature</p>
+              </div>
+            </div>
         </div>
     );
   };
