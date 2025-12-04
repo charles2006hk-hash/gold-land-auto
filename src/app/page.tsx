@@ -16,11 +16,14 @@ import {
   Loader2,
   DownloadCloud,
   AlertTriangle,
-  Users // 新增圖示
+  Users,
+  Settings,
+  Save,
+  LogOut
 } from 'lucide-react';
 
 // --- Firebase Imports ---
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { 
   getAuth, 
   signInAnonymously, 
@@ -29,7 +32,8 @@ import {
   User,
   initializeAuth,
   browserLocalPersistence,
-  inMemoryPersistence
+  inMemoryPersistence,
+  Auth
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -41,11 +45,12 @@ import {
   query, 
   orderBy, 
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  Firestore
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// ★★★ 請將您的 Firebase Config 填入下方 ★★★
+// ★★★ 預設設定 (如果代碼中沒有填寫，會由下方的 Setup Screen 處理) ★★★
 // ------------------------------------------------------------------
 const YOUR_FIREBASE_CONFIG = {
   apiKey: "請填入您的值",
@@ -56,44 +61,66 @@ const YOUR_FIREBASE_CONFIG = {
   appId: "請填入您的值"
 };
 
-// --- 自動偵測與初始化設定 ---
-let firebaseConfig = YOUR_FIREBASE_CONFIG;
-const isConfigConfigured = firebaseConfig.apiKey !== "請填入您的值" && firebaseConfig.apiKey !== "";
+// --- Global Firebase Instances ---
+let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
+let db: Firestore | null = null;
 
-if (!isConfigConfigured) {
-  try {
-    if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
-      firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG);
-    } else if (typeof window !== 'undefined' && (window as any).__firebase_config) {
-      firebaseConfig = JSON.parse((window as any).__firebase_config);
+// --- Helper: Get Config ---
+const getEffectiveConfig = () => {
+  // 1. 優先檢查是否在代碼中填寫了正確的值
+  if (YOUR_FIREBASE_CONFIG.apiKey !== "請填入您的值" && YOUR_FIREBASE_CONFIG.apiKey !== "") {
+    return YOUR_FIREBASE_CONFIG;
+  }
+  // 2. 檢查環境變數
+  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
+    try { return JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG); } catch (e) {}
+  }
+  // 3. 檢查 window 全域變數
+  if (typeof window !== 'undefined' && (window as any).__firebase_config) {
+    try { return JSON.parse((window as any).__firebase_config); } catch (e) {}
+  }
+  // 4. 最後檢查 LocalStorage (讓使用者可以在瀏覽器設定)
+  if (typeof window !== 'undefined') {
+    const local = localStorage.getItem('dms_firebase_config');
+    if (local) {
+      try { return JSON.parse(local); } catch (e) {}
     }
-  } catch (e) {
-    console.warn("No config found.");
   }
-}
+  return null;
+};
 
-// 1. 初始化 App
-const app = getApps().length > 0 ? getApp() : (isConfigConfigured || firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
+// --- Initialize Firebase ---
+const initFirebaseSystem = () => {
+  const config = getEffectiveConfig();
+  if (!config) return false;
 
-// 2. 初始化 Auth
-let auth: any = null;
-if (app) {
   try {
-    auth = getAuth(app); 
-  } catch (e: any) {
-    console.warn("Standard Auth Init Failed", e);
-  }
-  if (!auth) {
+    app = getApps().length > 0 ? getApp() : initializeApp(config);
+    
+    // Auth Initialization with Fallback
     try {
-      auth = initializeAuth(app, { persistence: [browserLocalPersistence, inMemoryPersistence] });
+      auth = getAuth(app);
     } catch (e) {
-      try { auth = initializeAuth(app, { persistence: inMemoryPersistence }); } catch(finalErr) {}
+      if (!auth) {
+        try {
+          auth = initializeAuth(app, { persistence: [browserLocalPersistence, inMemoryPersistence] });
+        } catch (err) {
+          try { auth = initializeAuth(app, { persistence: inMemoryPersistence }); } catch(final) {}
+        }
+      }
     }
-  }
-}
 
-// 3. 初始化 Firestore
-const db = app ? getFirestore(app) : null;
+    db = getFirestore(app);
+    return true;
+  } catch (e) {
+    console.error("Firebase Init Failed:", e);
+    return false;
+  }
+};
+
+// 嘗試立即初始化
+const isFirebaseReady = initFirebaseSystem();
 const appId = (typeof window !== 'undefined' && (window as any).__app_id) || 'gold-land-auto';
 
 // --- 公司資料 ---
@@ -138,6 +165,83 @@ const MOCK_INVENTORY = [
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
+// --- Setup Component (Config Wizard) ---
+const ConfigWizard = () => {
+  const [configInput, setConfigInput] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSave = () => {
+    try {
+      // 嘗試解析 JSON
+      const parsed = JSON.parse(configInput);
+      if (!parsed.apiKey || !parsed.authDomain) {
+        throw new Error("設定缺少 apiKey 或 authDomain");
+      }
+      localStorage.setItem('dms_firebase_config', JSON.stringify(parsed));
+      window.location.reload();
+    } catch (e) {
+      // 如果不是 JSON，嘗試解析 const firebaseConfig = { ... } 格式
+      const jsonMatch = configInput.match(/{[\s\S]*}/);
+      if (jsonMatch) {
+        try {
+          // 嘗試修復常見的 key 沒有引號的問題 (簡單的正則替換，不完美但夠用)
+          const validJson = jsonMatch[0].replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2": ').replace(/'/g, '"');
+          const parsed = JSON.parse(validJson);
+          localStorage.setItem('dms_firebase_config', JSON.stringify(parsed));
+          window.location.reload();
+          return;
+        } catch(err) {
+           setError("無法解析設定格式，請確保是標準 JSON 或 Firebase Console 的 JS 物件格式。");
+        }
+      } else {
+        setError("格式錯誤：請貼上包含 { apiKey: ... } 的完整設定物件。");
+      }
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg p-8 max-w-lg w-full shadow-2xl">
+        <div className="flex items-center mb-6 text-slate-800">
+          <Settings className="w-8 h-8 mr-3 text-yellow-500" />
+          <h1 className="text-2xl font-bold">系統初始化 setup</h1>
+        </div>
+        
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <p className="text-sm text-yellow-700">
+            檢測到系統尚未設定資料庫連線。請前往 Firebase Console 複製設定並貼上。
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Firebase Configuration</label>
+            <textarea 
+              rows={10}
+              className="w-full p-3 border border-gray-300 rounded font-mono text-xs bg-gray-50 focus:ring-2 focus:ring-yellow-500 outline-none"
+              placeholder={'const firebaseConfig = {\n  apiKey: "AIza...",\n  authDomain: "...",\n  ...\n};'}
+              value={configInput}
+              onChange={(e) => setConfigInput(e.target.value)}
+            />
+            {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+          </div>
+
+          <button 
+            onClick={handleSave}
+            className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-slate-800 transition flex items-center justify-center"
+          >
+            <Save size={18} className="mr-2" /> 儲存並啟動系統
+          </button>
+          
+          <div className="text-xs text-gray-400 text-center mt-4">
+            設定將儲存於此瀏覽器中 (LocalStorage)。
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
@@ -156,9 +260,15 @@ export default function GoldLandAutoDMS() {
   const printAreaRef = useRef<HTMLDivElement>(null);
   const handlePrint = () => { window.print(); };
 
+  // 如果設定未完成，顯示設定引導頁面
+  if (!isFirebaseReady) {
+    return <ConfigWizard />;
+  }
+
   // --- Auth ---
   useEffect(() => {
     if (!auth) { setLoading(false); return; }
+    
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
@@ -168,24 +278,26 @@ export default function GoldLandAutoDMS() {
         }
       } catch (error: any) {
         console.error("Login failed:", error);
-        // 忽略 storage error，因為我們改用 Public Data，登入失敗也能運作(只要 Rules 允許)
         if (!error.message?.includes('storage')) setAuthError(error.message);
+        setLoading(false);
       }
     };
-    initAuth();
+    
+    // 監聽 Auth 狀態
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) setAuthError(null);
+      setLoading(false);
     });
+
+    initAuth();
     return () => unsubscribe();
   }, []);
 
-  // --- Firestore Listener (改為 Public Path) ---
+  // --- Firestore Listener (Public Path) ---
   useEffect(() => {
     if (!db) return;
 
-    // ★★★ 關鍵修改：使用 Public Data 路徑，讓所有人共用資料 ★★★
-    // 路徑: artifacts/{appId}/public/data/inventory
     const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
@@ -199,12 +311,12 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
-      setAuthError("Permission Denied: 請檢查 Firebase Rules"); 
+      setAuthError("Permission Denied: 請檢查 Firebase Rules 是否已設為 true"); 
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [db]); // 只要 db 連線成功就開始監聽，不等待 user
+  }, []);
 
   // --- Actions ---
 
@@ -226,7 +338,6 @@ export default function GoldLandAutoDMS() {
     };
 
     try {
-      // 寫入 Public Path
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), newVehicle);
       (e.target as HTMLFormElement).reset();
       alert('車輛已成功儲存 (Shared DB)！');
@@ -266,6 +377,13 @@ export default function GoldLandAutoDMS() {
     } catch (err) {
       console.error(err);
       alert('載入失敗，請確認 Rules 已設定為 allow write: if true');
+    }
+  };
+
+  const resetConfig = () => {
+    if(confirm('確定要清除設定並登出？')) {
+      localStorage.removeItem('dms_firebase_config');
+      window.location.reload();
     }
   };
 
@@ -332,7 +450,7 @@ export default function GoldLandAutoDMS() {
         </div>
       );
     }
-    // ... 其他文件類型 (Invoice, Receipt...) 邏輯與上面相同，只顯示主要結構
+    
     return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black">
             <Header titleEn={docType === 'invoice' ? "INVOICE" : (docType === 'purchase_contract' ? "PURCHASE AGREEMENT" : "OFFICIAL RECEIPT")} titleCh={docType === 'invoice' ? "發票" : (docType === 'purchase_contract' ? "買入車輛合約" : "正式收據")} />
@@ -364,16 +482,20 @@ export default function GoldLandAutoDMS() {
         <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center">
             <div className="flex items-center gap-2 mb-1">
                 <div className={`w-2 h-2 rounded-full ${db ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span>{db ? 'System Online' : 'System Offline'}</span>
+                <span>{db ? 'Online' : 'Offline'}</span>
             </div>
-            <div className="mt-2 flex items-center text-gray-400"><Users size={12} className="mr-1"/> Shared Database</div>
+            <div className="mt-2 flex items-center text-gray-400"><Users size={12} className="mr-1"/> Shared DB</div>
             {/* Config Check */}
-            {!isConfigConfigured && (
+            {!isFirebaseReady && (
               <div className="mt-2 text-[10px] text-yellow-500 border border-yellow-700 rounded p-1 flex items-center bg-slate-800 animate-pulse">
                 <AlertTriangle size={12} className="mr-1" /> Config Missing
               </div>
             )}
             {authError && <div className="mt-1 text-[9px] text-red-400 max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={authError}>{authError}</div>}
+            
+            <button onClick={resetConfig} className="mt-4 flex items-center text-gray-500 hover:text-white transition">
+              <Settings size={12} className="mr-1" /> Config
+            </button>
         </div>
       </div>
     </>
