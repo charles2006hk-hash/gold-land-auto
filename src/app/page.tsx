@@ -267,14 +267,16 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth ---
   useEffect(() => {
-    if (!auth) { setLoading(false); return; }
+    // 建立局部變數鎖定 auth，解決 TypeScript 報錯
+    const currentAuth = auth;
+    if (!currentAuth) { setLoading(false); return; }
     
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
-          await signInWithCustomToken(auth, (window as any).__initial_auth_token);
+          await signInWithCustomToken(currentAuth, (window as any).__initial_auth_token);
         } else {
-          await signInAnonymously(auth);
+          await signInAnonymously(currentAuth);
         }
       } catch (error: any) {
         console.error("Login failed:", error);
@@ -284,7 +286,7 @@ export default function GoldLandAutoDMS() {
     };
     
     // 監聽 Auth 狀態
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(currentAuth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) setAuthError(null);
       setLoading(false);
