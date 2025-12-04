@@ -15,10 +15,11 @@ import {
   Database,
   Loader2,
   DownloadCloud,
-  AlertTriangle
+  AlertTriangle,
+  Users // 新增圖示
 } from 'lucide-react';
 
-// --- Firebase Imports (這些我已經幫您寫好了，請勿重複貼上) ---
+// --- Firebase Imports ---
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { 
   getAuth, 
@@ -45,22 +46,18 @@ import {
 
 // ------------------------------------------------------------------
 // ★★★ 請將您的 Firebase Config 填入下方 ★★★
-// 注意：只填入引號 "" 裡面的值，不要貼上整段 import 程式碼
 // ------------------------------------------------------------------
 const YOUR_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
-  authDomain: "gold-land-auto.firebaseapp.com",
-  projectId: "gold-land-auto",
-  storageBucket: "gold-land-auto.firebasestorage.app",
-  messagingSenderId: "817229766566",
-  appId: "1:817229766566:web:73314925fe0a4d43917967",
-  measurementId: "G-DQ9N75DH5V"
+  apiKey: "請填入您的值",
+  authDomain: "請填入您的值",
+  projectId: "請填入您的值",
+  storageBucket: "請填入您的值",
+  messagingSenderId: "請填入您的值",
+  appId: "請填入您的值"
 };
 
-// --- 自動偵測與初始化設定 (以下程式碼不需要更動) ---
+// --- 自動偵測與初始化設定 ---
 let firebaseConfig = YOUR_FIREBASE_CONFIG;
-
-// 檢查是否已填寫設定，或是使用環境變數
 const isConfigConfigured = firebaseConfig.apiKey !== "請填入您的值" && firebaseConfig.apiKey !== "";
 
 if (!isConfigConfigured) {
@@ -78,29 +75,19 @@ if (!isConfigConfigured) {
 // 1. 初始化 App
 const app = getApps().length > 0 ? getApp() : (isConfigConfigured || firebaseConfig.apiKey ? initializeApp(firebaseConfig) : null);
 
-// 2. 初始化 Auth (智慧切換模式)
+// 2. 初始化 Auth
 let auth: any = null;
 if (app) {
   try {
-    // 優先嘗試標準模式 (支援永久登入)
     auth = getAuth(app); 
   } catch (e: any) {
-    console.warn("Standard Auth Init Failed, trying fallback...", e);
+    console.warn("Standard Auth Init Failed", e);
   }
-
-  // 如果標準模式失敗 (例如在預覽視窗)，則強制使用底層初始化
   if (!auth) {
     try {
-      auth = initializeAuth(app, {
-        persistence: [browserLocalPersistence, inMemoryPersistence]
-      });
+      auth = initializeAuth(app, { persistence: [browserLocalPersistence, inMemoryPersistence] });
     } catch (e) {
-      // 終極備案：只用記憶體
-      try {
-         auth = initializeAuth(app, { persistence: inMemoryPersistence });
-      } catch(finalErr) {
-         console.error("Auth Init Critical Error", finalErr);
-      }
+      try { auth = initializeAuth(app, { persistence: inMemoryPersistence }); } catch(finalErr) {}
     }
   }
 }
@@ -109,7 +96,7 @@ if (app) {
 const db = app ? getFirestore(app) : null;
 const appId = (typeof window !== 'undefined' && (window as any).__app_id) || 'gold-land-auto';
 
-// --- 公司資料配置 ---
+// --- 公司資料 ---
 const COMPANY_INFO = {
   name_en: "GOLD LAND AUTO",
   name_ch: "金田汽車",
@@ -142,21 +129,14 @@ type Customer = {
 
 type DocType = 'sales_contract' | 'purchase_contract' | 'invoice' | 'receipt';
 
-// --- 模擬資料 ---
 const MOCK_INVENTORY = [
   { regMark: 'KG8888', make: 'Toyota', model: 'Alphard 3.5', year: '2019', chassisNo: 'AGH30-1234567', engineNo: '2GR-987654', price: 388000, status: 'In Stock' },
   { regMark: 'AB1234', make: 'Mercedes-Benz', model: 'E200 AMG', year: '2018', chassisNo: 'W213-5556666', engineNo: 'M274-111222', price: 238000, status: 'In Stock' },
   { regMark: 'XY999', make: 'Tesla', model: 'Model 3 LR', year: '2021', chassisNo: '5YJ3-8888888', engineNo: '3D1-000000', price: 198000, status: 'Sold' },
 ];
 
-// --- 工具函數 ---
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
-};
-
-const formatDate = (date: Date) => {
-  return date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
-};
+const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
+const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
@@ -176,14 +156,9 @@ export default function GoldLandAutoDMS() {
   const printAreaRef = useRef<HTMLDivElement>(null);
   const handlePrint = () => { window.print(); };
 
-  // --- Firebase Authentication ---
+  // --- Auth ---
   useEffect(() => {
-    // 若沒有 app 實例，表示設定檔未填或錯誤，停止 loading
-    if (!app || !auth) {
-      setLoading(false);
-      return;
-    }
-
+    if (!auth) { setLoading(false); return; }
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
@@ -193,34 +168,25 @@ export default function GoldLandAutoDMS() {
         }
       } catch (error: any) {
         console.error("Login failed:", error);
-        
-        // 如果是 storage 錯誤，嘗試用記憶體模式重試
-        if (error.code === 'auth/internal-error' || error.message?.includes('storage')) {
-            try {
-                setAuthError("Preview Mode (Storage Blocked)");
-            } catch(e) {}
-        } else {
-            setAuthError(error.message);
-        }
-        setLoading(false);
+        // 忽略 storage error，因為我們改用 Public Data，登入失敗也能運作(只要 Rules 允許)
+        if (!error.message?.includes('storage')) setAuthError(error.message);
       }
     };
-    
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) setAuthError(null);
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // --- Firestore Listener ---
+  // --- Firestore Listener (改為 Public Path) ---
   useEffect(() => {
-    if (!user || !db) return;
+    if (!db) return;
 
-    // 使用使用者的私人集合
-    const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
+    // ★★★ 關鍵修改：使用 Public Data 路徑，讓所有人共用資料 ★★★
+    // 路徑: artifacts/{appId}/public/data/inventory
+    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
     setLoading(true);
@@ -233,20 +199,18 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
+      setAuthError("Permission Denied: 請檢查 Firebase Rules"); 
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [db]); // 只要 db 連線成功就開始監聽，不等待 user
 
   // --- Actions ---
 
   const handleAddVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!db || !user) {
-        alert("系統未連線 (Offline)。\n請確認您已填入正確的 Firebase Config。");
-        return;
-    }
+    if (!db) return;
 
     const formData = new FormData(e.currentTarget);
     const newVehicle = {
@@ -262,36 +226,34 @@ export default function GoldLandAutoDMS() {
     };
 
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'inventory'), newVehicle);
+      // 寫入 Public Path
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory'), newVehicle);
       (e.target as HTMLFormElement).reset();
-      alert('車輛已成功儲存至雲端！');
+      alert('車輛已成功儲存 (Shared DB)！');
     } catch (error) {
       console.error("Error adding document: ", error);
-      alert('儲存失敗，請檢查權限或網路。');
+      alert('儲存失敗，請檢查權限。');
     }
   };
 
   const deleteVehicle = async (id: string) => {
-    if (!db || !user) return;
-    if (confirm('確定要從雲端刪除此車輛資料？(此動作無法復原)')) {
+    if (!db) return;
+    if (confirm('確定要從雲端刪除此車輛資料？')) {
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'inventory', id));
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'inventory', id));
       } catch (error) {
-        console.error("Error deleting document: ", error);
+        console.error("Error deleting:", error);
         alert('刪除失敗');
       }
     }
   };
 
   const loadDemoData = async () => {
-    if (!db || !user) {
-        alert("系統目前離線，請檢查 Firebase Config 設定。");
-        return;
-    }
-    if (!confirm('這將會寫入 3 筆範例資料到您的資料庫，確定嗎？')) return;
+    if (!db) return;
+    if (!confirm('這將會寫入範例資料到公司資料庫，確定嗎？')) return;
 
     const batch = writeBatch(db);
-    const inventoryRef = collection(db, 'artifacts', appId, 'users', user.uid, 'inventory');
+    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory');
 
     MOCK_INVENTORY.forEach(car => {
       const docRef = doc(inventoryRef);
@@ -303,12 +265,11 @@ export default function GoldLandAutoDMS() {
       alert('範例資料已載入！');
     } catch (err) {
       console.error(err);
-      alert('載入失敗 (Permission Denied?)，請確認 Firestore 規則是否開啟 Test Mode。');
+      alert('載入失敗，請確認 Rules 已設定為 allow write: if true');
     }
   };
 
   // --- Components ---
-
   const CompanyStamp = () => (
     <div className="absolute -top-10 left-4 w-36 h-36 border-4 border-red-600 rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-80 pointer-events-none select-none mix-blend-multiply z-10" style={{boxShadow: '0 0 0 2px rgba(220, 38, 38, 0.3)'}}>
       <div className="w-[90%] h-[90%] border border-red-600 rounded-full flex flex-col items-center justify-center p-1">
@@ -331,52 +292,26 @@ export default function GoldLandAutoDMS() {
         <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2">
           <div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-gray-50 rounded-lg overflow-hidden">
              <div className="flex flex-col items-center justify-center text-gray-400 w-full h-full">
-                <div className="flex flex-col items-center">
-                    <Building2 size={32} />
-                    <span className="text-[10px] mt-1">Logo</span>
-                </div>
+                <div className="flex flex-col items-center"><Building2 size={32} /><span className="text-[10px] mt-1">Logo</span></div>
              </div>
           </div>
           <div className="flex-1 text-right">
             <h1 className="text-3xl font-bold tracking-wide text-black">{COMPANY_INFO.name_en}</h1>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">{COMPANY_INFO.name_ch}</h2>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p>{COMPANY_INFO.address_en}</p>
-              <p>{COMPANY_INFO.address_ch}</p>
-              <p className="font-bold">Tel: {COMPANY_INFO.phone}</p>
-            </div>
+            <div className="text-xs text-gray-600 space-y-1"><p>{COMPANY_INFO.address_en}</p><p>{COMPANY_INFO.address_ch}</p><p className="font-bold">Tel: {COMPANY_INFO.phone}</p></div>
           </div>
         </div>
-        <div className="text-center mt-6">
-          <h2 className="text-xl font-bold uppercase underline decoration-2 underline-offset-4">{titleEn}</h2>
-          <h3 className="text-lg font-bold mt-1">{titleCh}</h3>
-        </div>
+        <div className="text-center mt-6"><h2 className="text-xl font-bold uppercase underline decoration-2 underline-offset-4">{titleEn}</h2><h3 className="text-lg font-bold mt-1">{titleCh}</h3></div>
       </div>
     );
 
     const VehicleTable = () => (
       <table className="w-full border-collapse border border-black mb-6 text-sm">
         <tbody>
-          <tr>
-            <td className="border border-black p-2 bg-gray-100 font-bold w-1/4">車牌號碼<br/><span className="text-xs font-normal">Reg. Mark</span></td>
-            <td className="border border-black p-2 w-1/4 font-mono font-bold text-lg">{selectedVehicle.regMark}</td>
-            <td className="border border-black p-2 bg-gray-100 font-bold w-1/4">製造年份<br/><span className="text-xs font-normal">Year of Manuf.</span></td>
-            <td className="border border-black p-2 w-1/4">{selectedVehicle.year}</td>
-          </tr>
-          <tr>
-            <td className="border border-black p-2 bg-gray-100 font-bold">廠名<br/><span className="text-xs font-normal">Make</span></td>
-            <td className="border border-black p-2">{selectedVehicle.make}</td>
-            <td className="border border-black p-2 bg-gray-100 font-bold">型號<br/><span className="text-xs font-normal">Model</span></td>
-            <td className="border border-black p-2">{selectedVehicle.model}</td>
-          </tr>
-          <tr>
-            <td className="border border-black p-2 bg-gray-100 font-bold">底盤號碼<br/><span className="text-xs font-normal">Chassis No.</span></td>
-            <td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.chassisNo}</td>
-          </tr>
-          <tr>
-            <td className="border border-black p-2 bg-gray-100 font-bold">引擎號碼<br/><span className="text-xs font-normal">Engine No.</span></td>
-            <td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.engineNo}</td>
-          </tr>
+          <tr><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">車牌號碼<br/><span className="text-xs font-normal">Reg. Mark</span></td><td className="border border-black p-2 w-1/4 font-mono font-bold text-lg">{selectedVehicle.regMark}</td><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">製造年份<br/><span className="text-xs font-normal">Year</span></td><td className="border border-black p-2 w-1/4">{selectedVehicle.year}</td></tr>
+          <tr><td className="border border-black p-2 bg-gray-100 font-bold">廠名<br/><span className="text-xs font-normal">Make</span></td><td className="border border-black p-2">{selectedVehicle.make}</td><td className="border border-black p-2 bg-gray-100 font-bold">型號<br/><span className="text-xs font-normal">Model</span></td><td className="border border-black p-2">{selectedVehicle.model}</td></tr>
+          <tr><td className="border border-black p-2 bg-gray-100 font-bold">底盤號碼<br/><span className="text-xs font-normal">Chassis No.</span></td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.chassisNo}</td></tr>
+          <tr><td className="border border-black p-2 bg-gray-100 font-bold">引擎號碼<br/><span className="text-xs font-normal">Engine No.</span></td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.engineNo}</td></tr>
         </tbody>
       </table>
     );
@@ -385,68 +320,30 @@ export default function GoldLandAutoDMS() {
       return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black relative">
           <Header titleEn="Sales & Purchase Agreement" titleCh="汽車買賣合約" />
-          <div className="flex justify-between mb-4 text-sm border-b pb-2">
-            <span>合約編號: <span className="font-mono font-bold">SLA-{today.replace(/\//g,'')}-{selectedVehicle.id.slice(0,6)}</span></span>
-            <span>日期: {today}</span>
-          </div>
+          <div className="flex justify-between mb-4 text-sm border-b pb-2"><span>合約編號: <span className="font-mono font-bold">SLA-{today.replace(/\//g,'')}-{selectedVehicle.id.slice(0,6)}</span></span><span>日期: {today}</span></div>
           <div className="mb-6">
             <h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">甲、買方資料 / Purchaser Details</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div><p className="text-gray-500 text-xs">姓名 / Name</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.name}</p></div>
-              <div><p className="text-gray-500 text-xs">電話 / Phone</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.phone}</p></div>
-              <div><p className="text-gray-500 text-xs">身份證號碼 / HKID</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.hkid}</p></div>
-              <div className="col-span-2"><p className="text-gray-500 text-xs">地址 / Address</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.address}</p></div>
-            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm"><div><p className="text-gray-500 text-xs">姓名 / Name</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.name}</p></div><div><p className="text-gray-500 text-xs">電話 / Phone</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.phone}</p></div><div><p className="text-gray-500 text-xs">身份證號碼 / HKID</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.hkid}</p></div><div className="col-span-2"><p className="text-gray-500 text-xs">地址 / Address</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.address}</p></div></div>
           </div>
           <div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">乙、車輛資料 / Vehicle Details</h3><VehicleTable /></div>
-          <div className="mb-6">
-            <h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">丙、交易款項 / Payment Details</h3>
-            <div className="text-sm space-y-3 px-2">
-              <div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>成交價 (Vehicle Price):</span><span className="font-bold text-lg">{formatCurrency(selectedVehicle.price)}</span></div>
-              <div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>已付訂金 (Deposit Paid):</span><span className="text-lg">{formatCurrency(deposit)}</span></div>
-              <div className="flex justify-between items-end border-b-2 border-black pb-1 mt-2"><span className="font-bold">尚餘尾數 (Balance Due):</span><span className="font-bold text-xl">{formatCurrency(balance)}</span></div>
-            </div>
-          </div>
-          <div className="mb-8 text-[11px] text-justify leading-relaxed text-gray-700">
-            <h3 className="font-bold mb-1 text-sm text-black">條款及細則 / Terms & Conditions:</h3>
-            <ol className="list-decimal pl-4 space-y-1">
-              <li>買方已親自驗收上述車輛，並確認車輛之機件性能及外觀狀況良好，同意以「現狀」成交。<br/><span className="italic text-gray-500">The Purchaser has inspected the vehicle and accepted its condition on an "as-is" basis.</span></li>
-              <li>如買方悔約，賣方有權沒收所有訂金。<br/><span className="italic text-gray-500">Deposit will be forfeited if the Purchaser fails to complete the payment.</span></li>
-              <li>賣方保證上述車輛並無涉及任何未清之財務按揭、罰款或法律訴訟。<br/><span className="italic text-gray-500">The Vendor guarantees the vehicle is free from any outstanding finance, fines, or legal encumbrances.</span></li>
-            </ol>
-          </div>
-          <div className="grid grid-cols-2 gap-16 mt-12">
-            <div className="relative"><div className="border-t border-black pt-2 text-center"><p className="font-bold">賣方簽署及公司蓋印</p><p className="text-xs text-gray-500">Authorized Signature & Chop</p><p className="text-xs font-bold mt-1">For and on behalf of<br/>{COMPANY_INFO.name_en}</p></div><CompanyStamp /></div>
-            <div><div className="border-t border-black pt-2 text-center"><p className="font-bold">買方簽署</p><p className="text-xs text-gray-500">Purchaser Signature</p></div></div>
-          </div>
+          <div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">丙、交易款項 / Payment Details</h3><div className="text-sm space-y-3 px-2"><div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>成交價 (Vehicle Price):</span><span className="font-bold text-lg">{formatCurrency(selectedVehicle.price)}</span></div><div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>已付訂金 (Deposit Paid):</span><span className="text-lg">{formatCurrency(deposit)}</span></div><div className="flex justify-between items-end border-b-2 border-black pb-1 mt-2"><span className="font-bold">尚餘尾數 (Balance Due):</span><span className="font-bold text-xl">{formatCurrency(balance)}</span></div></div></div>
+          <div className="mb-8 text-[11px] text-justify leading-relaxed text-gray-700"><h3 className="font-bold mb-1 text-sm text-black">條款及細則 / Terms & Conditions:</h3><ol className="list-decimal pl-4 space-y-1"><li>買方已親自驗收上述車輛，並確認車輛之機件性能及外觀狀況良好，同意以「現狀」成交。<br/><span className="italic text-gray-500">The Purchaser has inspected the vehicle and accepted its condition on an "as-is" basis.</span></li><li>如買方悔約，賣方有權沒收所有訂金。<br/><span className="italic text-gray-500">Deposit will be forfeited if the Purchaser fails to complete the payment.</span></li><li>賣方保證上述車輛並無涉及任何未清之財務按揭、罰款或法律訴訟。<br/><span className="italic text-gray-500">The Vendor guarantees the vehicle is free from any outstanding finance, fines, or legal encumbrances.</span></li></ol></div>
+          <div className="grid grid-cols-2 gap-16 mt-12"><div className="relative"><div className="border-t border-black pt-2 text-center"><p className="font-bold">賣方簽署及公司蓋印</p><p className="text-xs text-gray-500">Authorized Signature & Chop</p><p className="text-xs font-bold mt-1">For and on behalf of<br/>{COMPANY_INFO.name_en}</p></div><CompanyStamp /></div><div><div className="border-t border-black pt-2 text-center"><p className="font-bold">買方簽署</p><p className="text-xs text-gray-500">Purchaser Signature</p></div></div></div>
         </div>
       );
     }
-
-    if (docType === 'invoice') {
-        return (
-            <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black">
-                <Header titleEn="INVOICE" titleCh="發票" />
-                <div className="flex justify-between mb-8 border p-4 rounded-lg bg-gray-50">
-                    <div className="flex-1"><p className="text-gray-500 text-xs">Bill To / 致:</p><p className="font-bold text-lg mt-1">{customer.name}</p><p className="text-sm">{customer.address}</p></div>
-                    <div className="text-right border-l pl-8 ml-8"><div><p className="text-gray-500 text-xs">No.</p><p className="font-bold">INV-{today.replace(/\//g,'')}-{selectedVehicle.id.slice(0,6)}</p></div><div><p className="text-gray-500 text-xs">Date</p><p className="font-bold">{today}</p></div></div>
-                </div>
-                <VehicleTable />
-                <div className="mt-8 border-t-2 border-black pt-4 flex justify-between items-center text-xl font-bold"><span>Total / 總數:</span><span>{formatCurrency(selectedVehicle.price)}</span></div>
-                <div className="mt-20 w-1/2 ml-auto relative"><div className="border-t border-black pt-4 text-center"><p>Gold Land Auto</p></div><CompanyStamp /></div>
-            </div>
-        )
-    }
+    // ... 其他文件類型 (Invoice, Receipt...) 邏輯與上面相同，只顯示主要結構
     return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black">
-            <Header titleEn={docType === 'purchase_contract' ? "PURCHASE AGREEMENT" : "OFFICIAL RECEIPT"} titleCh={docType === 'purchase_contract' ? "買入車輛合約" : "正式收據"} />
-            <div className="text-center p-10 text-gray-500 italic">
-                {docType === 'receipt' 
-                 ? `茲收到 ${customer.name} 港幣 ${formatCurrency(deposit)} (訂金/尾數)。` 
-                 : `本公司同意收購 ${customer.name} 之車輛，成交價 ${formatCurrency(selectedVehicle.price)}。`}
+            <Header titleEn={docType === 'invoice' ? "INVOICE" : (docType === 'purchase_contract' ? "PURCHASE AGREEMENT" : "OFFICIAL RECEIPT")} titleCh={docType === 'invoice' ? "發票" : (docType === 'purchase_contract' ? "買入車輛合約" : "正式收據")} />
+            <div className="flex justify-between mb-8 border p-4 rounded-lg bg-gray-50">
+                <div className="flex-1"><p className="text-gray-500 text-xs">Customer / 客戶:</p><p className="font-bold text-lg mt-1">{customer.name}</p><p className="text-sm">{customer.address}</p></div>
+                <div className="text-right border-l pl-8 ml-8"><div><p className="text-gray-500 text-xs">No.</p><p className="font-bold">{docType === 'invoice' ? 'INV' : 'DOC'}-{today.replace(/\//g,'')}-{selectedVehicle.id.slice(0,6)}</p></div><div><p className="text-gray-500 text-xs">Date</p><p className="font-bold">{today}</p></div></div>
             </div>
             <VehicleTable />
-            <div className="mt-20 relative"><div className="border-t border-black pt-4 w-1/2 text-center"><p>簽署 Confirm</p></div><CompanyStamp /></div>
+            {docType === 'invoice' && <div className="mt-8 border-t-2 border-black pt-4 flex justify-between items-center text-xl font-bold"><span>Total / 總數:</span><span>{formatCurrency(selectedVehicle.price)}</span></div>}
+            {docType !== 'invoice' && <div className="text-center p-10 text-gray-500 italic">{docType === 'receipt' ? `Received HKD ${formatCurrency(deposit)} from ${customer.name}` : `Gold Land Auto agrees to purchase the vehicle for ${formatCurrency(selectedVehicle.price)}`}</div>}
+            <div className="mt-20 relative"><div className="border-t border-black pt-4 w-1/2 text-center"><p>Authorized Signature</p></div><CompanyStamp /></div>
         </div>
     );
   };
@@ -456,7 +353,7 @@ export default function GoldLandAutoDMS() {
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col print:hidden`}>
         <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-          <div><h1 className="text-xl font-bold text-yellow-500 tracking-tighter">GOLD LAND</h1><p className="text-xs text-slate-400 mt-1">Firebase Cloud System</p></div>
+          <div><h1 className="text-xl font-bold text-yellow-500 tracking-tighter">GOLD LAND</h1><p className="text-xs text-slate-400 mt-1">Enterprise System</p></div>
           <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white"><X size={24} /></button>
         </div>
         <nav className="flex-1 p-4 space-y-2">
@@ -466,17 +363,17 @@ export default function GoldLandAutoDMS() {
         </nav>
         <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center">
             <div className="flex items-center gap-2 mb-1">
-                <div className={`w-2 h-2 rounded-full ${user ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span>{user ? 'Cloud Connected' : 'Offline'}</span>
+                <div className={`w-2 h-2 rounded-full ${db ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span>{db ? 'System Online' : 'System Offline'}</span>
             </div>
-            {user && <span className="text-[10px] opacity-50">ID: {user.uid.slice(0,6)}...</span>}
-            {/* 警告提示 */}
+            <div className="mt-2 flex items-center text-gray-400"><Users size={12} className="mr-1"/> Shared Database</div>
+            {/* Config Check */}
             {!isConfigConfigured && (
               <div className="mt-2 text-[10px] text-yellow-500 border border-yellow-700 rounded p-1 flex items-center bg-slate-800 animate-pulse">
-                <AlertTriangle size={12} className="mr-1" />
-                <span className="scale-90">Please Set Config!</span>
+                <AlertTriangle size={12} className="mr-1" /> Config Missing
               </div>
             )}
+            {authError && <div className="mt-1 text-[9px] text-red-400 max-w-full overflow-hidden text-ellipsis whitespace-nowrap" title={authError}>{authError}</div>}
         </div>
       </div>
     </>
@@ -515,13 +412,7 @@ export default function GoldLandAutoDMS() {
               </h2>
               {!loading && inventory.length === 0 && (
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg flex items-center justify-between">
-                      <div className="flex items-center text-blue-800">
-                          <Database className="mr-3" />
-                          <div>
-                              <p className="font-bold">資料庫是空的</p>
-                              <p className="text-sm">這是您第一次使用雲端系統，是否載入範例資料？</p>
-                          </div>
-                      </div>
+                      <div className="flex items-center text-blue-800"><Database className="mr-3" /><div><p className="font-bold">資料庫是空的 (Shared DB)</p><p className="text-sm">是否載入範例資料？</p></div></div>
                       <button onClick={loadDemoData} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center text-sm"><DownloadCloud size={16} className="mr-2"/> 載入範例</button>
                   </div>
               )}
@@ -530,7 +421,7 @@ export default function GoldLandAutoDMS() {
                 <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500 flex justify-between items-center"><div><p className="text-sm text-gray-500">本月銷售額</p><p className="text-2xl font-bold text-green-700">HK$ {formatCurrency(inventory.filter(v => v.status === 'Sold').length * 28000).replace('HK$', '')}</p></div><DollarSign className="text-green-500 opacity-20" size={40} /></div>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-4 md:p-6 overflow-hidden">
-                <h3 className="font-bold mb-4">最新庫存狀態 (Cloud Sync)</h3>
+                <h3 className="font-bold mb-4">最新庫存狀態</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead><tr className="border-b bg-gray-50"><th className="p-3">狀態</th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th></tr></thead>
@@ -547,7 +438,7 @@ export default function GoldLandAutoDMS() {
 
           {activeTab === 'inventory' && (
             <div className="space-y-6 animate-fade-in">
-              <h2 className="text-2xl font-bold text-slate-800">車輛庫存 (Firebase)</h2>
+              <h2 className="text-2xl font-bold text-slate-800">車輛庫存 (Shared DB)</h2>
               <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm">
                 <h3 className="font-bold mb-4 flex items-center text-slate-700"><Plus size={18} className="mr-2"/> 快速入庫</h3>
                 <form onSubmit={handleAddVehicle} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
