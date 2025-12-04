@@ -50,7 +50,7 @@ import {
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// ★★★ Firebase 設定 (Hardcoded) ★★★
+// ★★★ Firebase 設定 ★★★
 // ------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
@@ -72,7 +72,7 @@ const initFirebaseSystem = () => {
   try {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     
-    // Auth Initialization with Fallback for storage restrictions
+    // Auth Initialization
     try {
       auth = getAuth(app);
     } catch (e) {
@@ -169,7 +169,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
               onChange={e => setInput(e.target.value)}
               autoFocus
             />
-            <p className="text-xs text-slate-400 mt-2">※ 此 ID 將用於識別及儲存您的資料 (Case Sensitive)</p>
+            <p className="text-xs text-slate-400 mt-2">※ 資料將儲存於此 ID 下，下次登入可直接讀取。</p>
           </div>
           
           <button 
@@ -230,7 +230,6 @@ export default function GoldLandAutoDMS() {
         }
       } catch (error: any) {
         console.error("Login failed:", error);
-        // 只顯示非 storage 的錯誤
         if (!error.message?.includes('storage') && error.code !== 'auth/internal-error') {
            setAuthError(error.message);
         }
@@ -252,9 +251,12 @@ export default function GoldLandAutoDMS() {
   useEffect(() => {
     if (!db || !staffId) return;
 
-    // ★★★ 修正後的路徑: 5 層結構 (奇數層，這是一個集合) ★★★
-    // 路徑: artifacts / {appId} / staff / {staffId} / inventory
-    const inventoryRef = collection(db, 'artifacts', appId, 'staff', staffId, 'inventory');
+    // ★★★ 路徑結構修正 ★★★
+    // 使用 5 層結構 (奇數層)，這樣才是有效的 Collection 參考
+    // artifacts / {appId} / staff / {staffId}_data / inventory
+    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_'); // 確保 ID 沒有特殊符號
+    const inventoryRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
+    
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
     setLoading(true);
@@ -267,9 +269,8 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
-      // 提示：如果出現權限錯誤，通常是因為 Firestore Rules
       if (error.code === 'permission-denied') {
-        setAuthError("Permission Denied: 請檢查 Firestore Rules (allow write: if true)");
+        setAuthError("請前往 Firebase Console -> Firestore -> Rules 將規則設為 allow read, write: if true;");
       }
       setLoading(false);
     });
@@ -301,13 +302,13 @@ export default function GoldLandAutoDMS() {
     };
 
     try {
-      // 寫入修正後的路徑
-      await addDoc(collection(db, 'artifacts', appId, 'staff', staffId, 'inventory'), newVehicle);
+      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+      await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'), newVehicle);
       (e.target as HTMLFormElement).reset();
       alert('車輛已成功儲存！');
     } catch (error) {
       console.error("Error adding document: ", error);
-      alert('儲存失敗，請檢查權限或網路。');
+      alert('儲存失敗，請確認 Firebase Rules 已設為 true。');
     }
   };
 
@@ -315,7 +316,8 @@ export default function GoldLandAutoDMS() {
     if (!db || !staffId) return;
     if (confirm('確定要從雲端刪除此車輛資料？')) {
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'staff', staffId, 'inventory', id));
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', id));
       } catch (error) {
         console.error("Error deleting:", error);
         alert('刪除失敗');
@@ -328,8 +330,8 @@ export default function GoldLandAutoDMS() {
     if (!confirm('這將會寫入範例資料到您的帳戶，確定嗎？')) return;
 
     const batch = writeBatch(db);
-    // 批次寫入修正後的路徑
-    const inventoryRef = collection(db, 'artifacts', appId, 'staff', staffId, 'inventory');
+    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+    const inventoryRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
 
     MOCK_INVENTORY.forEach(car => {
       const docRef = doc(inventoryRef);
