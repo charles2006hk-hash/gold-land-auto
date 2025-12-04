@@ -70,15 +70,12 @@ let db: Firestore | null = null;
 // --- Initialize Firebase ---
 const initFirebaseSystem = () => {
   try {
-    // 1. 初始化 App (防止重複初始化)
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     
-    // 2. 初始化 Auth (智慧切換模式)
+    // Auth Initialization with Fallback for storage restrictions
     try {
-      // 優先嘗試標準模式
       auth = getAuth(app);
     } catch (e) {
-      // 如果失敗 (例如在某些受限環境)，強制使用備援模式
       if (!auth) {
         try {
           auth = initializeAuth(app, { persistence: [browserLocalPersistence, inMemoryPersistence] });
@@ -88,7 +85,6 @@ const initFirebaseSystem = () => {
       }
     }
 
-    // 3. 初始化 Firestore
     db = getFirestore(app);
     return true;
   } catch (e) {
@@ -97,9 +93,7 @@ const initFirebaseSystem = () => {
   }
 };
 
-// 執行初始化
 const isFirebaseReady = initFirebaseSystem();
-// 使用設定中的 projectId 作為 appId，或使用預設值
 const appId = firebaseConfig.projectId || 'gold-land-auto';
 
 // --- 公司資料 ---
@@ -224,7 +218,6 @@ export default function GoldLandAutoDMS() {
 
   // 3. Auth Effect
   useEffect(() => {
-    // 鎖定 auth 實例
     const currentAuth = auth;
     if (!currentAuth) { setLoading(false); return; }
     
@@ -237,7 +230,10 @@ export default function GoldLandAutoDMS() {
         }
       } catch (error: any) {
         console.error("Login failed:", error);
-        if (!error.message?.includes('storage')) setAuthError(error.message);
+        // 只顯示非 storage 的錯誤
+        if (!error.message?.includes('storage') && error.code !== 'auth/internal-error') {
+           setAuthError(error.message);
+        }
         setLoading(false);
       }
     };
@@ -252,12 +248,13 @@ export default function GoldLandAutoDMS() {
     return () => unsubscribe();
   }, []);
 
-  // 4. Firestore Listener (Depend on Staff ID)
+  // 4. Firestore Listener
   useEffect(() => {
     if (!db || !staffId) return;
 
-    // 路徑: artifacts/{appId}/public/data/{staffId}/inventory
-    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory');
+    // ★★★ 修正後的路徑: 5 層結構 (奇數層，這是一個集合) ★★★
+    // 路徑: artifacts / {appId} / staff / {staffId} / inventory
+    const inventoryRef = collection(db, 'artifacts', appId, 'staff', staffId, 'inventory');
     const q = query(inventoryRef, orderBy('createdAt', 'desc'));
 
     setLoading(true);
@@ -270,14 +267,16 @@ export default function GoldLandAutoDMS() {
       setLoading(false);
     }, (error) => {
       console.error("Firestore sync error:", error);
-      setAuthError("Permission Denied: 請檢查 Firebase Rules"); 
+      // 提示：如果出現權限錯誤，通常是因為 Firestore Rules
+      if (error.code === 'permission-denied') {
+        setAuthError("Permission Denied: 請檢查 Firestore Rules (allow write: if true)");
+      }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [staffId]);
 
-  // 如果還沒輸入員工編號，顯示登入畫面
   if (!staffId) {
     return <StaffLoginScreen onLogin={handleStaffLogin} />;
   }
@@ -302,12 +301,13 @@ export default function GoldLandAutoDMS() {
     };
 
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory'), newVehicle);
+      // 寫入修正後的路徑
+      await addDoc(collection(db, 'artifacts', appId, 'staff', staffId, 'inventory'), newVehicle);
       (e.target as HTMLFormElement).reset();
       alert('車輛已成功儲存！');
     } catch (error) {
       console.error("Error adding document: ", error);
-      alert('儲存失敗，請檢查權限。');
+      alert('儲存失敗，請檢查權限或網路。');
     }
   };
 
@@ -315,7 +315,7 @@ export default function GoldLandAutoDMS() {
     if (!db || !staffId) return;
     if (confirm('確定要從雲端刪除此車輛資料？')) {
       try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory', id));
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', staffId, 'inventory', id));
       } catch (error) {
         console.error("Error deleting:", error);
         alert('刪除失敗');
@@ -328,7 +328,8 @@ export default function GoldLandAutoDMS() {
     if (!confirm('這將會寫入範例資料到您的帳戶，確定嗎？')) return;
 
     const batch = writeBatch(db);
-    const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', staffId, 'inventory');
+    // 批次寫入修正後的路徑
+    const inventoryRef = collection(db, 'artifacts', appId, 'staff', staffId, 'inventory');
 
     MOCK_INVENTORY.forEach(car => {
       const docRef = doc(inventoryRef);
@@ -505,7 +506,7 @@ export default function GoldLandAutoDMS() {
                     <thead><tr className="border-b bg-gray-50"><th className="p-3">狀態</th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th></tr></thead>
                     <tbody>
                       {inventory.slice(0,5).map(car => (
-                        <tr key={car.id} className="border-b last:border-0 hover:bg-gray-50"><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status === 'In Stock' ? '在庫' : '已售'}</span></td><td className="p-3 font-medium">{car.regMark}</td><td className="p-3">{car.make} {car.model}</td><td className="p-3">{formatCurrency(car.price)}</td></tr>
+                        <tr key={car.id} className="border-b last:border-0 hover:bg-gray-50"><td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{car.status === 'In Stock' ? '在庫' : '已售'}</span></td><td className="p-3 font-medium">{car.regMark}</td><td className="p-3">{car.make} {car.model}</td><td className="p-3">{formatCurrency(car.price)}</td></tr>
                       ))}
                     </tbody>
                   </table>
