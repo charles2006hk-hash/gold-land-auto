@@ -6,7 +6,7 @@ import {
   Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, 
   Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
   Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
-  ArrowUpDown, Briefcase, BarChart3, FileBarChart
+  ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -84,6 +84,7 @@ type Expense = {
   status: 'Paid' | 'Unpaid';
   paymentMethod: 'Cash' | 'Cheque' | 'Offset' | 'Transfer';
   date: string;
+  invoiceNo?: string; // 新增：單號/備注
 };
 
 type Vehicle = {
@@ -169,7 +170,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.5</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.6</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -195,7 +196,6 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  // ★★★ 更新 Tab 類型，加入 'reports' ★★★
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports'>('dashboard');
   
   // Data States
@@ -209,7 +209,7 @@ export default function GoldLandAutoDMS() {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   
-  // Report States (新增)
+  // Report States
   const [reportType, setReportType] = useState<'receivable' | 'payable' | 'sales'>('receivable');
   const [reportStartDate, setReportStartDate] = useState(new Date().getFullYear() + '-01-01');
   const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
@@ -342,6 +342,7 @@ export default function GoldLandAutoDMS() {
     }
   };
 
+  // --- Expense Management ---
   const addExpense = async (vehicleId: string, expense: Expense) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -372,6 +373,23 @@ export default function GoldLandAutoDMS() {
     }
   };
 
+  // ★★★ 更新單筆費用狀態 (for Inline Editing) ★★★
+  const updateExpenseStatus = async (vehicleId: string, expenseId: string, newStatus: 'Paid'|'Unpaid') => {
+    if (!db || !staffId) return;
+    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+    const v = inventory.find(v => v.id === vehicleId);
+    if (!v) return;
+
+    const newExpenses = v.expenses.map(e => e.id === expenseId ? { ...e, status: newStatus } : e);
+    await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
+      expenses: newExpenses
+    });
+    if (editingVehicle && editingVehicle.id === vehicleId) {
+        setEditingVehicle({ ...editingVehicle, expenses: newExpenses });
+    }
+  };
+
+  // --- Settings Management ---
   const updateSettings = async (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -403,6 +421,7 @@ export default function GoldLandAutoDMS() {
     await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
   };
 
+  // --- Sorting Logic ---
   const handleSort = (key: keyof Vehicle) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -440,9 +459,8 @@ export default function GoldLandAutoDMS() {
         if (exp.status === 'Unpaid') totalPayable += exp.amount;
       });
       if (car.status === 'Sold') {
-        const soldPrice = car.price; // 假設售價即成交價
-        const deposit = 0; // 暫時無紀錄已收訂金欄位，若需要可從 Expenses 推算或新增欄位
-        // 應收: 售價 - 訂金 (這裡簡化)
+        const soldPrice = car.price; 
+        const deposit = 0; 
         totalReceivable += soldPrice; 
         totalSoldThisMonth += soldPrice;
       }
@@ -452,26 +470,24 @@ export default function GoldLandAutoDMS() {
   };
   const stats = dashboardStats();
 
-  // --- Report Logic (New) ---
+  // --- Report Logic ---
   const generateReportData = () => {
     let data: any[] = [];
     
     if (reportType === 'receivable') {
-        // 應收：已售車輛
         data = inventory.filter(v => 
             v.status === 'Sold' && 
             (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
             (!reportEndDate || (v.stockOutDate || '') <= reportEndDate)
         ).map(v => ({
-            id: v.id,
+            vehicleId: v.id, // Used for linking
             date: v.stockOutDate || 'Unknown',
             title: `${v.year} ${v.make} ${v.model}`,
             regMark: v.regMark,
-            amount: v.price, // 應收總額
+            amount: v.price,
             status: 'Sold'
         }));
     } else if (reportType === 'payable') {
-        // 應付：未付費用
         inventory.forEach(v => {
             v.expenses?.forEach(exp => {
                 if (exp.status === 'Unpaid' && 
@@ -479,10 +495,12 @@ export default function GoldLandAutoDMS() {
                    (!reportEndDate || exp.date <= reportEndDate) &&
                    (!reportCompany || exp.company === reportCompany)) {
                     data.push({
+                        vehicleId: v.id, // Used for linking
                         id: exp.id,
                         date: exp.date,
                         title: `${v.regMark} - ${exp.type}`,
                         company: exp.company,
+                        invoiceNo: exp.invoiceNo, // 新增欄位顯示
                         amount: exp.amount,
                         status: 'Unpaid'
                     });
@@ -490,7 +508,6 @@ export default function GoldLandAutoDMS() {
             });
         });
     } else if (reportType === 'sales') {
-        // 銷售數據
         data = inventory.filter(v => 
             v.status === 'Sold' &&
             (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
@@ -499,11 +516,11 @@ export default function GoldLandAutoDMS() {
             const totalCost = (v.costPrice || 0) + (v.expenses?.reduce((sum, e) => sum + e.amount, 0) || 0);
             const profit = v.price - totalCost;
             return {
-                id: v.id,
+                vehicleId: v.id,
                 date: v.stockOutDate,
                 title: `${v.year} ${v.make} ${v.model}`,
                 regMark: v.regMark,
-                amount: v.price, // 成交價
+                amount: v.price, 
                 cost: totalCost,
                 profit: profit
             };
@@ -529,7 +546,8 @@ export default function GoldLandAutoDMS() {
     
     const [newExpense, setNewExpense] = useState({
         date: new Date().toISOString().split('T')[0],
-        type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash'
+        type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash',
+        invoiceNo: '' // 新增欄位
     });
 
     return (
@@ -633,6 +651,7 @@ export default function GoldLandAutoDMS() {
               </div>
             </div>
 
+            {/* 費用管理 */}
             {isNew ? (
                 <div className="md:col-span-3 mt-6 bg-yellow-50 p-4 rounded border border-yellow-200 text-center">
                     <p className="text-yellow-700 font-bold"><AlertTriangle className="inline mr-2"/> 請先儲存車輛基本資料，即可新增處理費用。</p>
@@ -642,38 +661,140 @@ export default function GoldLandAutoDMS() {
                 <h3 className="font-bold flex items-center mb-4"><Wrench size={16} className="mr-2"/> 處理費用記錄</h3>
                 <table className="w-full text-sm bg-white border mb-4">
                   <thead>
-                    <tr className="bg-gray-100 text-left"><th className="p-2">日期</th><th className="p-2">項目</th><th className="p-2">負責公司</th><th className="p-2">金額</th><th className="p-2">狀態</th><th className="p-2">方式</th><th className="p-2">操作</th></tr>
+                    <tr className="bg-gray-100 text-left">
+                      <th className="p-2">日期</th>
+                      <th className="p-2">項目</th>
+                      <th className="p-2">單號/備注</th>
+                      <th className="p-2">負責公司</th>
+                      <th className="p-2">金額</th>
+                      <th className="p-2">狀態</th>
+                      <th className="p-2">操作</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {v.expenses?.map(exp => (
                       <tr key={exp.id} className="border-t">
-                        <td className="p-2">{exp.date}</td><td className="p-2">{exp.type}</td><td className="p-2 text-gray-500 text-xs">{exp.company}</td><td className="p-2">{formatCurrency(exp.amount)}</td><td className="p-2"><span className={`px-2 py-0.5 rounded text-xs ${exp.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{exp.status}</span></td><td className="p-2">{exp.paymentMethod}</td><td className="p-2"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-500"><X size={14}/></button></td>
+                        <td className="p-2">{exp.date}</td>
+                        <td className="p-2">{exp.type}</td>
+                        <td className="p-2 text-gray-500">{exp.invoiceNo}</td>
+                        <td className="p-2 text-gray-500">{exp.company}</td>
+                        <td className="p-2">{formatCurrency(exp.amount)}</td>
+                        <td className="p-2">
+                           {/* ★★★ 狀態可直接編輯 (Select) ★★★ */}
+                           <select 
+                             value={exp.status} 
+                             onChange={(e) => updateExpenseStatus(v.id!, exp.id, e.target.value as 'Paid'|'Unpaid')}
+                             className={`px-1 py-0.5 rounded text-xs border cursor-pointer ${exp.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}
+                           >
+                             <option value="Unpaid">未付</option>
+                             <option value="Paid">已付</option>
+                           </select>
+                        </td>
+                        <td className="p-2"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-500"><X size={14}/></button></td>
                       </tr>
                     ))}
                     {(!v.expenses || v.expenses.length === 0) && <tr><td colSpan={7} className="p-4 text-center text-gray-400">暫無費用記錄</td></tr>}
                   </tbody>
-                  <tfoot><tr className="bg-gray-50 font-bold border-t"><td colSpan={3} className="p-2 text-right">總成本 (車價+費用):</td><td colSpan={4} className="p-2 text-blue-600">{formatCurrency((v.costPrice || 0) + (v.expenses || []).reduce((acc, cur) => acc + cur.amount, 0))}</td></tr></tfoot>
+                  <tfoot>
+                     <tr className="bg-gray-50 font-bold border-t">
+                        <td colSpan={4} className="p-2 text-right">總成本 (車價+費用):</td>
+                        <td colSpan={3} className="p-2 text-blue-600">
+                           {formatCurrency((v.costPrice || 0) + (v.expenses || []).reduce((acc, cur) => acc + cur.amount, 0))}
+                        </td>
+                     </tr>
+                  </tfoot>
                 </table>
+
+                {/* 新增費用表單 */}
                 <div className="grid grid-cols-7 gap-2 items-end bg-gray-100 p-2 rounded">
-                  <div className="col-span-1"><label className="text-[10px] text-gray-500">日期</label><input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full border p-1 rounded text-xs" /></div>
-                  <div className="col-span-1"><label className="text-[10px] text-gray-500">項目</label><select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value})} className="w-full border p-1 rounded text-xs"><option value="">選擇...</option>{settings.expenseTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                  <div className="col-span-1"><label className="text-[10px] text-gray-500">負責公司</label><select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="w-full border p-1 rounded text-xs"><option value="">選擇...</option>{(settings.expenseCompanies || []).map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                  <div className="col-span-1"><label className="text-[10px] text-gray-500">金額</label><input type="text" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} placeholder="0" className="w-full border p-1 rounded text-xs" /></div>
-                  <div className="col-span-1"><label className="text-[10px] text-gray-500">狀態</label><select value={newExpense.status} onChange={e => setNewExpense({...newExpense, status: e.target.value as any})} className="w-full border p-1 rounded text-xs"><option value="Unpaid">未付</option><option value="Paid">已付</option></select></div>
-                  <div className="col-span-1"><label className="text-[10px] text-gray-500">方式</label><select value={newExpense.paymentMethod} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value as any})} className="w-full border p-1 rounded text-xs"><option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="Offset">對數</option></select></div>
-                  <div className="col-span-1"><button type="button" onClick={() => {const amount = Number(newExpense.amount.replace(/,/g, '')); if(amount > 0 && newExpense.type) { addExpense(v.id!, { id: Date.now().toString(), date: newExpense.date, type: newExpense.type, company: newExpense.company, amount: amount, status: newExpense.status as any, paymentMethod: newExpense.paymentMethod as any, description: '' }); setNewExpense({...newExpense, amount: ''}); } else { alert("請填寫費用項目及金額"); }}} className="w-full bg-green-600 text-white p-1 rounded text-xs hover:bg-green-700 h-[26px]">新增</button></div>
+                  <div className="col-span-1">
+                      <label className="text-[10px] text-gray-500">日期</label>
+                      <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full border p-1 rounded text-xs" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] text-gray-500">項目</label>
+                    <select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value})} className="w-full border p-1 rounded text-xs">
+                      <option value="">選擇...</option>
+                      {settings.expenseTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  {/* ★★★ 新增：單號/備注輸入框 ★★★ */}
+                  <div className="col-span-1">
+                    <label className="text-[10px] text-gray-500">單號/備注</label>
+                    <input type="text" placeholder="No.123" value={newExpense.invoiceNo} onChange={e => setNewExpense({...newExpense, invoiceNo: e.target.value})} className="w-full border p-1 rounded text-xs" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] text-gray-500">負責公司</label>
+                    <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="w-full border p-1 rounded text-xs">
+                      <option value="">選擇...</option>
+                      {(settings.expenseCompanies || []).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] text-gray-500">金額</label>
+                    <input 
+                       type="text" 
+                       value={newExpense.amount}
+                       onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})}
+                       placeholder="0" 
+                       className="w-full border p-1 rounded text-xs" 
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <label className="text-[10px] text-gray-500">狀態</label>
+                    <select value={newExpense.status} onChange={e => setNewExpense({...newExpense, status: e.target.value as any})} className="w-full border p-1 rounded text-xs">
+                      <option value="Unpaid">未付</option>
+                      <option value="Paid">已付</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <button type="button" 
+                      onClick={() => {
+                        const amount = Number(newExpense.amount.replace(/,/g, ''));
+                        if(amount > 0 && newExpense.type) {
+                            addExpense(v.id!, { 
+                                id: Date.now().toString(), 
+                                date: newExpense.date, 
+                                type: newExpense.type, 
+                                company: newExpense.company,
+                                invoiceNo: newExpense.invoiceNo, // 存入單號
+                                amount: amount, 
+                                status: newExpense.status as any, 
+                                paymentMethod: newExpense.paymentMethod as any, 
+                                description: '' 
+                            });
+                            setNewExpense({...newExpense, amount: '', invoiceNo: ''});
+                        } else {
+                            alert("請填寫費用項目及金額");
+                        }
+                      }}
+                      className="w-full bg-green-600 text-white p-1 rounded text-xs hover:bg-green-700 h-[26px]"
+                    >新增</button>
+                  </div>
                 </div>
               </div>
             )}
-            <div className="md:col-span-3 flex justify-end gap-4 mt-4 pt-4 border-t"><button type="button" onClick={() => {setEditingVehicle(null); setActiveTab('inventory');}} className="px-6 py-2 border rounded hover:bg-gray-50">取消</button><button type="submit" className="px-6 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400">儲存資料</button></div>
+
+            <div className="md:col-span-3 flex justify-end gap-4 mt-4 pt-4 border-t">
+              <button type="button" onClick={() => {setEditingVehicle(null); setActiveTab('inventory');}} className="px-6 py-2 border rounded hover:bg-gray-50">取消</button>
+              <button type="submit" className="px-6 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400">儲存資料</button>
+            </div>
           </form>
         </div>
       </div>
     );
   };
 
-  // 2. Report View (New Module)
+  // 2. Report View (Linked to Edit)
   const ReportView = () => {
+    // 處理報表項目點擊：跳轉到車輛編輯
+    const handleReportItemClick = (vehicleId: string) => {
+        const vehicle = inventory.find(v => v.id === vehicleId);
+        if (vehicle) {
+            setEditingVehicle(vehicle);
+        }
+    };
+
     return (
         <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
             <div className="flex justify-between items-center mb-6 print:hidden">
@@ -713,7 +834,7 @@ export default function GoldLandAutoDMS() {
                 )}
             </div>
 
-            {/* Report Content (Print Visible) */}
+            {/* Report Content */}
             <div className="print:visible">
                 <div className="text-center mb-8 hidden print:block">
                     <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
@@ -732,6 +853,7 @@ export default function GoldLandAutoDMS() {
                             <th className="p-2 border">項目 / 車輛</th>
                             <th className="p-2 border">詳情 / 車牌</th>
                             {reportType === 'payable' && <th className="p-2 border">負責公司</th>}
+                            {reportType === 'payable' && <th className="p-2 border">單號</th>}
                             {reportType === 'sales' && <th className="p-2 border">成本 (Cost)</th>}
                             <th className="p-2 border text-right">金額 (Amount)</th>
                             {reportType === 'sales' && <th className="p-2 border text-right">利潤 (Profit)</th>}
@@ -739,31 +861,33 @@ export default function GoldLandAutoDMS() {
                     </thead>
                     <tbody>
                         {reportData.map((item, idx) => (
-                            <tr key={idx} className="border-b">
+                            <tr 
+                                key={idx} 
+                                className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent"
+                                onClick={() => handleReportItemClick(item.vehicleId)} // ★★★ 點擊連動 ★★★
+                                title="點擊編輯此車輛費用"
+                            >
                                 <td className="p-2 border">{item.date}</td>
-                                <td className="p-2 border font-bold">{item.title}</td>
+                                <td className="p-2 border font-bold flex items-center">{item.title} <ExternalLink size={10} className="ml-2 text-gray-400 print:hidden"/></td>
                                 <td className="p-2 border">{item.regMark}</td>
                                 {reportType === 'payable' && <td className="p-2 border">{item.company}</td>}
+                                {reportType === 'payable' && <td className="p-2 border">{item.invoiceNo || '-'}</td>}
                                 {reportType === 'sales' && <td className="p-2 border">{formatCurrency(item.cost)}</td>}
                                 <td className="p-2 border text-right font-mono">{formatCurrency(item.amount)}</td>
                                 {reportType === 'sales' && <td className={`p-2 border text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
                             </tr>
                         ))}
-                        {reportData.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
+                        {reportData.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
                     </tbody>
                     <tfoot>
                         <tr className="bg-gray-200 font-bold">
-                            <td colSpan={reportType === 'payable' ? 4 : 3} className="p-2 border text-right">Total:</td>
+                            <td colSpan={reportType === 'payable' ? 5 : 3} className="p-2 border text-right">Total:</td>
                             {reportType === 'sales' && <td className="p-2 border"></td>}
                             <td className="p-2 border text-right">{formatCurrency(totalReportAmount)}</td>
                             {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(totalReportProfit)}</td>}
                         </tr>
                     </tfoot>
                 </table>
-                
-                <div className="mt-8 text-xs text-gray-500 text-right hidden print:block">
-                    Generated by Gold Land Auto System on {new Date().toLocaleString()}
-                </div>
             </div>
         </div>
     );
@@ -810,7 +934,10 @@ export default function GoldLandAutoDMS() {
     <>
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col print:hidden`}>
-        <div className="p-6 border-b border-slate-700 flex justify-between items-center"><div><h1 className="text-xl font-bold text-yellow-500 tracking-tighter">GOLD LAND</h1><p className="text-xs text-slate-400 mt-1">Sales & Management</p></div><button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white"><X size={24} /></button></div>
+        <div className="p-6 border-b border-slate-700 flex justify-between items-center">
+          <div><h1 className="text-xl font-bold text-yellow-500 tracking-tighter">GOLD LAND</h1><p className="text-xs text-slate-400 mt-1">Sales & Management</p></div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white"><X size={24} /></button>
+        </div>
         <nav className="flex-1 p-4 space-y-2">
           <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'dashboard' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><LayoutDashboard size={20} className="mr-3" /> 業務儀表板</button>
           <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'inventory' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Car size={20} className="mr-3" /> 車輛管理</button>
