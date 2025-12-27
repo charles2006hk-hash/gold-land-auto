@@ -96,7 +96,8 @@ type Vehicle = {
   engineNo: string;
   
   // 擴充資料
-  purchaseType: 'Used' | 'New'; // 二手收購 / 新車訂購
+  // ★★★ 更新：增加 Consignment (寄賣) ★★★
+  purchaseType: 'Used' | 'New' | 'Consignment'; 
   colorExt: string; // 外觀顏色
   colorInt: string; // 內飾顏色
   licenseExpiry: string; // 牌費到期日
@@ -170,13 +171,21 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.1</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.2</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">員工編號 / Staff ID</label>
-            <input type="text" className="w-full p-4 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-yellow-500 outline-none transition" placeholder="e.g. BOSS, SALES01" value={input} onChange={e => setInput(e.target.value)} autoFocus />
+            {/* ★★★ 更新：文字顏色加深 (text-slate-900 font-bold) ★★★ */}
+            <input 
+              type="text" 
+              className="w-full p-4 border border-slate-300 rounded-xl text-lg text-slate-900 font-bold focus:ring-2 focus:ring-yellow-500 outline-none transition placeholder:text-slate-400" 
+              placeholder="e.g. BOSS, SALES01" 
+              value={input} 
+              onChange={e => setInput(e.target.value)} 
+              autoFocus 
+            />
           </div>
           <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center transition transform active:scale-95 shadow-lg">Login <ArrowRight className="ml-2" /></button>
         </form>
@@ -255,12 +264,11 @@ export default function GoldLandAutoDMS() {
     const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
     getDoc(settingsDocRef).then(docSnap => {
       if (docSnap.exists()) {
-        // 合併預設值以防舊資料結構缺失
         const loadedSettings = docSnap.data() as SystemSettings;
         setSettings({
             ...DEFAULT_SETTINGS,
             ...loadedSettings,
-            models: { ...DEFAULT_SETTINGS.models, ...loadedSettings.models } // Merge models to keep defaults
+            models: { ...DEFAULT_SETTINGS.models, ...loadedSettings.models }
         });
       } else {
         setDoc(settingsDocRef, DEFAULT_SETTINGS);
@@ -358,35 +366,27 @@ export default function GoldLandAutoDMS() {
     let newSettings = { ...settings };
 
     if (key === 'models' && parentKey) {
-        // Handle Nested Models (Level 2)
         const currentModels = newSettings.models[parentKey] || [];
         let newModelsList = [...currentModels];
-        
         if (action === 'add' && newItem && !newModelsList.includes(newItem)) {
             newModelsList.push(newItem);
         } else if (action === 'remove') {
             newModelsList = newModelsList.filter(item => item !== newItem);
         }
-        
         newSettings.models = { ...newSettings.models, [parentKey]: newModelsList };
     } else {
-        // Handle Flat Lists (Makes, ExpenseTypes, Colors)
         const list = settings[key] as string[];
         let newList = [...list];
-        
         if (action === 'add' && newItem && !newList.includes(newItem)) {
             newList.push(newItem);
-            // If adding a Make, verify it has an entry in models map
             if (key === 'makes' && !newSettings.models[newItem]) {
                 newSettings.models = { ...newSettings.models, [newItem]: [] };
             }
         } else if (action === 'remove') {
             newList = newList.filter(item => item !== newItem);
         }
-        
         (newSettings[key] as string[]) = newList;
     }
-
     setSettings(newSettings);
     await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
   };
@@ -483,6 +483,8 @@ export default function GoldLandAutoDMS() {
               <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full border p-2 rounded bg-gray-50">
                 <option value="Used">二手收購 (Used)</option>
                 <option value="New">訂購新車 (New)</option>
+                {/* ★★★ 更新：新增寄賣選項 ★★★ */}
+                <option value="Consignment">寄賣 (Consignment)</option>
               </select>
             </div>
             <div>
@@ -788,7 +790,7 @@ export default function GoldLandAutoDMS() {
         <tbody>
           <tr><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">車牌號碼 (Reg. Mark)</td><td className="border border-black p-2 w-1/4 font-mono font-bold text-lg">{selectedVehicle.regMark}</td><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">製造年份 (Year)</td><td className="border border-black p-2 w-1/4">{selectedVehicle.year}</td></tr>
           <tr><td className="border border-black p-2 bg-gray-100 font-bold">廠名 (Make)</td><td className="border border-black p-2">{selectedVehicle.make}</td><td className="border border-black p-2 bg-gray-100 font-bold">型號 (Model)</td><td className="border border-black p-2">{selectedVehicle.model}</td></tr>
-          <tr><td className="border border-black p-2 bg-gray-100 font-bold">顏色 (Color)</td><td className="border border-black p-2">{selectedVehicle.colorExt} / {selectedVehicle.colorInt}</td><td className="border border-black p-2 bg-gray-100 font-bold">收購類別</td><td className="border border-black p-2">{selectedVehicle.purchaseType === 'New' ? '新車' : '二手'}</td></tr>
+          <tr><td className="border border-black p-2 bg-gray-100 font-bold">顏色 (Color)</td><td className="border border-black p-2">{selectedVehicle.colorExt} / {selectedVehicle.colorInt}</td><td className="border border-black p-2 bg-gray-100 font-bold">收購類別</td><td className="border border-black p-2">{selectedVehicle.purchaseType === 'New' ? '新車' : (selectedVehicle.purchaseType === 'Consignment' ? '寄賣' : '二手')}</td></tr>
           <tr><td className="border border-black p-2 bg-gray-100 font-bold">底盤號碼 (Chassis)</td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.chassisNo}</td></tr>
           <tr><td className="border border-black p-2 bg-gray-100 font-bold">引擎號碼 (Engine)</td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.engineNo}</td></tr>
         </tbody>
@@ -897,8 +899,16 @@ export default function GoldLandAutoDMS() {
                         return (
                           <tr key={car.id} className="border-b hover:bg-gray-50">
                             <td className="p-3 text-gray-500 text-xs">{car.createdAt?.toDate ? formatDate(car.createdAt.toDate()) : 'N/A'}</td>
-                            <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status === 'In Stock' ? '在庫' : '已售'}</span></td>
-                            <td className="p-3 font-medium">{car.regMark}</td>
+                            <td className="p-3">
+                                {car.status === 'In Stock' && <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-800">在庫</span>}
+                                {car.status === 'Sold' && <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-800">已售</span>}
+                                {car.status === 'Reserved' && <span className="px-2 py-1 rounded text-xs bg-yellow-100 text-yellow-800">已訂</span>}
+                            </td>
+                            <td className="p-3 font-medium flex items-center">
+                                {car.regMark}
+                                {car.purchaseType === 'New' && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded scale-90">新車</span>}
+                                {car.purchaseType === 'Consignment' && <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-1 py-0.5 rounded scale-90">寄賣</span>}
+                            </td>
                             <td className="p-3">{car.make} {car.model}</td>
                             <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
                             <td className="p-3 text-right">{unpaidExps > 0 ? <span className="text-red-500 text-xs font-bold">{unpaidExps} 筆未付</span> : <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}</td>
@@ -938,6 +948,7 @@ export default function GoldLandAutoDMS() {
                               <p className="font-bold text-lg text-slate-800 mr-2">{car.regMark || '未出牌'}</p>
                               <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-500">{car.year}</span>
                               {car.purchaseType === 'New' && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">新車</span>}
+                              {car.purchaseType === 'Consignment' && <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">寄賣</span>}
                               {car.stockOutDate && <span className="ml-2 text-xs text-gray-400">售出: {car.stockOutDate}</span>}
                             </div>
                             <p className="text-gray-600 font-medium">{car.make} {car.model}</p>
