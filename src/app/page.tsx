@@ -20,7 +20,7 @@ import {
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// ★★★ Firebase 設定 (已鎖定) ★★★
+// ★★★ Firebase 設定 ★★★
 // ------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
@@ -156,8 +156,8 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto</h1>
-          <p className="text-slate-500 text-sm mt-2">Vehicle Management System</p>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.0</h1>
+          <p className="text-slate-500 text-sm mt-2">Vehicle Management System (Pro)</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -175,7 +175,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  // ★★★ 修正點：在類型定義中加入 'inventory_add' ★★★
+  // ★★★ 類型定義已修正，包含 'inventory_add' ★★★
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add'>('dashboard');
   
   // Data States
@@ -183,8 +183,8 @@ export default function GoldLandAutoDMS() {
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   
   // UI States
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); // For Doc Creation
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null); // For Edit/Expense Modal
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -203,7 +203,6 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // 建立局部變數鎖定 auth，解決 TypeScript "Argument of type 'Auth | null' is not assignable" 錯誤
     const currentAuth = auth;
     if (!currentAuth) { setLoading(false); return; }
 
@@ -231,20 +230,19 @@ export default function GoldLandAutoDMS() {
     
     // 1. Inventory Listener
     const invRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
-    const q = query(invRef, orderBy('createdAt', 'desc')); // 最新數據排先
+    const q = query(invRef, orderBy('createdAt', 'desc')); 
     const unsubInv = onSnapshot(q, (snapshot) => {
       const list: Vehicle[] = [];
       snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() } as Vehicle));
       setInventory(list);
     }, (err) => console.error("Inv sync error", err));
 
-    // 2. Settings Fetch (只讀一次，簡化流程)
+    // 2. Settings Fetch
     const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'settings_doc');
     getDoc(settingsDocRef).then(docSnap => {
       if (docSnap.exists()) {
         setSettings(docSnap.data() as SystemSettings);
       } else {
-        // Init default settings if not exists
         setDoc(settingsDocRef, DEFAULT_SETTINGS);
       }
     });
@@ -276,17 +274,15 @@ export default function GoldLandAutoDMS() {
       price: Number(formData.get('price')),
       costPrice: Number(formData.get('costPrice') || 0),
       status: editingVehicle ? editingVehicle.status : 'In Stock',
-      expenses: editingVehicle ? editingVehicle.expenses : [], // 保留舊有的 expenses
+      expenses: editingVehicle ? editingVehicle.expenses : [], 
       updatedAt: serverTimestamp()
     };
 
     try {
       if (editingVehicle && editingVehicle.id) {
-        // Update
         await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', editingVehicle.id), vData);
         alert('車輛資料已更新');
       } else {
-        // Create
         await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'), {
           ...vData,
           createdAt: serverTimestamp(),
@@ -294,7 +290,8 @@ export default function GoldLandAutoDMS() {
         });
         alert('新車輛已入庫');
       }
-      setEditingVehicle(null); // Close modal
+      setEditingVehicle(null);
+      setActiveTab('inventory');
     } catch (e) { alert('儲存失敗'); console.error(e); }
   };
 
@@ -351,25 +348,20 @@ export default function GoldLandAutoDMS() {
   // --- Dashboard Logic ---
   const dashboardStats = () => {
     let totalStockValue = 0;
-    let totalReceivable = 0; // 應收 (已售車輛尾數)
-    let totalPayable = 0; // 應付 (未付費用)
+    let totalReceivable = 0; 
+    let totalPayable = 0; 
     let totalSoldThisMonth = 0;
 
     inventory.forEach(car => {
       if (car.status === 'In Stock') totalStockValue += car.price;
       
-      // 計算未付費用
       car.expenses?.forEach(exp => {
         if (exp.status === 'Unpaid') totalPayable += exp.amount;
       });
 
-      // 計算應收尾數 (假設 status='Sold' 且 soldPrice 存在)
       if (car.status === 'Sold') {
         const soldPrice = car.soldPrice || car.price;
         const deposit = car.deposit || 0;
-        // 這裡簡化邏輯：如果標記為已售，假設還沒全數收齊 (實際應有更複雜的 Payment Log)
-        // 暫時以 "售價 - 訂金" 作為參考，或者在開單時標記 "Full Paid"
-        // 此處僅作示例計算
         totalReceivable += (soldPrice - deposit); 
         totalSoldThisMonth += soldPrice;
       }
@@ -384,8 +376,9 @@ export default function GoldLandAutoDMS() {
 
   // 1. Vehicle Form Modal (Add/Edit)
   const VehicleFormModal = () => {
-    if (!editingVehicle && activeTab !== 'inventory_add') return null; // Logic check
-    // Reuse state or defaults
+    // 檢查 activeTab 是否為 inventory_add，或是否有 editingVehicle
+    if (!editingVehicle && activeTab !== 'inventory_add') return null; 
+    
     const v = editingVehicle || {} as Partial<Vehicle>;
     
     return (
