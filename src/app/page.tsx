@@ -7,7 +7,7 @@ import {
   Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
   Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
-  StickyNote // 新增圖示
+  StickyNote, CreditCard, Armchair // 新增圖示
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -101,10 +101,16 @@ type Vehicle = {
   colorInt: string; 
   licenseExpiry: string; 
   
-  // ★★★ 新增欄位 ★★★
-  previousOwners?: string; // 首數 (字串以容納 "未出牌" 等描述)
-  mileage?: number;      // 公里數
-  remarks?: string;      // 備註
+  // 詳細狀況
+  previousOwners?: string; 
+  mileage?: number;      
+  remarks?: string;
+
+  // ★★★ 新增欄位 (v2.8) ★★★
+  seating?: number; // 座位數
+  priceA1?: number; // A1價
+  priceTax?: number; // 入口稅
+  priceRegistered?: number; // 牌簿價 (A1 + Tax)
 
   price: number; 
   costPrice?: number; 
@@ -177,7 +183,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.7</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.8</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -303,7 +309,15 @@ export default function GoldLandAutoDMS() {
     const status = formData.get('status') as any;
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
-    const mileageRaw = formData.get('mileage') as string; // 獲取公里數
+    const mileageRaw = formData.get('mileage') as string;
+    
+    // ★★★ 取得新欄位 (移除逗號) ★★★
+    const priceA1Raw = formData.get('priceA1') as string;
+    const priceTaxRaw = formData.get('priceTax') as string;
+    // 計算牌簿價 (A1 + Tax) - 確保是數字
+    const valA1 = Number(priceA1Raw.replace(/,/g, '') || 0);
+    const valTax = Number(priceTaxRaw.replace(/,/g, '') || 0);
+    const valRegistered = valA1 + valTax;
 
     const vData = {
       purchaseType: formData.get('purchaseType'),
@@ -318,11 +332,18 @@ export default function GoldLandAutoDMS() {
       licenseExpiry: formData.get('licenseExpiry') || '',
       price: Number(priceRaw.replace(/,/g, '')),
       costPrice: Number(costPriceRaw.replace(/,/g, '') || 0),
-      // ★★★ 新增欄位儲存 ★★★
+      
       previousOwners: formData.get('previousOwners') || '', 
       mileage: Number(mileageRaw.replace(/,/g, '') || 0), 
       remarks: formData.get('remarks') || '', 
+      
+      // ★★★ 新增欄位儲存 ★★★
+      seating: Number(formData.get('seating') || 5), // 預設 5
+      priceA1: valA1,
+      priceTax: valTax,
+      priceRegistered: valRegistered,
       // --------------------
+
       status: status,
       stockInDate: formData.get('stockInDate'),
       stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
@@ -551,11 +572,23 @@ export default function GoldLandAutoDMS() {
     const v = editingVehicle || {} as Partial<Vehicle>;
     const isNew = !v.id; 
     const [selectedMake, setSelectedMake] = useState(v.make || '');
+    
+    // 價格輸入 state
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
-    // ★★★ 新增：公里數的輸入 State ★★★
     const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
     
+    // ★★★ 新增：A1價與入口稅輸入 state ★★★
+    const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
+    const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
+    
+    // 自動計算牌簿價 (Registered Price)
+    const calcRegisteredPrice = () => {
+        const a1 = Number(priceA1Str.replace(/,/g, '')) || 0;
+        const tax = Number(priceTaxStr.replace(/,/g, '')) || 0;
+        return formatNumberInput(String(a1 + tax));
+    };
+
     const [newExpense, setNewExpense] = useState({
         date: new Date().toISOString().split('T')[0],
         type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash',
@@ -637,7 +670,7 @@ export default function GoldLandAutoDMS() {
               <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full border p-2 rounded"/>
             </div>
 
-            {/* ★★★ 新增：車輛詳細狀況區塊 (首數、公里數、備註) ★★★ */}
+            {/* 詳細狀況 & 備註 */}
             <div className="md:col-span-3 pb-2 border-b mt-4 flex items-center">
                 <StickyNote size={16} className="mr-2 text-yellow-600"/> 
                 <h3 className="font-bold text-gray-500">詳細狀況 & 備註</h3>
@@ -660,6 +693,12 @@ export default function GoldLandAutoDMS() {
                 <span className="absolute right-3 top-2 text-gray-400 text-xs">km</span>
               </div>
             </div>
+            {/* ★★★ 新增：座位數 ★★★ */}
+            <div>
+               <label className="block text-xs font-bold text-gray-500 flex items-center"><Armchair size={12} className="mr-1"/> 座位數 (Seating)</label>
+               <input name="seating" type="number" defaultValue={v.seating || 5} className="w-full border p-2 rounded" />
+            </div>
+
             <div className="md:col-span-3">
               <label className="block text-xs font-bold text-gray-500">備註 (Remarks)</label>
               <textarea name="remarks" defaultValue={v.remarks} className="w-full border p-2 rounded h-20 text-sm" placeholder="輸入車輛狀況備註..."/>
@@ -675,7 +714,8 @@ export default function GoldLandAutoDMS() {
               <input name="engineNo" defaultValue={v.engineNo} className="w-full border p-2 rounded font-mono" placeholder="非必填"/>
             </div>
 
-            <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">價格設定</h3></div>
+            {/* 價格設定 (擴充) */}
+            <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">價格與稅務設定</h3></div>
             <div>
               <label className="block text-xs font-bold text-gray-500">入貨成本 (Cost)</label>
               <div className="relative">
@@ -690,6 +730,39 @@ export default function GoldLandAutoDMS() {
                 <input name="price" type="text" value={priceStr} onChange={(e) => setPriceStr(formatNumberInput(e.target.value))} required className="w-full border p-2 pl-6 rounded font-bold text-lg font-mono" placeholder="0"/>
               </div>
             </div>
+            
+            {/* ★★★ 新增：A1價、入口稅、牌簿價 (自動計算) ★★★ */}
+            <div className="flex flex-col gap-2 p-2 bg-blue-50 rounded border border-blue-100">
+               <label className="block text-xs font-bold text-blue-800">A1 價 / 零售價 (Published Price)</label>
+               <input 
+                  name="priceA1" 
+                  type="text" 
+                  value={priceA1Str} 
+                  onChange={(e) => setPriceA1Str(formatNumberInput(e.target.value))} 
+                  className="w-full border p-1 rounded text-sm text-right"
+                  placeholder="0"
+               />
+            </div>
+            <div className="flex flex-col gap-2 p-2 bg-blue-50 rounded border border-blue-100">
+               <label className="block text-xs font-bold text-blue-800">入口稅 (Tax)</label>
+               <input 
+                  name="priceTax" 
+                  type="text" 
+                  value={priceTaxStr} 
+                  onChange={(e) => setPriceTaxStr(formatNumberInput(e.target.value))} 
+                  className="w-full border p-1 rounded text-sm text-right"
+                  placeholder="0"
+               />
+            </div>
+            <div className="flex flex-col gap-2 p-2 bg-blue-100 rounded border border-blue-200">
+               <label className="block text-xs font-bold text-blue-900 flex items-center"><CreditCard size={12} className="mr-1"/> 牌簿價 (Registered Value)</label>
+               {/* 唯讀欄位，自動顯示加總 */}
+               <div className="w-full p-1 text-right font-bold text-lg text-blue-900">
+                   {calcRegisteredPrice()}
+               </div>
+               <p className="text-[10px] text-blue-600 text-right">= A1價 + 入口稅</p>
+            </div>
+
 
             {/* 費用管理 */}
             {isNew ? (
@@ -959,10 +1032,7 @@ export default function GoldLandAutoDMS() {
 
   const CompanyStamp = () => (<div className="w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-90 pointer-events-none select-none mix-blend-multiply" style={{ color: '#2b3d90', border: '2px solid #2b3d90', boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', backgroundColor: 'rgba(43, 61, 144, 0.02)', mixBlendMode: 'multiply' }}><div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}><div className="absolute w-full h-full"><svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0"><defs><path id="textCircle" d="M 12, 50 A 38, 38 0 1, 1 88, 50" /></defs><text fontSize="11" fontWeight="bold" fill="#2b3d90" letterSpacing="1"><textPath href="#textCircle" startOffset="50%" textAnchor="middle">GOLD LAND AUTO</textPath></text></svg></div><div className="flex flex-col items-center justify-center mt-2 z-10"><span className="text-[6px] font-bold leading-none tracking-widest" style={{ textShadow: '0 0 0.5px #2b3d90' }}>金田</span><span className="text-[6px] font-bold leading-none tracking-widest mt-[1px]" style={{ textShadow: '0 0 0.5px #2b3d90' }}>汽車</span></div><div className="absolute bottom-1 text-[8px] font-bold text-[#2b3d90]">*</div></div></div>);
   const SignedStamp = () => (<div className="relative w-[50mm] h-[30mm] flex items-center justify-center"><svg viewBox="0 0 200 100" className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{ overflow: 'visible' }}><defs><filter id="ink-spread"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" /><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" /></filter></defs><path d="M20,60 C40,40 60,80 90,50 C110,30 130,70 160,40 C170,30 180,60 190,50" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.85 }} /><path d="M30,70 C60,60 120,60 180,55" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.9 }} /><path d="M50,40 Q40,80 60,70 T80,60" fill="none" stroke="black" strokeWidth="2.5" style={{ filter: 'url(#ink-spread)', opacity: 0.8 }} /></svg><div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-2 w-[22mm] h-[22mm] flex items-center justify-center z-10 pointer-events-none select-none"><CompanyStamp /></div></div>);
-  const DocumentTemplate = () => {if (!selectedVehicle) return null; const today = formatDate(new Date()); const balance = selectedVehicle.price - deposit; const Header = ({ titleEn, titleCh }: { titleEn: string, titleCh: string }) => (<div className="mb-8"><div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2"><div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-gray-50 rounded-lg overflow-hidden"><div className="flex flex-col items-center justify-center text-gray-400 w-full h-full"><div className="flex flex-col items-center"><Building2 size={32} /><span className="text-[10px] mt-1">Logo</span></div></div></div><div className="flex-1 text-right"><h1 className="text-3xl font-bold tracking-wide text-black">{COMPANY_INFO.name_en}</h1><h2 className="text-2xl font-bold text-gray-800 mb-2">{COMPANY_INFO.name_ch}</h2><div className="text-xs text-gray-600 space-y-1"><p>{COMPANY_INFO.address_en}</p><p>{COMPANY_INFO.address_ch}</p><p className="font-bold">Tel: {COMPANY_INFO.phone}</p></div></div></div><div className="text-center mt-6"><h2 className="text-xl font-bold uppercase underline decoration-2 underline-offset-4">{titleEn}</h2><h3 className="text-lg font-bold mt-1">{titleCh}</h3></div></div>); const VehicleTable = () => (<table className="w-full border-collapse border border-black mb-6 text-sm"><tbody><tr><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">車牌號碼 (Reg. Mark)</td><td className="border border-black p-2 w-1/4 font-mono font-bold text-lg">{selectedVehicle.regMark}</td><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">製造年份 (Year)</td><td className="border border-black p-2 w-1/4">{selectedVehicle.year}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">廠名 (Make)</td><td className="border border-black p-2">{selectedVehicle.make}</td><td className="border border-black p-2 bg-gray-100 font-bold">型號 (Model)</td><td className="border border-black p-2">{selectedVehicle.model}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">顏色 (Color)</td><td className="border border-black p-2">{selectedVehicle.colorExt} / {selectedVehicle.colorInt}</td><td className="border border-black p-2 bg-gray-100 font-bold">收購類別</td><td className="border border-black p-2">{selectedVehicle.purchaseType === 'New' ? '新車' : (selectedVehicle.purchaseType === 'Consignment' ? '寄賣' : '二手')}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">底盤號碼 (Chassis)</td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.chassisNo}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">引擎號碼 (Engine)</td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.engineNo}</td></tr>
-          {/* ★★★ 在合約表格中顯示首數和公里數 ★★★ */}
-          <tr><td className="border border-black p-2 bg-gray-100 font-bold">首數 (Previous Owners)</td><td className="border border-black p-2">{selectedVehicle.previousOwners || '-'}</td><td className="border border-black p-2 bg-gray-100 font-bold">公里數 (Mileage)</td><td className="border border-black p-2">{selectedVehicle.mileage ? `${selectedVehicle.mileage.toLocaleString()} km` : '-'}</td></tr>
-          </tbody></table>);
+  const DocumentTemplate = () => {if (!selectedVehicle) return null; const today = formatDate(new Date()); const balance = selectedVehicle.price - deposit; const Header = ({ titleEn, titleCh }: { titleEn: string, titleCh: string }) => (<div className="mb-8"><div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2"><div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-gray-50 rounded-lg overflow-hidden"><div className="flex flex-col items-center justify-center text-gray-400 w-full h-full"><div className="flex flex-col items-center"><Building2 size={32} /><span className="text-[10px] mt-1">Logo</span></div></div></div><div className="flex-1 text-right"><h1 className="text-3xl font-bold tracking-wide text-black">{COMPANY_INFO.name_en}</h1><h2 className="text-2xl font-bold text-gray-800 mb-2">{COMPANY_INFO.name_ch}</h2><div className="text-xs text-gray-600 space-y-1"><p>{COMPANY_INFO.address_en}</p><p>{COMPANY_INFO.address_ch}</p><p className="font-bold">Tel: {COMPANY_INFO.phone}</p></div></div></div><div className="text-center mt-6"><h2 className="text-xl font-bold uppercase underline decoration-2 underline-offset-4">{titleEn}</h2><h3 className="text-lg font-bold mt-1">{titleCh}</h3></div></div>); const VehicleTable = () => (<table className="w-full border-collapse border border-black mb-6 text-sm"><tbody><tr><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">車牌號碼 (Reg. Mark)</td><td className="border border-black p-2 w-1/4 font-mono font-bold text-lg">{selectedVehicle.regMark}</td><td className="border border-black p-2 bg-gray-100 font-bold w-1/4">製造年份 (Year)</td><td className="border border-black p-2 w-1/4">{selectedVehicle.year}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">廠名 (Make)</td><td className="border border-black p-2">{selectedVehicle.make}</td><td className="border border-black p-2 bg-gray-100 font-bold">型號 (Model)</td><td className="border border-black p-2">{selectedVehicle.model}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">顏色 (Color)</td><td className="border border-black p-2">{selectedVehicle.colorExt} / {selectedVehicle.colorInt}</td><td className="border border-black p-2 bg-gray-100 font-bold">收購類別</td><td className="border border-black p-2">{selectedVehicle.purchaseType === 'New' ? '新車' : (selectedVehicle.purchaseType === 'Consignment' ? '寄賣' : '二手')}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">底盤號碼 (Chassis)</td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.chassisNo}</td></tr><tr><td className="border border-black p-2 bg-gray-100 font-bold">引擎號碼 (Engine)</td><td className="border border-black p-2 font-mono" colSpan={3}>{selectedVehicle.engineNo}</td></tr></tbody></table>);
     if (docType === 'sales_contract') return (<div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black relative"><Header titleEn="Sales & Purchase Agreement" titleCh="汽車買賣合約" /><div className="flex justify-between mb-4 text-sm border-b pb-2"><span>合約編號: <span className="font-mono font-bold">SLA-{today.replace(/\//g,'')}-{selectedVehicle.id.slice(0,6)}</span></span><span>日期: {today}</span></div><div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">甲、買方資料</h3><div className="grid grid-cols-2 gap-4 text-sm"><div><p className="text-gray-500 text-xs">姓名</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.name}</p></div><div><p className="text-gray-500 text-xs">電話</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.phone}</p></div><div><p className="text-gray-500 text-xs">身份證</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.hkid}</p></div><div className="col-span-2"><p className="text-gray-500 text-xs">地址</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{customer.address}</p></div></div></div><div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">乙、車輛資料</h3><VehicleTable /></div><div className="mb-6"><h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">丙、交易款項</h3><div className="text-sm space-y-3 px-2"><div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>成交價:</span><span className="font-bold text-lg">{formatCurrency(selectedVehicle.price)}</span></div><div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>已付訂金:</span><span className="text-lg">{formatCurrency(deposit)}</span></div><div className="flex justify-between items-end border-b-2 border-black pb-1 mt-2"><span className="font-bold">尚餘尾數:</span><span className="font-bold text-xl">{formatCurrency(balance)}</span></div></div></div><div className="mb-8 text-[11px] text-justify leading-relaxed text-gray-700"><h3 className="font-bold mb-1 text-sm text-black">條款及細則:</h3><ol className="list-decimal pl-4 space-y-1"><li>買方已親自驗收上述車輛，同意以「現狀」成交。</li><li>如買方悔約，賣方有權沒收所有訂金。</li><li>賣方保證上述車輛並無涉及任何未清之財務按揭。</li></ol></div><div className="grid grid-cols-2 gap-16 mt-12"><div className="relative"><div className="border-t border-black pt-2 text-center"><p className="font-bold">賣方簽署及公司蓋印</p><p className="text-xs text-gray-500">Authorized Signature & Chop</p><p className="text-xs font-bold mt-1">For and on behalf of<br/>{COMPANY_INFO.name_en}</p></div><div className="mb-2 absolute -top-8 left-1/2 transform -translate-x-1/2"><SignedStamp /></div></div><div><div className="border-t border-black pt-2 text-center"><p className="font-bold">買方簽署</p><p className="text-xs text-gray-500">Purchaser Signature</p></div></div></div></div>);
     return (<div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black"><Header titleEn={docType === 'invoice' ? "INVOICE" : "DOCUMENT"} titleCh={docType === 'invoice' ? "發票" : "文件"} /><div className="flex justify-between mb-8 border p-4 rounded-lg bg-gray-50"><div className="flex-1"><p className="text-gray-500 text-xs">Customer:</p><p className="font-bold text-lg mt-1">{customer.name}</p></div><div className="text-right border-l pl-8 ml-8"><div><p className="text-gray-500 text-xs">No.</p><p className="font-bold">{docType.toUpperCase().slice(0,3)}-{today.replace(/\//g,'')}-{selectedVehicle.id.slice(0,6)}</p></div><div><p className="text-gray-500 text-xs">Date</p><p className="font-bold">{today}</p></div></div></div><VehicleTable /><div className="mt-8 border-t-2 border-black pt-4 flex justify-between items-center text-xl font-bold"><span>Total:</span><span>{formatCurrency(selectedVehicle.price)}</span></div><div className="mt-20 relative"><div className="border-t border-black pt-4 w-1/2 text-center"><p>Authorized Signature</p></div><div className="absolute -top-8 left-10"><SignedStamp /></div></div></div>);
   };
