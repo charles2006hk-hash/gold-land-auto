@@ -5,7 +5,8 @@ import {
   Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
   Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, 
   Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
-  Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit
+  Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
+  ArrowUpDown
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -84,7 +85,6 @@ type Expense = {
   date: string;
 };
 
-// ★★★ 修正 Vehicle 類型定義，加入銷售相關欄位 ★★★
 type Vehicle = {
   id: string;
   // 基本資料
@@ -106,13 +106,17 @@ type Vehicle = {
   costPrice?: number; // 入貨價 (只有老闆看得到?)
   status: 'In Stock' | 'Sold' | 'Reserved';
   
+  // 庫存日期
+  stockInDate?: any; // 入庫日 (createdAt)
+  stockOutDate?: string; // 出庫日 (成交日)
+  
   // 關聯資料
   expenses: Expense[]; // 處理費用列表
   
-  // ★★★ 銷售資料 (解決 build error 的關鍵) ★★★
+  // 銷售資料
   customerName?: string;
   customerPhone?: string;
-  soldDate?: any;
+  soldDate?: any; // usually same as stockOutDate
   soldPrice?: number; // 實際成交價
   deposit?: number;   // 已收訂金
   
@@ -122,7 +126,7 @@ type Vehicle = {
 
 type SystemSettings = {
   makes: string[];
-  models: string[];
+  models: Record<string, string[]>; // 二級數據：廠牌 -> 型號列表
   expenseTypes: string[];
   colors: string[];
 };
@@ -138,9 +142,17 @@ type DocType = 'sales_contract' | 'purchase_contract' | 'invoice' | 'receipt';
 
 const DEFAULT_SETTINGS: SystemSettings = {
   makes: ['Toyota', 'Honda', 'Mercedes-Benz', 'BMW', 'Tesla', 'Porsche', 'Audi'],
-  models: ['Alphard', 'Vellfire', 'Stepwgn', 'Model 3', 'Model Y', 'C200', 'E300', 'X5', 'Cayenne'],
-  expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '其他'],
-  colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)']
+  models: {
+    'Toyota': ['Alphard', 'Vellfire', 'Noah', 'Sienta', 'Hiace', 'Camry'],
+    'Honda': ['Stepwgn', 'Freed', 'Jazz', 'Odyssey', 'Civic'],
+    'Mercedes-Benz': ['A200', 'C200', 'E200', 'E300', 'S500', 'G63', 'GLC'],
+    'BMW': ['320i', '520i', 'X3', 'X5', 'iX', 'i4'],
+    'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X'],
+    'Porsche': ['911', 'Cayenne', 'Macan', 'Taycan', 'Panamera'],
+    'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7']
+  },
+  expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '拖車費', '佣金', '其他'],
+  colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)']
 };
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
@@ -158,13 +170,13 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.0</h1>
-          <p className="text-slate-500 text-sm mt-2">Vehicle Management System</p>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.1</h1>
+          <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">員工編號 / Staff ID</label>
-            <input type="text" className="w-full p-4 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-yellow-500 outline-none transition" placeholder="e.g. BOSS, ADMIN" value={input} onChange={e => setInput(e.target.value)} autoFocus />
+            <input type="text" className="w-full p-4 border border-slate-300 rounded-xl text-lg focus:ring-2 focus:ring-yellow-500 outline-none transition" placeholder="e.g. BOSS, SALES01" value={input} onChange={e => setInput(e.target.value)} autoFocus />
           </div>
           <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center transition transform active:scale-95 shadow-lg">Login <ArrowRight className="ml-2" /></button>
         </form>
@@ -190,9 +202,10 @@ export default function GoldLandAutoDMS() {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   
-  // Filters
+  // Sorting & Filter
   const [filterStatus, setFilterStatus] = useState<string>('All');
-  
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Vehicle; direction: 'asc' | 'desc' } | null>(null);
+
   // Forms
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
   const [deposit, setDeposit] = useState<number>(0);
@@ -242,7 +255,13 @@ export default function GoldLandAutoDMS() {
     const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
     getDoc(settingsDocRef).then(docSnap => {
       if (docSnap.exists()) {
-        setSettings(docSnap.data() as SystemSettings);
+        // 合併預設值以防舊資料結構缺失
+        const loadedSettings = docSnap.data() as SystemSettings;
+        setSettings({
+            ...DEFAULT_SETTINGS,
+            ...loadedSettings,
+            models: { ...DEFAULT_SETTINGS.models, ...loadedSettings.models } // Merge models to keep defaults
+        });
       } else {
         setDoc(settingsDocRef, DEFAULT_SETTINGS);
       }
@@ -261,6 +280,8 @@ export default function GoldLandAutoDMS() {
     const formData = new FormData(e.currentTarget);
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
+    const status = formData.get('status') as any;
+    
     const vData = {
       purchaseType: formData.get('purchaseType'),
       regMark: (formData.get('regMark') as string).toUpperCase(),
@@ -271,10 +292,11 @@ export default function GoldLandAutoDMS() {
       colorInt: formData.get('colorInt'),
       chassisNo: (formData.get('chassisNo') as string).toUpperCase(),
       engineNo: (formData.get('engineNo') as string).toUpperCase(),
-      licenseExpiry: formData.get('licenseExpiry') || 'Expired',
+      licenseExpiry: formData.get('licenseExpiry') || '',
       price: Number(formData.get('price')),
       costPrice: Number(formData.get('costPrice') || 0),
-      status: editingVehicle ? editingVehicle.status : 'In Stock',
+      status: status,
+      stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, // 只有已售才有出庫日
       expenses: editingVehicle ? editingVehicle.expenses : [], 
       updatedAt: serverTimestamp()
     };
@@ -329,21 +351,71 @@ export default function GoldLandAutoDMS() {
     });
   };
 
-  // --- Settings Management ---
-  const updateSettings = async (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove') => {
+  // --- Settings Management (Nested Models) ---
+  const updateSettings = async (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-    let newList = [...settings[key]];
-    
-    if (action === 'add' && newItem) {
-      if (!newList.includes(newItem)) newList.push(newItem);
-    } else if (action === 'remove') {
-      newList = newList.filter(item => item !== newItem);
+    let newSettings = { ...settings };
+
+    if (key === 'models' && parentKey) {
+        // Handle Nested Models (Level 2)
+        const currentModels = newSettings.models[parentKey] || [];
+        let newModelsList = [...currentModels];
+        
+        if (action === 'add' && newItem && !newModelsList.includes(newItem)) {
+            newModelsList.push(newItem);
+        } else if (action === 'remove') {
+            newModelsList = newModelsList.filter(item => item !== newItem);
+        }
+        
+        newSettings.models = { ...newSettings.models, [parentKey]: newModelsList };
+    } else {
+        // Handle Flat Lists (Makes, ExpenseTypes, Colors)
+        const list = settings[key] as string[];
+        let newList = [...list];
+        
+        if (action === 'add' && newItem && !newList.includes(newItem)) {
+            newList.push(newItem);
+            // If adding a Make, verify it has an entry in models map
+            if (key === 'makes' && !newSettings.models[newItem]) {
+                newSettings.models = { ...newSettings.models, [newItem]: [] };
+            }
+        } else if (action === 'remove') {
+            newList = newList.filter(item => item !== newItem);
+        }
+        
+        (newSettings[key] as string[]) = newList;
     }
 
-    const newSettings = { ...settings, [key]: newList };
     setSettings(newSettings);
     await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
+  };
+
+  // --- Sorting Logic ---
+  const handleSort = (key: keyof Vehicle) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedInventory = () => {
+    let sorted = [...inventory];
+    if (filterStatus !== 'All') {
+        sorted = sorted.filter(v => v.status === filterStatus);
+    }
+    
+    if (sortConfig) {
+      sorted.sort((a, b) => {
+        const aVal = a[sortConfig.key] || '';
+        const bVal = b[sortConfig.key] || '';
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sorted;
   };
 
   // --- Dashboard Logic ---
@@ -379,6 +451,7 @@ export default function GoldLandAutoDMS() {
   const VehicleFormModal = () => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     const v = editingVehicle || {} as Partial<Vehicle>;
+    const [selectedMake, setSelectedMake] = useState(v.make || '');
     
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -389,14 +462,27 @@ export default function GoldLandAutoDMS() {
           </div>
           <form onSubmit={saveVehicle} className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            {/* 基本資料 */}
-            <div className="md:col-span-3 pb-2 border-b"><h3 className="font-bold text-gray-500">基本資料</h3></div>
-            
+            <div className="md:col-span-3 pb-2 border-b flex justify-between">
+                <h3 className="font-bold text-gray-500">車輛狀態設定</h3>
+                <div className="flex items-center gap-4">
+                     <label className="flex items-center"><input type="radio" name="status" value="In Stock" defaultChecked={v.status !== 'Sold' && v.status !== 'Reserved'} className="mr-2"/> 在庫 (In Stock)</label>
+                     <label className="flex items-center"><input type="radio" name="status" value="Reserved" defaultChecked={v.status === 'Reserved'} className="mr-2"/> 已訂 (Reserved)</label>
+                     <label className="flex items-center"><input type="radio" name="status" value="Sold" defaultChecked={v.status === 'Sold'} className="mr-2"/> 已售 (Sold)</label>
+                </div>
+            </div>
+
+            {/* 如果狀態是 Sold，顯示出庫日期 */}
+            <div className="md:col-span-3 bg-green-50 p-2 rounded border border-green-100">
+               <label className="block text-xs font-bold text-green-700">出庫/成交日期 (Stock Out Date)</label>
+               <input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="border p-1 rounded text-sm"/>
+               <span className="text-xs text-gray-400 ml-2">※ 僅在狀態為「已售」時有效</span>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-gray-500">收購類型</label>
               <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full border p-2 rounded bg-gray-50">
-                <option value="Used">二手收購</option>
-                <option value="New">訂購新車</option>
+                <option value="Used">二手收購 (Used)</option>
+                <option value="New">訂購新車 (New)</option>
               </select>
             </div>
             <div>
@@ -408,15 +494,33 @@ export default function GoldLandAutoDMS() {
               <input name="licenseExpiry" type="date" defaultValue={v.licenseExpiry} className="w-full border p-2 rounded"/>
             </div>
 
+            {/* 二級連動選單：廠牌 -> 型號 */}
             <div>
               <label className="block text-xs font-bold text-gray-500">廠牌 (Make)</label>
-              <input list="makes" name="make" defaultValue={v.make} required className="w-full border p-2 rounded"/>
-              <datalist id="makes">{settings.makes.map(m => <option key={m} value={m} />)}</datalist>
+              <select 
+                name="make" 
+                value={selectedMake} 
+                onChange={(e) => setSelectedMake(e.target.value)} 
+                required 
+                className="w-full border p-2 rounded"
+              >
+                <option value="">請選擇...</option>
+                {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">型號 (Model)</label>
-              <input list="models" name="model" defaultValue={v.model} required className="w-full border p-2 rounded"/>
-              <datalist id="models">{settings.models.map(m => <option key={m} value={m} />)}</datalist>
+              <input 
+                list="model_list" 
+                name="model" 
+                defaultValue={v.model} 
+                required 
+                className="w-full border p-2 rounded" 
+                placeholder={selectedMake ? `選擇 ${selectedMake} 型號...` : '請先選擇廠牌'}
+              />
+              <datalist id="model_list">
+                {(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}
+              </datalist>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">年份 (Year)</label>
@@ -483,6 +587,14 @@ export default function GoldLandAutoDMS() {
                     ))}
                     {(!v.expenses || v.expenses.length === 0) && <tr><td colSpan={6} className="p-4 text-center text-gray-400">暫無費用記錄</td></tr>}
                   </tbody>
+                  <tfoot>
+                     <tr className="bg-gray-50 font-bold border-t">
+                        <td colSpan={2} className="p-2 text-right">總成本 (車價+費用):</td>
+                        <td colSpan={4} className="p-2 text-blue-600">
+                           {formatCurrency((v.costPrice || 0) + (v.expenses || []).reduce((acc, cur) => acc + cur.amount, 0))}
+                        </td>
+                     </tr>
+                  </tfoot>
                 </table>
 
                 <div className="grid grid-cols-6 gap-2 items-end">
@@ -534,40 +646,96 @@ export default function GoldLandAutoDMS() {
     );
   };
 
-  // 2. Settings Manager
-  const SettingsManager = () => (
+  // 2. Settings Manager (Updated for Nested Models)
+  const SettingsManager = () => {
+    const [activeMake, setActiveMake] = useState<string>(settings.makes[0] || '');
+
+    return (
     <div className="p-6 bg-white rounded-lg shadow-sm">
       <h2 className="text-xl font-bold mb-6 flex items-center"><Settings className="mr-2"/> 系統參數設置 (System Settings)</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {[
-          { key: 'makes', title: '車輛廠牌 (Makes)', placeholder: 'e.g. Porsche' },
-          { key: 'models', title: '車輛型號 (Models)', placeholder: 'e.g. 911 Carrera' },
-          { key: 'expenseTypes', title: '費用類別 (Expense Types)', placeholder: 'e.g. 驗車費' },
-        ].map((section) => (
-          <div key={section.key} className="bg-gray-50 p-4 rounded border">
-            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">{section.title}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {/* 1. 廠牌管理 */}
+        <div className="bg-gray-50 p-4 rounded border">
+            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">車輛廠牌 (Level 1: Makes)</h3>
             <div className="flex gap-2 mb-3">
-              <input id={`new-${section.key}`} placeholder={section.placeholder} className="flex-1 border p-2 rounded text-sm"/>
+              <input id="new-makes" placeholder="新增廠牌 e.g. Ferrari" className="flex-1 border p-2 rounded text-sm"/>
               <button onClick={() => {
-                const input = document.getElementById(`new-${section.key}`) as HTMLInputElement;
-                if(input.value) { updateSettings(section.key as keyof SystemSettings, input.value, 'add'); input.value=''; }
+                const input = document.getElementById("new-makes") as HTMLInputElement;
+                if(input.value) { updateSettings('makes', input.value, 'add'); input.value=''; }
               }} className="bg-slate-800 text-white px-3 rounded hover:bg-slate-700"><Plus size={16}/></button>
             </div>
-            <ul className="space-y-1 max-h-60 overflow-y-auto">
-              {(settings[section.key as keyof SystemSettings] as string[]).map(item => (
-                <li key={item} className="flex justify-between items-center bg-white p-2 rounded border text-sm">
-                  <span>{item}</span>
-                  <button onClick={() => updateSettings(section.key as keyof SystemSettings, item, 'remove')} className="text-red-400 hover:text-red-600"><X size={14}/></button>
+            <ul className="space-y-1 max-h-40 overflow-y-auto mb-4">
+              {settings.makes.map(make => (
+                <li key={make} onClick={() => setActiveMake(make)} className={`flex justify-between items-center p-2 rounded border text-sm cursor-pointer ${activeMake===make ? 'bg-yellow-100 border-yellow-300 ring-1 ring-yellow-300' : 'bg-white hover:bg-gray-100'}`}>
+                  <span>{make}</span>
+                  <button onClick={(e) => { e.stopPropagation(); updateSettings('makes', make, 'remove'); }} className="text-red-400 hover:text-red-600"><X size={14}/></button>
                 </li>
               ))}
             </ul>
-          </div>
-        ))}
+        </div>
+
+        {/* 2. 型號管理 (Dependent on Make) */}
+        <div className="bg-gray-50 p-4 rounded border">
+            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">型號列表 (Level 2: Models for {activeMake})</h3>
+            {!activeMake ? <p className="text-gray-400 text-xs">請先選擇左側廠牌</p> : (
+                <>
+                <div className="flex gap-2 mb-3">
+                    <input id="new-models" placeholder={`新增 ${activeMake} 型號...`} className="flex-1 border p-2 rounded text-sm"/>
+                    <button onClick={() => {
+                        const input = document.getElementById("new-models") as HTMLInputElement;
+                        if(input.value) { updateSettings('models', input.value, 'add', activeMake); input.value=''; }
+                    }} className="bg-slate-800 text-white px-3 rounded hover:bg-slate-700"><Plus size={16}/></button>
+                </div>
+                <ul className="space-y-1 max-h-40 overflow-y-auto">
+                    {(settings.models[activeMake] || []).map(model => (
+                        <li key={model} className="flex justify-between items-center bg-white p-2 rounded border text-sm">
+                            <span>{model}</span>
+                            <button onClick={() => updateSettings('models', model, 'remove', activeMake)} className="text-red-400 hover:text-red-600"><X size={14}/></button>
+                        </li>
+                    ))}
+                    {(!settings.models[activeMake] || settings.models[activeMake].length === 0) && <li className="text-xs text-gray-400 text-center py-2">暫無型號資料</li>}
+                </ul>
+                </>
+            )}
+        </div>
+
+        {/* 3. 費用與顏色 */}
+        <div className="bg-gray-50 p-4 rounded border md:col-span-2">
+            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">其他設定</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { key: 'expenseTypes', title: '費用類別', placeholder: 'e.g. 驗車費' },
+                  { key: 'colors', title: '顏色列表', placeholder: 'e.g. 香檳金' },
+                ].map(section => (
+                    <div key={section.key}>
+                        <h4 className="text-xs font-bold mb-2">{section.title}</h4>
+                        <div className="flex gap-2 mb-2">
+                            <input id={`new-${section.key}`} placeholder={section.placeholder} className="flex-1 border p-1 rounded text-xs"/>
+                            <button onClick={() => {
+                                const input = document.getElementById(`new-${section.key}`) as HTMLInputElement;
+                                if(input.value) { updateSettings(section.key as keyof SystemSettings, input.value, 'add'); input.value=''; }
+                            }} className="bg-slate-600 text-white px-2 rounded hover:bg-slate-500"><Plus size={14}/></button>
+                        </div>
+                        <ul className="space-y-1 max-h-32 overflow-y-auto">
+                            {(settings[section.key as keyof SystemSettings] as string[]).map(item => (
+                                <li key={item} className="flex justify-between items-center bg-white p-1 rounded border text-xs">
+                                    <span>{item}</span>
+                                    <button onClick={() => updateSettings(section.key as keyof SystemSettings, item, 'remove')} className="text-red-400 hover:text-red-600"><X size={12}/></button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ))}
+            </div>
+        </div>
+
       </div>
     </div>
-  );
+    );
+  };
 
-  // 3. Document Template (Updated with signature logic)
+  // 3. Document Template (Signature fixed)
   const CompanyStamp = () => (
     <div className="w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-90 pointer-events-none select-none mix-blend-multiply" style={{ color: '#2b3d90', border: '2px solid #2b3d90', boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', backgroundColor: 'rgba(43, 61, 144, 0.02)', mixBlendMode: 'multiply' }}>
       <div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}>
@@ -722,9 +890,9 @@ export default function GoldLandAutoDMS() {
                 <h3 className="font-bold mb-4">最新車輛動態</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead><tr className="border-b bg-gray-50"><th className="p-3">入庫日</th><th className="p-3">狀態</th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th><th className="p-3 text-right">費用狀況</th></tr></thead>
+                    <thead><tr className="border-b bg-gray-50"><th className="p-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('createdAt')}>入庫日 <ArrowUpDown size={12} className="inline"/></th><th className="p-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('status')}>狀態 <ArrowUpDown size={12} className="inline"/></th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th><th className="p-3 text-right">費用狀況</th></tr></thead>
                     <tbody>
-                      {inventory.slice(0, 10).map(car => {
+                      {getSortedInventory().slice(0, 10).map(car => {
                         const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
                         return (
                           <tr key={car.id} className="border-b hover:bg-gray-50">
@@ -760,7 +928,7 @@ export default function GoldLandAutoDMS() {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {inventory.filter(v => filterStatus === 'All' || v.status === filterStatus).map((car) => (
+                {getSortedInventory().map((car) => (
                   <div key={car.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition">
                      <div className="flex flex-col md:flex-row justify-between">
                        <div className="flex items-start space-x-4 mb-4 md:mb-0">
@@ -770,6 +938,7 @@ export default function GoldLandAutoDMS() {
                               <p className="font-bold text-lg text-slate-800 mr-2">{car.regMark || '未出牌'}</p>
                               <span className="text-xs bg-gray-100 px-2 py-0.5 rounded text-gray-500">{car.year}</span>
                               {car.purchaseType === 'New' && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">新車</span>}
+                              {car.stockOutDate && <span className="ml-2 text-xs text-gray-400">售出: {car.stockOutDate}</span>}
                             </div>
                             <p className="text-gray-600 font-medium">{car.make} {car.model}</p>
                             <p className="text-xs text-gray-400 mt-1">VIN: {car.chassisNo} | 牌費: {car.licenseExpiry}</p>
