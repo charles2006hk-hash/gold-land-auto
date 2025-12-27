@@ -7,7 +7,7 @@ import {
   Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
   Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
-  StickyNote, CreditCard, Armchair // 新增圖示
+  StickyNote, CreditCard, Armchair, Fuel, Zap // 新增圖示
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -106,11 +106,16 @@ type Vehicle = {
   mileage?: number;      
   remarks?: string;
 
-  // ★★★ 新增欄位 (v2.8) ★★★
-  seating?: number; // 座位數
-  priceA1?: number; // A1價
-  priceTax?: number; // 入口稅
-  priceRegistered?: number; // 牌簿價 (A1 + Tax)
+  // 規格與稅務 (v2.8 + v2.9)
+  seating?: number; 
+  priceA1?: number; 
+  priceTax?: number; 
+  priceRegistered?: number; 
+  
+  // ★★★ 新增：燃料與牌費 (v2.9) ★★★
+  fuelType?: 'Petrol' | 'Diesel' | 'Electric';
+  engineSize?: number; // cc for Petrol/Diesel, KW for Electric
+  licenseFee?: number; // Annual License Fee
 
   price: number; 
   costPrice?: number; 
@@ -171,6 +176,40 @@ const formatNumberInput = (value: string) => {
   return parts.join('.');
 };
 
+// ★★★ 牌費計算邏輯 (基於 2025 牌費表) ★★★
+const calculateLicenseFee = (fuelType: 'Petrol' | 'Diesel' | 'Electric', engineSize: number) => {
+  if (!engineSize) return 0;
+  
+  // 1. 汽油 (Petrol) - 單位 cc
+  if (fuelType === 'Petrol') {
+    if (engineSize <= 1500) return 5074;
+    if (engineSize <= 2500) return 7498;
+    if (engineSize <= 3500) return 9929;
+    if (engineSize <= 4500) return 12360;
+    return 14694; // > 4500cc
+  }
+  
+  // 2. 柴油 (Diesel) - 單位 cc
+  if (fuelType === 'Diesel') {
+    if (engineSize <= 1500) return 6972;
+    if (engineSize <= 2500) return 9396;
+    if (engineSize <= 3500) return 11827;
+    if (engineSize <= 4500) return 14258;
+    return 16592; // > 4500cc
+  }
+
+  // 3. 電動 (Electric) - 單位 KW (額定功率)
+  if (fuelType === 'Electric') {
+    if (engineSize <= 75) return 1614;
+    if (engineSize <= 125) return 2114;
+    if (engineSize <= 175) return 2614;
+    if (engineSize <= 225) return 3114;
+    return 5114; // > 225 kW
+  }
+
+  return 0;
+};
+
 // --- Components: Staff Login Screen ---
 const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
   const [input, setInput] = useState('');
@@ -183,7 +222,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.8</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.9</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -311,13 +350,17 @@ export default function GoldLandAutoDMS() {
     const costPriceRaw = formData.get('costPrice') as string;
     const mileageRaw = formData.get('mileage') as string;
     
-    // ★★★ 取得新欄位 (移除逗號) ★★★
     const priceA1Raw = formData.get('priceA1') as string;
     const priceTaxRaw = formData.get('priceTax') as string;
-    // 計算牌簿價 (A1 + Tax) - 確保是數字
     const valA1 = Number(priceA1Raw.replace(/,/g, '') || 0);
     const valTax = Number(priceTaxRaw.replace(/,/g, '') || 0);
     const valRegistered = valA1 + valTax;
+
+    // 獲取牌費計算資料
+    const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
+    const engineSizeRaw = formData.get('engineSize') as string;
+    const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
+    const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
     const vData = {
       purchaseType: formData.get('purchaseType'),
@@ -337,11 +380,15 @@ export default function GoldLandAutoDMS() {
       mileage: Number(mileageRaw.replace(/,/g, '') || 0), 
       remarks: formData.get('remarks') || '', 
       
-      // ★★★ 新增欄位儲存 ★★★
-      seating: Number(formData.get('seating') || 5), // 預設 5
+      seating: Number(formData.get('seating') || 5), 
       priceA1: valA1,
       priceTax: valTax,
       priceRegistered: valRegistered,
+
+      // ★★★ 儲存牌費資料 ★★★
+      fuelType: fuelType,
+      engineSize: engineSize,
+      licenseFee: licenseFee,
       // --------------------
 
       status: status,
@@ -501,7 +548,6 @@ export default function GoldLandAutoDMS() {
   };
   const stats = dashboardStats();
 
-  // --- Report Logic ---
   const generateReportData = () => {
     let data: any[] = [];
     
@@ -511,7 +557,7 @@ export default function GoldLandAutoDMS() {
             (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
             (!reportEndDate || (v.stockOutDate || '') <= reportEndDate)
         ).map(v => ({
-            vehicleId: v.id, // Used for linking
+            vehicleId: v.id,
             date: v.stockOutDate || 'Unknown',
             title: `${v.year} ${v.make} ${v.model}`,
             regMark: v.regMark,
@@ -526,7 +572,7 @@ export default function GoldLandAutoDMS() {
                    (!reportEndDate || exp.date <= reportEndDate) &&
                    (!reportCompany || exp.company === reportCompany)) {
                     data.push({
-                        vehicleId: v.id, // Used for linking
+                        vehicleId: v.id,
                         id: exp.id,
                         date: exp.date,
                         title: `${v.regMark} - ${exp.type}`,
@@ -578,11 +624,22 @@ export default function GoldLandAutoDMS() {
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
     const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
     
-    // ★★★ 新增：A1價與入口稅輸入 state ★★★
+    // A1 & Tax state
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
     const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
     
-    // 自動計算牌簿價 (Registered Price)
+    // Fuel & Engine Size state for auto-calc
+    const [fuelType, setFuelType] = useState<'Petrol'|'Diesel'|'Electric'>(v.fuelType || 'Petrol');
+    const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
+    const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
+
+    // Effect to update license fee when fuel or engine size changes
+    useEffect(() => {
+        const size = Number(engineSizeStr.replace(/,/g, ''));
+        const fee = calculateLicenseFee(fuelType, size);
+        setAutoLicenseFee(fee);
+    }, [fuelType, engineSizeStr]);
+    
     const calcRegisteredPrice = () => {
         const a1 = Number(priceA1Str.replace(/,/g, '')) || 0;
         const tax = Number(priceTaxStr.replace(/,/g, '')) || 0;
@@ -669,8 +726,42 @@ export default function GoldLandAutoDMS() {
               <label className="block text-xs font-bold text-gray-500">內飾顏色</label>
               <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full border p-2 rounded"/>
             </div>
+            
+            {/* ★★★ 新增：引擎與牌費計算區塊 ★★★ */}
+            <div className="md:col-span-3 bg-slate-50 p-2 rounded border mt-2">
+                <div className="flex items-center mb-2"><Fuel size={14} className="mr-2 text-slate-600"/><h4 className="font-bold text-xs text-slate-600">動力與牌費 (Power & License Fee)</h4></div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500">燃料 (Fuel Type)</label>
+                        <select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full border p-2 rounded">
+                            <option value="Petrol">汽油 (Petrol)</option>
+                            <option value="Diesel">柴油 (Diesel)</option>
+                            <option value="Electric">電動 (Electric)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 flex items-center">
+                           {fuelType === 'Electric' ? <Zap size={12} className="mr-1 text-yellow-500"/> : null} 
+                           {fuelType === 'Electric' ? '額定功率 (KW)' : '汽缸容量 (c.c.)'}
+                        </label>
+                        <input 
+                            name="engineSize" 
+                            type="text" 
+                            value={engineSizeStr} 
+                            onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} 
+                            className="w-full border p-2 rounded font-mono"
+                            placeholder="0"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500">預計每年牌費</label>
+                        <div className="w-full border p-2 rounded bg-gray-100 font-bold text-blue-700">
+                           {formatCurrency(autoLicenseFee)}
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-            {/* 詳細狀況 & 備註 */}
             <div className="md:col-span-3 pb-2 border-b mt-4 flex items-center">
                 <StickyNote size={16} className="mr-2 text-yellow-600"/> 
                 <h3 className="font-bold text-gray-500">詳細狀況 & 備註</h3>
@@ -693,7 +784,6 @@ export default function GoldLandAutoDMS() {
                 <span className="absolute right-3 top-2 text-gray-400 text-xs">km</span>
               </div>
             </div>
-            {/* ★★★ 新增：座位數 ★★★ */}
             <div>
                <label className="block text-xs font-bold text-gray-500 flex items-center"><Armchair size={12} className="mr-1"/> 座位數 (Seating)</label>
                <input name="seating" type="number" defaultValue={v.seating || 5} className="w-full border p-2 rounded" />
@@ -714,7 +804,6 @@ export default function GoldLandAutoDMS() {
               <input name="engineNo" defaultValue={v.engineNo} className="w-full border p-2 rounded font-mono" placeholder="非必填"/>
             </div>
 
-            {/* 價格設定 (擴充) */}
             <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">價格與稅務設定</h3></div>
             <div>
               <label className="block text-xs font-bold text-gray-500">入貨成本 (Cost)</label>
@@ -731,7 +820,6 @@ export default function GoldLandAutoDMS() {
               </div>
             </div>
             
-            {/* ★★★ 新增：A1價、入口稅、牌簿價 (自動計算) ★★★ */}
             <div className="flex flex-col gap-2 p-2 bg-blue-50 rounded border border-blue-100">
                <label className="block text-xs font-bold text-blue-800">A1 價 / 零售價 (Published Price)</label>
                <input 
@@ -756,7 +844,6 @@ export default function GoldLandAutoDMS() {
             </div>
             <div className="flex flex-col gap-2 p-2 bg-blue-100 rounded border border-blue-200">
                <label className="block text-xs font-bold text-blue-900 flex items-center"><CreditCard size={12} className="mr-1"/> 牌簿價 (Registered Value)</label>
-               {/* 唯讀欄位，自動顯示加總 */}
                <div className="w-full p-1 text-right font-bold text-lg text-blue-900">
                    {calcRegisteredPrice()}
                </div>
