@@ -96,7 +96,6 @@ type Vehicle = {
   engineNo: string;
   
   // 擴充資料
-  // ★★★ 更新：增加 Consignment (寄賣) ★★★
   purchaseType: 'Used' | 'New' | 'Consignment'; 
   colorExt: string; // 外觀顏色
   colorInt: string; // 內飾顏色
@@ -156,8 +155,16 @@ const DEFAULT_SETTINGS: SystemSettings = {
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)']
 };
 
+// --- 工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+// 數字格式化工具 (加上千分位)
+const formatNumberStr = (num: number | string | undefined) => {
+  if (num === undefined || num === null || num === '') return '';
+  const n = Number(num.toString().replace(/,/g, ''));
+  return isNaN(n) ? '' : n.toLocaleString('en-US');
+};
 
 // --- Components: Staff Login Screen ---
 const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
@@ -171,13 +178,12 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.2</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.3</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">員工編號 / Staff ID</label>
-            {/* ★★★ 更新：文字顏色加深 (text-slate-900 font-bold) ★★★ */}
             <input 
               type="text" 
               className="w-full p-4 border border-slate-300 rounded-xl text-lg text-slate-900 font-bold focus:ring-2 focus:ring-yellow-500 outline-none transition placeholder:text-slate-400" 
@@ -218,6 +224,7 @@ export default function GoldLandAutoDMS() {
   // Forms
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
   const [deposit, setDeposit] = useState<number>(0);
+  const [depositStr, setDepositStr] = useState<string>(''); // 用於輸入框顯示
   const [docType, setDocType] = useState<DocType>('sales_contract');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
@@ -290,6 +297,10 @@ export default function GoldLandAutoDMS() {
     
     const status = formData.get('status') as any;
     
+    // ★★★ 修正點：移除逗號再轉數字 ★★★
+    const priceRaw = formData.get('price') as string;
+    const costPriceRaw = formData.get('costPrice') as string;
+
     const vData = {
       purchaseType: formData.get('purchaseType'),
       regMark: (formData.get('regMark') as string).toUpperCase(),
@@ -301,10 +312,10 @@ export default function GoldLandAutoDMS() {
       chassisNo: (formData.get('chassisNo') as string).toUpperCase(),
       engineNo: (formData.get('engineNo') as string).toUpperCase(),
       licenseExpiry: formData.get('licenseExpiry') || '',
-      price: Number(formData.get('price')),
-      costPrice: Number(formData.get('costPrice') || 0),
+      price: Number(priceRaw.replace(/,/g, '')), // 移除逗號
+      costPrice: Number(costPriceRaw.replace(/,/g, '') || 0), // 移除逗號
       status: status,
-      stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, // 只有已售才有出庫日
+      stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
       expenses: editingVehicle ? editingVehicle.expenses : [], 
       updatedAt: serverTimestamp()
     };
@@ -483,7 +494,6 @@ export default function GoldLandAutoDMS() {
               <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full border p-2 rounded bg-gray-50">
                 <option value="Used">二手收購 (Used)</option>
                 <option value="New">訂購新車 (New)</option>
-                {/* ★★★ 更新：新增寄賣選項 ★★★ */}
                 <option value="Consignment">寄賣 (Consignment)</option>
               </select>
             </div>
@@ -542,23 +552,46 @@ export default function GoldLandAutoDMS() {
             <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">機件資料</h3></div>
             <div>
               <label className="block text-xs font-bold text-gray-500">底盤號 (Chassis No.)</label>
-              <input name="chassisNo" defaultValue={v.chassisNo} required className="w-full border p-2 rounded font-mono"/>
+              {/* ★★★ 修正點：移除 required ★★★ */}
+              <input name="chassisNo" defaultValue={v.chassisNo} className="w-full border p-2 rounded font-mono" placeholder="非必填"/>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">引擎號 (Engine No.)</label>
-              <input name="engineNo" defaultValue={v.engineNo} required className="w-full border p-2 rounded font-mono"/>
+              {/* ★★★ 修正點：移除 required ★★★ */}
+              <input name="engineNo" defaultValue={v.engineNo} className="w-full border p-2 rounded font-mono" placeholder="非必填"/>
             </div>
 
             <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">價格設定</h3></div>
             <div>
               <label className="block text-xs font-bold text-gray-500">入貨成本 (Cost)</label>
-              <div className="relative"><span className="absolute left-3 top-2 text-gray-400">$</span>
-              <input name="costPrice" type="number" defaultValue={v.costPrice} className="w-full border p-2 pl-6 rounded"/></div>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-400">$</span>
+                {/* ★★★ 修正點：使用 text type 並加上格式化事件 ★★★ */}
+                <input 
+                  name="costPrice" 
+                  type="text" 
+                  defaultValue={formatNumberStr(v.costPrice)} 
+                  onBlur={(e) => e.target.value = formatNumberStr(e.target.value)}
+                  className="w-full border p-2 pl-6 rounded"
+                  placeholder="0"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">預計售價 (Price)</label>
-              <div className="relative"><span className="absolute left-3 top-2 text-gray-400">$</span>
-              <input name="price" type="number" defaultValue={v.price} required className="w-full border p-2 pl-6 rounded font-bold text-lg"/></div>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-gray-400">$</span>
+                {/* ★★★ 修正點：使用 text type 並加上格式化事件 ★★★ */}
+                <input 
+                  name="price" 
+                  type="text" 
+                  defaultValue={formatNumberStr(v.price)} 
+                  onBlur={(e) => e.target.value = formatNumberStr(e.target.value)}
+                  required 
+                  className="w-full border p-2 pl-6 rounded font-bold text-lg"
+                  placeholder="0"
+                />
+              </div>
             </div>
 
             {/* 費用管理 */}
@@ -606,7 +639,16 @@ export default function GoldLandAutoDMS() {
                       {settings.expenseTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
-                  <div className="col-span-1"><input type="number" id="expAmount" placeholder="金額" className="w-full border p-1 rounded text-sm" /></div>
+                  <div className="col-span-1">
+                    {/* ★★★ 修正點：費用金額輸入框格式化 ★★★ */}
+                    <input 
+                       type="text" 
+                       id="expAmount" 
+                       placeholder="金額" 
+                       className="w-full border p-1 rounded text-sm" 
+                       onBlur={(e) => e.target.value = formatNumberStr(e.target.value)}
+                    />
+                  </div>
                   <div className="col-span-1">
                     <select id="expStatus" className="w-full border p-1 rounded text-sm">
                       <option value="Unpaid">未付 (Unpaid)</option>
@@ -626,10 +668,16 @@ export default function GoldLandAutoDMS() {
                       onClick={() => {
                         const date = (document.getElementById('expDate') as HTMLInputElement).value;
                         const type = (document.getElementById('expType') as HTMLSelectElement).value;
-                        const amount = Number((document.getElementById('expAmount') as HTMLInputElement).value);
+                        // 移除逗號再轉數字
+                        const amountStr = (document.getElementById('expAmount') as HTMLInputElement).value;
+                        const amount = Number(amountStr.replace(/,/g, ''));
+                        
                         const status = (document.getElementById('expStatus') as HTMLSelectElement).value as any;
                         const paymentMethod = (document.getElementById('expMethod') as HTMLSelectElement).value as any;
-                        if(amount > 0) addExpense(v.id!, { id: Date.now().toString(), date, type, amount, status, paymentMethod, description: '' });
+                        if(amount > 0) {
+                            addExpense(v.id!, { id: Date.now().toString(), date, type, amount, status, paymentMethod, description: '' });
+                            (document.getElementById('expAmount') as HTMLInputElement).value = ''; // 清空
+                        }
                       }}
                       className="w-full bg-green-600 text-white p-1 rounded text-sm hover:bg-green-700"
                     >新增費用</button>
@@ -1017,7 +1065,16 @@ export default function GoldLandAutoDMS() {
                       ))}
                     </div>
                     <label className="block text-sm font-bold text-gray-500 mb-1">已付訂金/收款金額</label>
-                    <input type="number" value={deposit} onChange={e => setDeposit(Number(e.target.value))} className="border p-2 rounded w-48" placeholder="0" />
+                    <input 
+                      type="text" 
+                      value={formatNumberStr(deposit)} 
+                      onChange={e => {
+                        const val = e.target.value.replace(/,/g, '');
+                        setDeposit(val ? Number(val) : 0);
+                      }}
+                      className="border p-2 rounded w-48" 
+                      placeholder="0" 
+                    />
                   </div>
 
                   <div className="flex justify-end pt-4">
