@@ -20,7 +20,7 @@ import {
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
-// ★★★ Firebase 設定 ★★★
+// ★★★ Firebase 設定 (已鎖定) ★★★
 // ------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
@@ -76,7 +76,7 @@ const COMPANY_INFO = {
 // --- 類型定義 ---
 type Expense = {
   id: string;
-  type: string;
+  type: string; // e.g. '維修', '噴油', '牌費'
   amount: number;
   description: string;
   status: 'Paid' | 'Unpaid';
@@ -84,23 +84,40 @@ type Expense = {
   date: string;
 };
 
+// ★★★ 修正 Vehicle 類型定義，加入銷售相關欄位 ★★★
 type Vehicle = {
   id: string;
+  // 基本資料
   regMark: string;
   make: string;
   model: string;
   year: string;
   chassisNo: string;
   engineNo: string;
-  purchaseType: 'Used' | 'New';
-  colorExt: string;
-  colorInt: string;
-  licenseExpiry: string;
-  price: number;
-  costPrice?: number;
+  
+  // 擴充資料
+  purchaseType: 'Used' | 'New'; // 二手收購 / 新車訂購
+  colorExt: string; // 外觀顏色
+  colorInt: string; // 內飾顏色
+  licenseExpiry: string; // 牌費到期日
+  
+  // 財務與狀態
+  price: number; // 售價 (或預計售價)
+  costPrice?: number; // 入貨價 (只有老闆看得到?)
   status: 'In Stock' | 'Sold' | 'Reserved';
-  expenses: Expense[];
+  
+  // 關聯資料
+  expenses: Expense[]; // 處理費用列表
+  
+  // ★★★ 銷售資料 (解決 build error 的關鍵) ★★★
+  customerName?: string;
+  customerPhone?: string;
+  soldDate?: any;
+  soldPrice?: number; // 實際成交價
+  deposit?: number;   // 已收訂金
+  
   createdAt?: any;
+  updatedAt?: any;
 };
 
 type SystemSettings = {
@@ -141,7 +158,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.0</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -212,17 +229,16 @@ export default function GoldLandAutoDMS() {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    // 1. Inventory Listener (路徑層級 5: Collection)
+    // 1. Inventory Listener
     const invRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
-    const q = query(invRef, orderBy('createdAt', 'desc'));
+    const q = query(invRef, orderBy('createdAt', 'desc')); 
     const unsubInv = onSnapshot(q, (snapshot) => {
       const list: Vehicle[] = [];
       snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() } as Vehicle));
       setInventory(list);
     }, (err) => console.error("Inv sync error", err));
 
-    // 2. Settings Fetch (路徑層級 6: Document)
-    // ★★★ 修正點：增加了 "system_config" 層級，確保總層數為 6 (偶數) ★★★
+    // 2. Settings Fetch
     const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
     getDoc(settingsDocRef).then(docSnap => {
       if (docSnap.exists()) {
@@ -259,7 +275,7 @@ export default function GoldLandAutoDMS() {
       price: Number(formData.get('price')),
       costPrice: Number(formData.get('costPrice') || 0),
       status: editingVehicle ? editingVehicle.status : 'In Stock',
-      expenses: editingVehicle ? editingVehicle.expenses : [],
+      expenses: editingVehicle ? editingVehicle.expenses : [], 
       updatedAt: serverTimestamp()
     };
 
@@ -327,7 +343,6 @@ export default function GoldLandAutoDMS() {
 
     const newSettings = { ...settings, [key]: newList };
     setSettings(newSettings);
-    // ★★★ 修正點：更新設定時也使用 6 層路徑 ★★★
     await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
   };
 
@@ -374,6 +389,7 @@ export default function GoldLandAutoDMS() {
           </div>
           <form onSubmit={saveVehicle} className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             
+            {/* 基本資料 */}
             <div className="md:col-span-3 pb-2 border-b"><h3 className="font-bold text-gray-500">基本資料</h3></div>
             
             <div>
