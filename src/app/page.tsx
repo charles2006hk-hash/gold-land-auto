@@ -77,8 +77,8 @@ const COMPANY_INFO = {
 // --- 類型定義 ---
 type Expense = {
   id: string;
-  type: string; // e.g. '維修', '噴油'
-  company: string; // 新增：負責公司/供應商
+  type: string; 
+  company: string; 
   amount: number;
   description: string;
   status: 'Paid' | 'Unpaid';
@@ -108,7 +108,7 @@ type Vehicle = {
   status: 'In Stock' | 'Sold' | 'Reserved';
   
   // 庫存日期
-  stockInDate?: string; // 入庫日 (新增)
+  stockInDate?: string; // 入庫日
   stockOutDate?: string; // 出庫日
   
   // 關聯資料
@@ -129,7 +129,7 @@ type SystemSettings = {
   makes: string[];
   models: Record<string, string[]>; 
   expenseTypes: string[];
-  expenseCompanies: string[]; // 新增：費用負責公司列表
+  expenseCompanies: string[]; 
   colors: string[];
 };
 
@@ -154,21 +154,17 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7']
   },
   expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '拖車費', '佣金', '其他'],
-  expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家'], // 預設公司
+  expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)']
 };
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
-// 數字格式化工具 (支援即時輸入顯示)
 const formatNumberInput = (value: string) => {
-  // 移除非數字字符 (除了小數點)
   const cleanVal = value.replace(/[^0-9.]/g, '');
   if (!cleanVal) return '';
-  // 分割整數與小數
   const parts = cleanVal.split('.');
-  // 加上千分位
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return parts.join('.');
 };
@@ -185,7 +181,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.4</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.4.1</h1>
           <p className="text-slate-500 text-sm mt-2">Vehicle Sales & Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -231,7 +227,7 @@ export default function GoldLandAutoDMS() {
   // Forms
   const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
   const [deposit, setDeposit] = useState<number>(0);
-  const [depositStr, setDepositStr] = useState<string>(''); // 用於輸入框即時顯示
+  const [depositStr, setDepositStr] = useState<string>(''); 
   const [docType, setDocType] = useState<DocType>('sales_contract');
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
@@ -283,7 +279,6 @@ export default function GoldLandAutoDMS() {
             ...DEFAULT_SETTINGS,
             ...loadedSettings,
             models: { ...DEFAULT_SETTINGS.models, ...loadedSettings.models },
-            // 合併新欄位 expenseCompanies
             expenseCompanies: loadedSettings.expenseCompanies || DEFAULT_SETTINGS.expenseCompanies
         });
       } else {
@@ -305,8 +300,6 @@ export default function GoldLandAutoDMS() {
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
     const status = formData.get('status') as any;
-    
-    // 處理金額欄位 (移除逗號)
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
 
@@ -324,7 +317,7 @@ export default function GoldLandAutoDMS() {
       price: Number(priceRaw.replace(/,/g, '')),
       costPrice: Number(costPriceRaw.replace(/,/g, '') || 0),
       status: status,
-      stockInDate: formData.get('stockInDate'), // 新增入庫日
+      stockInDate: formData.get('stockInDate'),
       stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
       expenses: editingVehicle ? editingVehicle.expenses : [], 
       updatedAt: serverTimestamp()
@@ -355,7 +348,7 @@ export default function GoldLandAutoDMS() {
     }
   };
 
-  // --- Expense Management ---
+  // --- Expense Management (修復更新問題) ---
   const addExpense = async (vehicleId: string, expense: Expense) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -363,9 +356,16 @@ export default function GoldLandAutoDMS() {
     if (!v) return;
 
     const newExpenses = [...(v.expenses || []), expense];
+    
+    // 1. 更新資料庫
     await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
       expenses: newExpenses
     });
+
+    // 2. ★★★ 關鍵修復：手動更新本地 editingVehicle 狀態，讓 UI 即時反應 ★★★
+    if (editingVehicle && editingVehicle.id === vehicleId) {
+        setEditingVehicle({ ...editingVehicle, expenses: newExpenses });
+    }
   };
 
   const deleteExpense = async (vehicleId: string, expenseId: string) => {
@@ -375,12 +375,18 @@ export default function GoldLandAutoDMS() {
     if (!v) return;
 
     const newExpenses = v.expenses.filter(e => e.id !== expenseId);
+    
     await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
       expenses: newExpenses
     });
+
+    // ★★★ 關鍵修復：同步更新 UI ★★★
+    if (editingVehicle && editingVehicle.id === vehicleId) {
+        setEditingVehicle({ ...editingVehicle, expenses: newExpenses });
+    }
   };
 
-  // --- Settings Management (Nested Models) ---
+  // --- Settings Management ---
   const updateSettings = async (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -412,7 +418,7 @@ export default function GoldLandAutoDMS() {
     await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
   };
 
-  // --- Sorting Logic ---
+  // --- Sorting & Dashboard ---
   const handleSort = (key: keyof Vehicle) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -426,7 +432,6 @@ export default function GoldLandAutoDMS() {
     if (filterStatus !== 'All') {
         sorted = sorted.filter(v => v.status === filterStatus);
     }
-    
     if (sortConfig) {
       sorted.sort((a, b) => {
         const aVal = a[sortConfig.key] || '';
@@ -439,7 +444,6 @@ export default function GoldLandAutoDMS() {
     return sorted;
   };
 
-  // --- Dashboard Logic ---
   const dashboardStats = () => {
     let totalStockValue = 0;
     let totalReceivable = 0; 
@@ -448,11 +452,9 @@ export default function GoldLandAutoDMS() {
 
     inventory.forEach(car => {
       if (car.status === 'In Stock') totalStockValue += car.price;
-      
       car.expenses?.forEach(exp => {
         if (exp.status === 'Unpaid') totalPayable += exp.amount;
       });
-
       if (car.status === 'Sold') {
         const soldPrice = car.soldPrice || car.price;
         const deposit = car.deposit || 0;
@@ -463,7 +465,6 @@ export default function GoldLandAutoDMS() {
 
     return { totalStockValue, totalReceivable, totalPayable, totalSoldThisMonth };
   };
-
   const stats = dashboardStats();
 
   // --- Sub-Components ---
@@ -472,8 +473,8 @@ export default function GoldLandAutoDMS() {
   const VehicleFormModal = () => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     const v = editingVehicle || {} as Partial<Vehicle>;
+    const isNew = !v.id; // 判斷是否為新車
     const [selectedMake, setSelectedMake] = useState(v.make || '');
-    // 本地 State 用於控制數字輸入顯示 (Formatted)
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
     
@@ -482,7 +483,7 @@ export default function GoldLandAutoDMS() {
         date: new Date().toISOString().split('T')[0],
         type: '',
         company: '',
-        amount: '', // String for formatting
+        amount: '', 
         status: 'Unpaid',
         paymentMethod: 'Cash'
     });
@@ -491,7 +492,7 @@ export default function GoldLandAutoDMS() {
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
           <div className="p-6 border-b flex justify-between items-center bg-slate-900 text-white rounded-t-lg">
-            <h2 className="text-xl font-bold flex items-center"><Car className="mr-2"/> {editingVehicle ? '編輯車輛資料' : '車輛入庫 (Stock In)'}</h2>
+            <h2 className="text-xl font-bold flex items-center"><Car className="mr-2"/> {isNew ? '車輛入庫 (Stock In)' : '編輯車輛資料 (Edit Vehicle)'}</h2>
             <button onClick={() => {setEditingVehicle(null); setActiveTab('inventory');}}><X /></button>
           </div>
           <form onSubmit={saveVehicle} className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -505,7 +506,6 @@ export default function GoldLandAutoDMS() {
                 </div>
             </div>
 
-            {/* 日期欄位 */}
             <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="block text-xs font-bold text-gray-500">入庫日期 (Stock In)</label>
@@ -536,33 +536,17 @@ export default function GoldLandAutoDMS() {
               <input name="licenseExpiry" type="date" defaultValue={v.licenseExpiry} className="w-full border p-2 rounded"/>
             </div>
 
-            {/* 二級連動選單：廠牌 -> 型號 */}
             <div>
               <label className="block text-xs font-bold text-gray-500">廠牌 (Make)</label>
-              <select 
-                name="make" 
-                value={selectedMake} 
-                onChange={(e) => setSelectedMake(e.target.value)} 
-                required 
-                className="w-full border p-2 rounded"
-              >
+              <select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} required className="w-full border p-2 rounded">
                 <option value="">請選擇...</option>
                 {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">型號 (Model)</label>
-              <input 
-                list="model_list" 
-                name="model" 
-                defaultValue={v.model} 
-                required 
-                className="w-full border p-2 rounded" 
-                placeholder={selectedMake ? `選擇 ${selectedMake} 型號...` : '請先選擇廠牌'}
-              />
-              <datalist id="model_list">
-                {(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}
-              </datalist>
+              <input list="model_list" name="model" defaultValue={v.model} required className="w-full border p-2 rounded" placeholder={selectedMake ? `選擇 ${selectedMake} 型號...` : '請先選擇廠牌'}/>
+              <datalist id="model_list">{(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}</datalist>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">年份 (Year)</label>
@@ -594,34 +578,23 @@ export default function GoldLandAutoDMS() {
               <label className="block text-xs font-bold text-gray-500">入貨成本 (Cost)</label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-gray-400">$</span>
-                <input 
-                  name="costPrice" 
-                  type="text" 
-                  value={costStr}
-                  onChange={(e) => setCostStr(formatNumberInput(e.target.value))}
-                  className="w-full border p-2 pl-6 rounded font-mono"
-                  placeholder="0"
-                />
+                <input name="costPrice" type="text" value={costStr} onChange={(e) => setCostStr(formatNumberInput(e.target.value))} className="w-full border p-2 pl-6 rounded font-mono" placeholder="0"/>
               </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500">預計售價 (Price)</label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-gray-400">$</span>
-                <input 
-                  name="price" 
-                  type="text" 
-                  value={priceStr}
-                  onChange={(e) => setPriceStr(formatNumberInput(e.target.value))}
-                  required 
-                  className="w-full border p-2 pl-6 rounded font-bold text-lg font-mono"
-                  placeholder="0"
-                />
+                <input name="price" type="text" value={priceStr} onChange={(e) => setPriceStr(formatNumberInput(e.target.value))} required className="w-full border p-2 pl-6 rounded font-bold text-lg font-mono" placeholder="0"/>
               </div>
             </div>
 
-            {/* 費用管理 */}
-            {editingVehicle && (
+            {/* ★★★ 費用管理：只在「編輯模式」顯示，避免未存檔就加費用 ★★★ */}
+            {isNew ? (
+                <div className="md:col-span-3 mt-6 bg-yellow-50 p-4 rounded border border-yellow-200 text-center">
+                    <p className="text-yellow-700 font-bold"><AlertTriangle className="inline mr-2"/> 請先儲存車輛基本資料，即可新增處理費用。</p>
+                </div>
+            ) : (
               <div className="md:col-span-3 mt-6 bg-gray-50 p-4 rounded border">
                 <h3 className="font-bold flex items-center mb-4"><Wrench size={16} className="mr-2"/> 處理費用記錄</h3>
                 <table className="w-full text-sm bg-white border mb-4">
@@ -641,7 +614,7 @@ export default function GoldLandAutoDMS() {
                       <tr key={exp.id} className="border-t">
                         <td className="p-2">{exp.date}</td>
                         <td className="p-2">{exp.type}</td>
-                        <td className="p-2 text-gray-500">{exp.company}</td>
+                        <td className="p-2 text-gray-500 text-xs">{exp.company}</td>
                         <td className="p-2">{formatCurrency(exp.amount)}</td>
                         <td className="p-2"><span className={`px-2 py-0.5 rounded text-xs ${exp.status==='Paid'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}`}>{exp.status}</span></td>
                         <td className="p-2">{exp.paymentMethod}</td>
@@ -660,7 +633,6 @@ export default function GoldLandAutoDMS() {
                   </tfoot>
                 </table>
 
-                {/* 新增費用表單 (使用 React State 控制) */}
                 <div className="grid grid-cols-7 gap-2 items-end bg-gray-100 p-2 rounded">
                   <div className="col-span-1">
                       <label className="text-[10px] text-gray-500">日期</label>
@@ -721,7 +693,6 @@ export default function GoldLandAutoDMS() {
                                 paymentMethod: newExpense.paymentMethod as any, 
                                 description: '' 
                             });
-                            // Reset amount but keep date
                             setNewExpense({...newExpense, amount: ''});
                         } else {
                             alert("請填寫費用項目及金額");
@@ -753,11 +724,10 @@ export default function GoldLandAutoDMS() {
       <h2 className="text-xl font-bold mb-6 flex items-center"><Settings className="mr-2"/> 系統參數設置 (System Settings)</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
-        {/* 1. 廠牌管理 */}
         <div className="bg-gray-50 p-4 rounded border">
-            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">車輛廠牌 (Level 1: Makes)</h3>
+            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">車輛廠牌 (Level 1)</h3>
             <div className="flex gap-2 mb-3">
-              <input id="new-makes" placeholder="新增廠牌 e.g. Ferrari" className="flex-1 border p-2 rounded text-sm"/>
+              <input id="new-makes" placeholder="新增廠牌..." className="flex-1 border p-2 rounded text-sm"/>
               <button onClick={() => {
                 const input = document.getElementById("new-makes") as HTMLInputElement;
                 if(input.value) { updateSettings('makes', input.value, 'add'); input.value=''; }
@@ -773,9 +743,8 @@ export default function GoldLandAutoDMS() {
             </ul>
         </div>
 
-        {/* 2. 型號管理 (Dependent on Make) */}
         <div className="bg-gray-50 p-4 rounded border">
-            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">型號列表 (Level 2: Models for {activeMake})</h3>
+            <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">型號列表 (Level 2: {activeMake})</h3>
             {!activeMake ? <p className="text-gray-400 text-xs">請先選擇左側廠牌</p> : (
                 <>
                 <div className="flex gap-2 mb-3">
@@ -798,13 +767,12 @@ export default function GoldLandAutoDMS() {
             )}
         </div>
 
-        {/* 3. 費用、公司與顏色 */}
         <div className="bg-gray-50 p-4 rounded border md:col-span-2">
             <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">其他設定</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {[
                   { key: 'expenseTypes', title: '費用類別', placeholder: 'e.g. 驗車費' },
-                  { key: 'expenseCompanies', title: '費用負責公司', placeholder: 'e.g. ABC車房' }, // 新增公司設定
+                  { key: 'expenseCompanies', title: '費用負責公司', placeholder: 'e.g. ABC車房' }, 
                   { key: 'colors', title: '顏色列表', placeholder: 'e.g. 香檳金' },
                 ].map(section => (
                     <div key={section.key}>
@@ -1114,7 +1082,6 @@ export default function GoldLandAutoDMS() {
                       ))}
                     </div>
                     <label className="block text-sm font-bold text-gray-500 mb-1">已付訂金/收款金額</label>
-                    {/* ★★★ 修正點：訂金金額輸入框格式化 ★★★ */}
                     <input 
                       type="text" 
                       value={formatNumberInput(String(deposit))} 
