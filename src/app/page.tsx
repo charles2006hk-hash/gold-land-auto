@@ -202,15 +202,22 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // 建立局部變數鎖定 auth，解決 TypeScript "Argument of type 'Auth | null' is not assignable" 錯誤
+    // ★★★ 關鍵修正：將 auth 存入局部變數，確保類型安全 ★★★
     const currentAuth = auth;
-    if (!currentAuth) { setLoading(false); return; }
+    
+    // 如果 auth 未初始化，則直接返回（不再繼續執行）
+    if (!currentAuth) { 
+      setLoading(false); 
+      return; 
+    }
 
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
+          // 使用局部變數 currentAuth，而不是全域變數 auth
           await signInWithCustomToken(currentAuth, (window as any).__initial_auth_token);
         } else {
+          // 使用局部變數 currentAuth
           await signInAnonymously(currentAuth);
         }
       } catch (error: any) {
@@ -218,7 +225,13 @@ export default function GoldLandAutoDMS() {
         setLoading(false);
       }
     };
-    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { setUser(u); setLoading(false); });
+    
+    // 使用局部變數 currentAuth
+    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { 
+      setUser(u); 
+      setLoading(false); 
+    });
+    
     initAuth();
     return () => unsubscribe();
   }, []);
