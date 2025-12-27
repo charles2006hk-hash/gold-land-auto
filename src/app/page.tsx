@@ -76,7 +76,7 @@ const COMPANY_INFO = {
 // --- 類型定義 ---
 type Expense = {
   id: string;
-  type: string; // e.g. '維修', '噴油', '牌費'
+  type: string;
   amount: number;
   description: string;
   status: 'Paid' | 'Unpaid';
@@ -86,35 +86,20 @@ type Expense = {
 
 type Vehicle = {
   id: string;
-  // 基本資料
   regMark: string;
   make: string;
   model: string;
   year: string;
   chassisNo: string;
   engineNo: string;
-  
-  // 擴充資料
-  purchaseType: 'Used' | 'New'; // 二手收購 / 新車訂購
-  colorExt: string; // 外觀顏色
-  colorInt: string; // 內飾顏色
-  licenseExpiry: string; // 牌費到期日
-  
-  // 財務與狀態
-  price: number; // 售價 (或預計售價)
-  costPrice?: number; // 入貨價 (只有老闆看得到?)
+  purchaseType: 'Used' | 'New';
+  colorExt: string;
+  colorInt: string;
+  licenseExpiry: string;
+  price: number;
+  costPrice?: number;
   status: 'In Stock' | 'Sold' | 'Reserved';
-  
-  // 關聯資料
-  expenses: Expense[]; // 處理費用列表
-  
-  // 銷售資料
-  customerName?: string;
-  customerPhone?: string;
-  soldDate?: any;
-  soldPrice?: number;
-  deposit?: number;
-  
+  expenses: Expense[];
   createdAt?: any;
 };
 
@@ -156,8 +141,8 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v2.0</h1>
-          <p className="text-slate-500 text-sm mt-2">Vehicle Management System (Pro)</p>
+          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto</h1>
+          <p className="text-slate-500 text-sm mt-2">Vehicle Management System</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -175,7 +160,6 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  // ★★★ 類型定義已修正，包含 'inventory_add' ★★★
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add'>('dashboard');
   
   // Data States
@@ -228,17 +212,18 @@ export default function GoldLandAutoDMS() {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    // 1. Inventory Listener
+    // 1. Inventory Listener (路徑層級 5: Collection)
     const invRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
-    const q = query(invRef, orderBy('createdAt', 'desc')); 
+    const q = query(invRef, orderBy('createdAt', 'desc'));
     const unsubInv = onSnapshot(q, (snapshot) => {
       const list: Vehicle[] = [];
       snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() } as Vehicle));
       setInventory(list);
     }, (err) => console.error("Inv sync error", err));
 
-    // 2. Settings Fetch
-    const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'settings_doc');
+    // 2. Settings Fetch (路徑層級 6: Document)
+    // ★★★ 修正點：增加了 "system_config" 層級，確保總層數為 6 (偶數) ★★★
+    const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
     getDoc(settingsDocRef).then(docSnap => {
       if (docSnap.exists()) {
         setSettings(docSnap.data() as SystemSettings);
@@ -274,7 +259,7 @@ export default function GoldLandAutoDMS() {
       price: Number(formData.get('price')),
       costPrice: Number(formData.get('costPrice') || 0),
       status: editingVehicle ? editingVehicle.status : 'In Stock',
-      expenses: editingVehicle ? editingVehicle.expenses : [], 
+      expenses: editingVehicle ? editingVehicle.expenses : [],
       updatedAt: serverTimestamp()
     };
 
@@ -342,7 +327,8 @@ export default function GoldLandAutoDMS() {
 
     const newSettings = { ...settings, [key]: newList };
     setSettings(newSettings);
-    await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'settings_doc'), newSettings);
+    // ★★★ 修正點：更新設定時也使用 6 層路徑 ★★★
+    await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
   };
 
   // --- Dashboard Logic ---
@@ -376,9 +362,7 @@ export default function GoldLandAutoDMS() {
 
   // 1. Vehicle Form Modal (Add/Edit)
   const VehicleFormModal = () => {
-    // 檢查 activeTab 是否為 inventory_add，或是否有 editingVehicle
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
-    
     const v = editingVehicle || {} as Partial<Vehicle>;
     
     return (
@@ -390,7 +374,6 @@ export default function GoldLandAutoDMS() {
           </div>
           <form onSubmit={saveVehicle} className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            {/* 基本資料 */}
             <div className="md:col-span-3 pb-2 border-b"><h3 className="font-bold text-gray-500">基本資料</h3></div>
             
             <div>
@@ -434,7 +417,6 @@ export default function GoldLandAutoDMS() {
               <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full border p-2 rounded"/>
             </div>
             
-            {/* 機件資料 */}
             <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">機件資料</h3></div>
             <div>
               <label className="block text-xs font-bold text-gray-500">底盤號 (Chassis No.)</label>
@@ -445,7 +427,6 @@ export default function GoldLandAutoDMS() {
               <input name="engineNo" defaultValue={v.engineNo} required className="w-full border p-2 rounded font-mono"/>
             </div>
 
-            {/* 價格資料 */}
             <div className="md:col-span-3 pb-2 border-b mt-4"><h3 className="font-bold text-gray-500">價格設定</h3></div>
             <div>
               <label className="block text-xs font-bold text-gray-500">入貨成本 (Cost)</label>
@@ -458,12 +439,10 @@ export default function GoldLandAutoDMS() {
               <input name="price" type="number" defaultValue={v.price} required className="w-full border p-2 pl-6 rounded font-bold text-lg"/></div>
             </div>
 
-            {/* 費用管理 (僅編輯模式顯示) */}
+            {/* 費用管理 */}
             {editingVehicle && (
               <div className="md:col-span-3 mt-6 bg-gray-50 p-4 rounded border">
                 <h3 className="font-bold flex items-center mb-4"><Wrench size={16} className="mr-2"/> 處理費用記錄</h3>
-                
-                {/* 費用列表 */}
                 <table className="w-full text-sm bg-white border mb-4">
                   <thead>
                     <tr className="bg-gray-100 text-left">
@@ -490,7 +469,6 @@ export default function GoldLandAutoDMS() {
                   </tbody>
                 </table>
 
-                {/* 新增費用表單 (Inline) */}
                 <div className="grid grid-cols-6 gap-2 items-end">
                   <div className="col-span-1"><input type="date" id="expDate" className="w-full border p-1 rounded text-sm" defaultValue={new Date().toISOString().split('T')[0]} /></div>
                   <div className="col-span-1">
