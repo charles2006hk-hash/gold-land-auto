@@ -175,7 +175,8 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings'>('dashboard');
+  // ★★★ 修正點：在類型定義中加入 'inventory_add' ★★★
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add'>('dashboard');
   
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
@@ -202,22 +203,15 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // ★★★ 關鍵修正：將 auth 存入局部變數，確保類型安全 ★★★
+    // 建立局部變數鎖定 auth，解決 TypeScript "Argument of type 'Auth | null' is not assignable" 錯誤
     const currentAuth = auth;
-    
-    // 如果 auth 未初始化，則直接返回（不再繼續執行）
-    if (!currentAuth) { 
-      setLoading(false); 
-      return; 
-    }
+    if (!currentAuth) { setLoading(false); return; }
 
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
-          // 使用局部變數 currentAuth，而不是全域變數 auth
           await signInWithCustomToken(currentAuth, (window as any).__initial_auth_token);
         } else {
-          // 使用局部變數 currentAuth
           await signInAnonymously(currentAuth);
         }
       } catch (error: any) {
@@ -225,13 +219,7 @@ export default function GoldLandAutoDMS() {
         setLoading(false);
       }
     };
-    
-    // 使用局部變數 currentAuth
-    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { 
-      setUser(u); 
-      setLoading(false); 
-    });
-    
+    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { setUser(u); setLoading(false); });
     initAuth();
     return () => unsubscribe();
   }, []);
