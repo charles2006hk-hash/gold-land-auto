@@ -202,20 +202,23 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    if (!auth) { setLoading(false); return; }
+    // 建立局部變數鎖定 auth，解決 TypeScript "Argument of type 'Auth | null' is not assignable" 錯誤
+    const currentAuth = auth;
+    if (!currentAuth) { setLoading(false); return; }
+
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
-          await signInWithCustomToken(auth, (window as any).__initial_auth_token);
+          await signInWithCustomToken(currentAuth, (window as any).__initial_auth_token);
         } else {
-          await signInAnonymously(auth);
+          await signInAnonymously(currentAuth);
         }
       } catch (error: any) {
         if (!error.message?.includes('storage')) setAuthError(error.message);
         setLoading(false);
       }
     };
-    const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
+    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { setUser(u); setLoading(false); });
     initAuth();
     return () => unsubscribe();
   }, []);
