@@ -1175,9 +1175,11 @@ export default function GoldLandAutoDMS() {
           </div>
         )}
 
-        <div className={`${isPreviewMode ? 'block mt-24 md:mt-16' : 'hidden'} print:block print:mt-0`}><div ref={printAreaRef} className="print:w-full"><DocumentTemplate /></div></div>
+        {/* 修正：僅在預覽模式下打印文檔模板區域，且不為空時才佔位 */}
+        <div className={`${isPreviewMode ? 'block mt-24 md:mt-16' : 'hidden'} ${isPreviewMode ? 'print:block' : 'print:hidden'} print:mt-0`}><div ref={printAreaRef} className="print:w-full"><DocumentTemplate /></div></div>
 
-        <div className={`${isPreviewMode ? 'hidden' : 'block'} print:hidden space-y-6`}>
+        {/* 修正：如果是報表模式 (reports)，則在打印時允許顯示主要內容區 */}
+        <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} space-y-6`}>
           
           {/* Modal for Add/Edit Vehicle */}
           {(activeTab === 'inventory_add' || editingVehicle) && <VehicleFormModal />}
@@ -1202,11 +1204,13 @@ export default function GoldLandAutoDMS() {
                   <table className="w-full text-left text-sm whitespace-nowrap">
                     <thead><tr className="border-b bg-gray-50"><th className="p-3">入庫日</th><th className="p-3">狀態</th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th><th className="p-3 text-right">費用狀況</th></tr></thead>
                     <tbody>
-                      {getSortedInventory().slice(0, 10).map(car => {
+                      {/* 修正：移除 .slice(0, 10) 限制，顯示所有車輛 */}
+                      {getSortedInventory().map(car => {
                         const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
                         return (
                           <tr key={car.id} className="border-b hover:bg-gray-50">
-                            <td className="p-3 text-gray-500 text-xs">{car.createdAt?.toDate ? formatDate(car.createdAt.toDate()) : 'N/A'}</td>
+                            {/* 修正：優先顯示手動輸入的 stockInDate */}
+                            <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status}</span></td>
                             <td className="p-3 font-medium">{car.regMark}</td>
                             <td className="p-3">{car.year} {car.make} {car.model}</td>
