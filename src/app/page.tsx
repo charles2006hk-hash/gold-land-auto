@@ -73,7 +73,7 @@ const COMPANY_INFO = {
   address_en: "Rm 11, 22/F, Blk B, New Trade Plaza, 6 On Ping St, Shek Mun, Shatin, N.T., HK",
   address_ch: "香港沙田石門安平街6號新貿中心B座22樓11室",
   phone: "+852 3490 6112",
-  logo_url: "/logo.png"
+  logo_url: "/GL_APPLOGO.png" // 更新 Logo 路徑
 };
 
 // --- 類型定義 ---
@@ -228,9 +228,12 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><UserCircle size={48} className="text-white" /></div>
-          <h1 className="text-2xl font-bold text-slate-800">Gold Land Auto v3.0.3</h1>
-          <p className="text-slate-500 text-sm mt-2">Sales & Management System</p>
+          {/* Logo 顯示 */}
+          <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-md border border-slate-100 p-2">
+             <img src={COMPANY_INFO.logo_url} alt="Gold Land Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.parentElement!.innerHTML='<svg class="w-12 h-12 text-yellow-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>'; }} />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">金田汽車DMS系統</h1>
+          <p className="text-slate-500 text-sm mt-1 font-medium">v3.0.3 Sales & Management</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -294,6 +297,27 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
+    // 設定 PWA/App Icon
+    const setAppIcon = () => {
+        const iconPath = COMPANY_INFO.logo_url;
+        
+        // Helper to set link tags
+        const setLink = (rel: string, href: string) => {
+            let link = document.querySelector(`link[rel~='${rel}']`) as HTMLLinkElement;
+            if (!link) {
+                link = document.createElement('link');
+                link.rel = rel;
+                document.getElementsByTagName('head')[0].appendChild(link);
+            }
+            link.href = href;
+        };
+
+        setLink('icon', iconPath);
+        setLink('apple-touch-icon', iconPath);
+        document.title = "金田汽車DMS系統";
+    };
+    setAppIcon();
+
     const currentAuth = auth;
     if (!currentAuth) { setLoading(false); return; }
 
@@ -862,6 +886,10 @@ export default function GoldLandAutoDMS() {
 
             <div className="print:visible">
                 <div className="text-center mb-8 hidden print:block">
+                    {/* 報表 Logo */}
+                    <div className="w-20 h-20 mx-auto mb-2 flex items-center justify-center">
+                         <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                    </div>
                     <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
                     <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
                         {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
@@ -981,10 +1009,10 @@ export default function GoldLandAutoDMS() {
     const Header = ({ titleEn, titleCh }: { titleEn: string, titleCh: string }) => (
         <div className="mb-8">
             <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2">
-                <div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-gray-50 rounded-lg overflow-hidden">
-                    <div className="flex flex-col items-center justify-center text-gray-400 w-full h-full">
-                        <div className="flex flex-col items-center"><Building2 size={32} /><span className="text-[10px] mt-1">Logo</span></div>
-                    </div>
+                <div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-white rounded-lg overflow-hidden relative">
+                    {/* 文件 Logo */}
+                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-1" onError={(e) => { e.currentTarget.style.display='none'; }}/>
+                    <div className="absolute inset-0 flex items-center justify-center -z-10 text-gray-200"><Building2 size={32} /></div>
                 </div>
                 <div className="flex-1 text-right">
                     <h1 className="text-3xl font-bold tracking-wide text-black">{COMPANY_INFO.name_en}</h1>
@@ -1146,9 +1174,15 @@ export default function GoldLandAutoDMS() {
     <>
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden`}>
-        <div className="p-6 border-b border-slate-700 flex justify-between items-center">
-          <div><h1 className="text-xl font-bold text-yellow-500 tracking-tighter">GOLD LAND</h1><p className="text-xs text-slate-400 mt-1">Sales & Management</p></div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white"><X size={24} /></button>
+        <div className="p-6 border-b border-slate-700 flex items-center gap-3 overflow-hidden">
+            {/* 側邊欄 Logo */}
+            <div className="w-10 h-10 bg-white rounded-full flex-shrink-0 flex items-center justify-center p-0.5">
+                 <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <div>
+                 <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight">金田汽車<br/>DMS系統</h1>
+            </div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto"><X size={24} /></button>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'dashboard' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><LayoutDashboard size={20} className="mr-3" /> 業務儀表板</button>
@@ -1165,8 +1199,8 @@ export default function GoldLandAutoDMS() {
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
       <Sidebar />
-      <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300">
-        <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land</span><div className="w-7"></div></div>
+      <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
+        <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land</span><div className="w-7"></div></div>
 
         {isPreviewMode && (
           <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-center z-50 shadow-xl print:hidden gap-3">
@@ -1176,35 +1210,50 @@ export default function GoldLandAutoDMS() {
         )}
 
         {/* 修正：僅在預覽模式下打印文檔模板區域，且不為空時才佔位 */}
-        <div className={`${isPreviewMode ? 'block mt-24 md:mt-16' : 'hidden'} ${isPreviewMode ? 'print:block' : 'print:hidden'} print:mt-0`}><div ref={printAreaRef} className="print:w-full"><DocumentTemplate /></div></div>
+        <div className={`${isPreviewMode ? 'block mt-24 md:mt-16' : 'hidden'} ${isPreviewMode ? 'print:block' : 'print:hidden'} print:mt-0 flex-1 overflow-y-auto`}><div ref={printAreaRef} className="print:w-full"><DocumentTemplate /></div></div>
 
         {/* 修正：如果是報表模式 (reports)，則在打印時允許顯示主要內容區 */}
-        <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} space-y-6`}>
+        <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} flex flex-col h-full overflow-hidden`}>
           
           {/* Modal for Add/Edit Vehicle */}
           {(activeTab === 'inventory_add' || editingVehicle) && <VehicleFormModal />}
           
-          {/* Report Tab */}
-          {activeTab === 'reports' && <ReportView />}
+          {/* Report Tab - 讓它內部也可以滾動 */}
+          {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
-          {/* Dashboard Tab */}
+          {/* Dashboard Tab - 固定頂部，列表滾動 */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-6 animate-fade-in">
-              <h2 className="text-2xl font-bold text-slate-800">業務儀表板</h2>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
+              <h2 className="text-2xl font-bold text-slate-800 flex-none">業務儀表板</h2>
+              
+              {/* Stats Cards - 固定高度 */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-none">
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><p className="text-xs text-gray-500 uppercase">庫存總值</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalStockValue)}</p></div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500"><p className="text-xs text-gray-500 uppercase">未付費用</p><p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalPayable)}</p></div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500"><p className="text-xs text-gray-500 uppercase">應收尾數</p><p className="text-2xl font-bold text-blue-600">{formatCurrency(stats.totalReceivable)}</p></div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-4">
-                <h3 className="font-bold mb-4">最新車輛動態</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead><tr className="border-b bg-gray-50"><th className="p-3">入庫日</th><th className="p-3">狀態</th><th className="p-3">車牌</th><th className="p-3">車型</th><th className="p-3">售價</th><th className="p-3 text-right">費用狀況</th></tr></thead>
+              {/* Table Container - 剩餘空間滾動 */}
+              <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
+                <h3 className="font-bold mb-4 flex-none">最新車輛動態</h3>
+                <div className="flex-1 overflow-y-auto">
+                  <table className="w-full text-left text-sm whitespace-nowrap relative">
+                    <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm">
+                        <tr className="border-b">
+                            <th className="p-3 cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort('stockInDate')}>
+                                <div className="flex items-center">入庫日 <ArrowUpDown size={14} className="ml-1 text-gray-400"/></div>
+                            </th>
+                            <th className="p-3 cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort('status')}>
+                                <div className="flex items-center">狀態 <ArrowUpDown size={14} className="ml-1 text-gray-400"/></div>
+                            </th>
+                            <th className="p-3">車牌</th>
+                            <th className="p-3">車型</th>
+                            <th className="p-3">售價</th>
+                            <th className="p-3 text-right">費用狀況</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                      {/* 修正：移除 .slice(0, 10) 限制，顯示所有車輛 */}
                       {getSortedInventory().map(car => {
                         const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
                         return (
@@ -1226,21 +1275,47 @@ export default function GoldLandAutoDMS() {
             </div>
           )}
 
-          {/* Inventory Tab */}
+          {/* Inventory Tab - 固定頂部，Grid 滾動 */}
           {activeTab === 'inventory' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="flex justify-between items-center mb-2"><h2 className="text-xl font-bold text-slate-800">車輛庫存 ({getSortedInventory().length})</h2><button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm"><Plus size={16} className="mr-1"/> 入庫</button></div>
-              <div className="flex gap-2 overflow-x-auto pb-1">{['All', 'In Stock', 'Sold', 'Reserved'].map(s => (<button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>{s === 'All' ? '全部' : s}</button>))}</div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">{getSortedInventory().map((car) => { const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}</div>
+            <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
+              {/* Header Controls */}
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-none">
+                  <h2 className="text-xl font-bold text-slate-800 whitespace-nowrap">車輛庫存 ({getSortedInventory().length})</h2>
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                      <div className="relative flex-1 md:w-64">
+                          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
+                          <input 
+                              type="text" 
+                              placeholder="搜尋車牌、型號..." 
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
+                          />
+                      </div>
+                      <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus size={16} className="mr-1"/> 入庫</button>
+                  </div>
+              </div>
+              
+              {/* Filter Bar */}
+              <div className="flex gap-2 overflow-x-auto pb-1 flex-none scrollbar-hide">
+                  {['All', 'In Stock', 'Sold', 'Reserved'].map(s => (<button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>{s === 'All' ? '全部' : s}</button>))}
+              </div>
+
+              {/* Grid Container - 捲動區域 */}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
+                    {getSortedInventory().map((car) => { const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
+                </div>
+              </div>
             </div>
           )}
 
           {/* Settings Tab */}
-          {activeTab === 'settings' && <SettingsManager />}
+          {activeTab === 'settings' && <div className="flex-1 overflow-y-auto"><SettingsManager /></div>}
 
           {/* Create Doc Tab */}
           {activeTab === 'create_doc' && (
-            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in"><h2 className="text-xl font-bold text-slate-800 mb-4">開立合約 / 文件</h2>{!selectedVehicle ? (<div className="text-center p-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50"><p className="text-gray-500 mb-4">請先從「車輛管理」頁面選擇一輛車來開單。</p><button onClick={() => setActiveTab('inventory')} className="px-6 py-2 bg-slate-800 text-white rounded hover:bg-slate-700">前往選擇車輛</button></div>) : (/* Legacy Create Doc UI - kept for compatibility but main flow is in Edit Modal */ <div>Please use Inventory Edit to create docs.</div>)}</div>
+            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in flex-1 overflow-y-auto"><h2 className="text-xl font-bold text-slate-800 mb-4">開立合約 / 文件</h2>{!selectedVehicle ? (<div className="text-center p-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50"><p className="text-gray-500 mb-4">請先從「車輛管理」頁面選擇一輛車來開單。</p><button onClick={() => setActiveTab('inventory')} className="px-6 py-2 bg-slate-800 text-white rounded hover:bg-slate-700">前往選擇車輛</button></div>) : (/* Legacy Create Doc UI - kept for compatibility but main flow is in Edit Modal */ <div>Please use Inventory Edit to create docs.</div>)}</div>
           )}
         </div>
       </main>
