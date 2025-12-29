@@ -1596,9 +1596,6 @@ export default function GoldLandAutoDMS() {
     );
   };
 
-  // ... (ReportView & DocumentTemplate code remains same, included below implicitly by not changing) ...
-  // Re-including them for completeness as per instructions
-
   const CompanyStamp = () => (<div className="w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-90 pointer-events-none select-none mix-blend-multiply" style={{ color: '#2b3d90', border: '2px solid #2b3d90', boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', backgroundColor: 'rgba(43, 61, 144, 0.02)', mixBlendMode: 'multiply' }}><div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}><div className="absolute w-full h-full"><svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0"><defs><path id="textCircle" d="M 12, 50 A 38, 38 0 1, 1 88, 50" /></defs><text fontSize="11" fontWeight="bold" fill="#2b3d90" letterSpacing="1"><textPath href="#textCircle" startOffset="50%" textAnchor="middle">GOLD LAND AUTO</textPath></text></svg></div><div className="flex flex-col items-center justify-center mt-2 z-10"><span className="text-[6px] font-bold leading-none tracking-widest" style={{ textShadow: '0 0 0.5px #2b3d90' }}>金田</span><span className="text-[6px] font-bold leading-none tracking-widest mt-[1px]" style={{ textShadow: '0 0 0.5px #2b3d90' }}>汽車</span></div><div className="absolute bottom-1 text-[8px] font-bold text-[#2b3d90]">*</div></div></div>);
   const SignedStamp = () => (<div className="relative w-[50mm] h-[30mm] flex items-center justify-center"><svg viewBox="0 0 200 100" className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{ overflow: 'visible' }}><defs><filter id="ink-spread"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" /><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" /></filter></defs><path d="M20,60 C40,40 60,80 90,50 C110,30 130,70 160,40 C170,30 180,60 190,50" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.85 }} /><path d="M30,70 C60,60 120,60 180,55" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.9 }} /><path d="M50,40 Q40,80 60,70 T80,60" fill="none" stroke="black" strokeWidth="2.5" style={{ filter: 'url(#ink-spread)', opacity: 0.8 }} /></svg><div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-2 w-[22mm] h-[22mm] flex items-center justify-center z-10 pointer-events-none select-none"><CompanyStamp /></div></div>);
   
@@ -1781,111 +1778,6 @@ export default function GoldLandAutoDMS() {
                     <p>Authorized Signature</p>
                 </div>
                 <div className="absolute -top-8 left-10"><SignedStamp /></div>
-            </div>
-        </div>
-    );
-  };
-
-  // 2. Report View (Linked to Edit)
-  const ReportView = () => {
-    const handleReportItemClick = (vehicleId: string) => {
-        const vehicle = inventory.find(v => v.id === vehicleId);
-        if (vehicle) {
-            setEditingVehicle(vehicle);
-        }
-    };
-
-    return (
-        <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
-            <div className="flex justify-between items-center mb-6 print:hidden">
-                <h2 className="text-xl font-bold flex items-center"><FileBarChart className="mr-2"/> 統計報表中心</h2>
-                <div className="flex space-x-2">
-                    <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 rounded flex items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
-                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300">返回</button>
-                </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded border mb-6 print:hidden grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">報表類型</label>
-                    <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-2 rounded">
-                        <option value="receivable">應收未收報表 (Receivables)</option>
-                        <option value="payable">應付未付報表 (Payables)</option>
-                        <option value="sales">銷售數據統計 (Sales Stats)</option>
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label>
-                    <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">結束日期</label>
-                    <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
-                {reportType === 'payable' && (
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">負責公司 (供應商)</label>
-                        <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded">
-                            <option value="">全部公司</option>
-                            {settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-                )}
-            </div>
-
-            <div className="print:visible">
-                <div className="text-center mb-8 hidden print:block">
-                    <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
-                    <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
-                        {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
-                         reportType === 'payable' ? '應付未付報表 (Accounts Payable)' : 
-                         '銷售數據統計 (Sales Report)'}
-                    </h2>
-                    <p className="text-sm text-gray-600">Period: {reportStartDate} to {reportEndDate}</p>
-                </div>
-
-                <table className="w-full border-collapse text-sm">
-                    <thead>
-                        <tr className="bg-gray-100 border-b-2 border-black text-left">
-                            <th className="p-2 border">日期</th>
-                            <th className="p-2 border">項目 / 車輛</th>
-                            <th className="p-2 border">詳情 / 車牌</th>
-                            {reportType === 'payable' && <th className="p-2 border">負責公司</th>}
-                            {reportType === 'payable' && <th className="p-2 border">單號</th>}
-                            {reportType === 'sales' && <th className="p-2 border">成本 (Cost)</th>}
-                            <th className="p-2 border text-right">金額 (Amount)</th>
-                            {reportType === 'sales' && <th className="p-2 border text-right">利潤 (Profit)</th>}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {reportData.map((item, idx) => (
-                            <tr 
-                                key={idx} 
-                                className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent"
-                                onClick={() => handleReportItemClick(item.vehicleId)}
-                                title="點擊編輯此車輛費用"
-                            >
-                                <td className="p-2 border">{item.date}</td>
-                                <td className="p-2 border font-bold flex items-center">{item.title} <ExternalLink size={10} className="ml-2 text-gray-400 print:hidden"/></td>
-                                <td className="p-2 border">{item.regMark}</td>
-                                {reportType === 'payable' && <td className="p-2 border">{item.company}</td>}
-                                {reportType === 'payable' && <td className="p-2 border">{item.invoiceNo || '-'}</td>}
-                                {reportType === 'sales' && <td className="p-2 border">{formatCurrency(item.cost)}</td>}
-                                <td className="p-2 border text-right font-mono">{formatCurrency(item.amount)}</td>
-                                {reportType === 'sales' && <td className={`p-2 border text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
-                            </tr>
-                        ))}
-                        {reportData.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
-                    </tbody>
-                    <tfoot>
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={reportType === 'payable' ? 5 : 3} className="p-2 border text-right">Total:</td>
-                            {reportType === 'sales' && <td className="p-2 border"></td>}
-                            <td className="p-2 border text-right">{formatCurrency(totalReportAmount)}</td>
-                            {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(totalReportProfit)}</td>}
-                        </tr>
-                    </tfoot>
-                </table>
             </div>
         </div>
     );
