@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, Globe, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  CreditCard as PaymentIcon
+  CreditCard as PaymentIcon, MapPin
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -118,8 +118,12 @@ type CrossBorderTask = {
 type CrossBorderData = {
     isEnabled: boolean; 
     mainlandPlate?: string; 
-    driverOwner?: string; 
+    driver1?: string; // 主司機
+    driver2?: string; // 副司機 1
+    driver3?: string; // 副司機 2
     insuranceAgent?: string; 
+    quotaNumber?: string; // 指標號
+    ports?: string[]; // 口岸 (多選)
     
     // 日期管理 (YYYY-MM-DD)
     dateHkInsurance?: string; 
@@ -222,9 +226,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
   expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '拖車費', '佣金', '中港牌批文費', '內地保險', '其他'],
   expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家', '中檢公司'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)'],
-  cbItems: ['批文延期', '禁區紙續期', '內地驗車', '海關年檢', '封關/解封', '換司機', '換車'],
-  cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸']
+  cbItems: ['批文延期', '禁區紙續期', '內地驗車', '海關年檢', '封關/解封', '換司機', '換車', '買保險'],
+  cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸', '港珠澳大橋口岸']
 };
+
+const AVAILABLE_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '大橋'];
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -276,7 +282,7 @@ const getDaysRemaining = (targetDate?: string) => {
 
 // 狀態標籤組件 (日期)
 const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
-    if (!date) return <div className="text-gray-300 text-xs">-</div>;
+    if (!date) return <div className="text-gray-300 text-xs text-center">-</div>;
     const days = getDaysRemaining(date);
     let colorClass = "text-green-600 bg-green-50 border-green-200";
     let statusText = "正常";
@@ -285,19 +291,19 @@ const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
 
     if (days < 0) {
         colorClass = "text-red-600 bg-red-50 border-red-200 font-bold";
-        statusText = `已過期 ${Math.abs(days)} 天`;
+        statusText = `過期 ${Math.abs(days)}天`;
     } else if (days <= 30) {
         colorClass = "text-amber-600 bg-amber-50 border-amber-200 font-bold";
-        statusText = `剩 ${days} 天`;
+        statusText = `剩 ${days}天`;
     } else {
         statusText = "正常";
     }
 
     return (
-        <div className={`border rounded px-2 py-1 text-xs inline-block w-full text-center ${colorClass}`}>
-            <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
-            <div>{date}</div>
-            <div>{statusText}</div>
+        <div className={`border rounded px-1 py-1 text-[10px] inline-flex flex-col items-center justify-center w-20 text-center leading-tight ${colorClass}`} title={`${label}: ${date}`}>
+            <div className="font-bold mb-0.5 scale-90">{label}</div>
+            <div className="scale-90">{date}</div>
+            <div className="scale-90">{statusText}</div>
         </div>
     );
 };
@@ -514,13 +520,26 @@ export default function GoldLandAutoDMS() {
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
-    // Cross Border Data Capture
+    // Cross Border Data Capture - with safe defaults and multi-select handling
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
+    
+    // Get all selected ports
+    const selectedPorts: string[] = [];
+    AVAILABLE_PORTS.forEach(port => {
+        if (formData.get(`cb_port_${port}`) === 'on') {
+            selectedPorts.push(port);
+        }
+    });
+
     const crossBorderData: CrossBorderData = {
         isEnabled: cbEnabled,
         mainlandPlate: formData.get('cb_mainlandPlate') as string || '',
-        driverOwner: formData.get('cb_driverOwner') as string || '',
+        driver1: formData.get('cb_driver1') as string || '',
+        driver2: formData.get('cb_driver2') as string || '',
+        driver3: formData.get('cb_driver3') as string || '',
         insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
+        quotaNumber: formData.get('cb_quotaNumber') as string || '',
+        ports: selectedPorts,
         dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
         dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
         dateBr: formData.get('cb_dateBr') as string || '',
@@ -662,11 +681,23 @@ export default function GoldLandAutoDMS() {
       updateSubItem(vehicleId, 'crossBorder', newTasks);
   };
 
-  const deleteCbTask = (vehicleId: string, taskId: string) => {
+  const deleteCbTask = async (vehicleId: string, taskId: string) => {
+      if (!db || !staffId) return;
+      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
       const v = inventory.find(v => v.id === vehicleId);
       if (!v) return;
+      
+      // 1. Remove the task
       const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
-      updateSubItem(vehicleId, 'crossBorder', newTasks);
+      
+      // 2. Remove any payments linked to this task
+      const newPayments = (v.payments || []).filter(p => p.relatedTaskId !== taskId);
+
+      // 3. Batch Update
+      await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
+          crossBorder: { ...v.crossBorder, tasks: newTasks },
+          payments: newPayments
+      });
   };
 
   // Settings
@@ -967,25 +998,49 @@ export default function GoldLandAutoDMS() {
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded border border-blue-100 animate-fade-in"
                     style={{ display: isCbExpanded ? 'grid' : 'none' }}
                 >
-                    <div><label className="text-[10px] text-blue-800 font-bold">內地車牌 (Mainland Plate)</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} placeholder="粵Z..." className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-blue-800 font-bold">司機/車主 (Driver/Owner)</label><input name="cb_driverOwner" defaultValue={v.crossBorder?.driverOwner} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-blue-800 font-bold">保險代理 (Agent)</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">內地車牌 (Mainland Plate)</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} placeholder="粵Z..." className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">指標號 (Quota No.)</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">保險代理 (Agent)</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"></div>
+
+                    {/* 司機資訊 */}
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">主司機 (Main Driver)</label><input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 1 (Driver 2)</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 2 (Driver 3)</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border p-1 rounded text-sm"/></div>
+                    
+                    {/* 口岸選擇 (多選) */}
+                    <div className="md:col-span-4 border-t border-blue-200 mt-2 pt-2">
+                        <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (Ports - Select multiple)</label>
+                        <div className="flex flex-wrap gap-3">
+                            {AVAILABLE_PORTS.map(port => (
+                                <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
+                                    <input 
+                                        type="checkbox" 
+                                        name={`cb_port_${port}`} 
+                                        defaultChecked={v.crossBorder?.ports?.includes(port)} 
+                                        className="mr-1 w-3 h-3"
+                                    />
+                                    {port}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
 
                     <div className="md:col-span-4 border-t border-blue-200 my-2"></div>
 
-                    <div><label className="text-[10px] text-gray-500">香港保險到期</label><input type="date" name="cb_dateHkInsurance" defaultValue={v.crossBorder?.dateHkInsurance} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">留牌紙到期</label><input type="date" name="cb_dateReservedPlate" defaultValue={v.crossBorder?.dateReservedPlate} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">商業登記(BR)到期</label><input type="date" name="cb_dateBr" defaultValue={v.crossBorder?.dateBr} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">牌照費(行車證)到期</label><input type="date" name="cb_dateLicenseFee" defaultValue={v.crossBorder?.dateLicenseFee} className="w-full border p-1 rounded text-sm"/></div>
+                    {/* 10 項提醒日期 */}
+                    <div><label className="text-[10px] text-gray-500">香港保險到期 (HK Ins)</label><input type="date" name="cb_dateHkInsurance" defaultValue={v.crossBorder?.dateHkInsurance} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">留牌紙到期 (Reserved Plate)</label><input type="date" name="cb_dateReservedPlate" defaultValue={v.crossBorder?.dateReservedPlate} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">商業登記到期 (BR)</label><input type="date" name="cb_dateBr" defaultValue={v.crossBorder?.dateBr} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">牌照費到期 (License Fee)</label><input type="date" name="cb_dateLicenseFee" defaultValue={v.crossBorder?.dateLicenseFee} className="w-full border p-1 rounded text-sm"/></div>
 
-                    <div><label className="text-[10px] text-gray-500">內地交強險到期</label><input type="date" name="cb_dateMainlandJqx" defaultValue={v.crossBorder?.dateMainlandJqx} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">內地商業險到期</label><input type="date" name="cb_dateMainlandSyx" defaultValue={v.crossBorder?.dateMainlandSyx} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">禁區紙到期</label><input type="date" name="cb_dateClosedRoad" defaultValue={v.crossBorder?.dateClosedRoad} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">批文卡到期</label><input type="date" name="cb_dateApproval" defaultValue={v.crossBorder?.dateApproval} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">內地交強險到期 (CN JQX)</label><input type="date" name="cb_dateMainlandJqx" defaultValue={v.crossBorder?.dateMainlandJqx} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">內地商業險到期 (CN SYX)</label><input type="date" name="cb_dateMainlandSyx" defaultValue={v.crossBorder?.dateMainlandSyx} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">禁區紙到期 (Closed Road)</label><input type="date" name="cb_dateClosedRoad" defaultValue={v.crossBorder?.dateClosedRoad} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">批文卡到期 (Approval)</label><input type="date" name="cb_dateApproval" defaultValue={v.crossBorder?.dateApproval} className="w-full border p-1 rounded text-sm"/></div>
 
-                    <div><label className="text-[10px] text-gray-500">內地驗車(行駛證)到期</label><input type="date" name="cb_dateMainlandLicense" defaultValue={v.crossBorder?.dateMainlandLicense} className="w-full border p-1 rounded text-sm"/></div>
-                    <div><label className="text-[10px] text-gray-500">香港驗車日期</label><input type="date" name="cb_dateHkInspection" defaultValue={v.crossBorder?.dateHkInspection} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">內地驗車(行駛證)到期 (CN Lic)</label><input type="date" name="cb_dateMainlandLicense" defaultValue={v.crossBorder?.dateMainlandLicense} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">香港驗車日期 (HK Insp)</label><input type="date" name="cb_dateHkInspection" defaultValue={v.crossBorder?.dateHkInspection} className="w-full border p-1 rounded text-sm"/></div>
                 </div>
             </div>
 
@@ -1064,7 +1119,7 @@ export default function GoldLandAutoDMS() {
                    <div className="col-span-1"><label className="text-[10px]">方式</label><select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value as any})} className="w-full border p-1 rounded text-xs"><option>Cash</option><option>Cheque</option><option>Transfer</option></select></div>
                    <div className="col-span-1"><label className="text-[10px]">金額</label><input type="text" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-full border p-1 rounded text-xs" placeholder="0"/></div>
                    <div className="col-span-1"><label className="text-[10px]">備注</label><input type="text" value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full border p-1 rounded text-xs" placeholder="支票號/備注"/></div>
-                   <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amount = Number(newPayment.amount.replace(/,/g, '')); if(amount > 0) { addPayment(v.id!, { id: Date.now().toString(), ...newPayment, amount } as Payment); setNewPayment({...newPayment, amount: '', note: ''}); }}} className="w-full bg-blue-600 text-white p-1 rounded text-xs hover:bg-blue-700 h-[26px]">新增收款</button></div>
+                   <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amount = Number(newPayment.amount.replace(/,/g, '')); if(amount > 0) { addPayment(v.id!, { id: Date.now().toString(), ...newPayment, amount } as Payment); setNewPayment({...newPayment, amount: '', note: ''}); }}} className="w-full bg-blue-600 text-white p-1 rounded text-xs h-[26px]">新增收款</button></div>
                 </div>
               </div>
             )}
@@ -1105,111 +1160,6 @@ export default function GoldLandAutoDMS() {
           </form>
         </div>
       </div>
-    );
-  };
-
-  // 2. Report View (Linked to Edit)
-  const ReportView = () => {
-    const handleReportItemClick = (vehicleId: string) => {
-        const vehicle = inventory.find(v => v.id === vehicleId);
-        if (vehicle) {
-            setEditingVehicle(vehicle);
-        }
-    };
-
-    return (
-        <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
-            <div className="flex justify-between items-center mb-6 print:hidden">
-                <h2 className="text-xl font-bold flex items-center"><FileBarChart className="mr-2"/> 統計報表中心</h2>
-                <div className="flex space-x-2">
-                    <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 rounded flex items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
-                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300">返回</button>
-                </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded border mb-6 print:hidden grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">報表類型</label>
-                    <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-2 rounded">
-                        <option value="receivable">應收未收報表 (Receivables)</option>
-                        <option value="payable">應付未付報表 (Payables)</option>
-                        <option value="sales">銷售數據統計 (Sales Stats)</option>
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label>
-                    <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">結束日期</label>
-                    <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
-                {reportType === 'payable' && (
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">負責公司 (供應商)</label>
-                        <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded">
-                            <option value="">全部公司</option>
-                            {settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-                )}
-            </div>
-
-            <div className="print:visible">
-                <div className="text-center mb-8 hidden print:block">
-                    <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
-                    <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
-                        {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
-                         reportType === 'payable' ? '應付未付報表 (Accounts Payable)' : 
-                         '銷售數據統計 (Sales Report)'}
-                    </h2>
-                    <p className="text-sm text-gray-600">Period: {reportStartDate} to {reportEndDate}</p>
-                </div>
-
-                <table className="w-full border-collapse text-sm">
-                    <thead>
-                        <tr className="bg-gray-100 border-b-2 border-black text-left">
-                            <th className="p-2 border">日期</th>
-                            <th className="p-2 border">項目 / 車輛</th>
-                            <th className="p-2 border">詳情 / 車牌</th>
-                            {reportType === 'payable' && <th className="p-2 border">負責公司</th>}
-                            {reportType === 'payable' && <th className="p-2 border">單號</th>}
-                            {reportType === 'sales' && <th className="p-2 border">成本 (Cost)</th>}
-                            <th className="p-2 border text-right">金額 (Amount)</th>
-                            {reportType === 'sales' && <th className="p-2 border text-right">利潤 (Profit)</th>}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {reportData.map((item, idx) => (
-                            <tr 
-                                key={idx} 
-                                className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent"
-                                onClick={() => handleReportItemClick(item.vehicleId)}
-                                title="點擊編輯此車輛費用"
-                            >
-                                <td className="p-2 border">{item.date}</td>
-                                <td className="p-2 border font-bold flex items-center">{item.title} <ExternalLink size={10} className="ml-2 text-gray-400 print:hidden"/></td>
-                                <td className="p-2 border">{item.regMark}</td>
-                                {reportType === 'payable' && <td className="p-2 border">{item.company}</td>}
-                                {reportType === 'payable' && <td className="p-2 border">{item.invoiceNo || '-'}</td>}
-                                {reportType === 'sales' && <td className="p-2 border">{formatCurrency(item.cost)}</td>}
-                                <td className="p-2 border text-right font-mono">{formatCurrency(item.amount)}</td>
-                                {reportType === 'sales' && <td className={`p-2 border text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
-                            </tr>
-                        ))}
-                        {reportData.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
-                    </tbody>
-                    <tfoot>
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={reportType === 'payable' ? 5 : 3} className="p-2 border text-right">Total:</td>
-                            {reportType === 'sales' && <td className="p-2 border"></td>}
-                            <td className="p-2 border text-right">{formatCurrency(totalReportAmount)}</td>
-                            {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(totalReportProfit)}</td>}
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
     );
   };
 
@@ -1263,9 +1213,6 @@ export default function GoldLandAutoDMS() {
               relatedTaskId: paymentModalTask.id
           };
           addPayment(activeCbVehicleId, newPayment);
-          
-          // Optionally mark task as paid or just close modal. 
-          // Since we track payments separately, we can just close.
           setPaymentModalTask(null);
       };
 
@@ -1287,20 +1234,25 @@ export default function GoldLandAutoDMS() {
                   </div>
               </div>
 
-              {/* TOP SECTION: Vehicle List (Scrollable) */}
+              {/* TOP SECTION: Vehicle List (Scrollable, 10 Items) */}
               <div className="bg-white rounded-lg shadow-sm overflow-hidden flex-none max-h-[40vh] flex flex-col border">
-                  <div className="overflow-y-auto flex-1">
+                  <div className="overflow-x-auto flex-1">
                       <table className="w-full text-left text-sm whitespace-nowrap relative">
                           <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
                               <tr>
                                   <th className="p-3">香港車牌</th>
                                   <th className="p-3">內地車牌</th>
-                                  <th className="p-3">司機/車主</th>
+                                  <th className="p-3">主司機</th>
                                   <th className="p-3">香港保險</th>
                                   <th className="p-3">留牌紙</th>
+                                  <th className="p-3">BR</th>
+                                  <th className="p-3">牌照費</th>
                                   <th className="p-3">內地交強險</th>
+                                  <th className="p-3">內地商業險</th>
+                                  <th className="p-3">禁區紙</th>
                                   <th className="p-3">批文卡</th>
-                                  <th className="p-3">內地驗車</th>
+                                  <th className="p-3">行駛證(內地驗車)</th>
+                                  <th className="p-3">香港驗車</th>
                                   <th className="p-3">操作</th>
                               </tr>
                           </thead>
@@ -1313,18 +1265,23 @@ export default function GoldLandAutoDMS() {
                                   >
                                       <td className="p-3 font-bold">{v.regMark}</td>
                                       <td className="p-3 text-blue-600">{v.crossBorder?.mainlandPlate || '-'}</td>
-                                      <td className="p-3 text-gray-600">{v.crossBorder?.driverOwner || '-'}</td>
-                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="HK Ins."/></td>
+                                      <td className="p-3 text-gray-600">{v.crossBorder?.driver1 || '-'}</td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="HK Ins"/></td>
                                       <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateReservedPlate} label="Reserve"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateBr} label="BR"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateLicenseFee} label="Lic Fee"/></td>
                                       <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandJqx} label="CN JQX"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandSyx} label="CN SYX"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateClosedRoad} label="Closed Rd"/></td>
                                       <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateApproval} label="Approval"/></td>
-                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="Inspection"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="CN Lic"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInspection} label="HK Insp"/></td>
                                       <td className="p-3">
                                           <button onClick={(e) => { e.stopPropagation(); setEditingVehicle(v); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><Edit size={14}/></button>
                                       </td>
                                   </tr>
                               ))}
-                              {cbVehicles.length === 0 && <tr><td colSpan={12} className="p-8 text-center text-gray-400">暫無中港車輛資料。請在「車輛管理」編輯車輛並啟用中港模組。</td></tr>}
+                              {cbVehicles.length === 0 && <tr><td colSpan={14} className="p-8 text-center text-gray-400">暫無中港車輛資料。請在「車輛管理」編輯車輛並啟用中港模組。</td></tr>}
                           </tbody>
                       </table>
                   </div>
