@@ -344,7 +344,17 @@ export default function GoldLandAutoDMS() {
         setMeta('og:site_name', appName, true);
         setMeta('og:image', iconPath, true);
     };
+    
+    // Run immediately and on route changes if needed
     setAppIcon();
+    
+    // Add a MutationObserver to persist title changes if framework reverts them
+    const observer = new MutationObserver(() => {
+        if (document.title !== "金田汽車DMS系統") {
+            document.title = "金田汽車DMS系統";
+        }
+    });
+    observer.observe(document.querySelector('title') || document.head, { subtree: true, characterData: true, childList: true });
 
     const currentAuth = auth;
     if (!currentAuth) { setLoading(false); return; }
@@ -1248,7 +1258,7 @@ export default function GoldLandAutoDMS() {
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
-          {/* Dashboard Tab - 固定頂部，列表滾動 */}
+          {/* Dashboard Tab - Split into Two Sections */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
               <h2 className="text-2xl font-bold text-slate-800 flex-none">業務儀表板</h2>
@@ -1261,70 +1271,99 @@ export default function GoldLandAutoDMS() {
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* Table Container - 剩餘空間滾動 */}
-              <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
-                <h3 className="font-bold mb-4 flex-none">最新車輛動態</h3>
-                <div className="flex-1 overflow-y-auto">
-                  <table className="w-full text-left text-sm whitespace-nowrap relative">
-                    <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm">
-                        <tr className="border-b">
-                            <th className="p-3 cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort('stockInDate')}>
-                                <div className="flex items-center">入庫日 <ArrowUpDown size={14} className="ml-1 text-gray-400"/></div>
-                            </th>
-                            <th className="p-3 cursor-pointer hover:bg-gray-200 transition select-none" onClick={() => handleSort('status')}>
-                                <div className="flex items-center">狀態 <ArrowUpDown size={14} className="ml-1 text-gray-400"/></div>
-                            </th>
-                            <th className="p-3">車牌</th>
-                            <th className="p-3">車型</th>
-                            <th className="p-3">售價</th>
-                            <th className="p-3">牌費到期</th>
-                            <th className="p-3 text-right">費用狀況</th>
+              {/* Data Calculation */}
+              {(() => {
+                  const allVehicles = getSortedInventory();
+                  const unfinished: Vehicle[] = [];
+                  const finished: Vehicle[] = [];
+
+                  allVehicles.forEach(car => {
+                      const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+                      const balance = (car.price || 0) - received;
+                      const hasUnpaidExpenses = car.expenses?.some(e => e.status === 'Unpaid');
+                      
+                      // 定義「已完成」：已售出 且 餘額<=0 且 無未付費用
+                      const isFinished = car.status === 'Sold' && balance <= 0 && !hasUnpaidExpenses;
+
+                      if (isFinished) finished.push(car);
+                      else unfinished.push(car);
+                  });
+
+                  const renderTableRows = (list: Vehicle[]) => list.map(car => {
+                      const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
+                      const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+                      const balance = (car.price || 0) - received;
+                      
+                      return (
+                        <tr key={car.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
+                          <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></td>
+                          <td className="p-3 font-medium">{car.regMark}</td>
+                          <td className="p-3">
+                              {car.year} {car.make} {car.model}
+                              {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
+                          </td>
+                          <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
+                          <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
+                          <td className="p-3 text-right">
+                              {unpaidExps > 0 && <span className="text-red-500 text-xs font-bold block">{unpaidExps} 筆未付</span>}
+                              {balance > 0 && car.status !== 'In Stock' && <span className="text-blue-500 text-xs font-bold block">欠款 {formatCurrency(balance)}</span>}
+                              {unpaidExps === 0 && (balance <= 0 || car.status === 'In Stock') && <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}
+                          </td>
                         </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const allVehicles = getSortedInventory();
-                        const unfinished: Vehicle[] = [];
-                        const finished: Vehicle[] = [];
+                      );
+                  });
 
-                        allVehicles.forEach(car => {
-                            const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
-                            const balance = (car.price || 0) - received;
-                            const hasUnpaidExpenses = car.expenses?.some(e => e.status === 'Unpaid');
-                            
-                            // 定義「已完成」：已售出 且 餘額<=0 且 無未付費用
-                            // 剩下的（在庫、未付清、有未付費用）都算未完成
-                            const isFinished = car.status === 'Sold' && balance <= 0 && !hasUnpaidExpenses;
+                  return (
+                    <>
+                      {/* Section 1: In Progress (Fixed Height, Scrollable) */}
+                      <div className="bg-white rounded-lg shadow-sm p-4 flex-none flex flex-col overflow-hidden max-h-[40vh]">
+                        <h3 className="font-bold mb-4 flex-none text-yellow-600 flex items-center"><AlertTriangle size={18} className="mr-2"/> 進行中的車輛 (In Progress)</h3>
+                        <div className="flex-1 overflow-y-auto border rounded-lg">
+                          <table className="w-full text-left text-sm whitespace-nowrap relative">
+                            <thead className="sticky top-0 bg-yellow-50 z-10 shadow-sm text-yellow-800">
+                                <tr className="border-b">
+                                    <th className="p-3">入庫日</th>
+                                    <th className="p-3">狀態</th>
+                                    <th className="p-3">車牌</th>
+                                    <th className="p-3">車型</th>
+                                    <th className="p-3">售價</th>
+                                    <th className="p-3">牌費到期</th>
+                                    <th className="p-3 text-right">狀況</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                              {unfinished.length > 0 ? renderTableRows(unfinished) : <tr><td colSpan={7} className="p-4 text-center text-gray-400">目前沒有進行中的案件</td></tr>}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
 
-                            if (isFinished) finished.push(car);
-                            else unfinished.push(car);
-                        });
-
-                        // 未完成顯示前10條，已完成接在後面
-                        const displayList = [...unfinished.slice(0, 10), ...finished];
-
-                        return displayList.map(car => {
-                            const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
-                            return (
-                              <tr key={car.id} className="border-b hover:bg-gray-50">
-                                <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
-                                <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status}</span></td>
-                                <td className="p-3 font-medium">{car.regMark}</td>
-                                <td className="p-3">
-                                    {car.year} {car.make} {car.model}
-                                    {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
-                                </td>
-                                <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
-                                <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
-                                <td className="p-3 text-right">{unpaidExps > 0 ? <span className="text-red-500 text-xs font-bold">{unpaidExps} 筆未付</span> : <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}</td>
-                              </tr>
-                            );
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                      {/* Section 2: Completed (Fills Remaining Space, Scrollable) */}
+                      <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
+                        <h3 className="font-bold mb-4 flex-none text-green-600 flex items-center"><CheckCircle size={18} className="mr-2"/> 已成交車輛 (Completed)</h3>
+                        <div className="flex-1 overflow-y-auto border rounded-lg">
+                          <table className="w-full text-left text-sm whitespace-nowrap relative">
+                            <thead className="sticky top-0 bg-green-50 z-10 shadow-sm text-green-800">
+                                <tr className="border-b">
+                                    <th className="p-3">入庫日</th>
+                                    <th className="p-3">狀態</th>
+                                    <th className="p-3">車牌</th>
+                                    <th className="p-3">車型</th>
+                                    <th className="p-3">售價</th>
+                                    <th className="p-3">牌費到期</th>
+                                    <th className="p-3 text-right">狀況</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                              {finished.length > 0 ? renderTableRows(finished) : <tr><td colSpan={7} className="p-4 text-center text-gray-400">目前沒有已完成的案件</td></tr>}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  );
+              })()}
             </div>
           )}
 
@@ -1354,7 +1393,7 @@ export default function GoldLandAutoDMS() {
                   {['All', 'In Stock', 'Sold', 'Reserved'].map(s => (<button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>{s === 'All' ? '全部' : s}</button>))}
               </div>
 
-              {/* Grid Container -捲動區域 */}
+              {/* Grid Container - 捲動區域 */}
               <div className="flex-1 overflow-y-auto min-h-0 pr-1">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
                     {getSortedInventory().map((car) => { const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
