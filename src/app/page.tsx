@@ -219,7 +219,7 @@ const calculateLicenseFee = (fuelType: 'Petrol' | 'Diesel' | 'Electric', engineS
 
 // --- Components: Staff Login Screen ---
 const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState('charles');
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if(input.trim()) onLogin(input.trim().toUpperCase());
@@ -315,6 +315,20 @@ export default function GoldLandAutoDMS() {
         setLink('icon', iconPath);
         setLink('apple-touch-icon', iconPath);
         document.title = "金田汽車DMS系統";
+
+        // Helper to set meta tags for App Name
+        const setMeta = (name: string, content: string) => {
+            let meta = document.querySelector(`meta[name='${name}']`);
+            if (!meta) {
+                meta = document.createElement('meta');
+                meta.setAttribute('name', name);
+                document.getElementsByTagName('head')[0].appendChild(meta);
+            }
+            meta.setAttribute('content', content);
+        };
+
+        setMeta('apple-mobile-web-app-title', '金田汽車DMS系統');
+        setMeta('application-name', '金田汽車DMS系統');
     };
     setAppIcon();
 
@@ -430,8 +444,8 @@ export default function GoldLandAutoDMS() {
       status: status,
       stockInDate: formData.get('stockInDate'),
       stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
-      expenses: editingVehicle ? editingVehicle.expenses : [], 
-      payments: editingVehicle ? editingVehicle.payments : [], 
+      expenses: editingVehicle?.expenses || [], 
+      payments: editingVehicle?.payments || [], 
       updatedAt: serverTimestamp()
     };
 
