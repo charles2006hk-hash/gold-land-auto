@@ -1108,6 +1108,111 @@ export default function GoldLandAutoDMS() {
     );
   };
 
+  // 2. Report View (Linked to Edit)
+  const ReportView = () => {
+    const handleReportItemClick = (vehicleId: string) => {
+        const vehicle = inventory.find(v => v.id === vehicleId);
+        if (vehicle) {
+            setEditingVehicle(vehicle);
+        }
+    };
+
+    return (
+        <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
+            <div className="flex justify-between items-center mb-6 print:hidden">
+                <h2 className="text-xl font-bold flex items-center"><FileBarChart className="mr-2"/> 統計報表中心</h2>
+                <div className="flex space-x-2">
+                    <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 rounded flex items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
+                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300">返回</button>
+                </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded border mb-6 print:hidden grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">報表類型</label>
+                    <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-2 rounded">
+                        <option value="receivable">應收未收報表 (Receivables)</option>
+                        <option value="payable">應付未付報表 (Payables)</option>
+                        <option value="sales">銷售數據統計 (Sales Stats)</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label>
+                    <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded" />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">結束日期</label>
+                    <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-2 rounded" />
+                </div>
+                {reportType === 'payable' && (
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 mb-1">負責公司 (供應商)</label>
+                        <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded">
+                            <option value="">全部公司</option>
+                            {settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                )}
+            </div>
+
+            <div className="print:visible">
+                <div className="text-center mb-8 hidden print:block">
+                    <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
+                    <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
+                        {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
+                         reportType === 'payable' ? '應付未付報表 (Accounts Payable)' : 
+                         '銷售數據統計 (Sales Report)'}
+                    </h2>
+                    <p className="text-sm text-gray-600">Period: {reportStartDate} to {reportEndDate}</p>
+                </div>
+
+                <table className="w-full border-collapse text-sm">
+                    <thead>
+                        <tr className="bg-gray-100 border-b-2 border-black text-left">
+                            <th className="p-2 border">日期</th>
+                            <th className="p-2 border">項目 / 車輛</th>
+                            <th className="p-2 border">詳情 / 車牌</th>
+                            {reportType === 'payable' && <th className="p-2 border">負責公司</th>}
+                            {reportType === 'payable' && <th className="p-2 border">單號</th>}
+                            {reportType === 'sales' && <th className="p-2 border">成本 (Cost)</th>}
+                            <th className="p-2 border text-right">金額 (Amount)</th>
+                            {reportType === 'sales' && <th className="p-2 border text-right">利潤 (Profit)</th>}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {reportData.map((item, idx) => (
+                            <tr 
+                                key={idx} 
+                                className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent"
+                                onClick={() => handleReportItemClick(item.vehicleId)}
+                                title="點擊編輯此車輛費用"
+                            >
+                                <td className="p-2 border">{item.date}</td>
+                                <td className="p-2 border font-bold flex items-center">{item.title} <ExternalLink size={10} className="ml-2 text-gray-400 print:hidden"/></td>
+                                <td className="p-2 border">{item.regMark}</td>
+                                {reportType === 'payable' && <td className="p-2 border">{item.company}</td>}
+                                {reportType === 'payable' && <td className="p-2 border">{item.invoiceNo || '-'}</td>}
+                                {reportType === 'sales' && <td className="p-2 border">{formatCurrency(item.cost)}</td>}
+                                <td className="p-2 border text-right font-mono">{formatCurrency(item.amount)}</td>
+                                {reportType === 'sales' && <td className={`p-2 border text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
+                            </tr>
+                        ))}
+                        {reportData.length === 0 && <tr><td colSpan={9} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
+                    </tbody>
+                    <tfoot>
+                        <tr className="bg-gray-200 font-bold">
+                            <td colSpan={reportType === 'payable' ? 5 : 3} className="p-2 border text-right">Total:</td>
+                            {reportType === 'sales' && <td className="p-2 border"></td>}
+                            <td className="p-2 border text-right">{formatCurrency(totalReportAmount)}</td>
+                            {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(totalReportProfit)}</td>}
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    );
+  };
+
   // 2. Cross Border View
   const CrossBorderView = () => {
       const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
@@ -1140,7 +1245,6 @@ export default function GoldLandAutoDMS() {
               fee: Number(newTask.fee) || 0,
               currency: (newTask.currency as any) || 'HKD',
               note: newTask.note || '',
-              isCompleted: false,
               isPaid: false
           };
           addCbTask(activeCbVehicleId, task);
@@ -1625,6 +1729,7 @@ export default function GoldLandAutoDMS() {
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden`}>
         <div className="p-6 border-b border-slate-700 flex items-center gap-3 overflow-hidden">
+            {/* 側邊欄 Logo */}
             <div className="w-10 h-10 bg-white rounded-full flex-shrink-0 flex items-center justify-center p-0.5">
                  <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
             </div>
