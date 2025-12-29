@@ -298,23 +298,24 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // 設定 PWA/App Icon
+    // 設定 PWA/App Icon 及瀏覽器 Meta
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
         
-        // 1. Helper to set link tags (Favicon, Apple Touch Icon)
+        // 1. 強制移除現有的 icon 以確保覆蓋
+        const existingIcons = document.querySelectorAll("link[rel*='icon']");
+        existingIcons.forEach(el => el.remove());
+
+        // 2. Helper to set link tags
         const setLink = (rel: string, href: string) => {
-            let link = document.querySelector(`link[rel~='${rel}']`) as HTMLLinkElement;
-            if (!link) {
-                link = document.createElement('link');
-                link.rel = rel;
-                document.getElementsByTagName('head')[0].appendChild(link);
-            }
+            let link = document.createElement('link');
+            link.rel = rel;
             link.href = href;
+            document.getElementsByTagName('head')[0].appendChild(link);
         };
 
-        // 2. Helper to set meta tags (App Name, OG Tags)
+        // 3. Helper to set meta tags
         const setMeta = (propertyOrName: string, content: string, isProperty: boolean = false) => {
             const attr = isProperty ? 'property' : 'name';
             let meta = document.querySelector(`meta[${attr}='${propertyOrName}']`);
@@ -329,20 +330,19 @@ export default function GoldLandAutoDMS() {
         // Browser & PWA Basic Settings
         document.title = appName;
         setLink('icon', iconPath);
-        setLink('shortcut icon', iconPath); // For some browsers
-        setLink('apple-touch-icon', iconPath); // For iOS Home Screen
+        setLink('shortcut icon', iconPath);
+        setLink('apple-touch-icon', iconPath); 
 
         // PWA / Mobile Web App Meta Tags
-        setMeta('apple-mobile-web-app-title', appName); // iOS App Name
-        setMeta('application-name', appName); // Windows/Android Pin Name
+        setMeta('apple-mobile-web-app-title', appName); 
+        setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
         setMeta('mobile-web-app-capable', 'yes');
 
-        // Open Graph / Social Sharing (Enhances link previews)
+        // Open Graph / Social Sharing
         setMeta('og:title', appName, true);
         setMeta('og:site_name', appName, true);
         setMeta('og:image', iconPath, true);
-        setMeta('og:description', '金田汽車銷售管理系統 v3.0', true);
     };
     setAppIcon();
 
@@ -622,16 +622,19 @@ export default function GoldLandAutoDMS() {
     let data: any[] = [];
     
     if (reportType === 'receivable') {
-        data = inventory.filter(v => 
-            v.status === 'Sold' && 
-            (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
-            (!reportEndDate || (v.stockOutDate || '') <= reportEndDate)
-        ).map(v => ({
+        data = inventory.filter(v => {
+            const received = v.payments?.reduce((s, p) => s + p.amount, 0) || 0;
+            const balance = (v.price || 0) - received;
+            return v.status === 'Sold' && 
+                   (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
+                   (!reportEndDate || (v.stockOutDate || '') <= reportEndDate) &&
+                   balance > 0; // 只顯示還有餘額的
+        }).map(v => ({
             vehicleId: v.id,
             date: v.stockOutDate || 'Unknown',
             title: `${v.year} ${v.make} ${v.model}`,
             regMark: v.regMark,
-            amount: v.price,
+            amount: (v.price || 0) - (v.payments?.reduce((s, p) => s + p.amount, 0) || 0), // 顯示剩餘金額
             status: 'Sold'
         }));
     } else if (reportType === 'payable') {
@@ -1274,27 +1277,50 @@ export default function GoldLandAutoDMS() {
                             <th className="p-3">車牌</th>
                             <th className="p-3">車型</th>
                             <th className="p-3">售價</th>
+                            <th className="p-3">牌費到期</th>
                             <th className="p-3 text-right">費用狀況</th>
                         </tr>
                     </thead>
                     <tbody>
-                      {getSortedInventory().map(car => {
-                        const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
-                        return (
-                          <tr key={car.id} className="border-b hover:bg-gray-50">
-                            {/* 修正：優先顯示手動輸入的 stockInDate */}
-                            <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
-                            <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status}</span></td>
-                            <td className="p-3 font-medium">{car.regMark}</td>
-                            <td className="p-3">
-                                {car.year} {car.make} {car.model}
-                                {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
-                            </td>
-                            <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
-                            <td className="p-3 text-right">{unpaidExps > 0 ? <span className="text-red-500 text-xs font-bold">{unpaidExps} 筆未付</span> : <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}</td>
-                          </tr>
-                        );
-                      })}
+                      {(() => {
+                        const allVehicles = getSortedInventory();
+                        const unfinished = [];
+                        const finished = [];
+
+                        allVehicles.forEach(car => {
+                            const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+                            const balance = (car.price || 0) - received;
+                            const hasUnpaidExpenses = car.expenses?.some(e => e.status === 'Unpaid');
+                            
+                            // 定義「已完成」：已售出 且 餘額<=0 且 無未付費用
+                            // 剩下的（在庫、未付清、有未付費用）都算未完成
+                            const isFinished = car.status === 'Sold' && balance <= 0 && !hasUnpaidExpenses;
+
+                            if (isFinished) finished.push(car);
+                            else unfinished.push(car);
+                        });
+
+                        // 未完成顯示前10條，已完成接在後面
+                        const displayList = [...unfinished.slice(0, 10), ...finished];
+
+                        return displayList.map(car => {
+                            const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
+                            return (
+                              <tr key={car.id} className="border-b hover:bg-gray-50">
+                                <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
+                                <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status}</span></td>
+                                <td className="p-3 font-medium">{car.regMark}</td>
+                                <td className="p-3">
+                                    {car.year} {car.make} {car.model}
+                                    {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
+                                </td>
+                                <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
+                                <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
+                                <td className="p-3 text-right">{unpaidExps > 0 ? <span className="text-red-500 text-xs font-bold">{unpaidExps} 筆未付</span> : <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}</td>
+                              </tr>
+                            );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
