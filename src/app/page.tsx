@@ -616,7 +616,7 @@ export default function GoldLandAutoDMS() {
     }
   };
 
-  // --- Sub-Item Management ---
+  // --- Sub-Item Management (FIXED: Updates Local State) ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder', newItems: any) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -624,15 +624,24 @@ export default function GoldLandAutoDMS() {
     if (!v) return;
 
     let updateData = {};
+    let newVehicleState = { ...v };
+
     if (field === 'crossBorder') {
         updateData = { crossBorder: { ...v.crossBorder, tasks: newItems } };
+        newVehicleState.crossBorder = { ...v.crossBorder!, tasks: newItems };
     } else {
         updateData = { [field]: newItems };
+        newVehicleState[field] = newItems;
     }
 
     await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), updateData);
+    
+    // !!! CRITICAL FIX: Update local editing state to prevent data loss on next save !!!
     if (editingVehicle && editingVehicle.id === vehicleId) {
-        // Sync local edit state if open
+        setEditingVehicle(prev => {
+             if (!prev) return null;
+             return { ...prev, ...newVehicleState };
+        });
     }
   };
 
@@ -683,6 +692,18 @@ export default function GoldLandAutoDMS() {
           crossBorder: { ...v.crossBorder, tasks: newTasks },
           payments: newPayments
       });
+
+      // Update local state as well
+      if (editingVehicle && editingVehicle.id === vehicleId) {
+          setEditingVehicle(prev => {
+              if(!prev) return null;
+              return {
+                  ...prev,
+                  crossBorder: { ...prev.crossBorder!, tasks: newTasks },
+                  payments: newPayments
+              }
+          });
+      }
   };
 
   // Settings
@@ -823,12 +844,17 @@ export default function GoldLandAutoDMS() {
         data = inventory.filter(v => {
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
+            
             const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
             const balance = totalReceivable - received;
+            
             const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
             const refDate = v.stockOutDate || v.stockInDate || ''; 
             
-            return isRelevantStatus && 
+            // 只要有餘額，即使是在庫車輛但有中港欠款，也顯示
+            const hasPendingCB = cbFees > 0 && balance > 0;
+
+            return (isRelevantStatus || hasPendingCB) && 
                    (!reportStartDate || refDate >= reportStartDate) &&
                    (!reportEndDate || refDate <= reportEndDate) &&
                    balance > 0; 
@@ -845,10 +871,11 @@ export default function GoldLandAutoDMS() {
                 status: v.status
             };
         });
-        // Extra CB Fees for non-sold
+
+        // 額外加入單獨的中港業務費用 (如果只是代辦)
         inventory.forEach(v => {
             (v.crossBorder?.tasks || []).forEach(task => {
-                const isPaid = (v.payments || []).some(p => p.relatedTaskId === task.id);
+                const isPaid = v.payments?.some(p => p.relatedTaskId === task.id);
                 if (task.fee > 0 && !isPaid && (!data.some(d => d.vehicleId === v.id))) {
                     data.push({
                         vehicleId: v.id,
@@ -890,7 +917,7 @@ export default function GoldLandAutoDMS() {
         ).map(v => {
             const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-            const totalRevenue = (v.price || 0) + cbFees;
+            const totalRevenue = v.price + cbFees;
             const profit = totalRevenue - totalCost;
             return {
                 vehicleId: v.id,
@@ -929,6 +956,7 @@ export default function GoldLandAutoDMS() {
     const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
     const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
 
+    // Dynamic Calculation for display
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
     const totalRevenue = (v.price || 0) + cbFees;
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -1139,7 +1167,7 @@ export default function GoldLandAutoDMS() {
                    <div className="col-span-1"><label className="text-[10px]">方式</label><select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value as any})} className="w-full border p-1 rounded text-xs"><option>Cash</option><option>Cheque</option><option>Transfer</option></select></div>
                    <div className="col-span-1"><label className="text-[10px]">金額</label><input type="text" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-full border p-1 rounded text-xs" placeholder="0"/></div>
                    <div className="col-span-1"><label className="text-[10px]">備注</label><input type="text" value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full border p-1 rounded text-xs" placeholder="支票號/備注"/></div>
-                   <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amount = Number(newPayment.amount.replace(/,/g, '')); if(amount > 0) { addPayment(v.id!, { id: Date.now().toString(), ...newPayment, amount } as Payment); setNewPayment({...newPayment, amount: '', note: ''}); }}} className="w-full bg-blue-600 text-white p-1 rounded text-xs h-[26px]">新增收款</button></div>
+                   <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amount = Number(newPayment.amount.replace(/,/g, '')); if(amount > 0) { addPayment(v.id!, { id: Date.now().toString(), ...newPayment, amount } as Payment); setNewPayment({...newPayment, amount: '', note: ''}); }}} className="w-full bg-blue-600 text-white p-1 rounded text-xs hover:bg-blue-700 h-[26px]">新增收款</button></div>
                 </div>
               </div>
             )}
@@ -1191,13 +1219,9 @@ export default function GoldLandAutoDMS() {
             setEditingVehicle(vehicle);
         }
     };
-    
-    // ... rest of ReportView logic (Standard) ... 
-    // Reusing the same structure as before but ensuring no duplicates
 
     return (
         <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
-            {/* Header & Filter UI (Standard) */}
             <div className="flex justify-between items-center mb-6 print:hidden">
                 <h2 className="text-xl font-bold flex items-center"><FileBarChart className="mr-2"/> 統計報表中心</h2>
                 <div className="flex space-x-2">
@@ -1233,10 +1257,9 @@ export default function GoldLandAutoDMS() {
                     </div>
                 )}
             </div>
-            
-            {/* Report Content Table */}
+
             <div className="print:visible">
-                 <div className="text-center mb-8 hidden print:block">
+                <div className="text-center mb-8 hidden print:block">
                     <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
                     <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
                         {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
@@ -1295,7 +1318,6 @@ export default function GoldLandAutoDMS() {
 
   // 2. Cross Border View
   const CrossBorderView = () => {
-      // ... same logic as before ...
       const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
       const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
       
@@ -1574,8 +1596,6 @@ export default function GoldLandAutoDMS() {
       );
   };
 
-  // ... (SettingsManager, CompanyStamp, SignedStamp, DocumentTemplate, Sidebar are standard) ...
-
   // 3. Settings Manager
   const SettingsManager = () => {
     const [activeMake, setActiveMake] = useState<string>(settings.makes[0] || '');
@@ -1645,7 +1665,7 @@ export default function GoldLandAutoDMS() {
     };
 
     const today = formatDate(new Date()); 
-    const totalPaid = activeVehicle.payments?.reduce((sum, p) => sum + p.amount, 0) || deposit || 0;
+    const totalPaid = (activeVehicle.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0) || deposit || 0;
     const balance = (activeVehicle.price || 0) - totalPaid;
 
     const Header = ({ titleEn, titleCh }: { titleEn: string, titleCh: string }) => (
@@ -1886,9 +1906,9 @@ export default function GoldLandAutoDMS() {
                   const finished: Vehicle[] = [];
 
                   allVehicles.forEach(car => {
-                      const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+                      const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                       const balance = (car.price || 0) - received;
-                      const hasUnpaidExpenses = car.expenses?.some(e => e.status === 'Unpaid');
+                      const hasUnpaidExpenses = (car.expenses || []).some(e => e.status === 'Unpaid');
                       
                       const isFinished = car.status === 'Sold' && balance <= 0 && !hasUnpaidExpenses;
 
@@ -1897,8 +1917,8 @@ export default function GoldLandAutoDMS() {
                   });
 
                   const renderTableRows = (list: Vehicle[]) => list.map(car => {
-                      const unpaidExps = car.expenses?.filter(e => e.status === 'Unpaid').length || 0;
-                      const received = car.payments?.reduce((acc, p) => acc + p.amount, 0) || 0;
+                      const unpaidExps = (car.expenses || []).filter(e => e.status === 'Unpaid').length || 0;
+                      const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                       const balance = (car.price || 0) - received;
                       
                       return (
@@ -1971,41 +1991,6 @@ export default function GoldLandAutoDMS() {
                     </>
                   );
               })()}
-            </div>
-          )}
-
-          {/* Inventory Tab - 固定頂部，Grid 滾動 */}
-          {activeTab === 'inventory' && (
-            <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
-              {/* Header Controls */}
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-none">
-                  <h2 className="text-xl font-bold text-slate-800 whitespace-nowrap">車輛庫存 ({getSortedInventory().length})</h2>
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                      <div className="relative flex-1 md:w-64">
-                          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
-                          <input 
-                              type="text" 
-                              placeholder="搜尋車牌、型號..." 
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
-                          />
-                      </div>
-                      <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus size={16} className="mr-1"/> 入庫</button>
-                  </div>
-              </div>
-              
-              {/* Filter Bar */}
-              <div className="flex gap-2 overflow-x-auto pb-1 flex-none scrollbar-hide">
-                  {['All', 'In Stock', 'Sold', 'Reserved'].map(s => (<button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>{s === 'All' ? '全部' : s}</button>))}
-              </div>
-
-              {/* Grid Container - 捲動區域 */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                    {getSortedInventory().map((car) => { const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
-                </div>
-              </div>
             </div>
           )}
 
