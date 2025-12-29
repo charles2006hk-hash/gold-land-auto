@@ -8,7 +8,7 @@ import {
   Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
-  Receipt, FileCheck
+  Receipt, FileCheck, Globe, CalendarDays, Bell, ShieldCheck
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -73,7 +73,7 @@ const COMPANY_INFO = {
   address_en: "Rm 11, 22/F, Blk B, New Trade Plaza, 6 On Ping St, Shek Mun, Shatin, N.T., HK",
   address_ch: "香港沙田石門安平街6號新貿中心B座22樓11室",
   phone: "+852 3490 6112",
-  logo_url: "/GL_APPLOGO.png" // 更新 Logo 路徑
+  logo_url: "/GL_APPLOGO.png" 
 };
 
 // --- 類型定義 ---
@@ -98,6 +98,26 @@ type Payment = {
   note?: string; 
 };
 
+// 新增：中港車專屬資料結構
+type CrossBorderData = {
+    isEnabled: boolean; // 是否啟用中港業務功能
+    mainlandPlate?: string; // 內地車牌 (粵Z...)
+    driverOwner?: string; // 司機/車主
+    insuranceAgent?: string; // 保險代理
+    
+    // 日期管理 (YYYY-MM-DD)
+    dateHkInsurance?: string; // 香港保險到期
+    dateReservedPlate?: string; // 留牌紙到期
+    dateBr?: string; // 商業登記(BR)到期
+    dateLicenseFee?: string; // 香港牌照費到期 (可與 Vehicle.licenseExpiry 連動，但這裡分開紀錄更靈活)
+    dateMainlandJqx?: string; // 內地交強險到期
+    dateMainlandSyx?: string; // 內地商業險到期
+    dateClosedRoad?: string; // 禁區紙到期
+    dateApproval?: string; // 批文卡到期
+    dateMainlandLicense?: string; // 行駛證到期
+    dateHkInspection?: string; // 香港驗車日期
+};
+
 type Vehicle = {
   id: string;
   regMark: string;
@@ -109,7 +129,7 @@ type Vehicle = {
   purchaseType: 'Used' | 'New' | 'Consignment'; 
   colorExt: string; 
   colorInt: string; 
-  licenseExpiry: string; 
+  licenseExpiry: string; // 香港牌費
   
   previousOwners?: string; 
   mileage?: number;      
@@ -143,6 +163,9 @@ type Vehicle = {
   soldPrice?: number;
   deposit?: number;
 
+  // 新增欄位
+  crossBorder?: CrossBorderData;
+
   createdAt?: any;
   updatedAt?: any;
 };
@@ -164,7 +187,6 @@ type Customer = {
 
 type DocType = 'sales_contract' | 'purchase_contract' | 'invoice' | 'receipt';
 
-// 更新預設設定，加入汽缸容量範例
 const DEFAULT_SETTINGS: SystemSettings = {
   makes: ['Toyota', 'Honda', 'Mercedes-Benz', 'BMW', 'Tesla', 'Porsche', 'Audi'],
   models: {
@@ -176,8 +198,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Porsche': ['911', 'Cayenne', 'Macan', 'Taycan', 'Panamera'],
     'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7']
   },
-  expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '拖車費', '佣金', '其他'],
-  expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家'], 
+  expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '拖車費', '佣金', '中港牌批文費', '內地保險', '其他'],
+  expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家', '中檢公司'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)']
 };
 
@@ -218,6 +240,45 @@ const calculateLicenseFee = (fuelType: 'Petrol' | 'Diesel' | 'Electric', engineS
   return 0;
 };
 
+// 計算日期剩餘天數
+const getDaysRemaining = (targetDate?: string) => {
+    if (!targetDate) return null;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const target = new Date(targetDate);
+    const diffTime = target.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+};
+
+// 狀態標籤組件 (日期)
+const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
+    if (!date) return <div className="text-gray-300 text-xs">-</div>;
+    const days = getDaysRemaining(date);
+    let colorClass = "text-green-600 bg-green-50 border-green-200";
+    let statusText = "正常";
+
+    if (days === null) return null;
+
+    if (days < 0) {
+        colorClass = "text-red-600 bg-red-50 border-red-200 font-bold";
+        statusText = `已過期 ${Math.abs(days)} 天`;
+    } else if (days <= 30) {
+        colorClass = "text-amber-600 bg-amber-50 border-amber-200 font-bold";
+        statusText = `剩 ${days} 天`;
+    } else {
+        statusText = "正常";
+    }
+
+    return (
+        <div className={`border rounded px-2 py-1 text-xs inline-block w-full text-center ${colorClass}`}>
+            <div className="text-[10px] text-gray-500 mb-0.5">{label}</div>
+            <div>{date}</div>
+            <div>{statusText}</div>
+        </div>
+    );
+};
+
 // --- Components: Staff Login Screen ---
 const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
   const [input, setInput] = useState('charles');
@@ -229,7 +290,6 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
         <div className="text-center mb-8">
-          {/* Logo 顯示 */}
           <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-md border border-slate-100 p-2">
              <img src={COMPANY_INFO.logo_url} alt="Gold Land Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.parentElement!.innerHTML='<svg class="w-12 h-12 text-yellow-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>'; }} />
           </div>
@@ -259,7 +319,7 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border'>('dashboard');
   
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
@@ -303,11 +363,9 @@ export default function GoldLandAutoDMS() {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
         
-        // 1. 強制移除現有的 icon 以確保覆蓋 (包含 next.js 預設的)
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
         existingIcons.forEach(el => el.parentNode?.removeChild(el));
 
-        // 2. Helper to set link tags
         const setLink = (rel: string, href: string) => {
             let link = document.createElement('link');
             link.rel = rel;
@@ -315,7 +373,6 @@ export default function GoldLandAutoDMS() {
             document.getElementsByTagName('head')[0].appendChild(link);
         };
 
-        // 3. Helper to set meta tags
         const setMeta = (propertyOrName: string, content: string, isProperty: boolean = false) => {
             const attr = isProperty ? 'property' : 'name';
             let meta = document.querySelector(`meta[${attr}='${propertyOrName}']`);
@@ -327,28 +384,23 @@ export default function GoldLandAutoDMS() {
             meta.setAttribute('content', content);
         };
 
-        // Browser & PWA Basic Settings
         document.title = appName;
         setLink('icon', iconPath);
         setLink('shortcut icon', iconPath);
         setLink('apple-touch-icon', iconPath); 
 
-        // PWA / Mobile Web App Meta Tags
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
         setMeta('mobile-web-app-capable', 'yes');
 
-        // Open Graph / Social Sharing
         setMeta('og:title', appName, true);
         setMeta('og:site_name', appName, true);
         setMeta('og:image', iconPath, true);
     };
     
-    // Run immediately and on route changes if needed
     setAppIcon();
     
-    // Add a MutationObserver to persist title changes if framework reverts them
     const observer = new MutationObserver(() => {
         if (document.title !== "金田汽車DMS系統") {
             document.title = "金田汽車DMS系統";
@@ -433,6 +485,25 @@ export default function GoldLandAutoDMS() {
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
+    // Cross Border Data Capture
+    const cbEnabled = formData.get('cb_isEnabled') === 'on';
+    const crossBorderData: CrossBorderData = {
+        isEnabled: cbEnabled,
+        mainlandPlate: formData.get('cb_mainlandPlate') as string || '',
+        driverOwner: formData.get('cb_driverOwner') as string || '',
+        insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
+        dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
+        dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
+        dateBr: formData.get('cb_dateBr') as string || '',
+        dateLicenseFee: formData.get('cb_dateLicenseFee') as string || '',
+        dateMainlandJqx: formData.get('cb_dateMainlandJqx') as string || '',
+        dateMainlandSyx: formData.get('cb_dateMainlandSyx') as string || '',
+        dateClosedRoad: formData.get('cb_dateClosedRoad') as string || '',
+        dateApproval: formData.get('cb_dateApproval') as string || '',
+        dateMainlandLicense: formData.get('cb_dateMainlandLicense') as string || '',
+        dateHkInspection: formData.get('cb_dateHkInspection') as string || '',
+    };
+
     const vData = {
       purchaseType: formData.get('purchaseType'),
       regMark: (formData.get('regMark') as string).toUpperCase(),
@@ -470,7 +541,9 @@ export default function GoldLandAutoDMS() {
       stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
       expenses: editingVehicle?.expenses || [], 
       payments: editingVehicle?.payments || [], 
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
+
+      crossBorder: crossBorderData
     };
 
     try {
@@ -487,7 +560,12 @@ export default function GoldLandAutoDMS() {
         alert('新車輛已入庫');
       }
       setEditingVehicle(null);
-      setActiveTab('inventory');
+      // Determine where to go back
+      if (activeTab !== 'inventory_add') {
+          // Stay where we were
+      } else {
+          setActiveTab('inventory');
+      }
     } catch (e) { alert('儲存失敗'); console.error(e); }
   };
 
@@ -620,6 +698,50 @@ export default function GoldLandAutoDMS() {
     return { totalStockValue, totalReceivable, totalPayable, totalSoldThisMonth };
   };
   const stats = dashboardStats();
+
+  // --- Cross Border Logic ---
+  const crossBorderStats = () => {
+      const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      let expiredCount = 0;
+      let soonCount = 0;
+
+      cbVehicles.forEach(v => {
+          const dates = [
+              v.crossBorder?.dateHkInsurance,
+              v.crossBorder?.dateReservedPlate,
+              v.crossBorder?.dateBr,
+              v.crossBorder?.dateLicenseFee,
+              v.crossBorder?.dateMainlandJqx,
+              v.crossBorder?.dateMainlandSyx,
+              v.crossBorder?.dateClosedRoad,
+              v.crossBorder?.dateApproval,
+              v.crossBorder?.dateMainlandLicense,
+              v.crossBorder?.dateHkInspection
+          ];
+          
+          let hasExpired = false;
+          let hasSoon = false;
+
+          dates.forEach(d => {
+              if(d) {
+                  const days = getDaysRemaining(d);
+                  if (days !== null) {
+                      if (days < 0) hasExpired = true;
+                      else if (days <= 30) hasSoon = true;
+                  }
+              }
+          });
+
+          if (hasExpired) expiredCount++;
+          else if (hasSoon) soonCount++;
+      });
+
+      return { total: cbVehicles.length, expired: expiredCount, soon: soonCount };
+  };
+  const cbStats = crossBorderStats();
 
   // --- Print Handling ---
   const openPrintPreview = (type: DocType, vehicle: Vehicle, payment?: Payment) => {
@@ -766,10 +888,40 @@ export default function GoldLandAutoDMS() {
                 <div><label className="text-xs text-gray-500">地址 (Address)</label><input name="customerAddress" defaultValue={v.customerAddress} className="w-full border p-2 rounded"/></div>
             </div>
             
+            {/* 中港車管家模組 */}
+            <div className="md:col-span-3 border-t mt-4 pt-4">
+                <div className="flex items-center gap-2 mb-4 bg-blue-50 p-2 rounded">
+                    <input type="checkbox" id="cb_enable" name="cb_isEnabled" defaultChecked={v.crossBorder?.isEnabled} className="w-5 h-5"/>
+                    <label htmlFor="cb_enable" className="font-bold text-blue-900 flex items-center"><Globe className="mr-2"/> 啟用中港車管家模組 (Cross-Border Business)</label>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded border border-blue-100">
+                    <div><label className="text-[10px] text-blue-800 font-bold">內地車牌 (Mainland Plate)</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} placeholder="粵Z..." className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-blue-800 font-bold">司機/車主 (Driver/Owner)</label><input name="cb_driverOwner" defaultValue={v.crossBorder?.driverOwner} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-blue-800 font-bold">保險代理 (Agent)</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"></div>
+
+                    <div className="md:col-span-4 border-t border-blue-200 my-2"></div>
+
+                    <div><label className="text-[10px] text-gray-500">香港保險到期</label><input type="date" name="cb_dateHkInsurance" defaultValue={v.crossBorder?.dateHkInsurance} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">留牌紙到期</label><input type="date" name="cb_dateReservedPlate" defaultValue={v.crossBorder?.dateReservedPlate} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">商業登記(BR)到期</label><input type="date" name="cb_dateBr" defaultValue={v.crossBorder?.dateBr} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">牌照費(行車證)到期</label><input type="date" name="cb_dateLicenseFee" defaultValue={v.crossBorder?.dateLicenseFee} className="w-full border p-1 rounded text-sm"/></div>
+
+                    <div><label className="text-[10px] text-gray-500">內地交強險到期</label><input type="date" name="cb_dateMainlandJqx" defaultValue={v.crossBorder?.dateMainlandJqx} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">內地商業險到期</label><input type="date" name="cb_dateMainlandSyx" defaultValue={v.crossBorder?.dateMainlandSyx} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">禁區紙到期</label><input type="date" name="cb_dateClosedRoad" defaultValue={v.crossBorder?.dateClosedRoad} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">批文卡到期</label><input type="date" name="cb_dateApproval" defaultValue={v.crossBorder?.dateApproval} className="w-full border p-1 rounded text-sm"/></div>
+
+                    <div><label className="text-[10px] text-gray-500">內地驗車(行駛證)到期</label><input type="date" name="cb_dateMainlandLicense" defaultValue={v.crossBorder?.dateMainlandLicense} className="w-full border p-1 rounded text-sm"/></div>
+                    <div><label className="text-[10px] text-gray-500">香港驗車日期</label><input type="date" name="cb_dateHkInspection" defaultValue={v.crossBorder?.dateHkInspection} className="w-full border p-1 rounded text-sm"/></div>
+                </div>
+            </div>
+
             <div className="md:col-span-3 border-t my-2 pt-2"><h3 className="font-bold text-gray-500 mb-2">車輛資料</h3></div>
             <div><label className="block text-xs font-bold text-gray-500">收購類型</label><select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full border p-2 rounded bg-gray-50"><option value="Used">二手收購 (Used)</option><option value="New">訂購新車 (New)</option><option value="Consignment">寄賣 (Consignment)</option></select></div>
             <div><label className="block text-xs font-bold text-gray-500">車牌 (Reg. Mark)</label><input name="regMark" defaultValue={v.regMark} placeholder="未出牌可留空" className="w-full border p-2 rounded"/></div>
-            <div><label className="block text-xs font-bold text-gray-500">牌費到期日</label><input name="licenseExpiry" type="date" defaultValue={v.licenseExpiry} className="w-full border p-2 rounded"/></div>
+            <div><label className="block text-xs font-bold text-gray-500">牌費到期日 (一般)</label><input name="licenseExpiry" type="date" defaultValue={v.licenseExpiry} className="w-full border p-2 rounded"/></div>
             <div><label className="block text-xs font-bold text-gray-500">廠牌 (Make)</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} required className="w-full border p-2 rounded"><option value="">請選擇...</option>{settings.makes.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
             <div><label className="block text-xs font-bold text-gray-500">型號 (Model)</label><input list="model_list" name="model" defaultValue={v.model} required className="w-full border p-2 rounded" placeholder={selectedMake ? `選擇 ${selectedMake} 型號...` : '請先選擇廠牌'}/><datalist id="model_list">{(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}</datalist></div>
             <div><label className="block text-xs font-bold text-gray-500">年份 (Year)</label><input name="year" type="number" defaultValue={v.year} required className="w-full border p-2 rounded"/></div>
@@ -883,6 +1035,75 @@ export default function GoldLandAutoDMS() {
         </div>
       </div>
     );
+  };
+
+  // 2. Cross Border View
+  const CrossBorderView = () => {
+      const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
+      
+      const renderCard = (label: string, value: number, color: string) => (
+          <div className={`bg-white p-4 rounded-lg shadow-sm border-l-4 ${color}`}>
+              <p className="text-xs text-gray-500 uppercase">{label}</p>
+              <p className="text-2xl font-bold text-slate-800">{value}</p>
+          </div>
+      );
+
+      return (
+          <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-slate-800 flex items-center"><Globe className="mr-2"/> 中港車管家 (Cross-Border Manager)</h2>
+                  <div className="flex gap-2">
+                      {renderCard("總車輛", cbStats.total, "border-blue-500")}
+                      {renderCard("已過期", cbStats.expired, "border-red-500")}
+                      {renderCard("即將到期 (30天)", cbStats.soon, "border-yellow-500")}
+                  </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm whitespace-nowrap">
+                          <thead className="bg-slate-50 border-b">
+                              <tr>
+                                  <th className="p-3">香港車牌</th>
+                                  <th className="p-3">內地車牌</th>
+                                  <th className="p-3">司機/車主</th>
+                                  <th className="p-3">香港保險</th>
+                                  <th className="p-3">留牌紙</th>
+                                  <th className="p-3">牌照費</th>
+                                  <th className="p-3">內地交強險</th>
+                                  <th className="p-3">內地商業險</th>
+                                  <th className="p-3">禁區紙</th>
+                                  <th className="p-3">批文卡</th>
+                                  <th className="p-3">內地驗車</th>
+                                  <th className="p-3">操作</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              {cbVehicles.map(v => (
+                                  <tr key={v.id} className="border-b hover:bg-gray-50">
+                                      <td className="p-3 font-bold">{v.regMark}</td>
+                                      <td className="p-3 text-blue-600">{v.crossBorder?.mainlandPlate || '-'}</td>
+                                      <td className="p-3 text-gray-600">{v.crossBorder?.driverOwner || '-'}</td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="HK Ins."/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateReservedPlate} label="Reserve"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateLicenseFee} label="Lic. Fee"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandJqx} label="CN JQX"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandSyx} label="CN SYX"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateClosedRoad} label="Closed Rd"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateApproval} label="Approval"/></td>
+                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="Inspection"/></td>
+                                      <td className="p-3">
+                                          <button onClick={() => setEditingVehicle(v)} className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"><Edit size={14}/></button>
+                                      </td>
+                                  </tr>
+                              ))}
+                              {cbVehicles.length === 0 && <tr><td colSpan={12} className="p-8 text-center text-gray-400">暫無中港車輛資料。請在「車輛管理」編輯車輛並啟用中港模組。</td></tr>}
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
+      );
   };
 
   // 2. Report View (Linked to Edit)
@@ -1233,6 +1454,7 @@ export default function GoldLandAutoDMS() {
           <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'inventory' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Car size={20} className="mr-3" /> 車輛管理</button>
           <button onClick={() => { setActiveTab('create_doc'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'create_doc' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileText size={20} className="mr-3" /> 開單系統</button>
           <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'reports' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileBarChart size={20} className="mr-3" /> 統計報表</button>
+          <button onClick={() => { setActiveTab('cross_border'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'cross_border' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Globe size={20} className="mr-3" /> 中港業務</button>
           <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'settings' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Settings size={20} className="mr-3" /> 系統設置</button>
         </nav>
         <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center"><div className="mt-3 flex items-center justify-center space-x-2 bg-slate-800 p-2 rounded w-full"><UserCircle size={14} className="text-yellow-500"/><span className="font-bold text-white truncate max-w-[80px]">{staffId}</span></div><button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="mt-2 text-[10px] flex items-center text-red-400 hover:text-red-300 transition"><LogOut size={10} className="mr-1" /> Logout</button></div>
@@ -1265,6 +1487,9 @@ export default function GoldLandAutoDMS() {
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
+          {/* Cross Border Tab - 讓它內部也可以滾動 */}
+          {activeTab === 'cross_border' && <div className="flex-1 overflow-y-auto"><CrossBorderView /></div>}
+
           {/* Dashboard Tab - Split into Two Sections */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
@@ -1290,6 +1515,7 @@ export default function GoldLandAutoDMS() {
                       const hasUnpaidExpenses = car.expenses?.some(e => e.status === 'Unpaid');
                       
                       // 定義「已完成」：已售出 且 餘額<=0 且 無未付費用
+                      // 剩下的（在庫、未付清、有未付費用）都算未完成
                       const isFinished = car.status === 'Sold' && balance <= 0 && !hasUnpaidExpenses;
 
                       if (isFinished) finished.push(car);
