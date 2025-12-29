@@ -164,12 +164,13 @@ type Customer = {
 
 type DocType = 'sales_contract' | 'purchase_contract' | 'invoice' | 'receipt';
 
+// 更新預設設定，加入汽缸容量範例
 const DEFAULT_SETTINGS: SystemSettings = {
   makes: ['Toyota', 'Honda', 'Mercedes-Benz', 'BMW', 'Tesla', 'Porsche', 'Audi'],
   models: {
-    'Toyota': ['Alphard', 'Vellfire', 'Noah', 'Sienta', 'Hiace', 'Camry'],
-    'Honda': ['Stepwgn', 'Freed', 'Jazz', 'Odyssey', 'Civic'],
-    'Mercedes-Benz': ['A200', 'C200', 'E200', 'E300', 'S500', 'G63', 'GLC'],
+    'Toyota': ['Alphard 2.5', 'Alphard 3.5', 'Vellfire 2.5', 'Vellfire 3.5', 'Noah', 'Sienta', 'Hiace', 'Camry'],
+    'Honda': ['Stepwgn 1.5', 'Stepwgn 2.0', 'Freed', 'Jazz', 'Odyssey', 'Civic'],
+    'Mercedes-Benz': ['A200', 'C200', 'E200', 'E300', 'S500', 'G63', 'GLC 300'],
     'BMW': ['320i', '520i', 'X3', 'X5', 'iX', 'i4'],
     'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X'],
     'Porsche': ['911', 'Cayenne', 'Macan', 'Taycan', 'Panamera'],
@@ -300,8 +301,9 @@ export default function GoldLandAutoDMS() {
     // 設定 PWA/App Icon
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
+        const appName = "金田汽車DMS系統";
         
-        // Helper to set link tags
+        // 1. Helper to set link tags (Favicon, Apple Touch Icon)
         const setLink = (rel: string, href: string) => {
             let link = document.querySelector(`link[rel~='${rel}']`) as HTMLLinkElement;
             if (!link) {
@@ -312,23 +314,35 @@ export default function GoldLandAutoDMS() {
             link.href = href;
         };
 
-        setLink('icon', iconPath);
-        setLink('apple-touch-icon', iconPath);
-        document.title = "金田汽車DMS系統";
-
-        // Helper to set meta tags for App Name
-        const setMeta = (name: string, content: string) => {
-            let meta = document.querySelector(`meta[name='${name}']`);
+        // 2. Helper to set meta tags (App Name, OG Tags)
+        const setMeta = (propertyOrName: string, content: string, isProperty: boolean = false) => {
+            const attr = isProperty ? 'property' : 'name';
+            let meta = document.querySelector(`meta[${attr}='${propertyOrName}']`);
             if (!meta) {
                 meta = document.createElement('meta');
-                meta.setAttribute('name', name);
+                meta.setAttribute(attr, propertyOrName);
                 document.getElementsByTagName('head')[0].appendChild(meta);
             }
             meta.setAttribute('content', content);
         };
 
-        setMeta('apple-mobile-web-app-title', '金田汽車DMS系統');
-        setMeta('application-name', '金田汽車DMS系統');
+        // Browser & PWA Basic Settings
+        document.title = appName;
+        setLink('icon', iconPath);
+        setLink('shortcut icon', iconPath); // For some browsers
+        setLink('apple-touch-icon', iconPath); // For iOS Home Screen
+
+        // PWA / Mobile Web App Meta Tags
+        setMeta('apple-mobile-web-app-title', appName); // iOS App Name
+        setMeta('application-name', appName); // Windows/Android Pin Name
+        setMeta('apple-mobile-web-app-capable', 'yes');
+        setMeta('mobile-web-app-capable', 'yes');
+
+        // Open Graph / Social Sharing (Enhances link previews)
+        setMeta('og:title', appName, true);
+        setMeta('og:site_name', appName, true);
+        setMeta('og:image', iconPath, true);
+        setMeta('og:description', '金田汽車銷售管理系統 v3.0', true);
     };
     setAppIcon();
 
@@ -900,10 +914,6 @@ export default function GoldLandAutoDMS() {
 
             <div className="print:visible">
                 <div className="text-center mb-8 hidden print:block">
-                    {/* 報表 Logo */}
-                    <div className="w-20 h-20 mx-auto mb-2 flex items-center justify-center">
-                         <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
-                    </div>
                     <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
                     <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
                         {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
@@ -975,7 +985,7 @@ export default function GoldLandAutoDMS() {
         </div>
         <div className="bg-gray-50 p-4 rounded border">
             <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">型號列表 (Level 2: {activeMake})</h3>
-            {!activeMake ? <p className="text-gray-400 text-xs">請先選擇左側廠牌</p> : (<><div className="flex gap-2 mb-3"><input id="new-models" placeholder={`新增 ${activeMake} 型號...`} className="flex-1 border p-2 rounded text-sm"/><button onClick={() => {const input = document.getElementById("new-models") as HTMLInputElement; if(input.value) { updateSettings('models', input.value, 'add', activeMake); input.value=''; }}} className="bg-slate-800 text-white px-3 rounded hover:bg-slate-700"><Plus size={16}/></button></div><ul className="space-y-1 max-h-40 overflow-y-auto">{(settings.models[activeMake] || []).map(model => (<li key={model} className="flex justify-between items-center bg-white p-2 rounded border text-sm"><span>{model}</span><button onClick={() => updateSettings('models', model, 'remove', activeMake)} className="text-red-400 hover:text-red-600"><X size={14}/></button></li>))}</ul></>)}
+            {!activeMake ? <p className="text-gray-400 text-xs">請先選擇左側廠牌</p> : (<><div className="flex gap-2 mb-3"><input id="new-models" placeholder={`新增 ${activeMake} 型號 (e.g. 2.5)...`} className="flex-1 border p-2 rounded text-sm"/><button onClick={() => {const input = document.getElementById("new-models") as HTMLInputElement; if(input.value) { updateSettings('models', input.value, 'add', activeMake); input.value=''; }}} className="bg-slate-800 text-white px-3 rounded hover:bg-slate-700"><Plus size={16}/></button></div><ul className="space-y-1 max-h-40 overflow-y-auto">{(settings.models[activeMake] || []).map(model => (<li key={model} className="flex justify-between items-center bg-white p-2 rounded border text-sm"><span>{model}</span><button onClick={() => updateSettings('models', model, 'remove', activeMake)} className="text-red-400 hover:text-red-600"><X size={14}/></button></li>))}</ul></>)}
         </div>
         <div className="bg-gray-50 p-4 rounded border md:col-span-2">
             <h3 className="font-bold mb-3 text-sm uppercase text-gray-600">其他設定</h3>
@@ -1276,7 +1286,10 @@ export default function GoldLandAutoDMS() {
                             <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
                             <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{car.status}</span></td>
                             <td className="p-3 font-medium">{car.regMark}</td>
-                            <td className="p-3">{car.year} {car.make} {car.model}</td>
+                            <td className="p-3">
+                                {car.year} {car.make} {car.model}
+                                {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
+                            </td>
                             <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
                             <td className="p-3 text-right">{unpaidExps > 0 ? <span className="text-red-500 text-xs font-bold">{unpaidExps} 筆未付</span> : <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}</td>
                           </tr>
