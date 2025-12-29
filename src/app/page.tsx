@@ -298,14 +298,14 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // 設定 PWA/App Icon 及瀏覽器 Meta
+    // 設定 PWA/App Icon 及瀏覽器 Meta (強制覆蓋)
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
         
-        // 1. 強制移除現有的 icon 以確保覆蓋
+        // 1. 強制移除現有的 icon 以確保覆蓋 (包含 next.js 預設的)
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
-        existingIcons.forEach(el => el.remove());
+        existingIcons.forEach(el => el.parentNode?.removeChild(el));
 
         // 2. Helper to set link tags
         const setLink = (rel: string, href: string) => {
@@ -635,9 +635,16 @@ export default function GoldLandAutoDMS() {
         data = inventory.filter(v => {
             const received = v.payments?.reduce((s, p) => s + p.amount, 0) || 0;
             const balance = (v.price || 0) - received;
-            return v.status === 'Sold' && 
-                   (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
-                   (!reportEndDate || (v.stockOutDate || '') <= reportEndDate) &&
+            
+            // 已售 或 已訂 的車輛都算
+            const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
+            
+            // 如果有出庫日期就用出庫日期，沒有（如 Reserved）則用入庫日期做篩選
+            const refDate = v.stockOutDate || v.stockInDate || ''; 
+            
+            return isRelevantStatus && 
+                   (!reportStartDate || refDate >= reportStartDate) &&
+                   (!reportEndDate || refDate <= reportEndDate) &&
                    balance > 0; // 只顯示還有餘額的
         }).map(v => ({
             vehicleId: v.id,
@@ -645,7 +652,7 @@ export default function GoldLandAutoDMS() {
             title: `${v.year} ${v.make} ${v.model}`,
             regMark: v.regMark,
             amount: (v.price || 0) - (v.payments?.reduce((s, p) => s + p.amount, 0) || 0), // 顯示剩餘金額
-            status: 'Sold'
+            status: v.status
         }));
     } else if (reportType === 'payable') {
         inventory.forEach(v => {
