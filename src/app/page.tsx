@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, Globe, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  CreditCard as PaymentIcon, MapPin, Info
+  CreditCard as PaymentIcon, MapPin, Info, RefreshCw
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -93,12 +93,12 @@ type Expense = {
 type Payment = {
   id: string;
   date: string;
-  type: 'Deposit' | 'Part Payment' | 'Balance' | 'Full Payment' | 'Service Fee'; 
+  type: 'Deposit' | 'Part Payment' | 'Balance' | 'Full Payment' | 'Service Fee' | 'Refund'; 
   amount: number;
   method: 'Cash' | 'Cheque' | 'Transfer';
   note?: string; 
   relatedTaskId?: string; // Link payment to a specific CB task
-  isCbFee?: boolean; // Helper flag
+  isCbFee?: boolean; 
 };
 
 // 中港業務流程項目
@@ -109,7 +109,7 @@ type CrossBorderTask = {
     institution: string; // 辦理機構
     handler: string; // 辦理人
     days: string; // 流程時間(天數)
-    fee: number; // 應收費用金額 (Receivable)
+    fee: number; // 應收費用金額 (Receivable)，可為負數
     currency: 'HKD' | 'RMB'; // 幣種
     note: string; // 備注
     isPaid: boolean; // 是否已付款
@@ -119,14 +119,13 @@ type CrossBorderTask = {
 type CrossBorderData = {
     isEnabled: boolean; 
     mainlandPlate?: string; 
-    driver1?: string; // 主司機
-    driver2?: string; // 副司機 1
-    driver3?: string; // 副司機 2
+    driver1?: string; 
+    driver2?: string; 
+    driver3?: string; 
     insuranceAgent?: string; 
-    quotaNumber?: string; // 指標號
-    ports?: string[]; // 口岸 (多選)
+    quotaNumber?: string; 
+    ports?: string[]; 
     
-    // 日期管理 (YYYY-MM-DD)
     dateHkInsurance?: string; 
     dateReservedPlate?: string; 
     dateBr?: string; 
@@ -138,7 +137,6 @@ type CrossBorderData = {
     dateMainlandLicense?: string; 
     dateHkInspection?: string; 
 
-    // 新增：業務流程列表
     tasks?: CrossBorderTask[];
 };
 
@@ -199,7 +197,6 @@ type SystemSettings = {
   expenseTypes: string[];
   expenseCompanies: string[]; 
   colors: string[];
-  // 新增設定
   cbItems: string[];
   cbInstitutions: string[];
 };
@@ -231,17 +228,21 @@ const DEFAULT_SETTINGS: SystemSettings = {
   cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸', '港珠澳大橋口岸']
 };
 
-const AVAILABLE_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '大橋'];
+const PORTS_HK_GD = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
+const PORTS_MO_GD = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
 const formatNumberInput = (value: string) => {
+  // Allow negative numbers
+  const isNegative = value.startsWith('-');
   const cleanVal = value.replace(/[^0-9.]/g, '');
   if (!cleanVal) return '';
   const parts = cleanVal.split('.');
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return parts.join('.');
+  const result = parts.join('.');
+  return isNegative ? `-${result}` : result;
 };
 
 const calculateLicenseFee = (fuelType: 'Petrol' | 'Diesel' | 'Electric', engineSize: number) => {
@@ -367,8 +368,12 @@ export default function GoldLandAutoDMS() {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   
-  // Doc Preview State
-  const [previewDoc, setPreviewDoc] = useState<{ type: DocType, vehicle: Vehicle, payment?: Payment } | null>(null);
+  // Doc Preview State (Updated for Multi-Item Selection)
+  const [previewDoc, setPreviewDoc] = useState<{ 
+      type: DocType, 
+      vehicle: Vehicle, 
+      selectedItems?: (Payment | CrossBorderTask)[] 
+  } | null>(null);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState(''); 
@@ -392,7 +397,6 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // 設定 PWA/App Icon 及瀏覽器 Meta (強制覆蓋)
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
@@ -422,12 +426,10 @@ export default function GoldLandAutoDMS() {
         setLink('icon', iconPath);
         setLink('shortcut icon', iconPath);
         setLink('apple-touch-icon', iconPath); 
-
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
         setMeta('mobile-web-app-capable', 'yes');
-
         setMeta('og:title', appName, true);
         setMeta('og:site_name', appName, true);
         setMeta('og:image', iconPath, true);
@@ -525,7 +527,7 @@ export default function GoldLandAutoDMS() {
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
     const selectedPorts: string[] = [];
-    AVAILABLE_PORTS.forEach(port => {
+    [...PORTS_HK_GD, ...PORTS_MO_GD].forEach(port => {
         if (formData.get(`cb_port_${port}`) === 'on') {
             selectedPorts.push(port);
         }
@@ -623,7 +625,7 @@ export default function GoldLandAutoDMS() {
     }
   };
 
-  // --- Sub-Item Management (FIXED: Updates Local State) ---
+  // --- Sub-Item Management ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder', newItems: any) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -684,6 +686,13 @@ export default function GoldLandAutoDMS() {
       const newTasks = [...(v.crossBorder?.tasks || []), task];
       updateSubItem(vehicleId, 'crossBorder', newTasks);
   };
+  
+  const updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
+      const v = inventory.find(v => v.id === vehicleId);
+      if (!v) return;
+      const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === updatedTask.id ? updatedTask : t);
+      updateSubItem(vehicleId, 'crossBorder', newTasks);
+  };
 
   const deleteCbTask = async (vehicleId: string, taskId: string) => {
       if (!db || !staffId) return;
@@ -699,7 +708,6 @@ export default function GoldLandAutoDMS() {
           payments: newPayments
       });
 
-      // Update local state
       if (editingVehicle && editingVehicle.id === vehicleId) {
           setEditingVehicle(prev => {
               if(!prev) return null;
@@ -837,8 +845,8 @@ export default function GoldLandAutoDMS() {
   const cbStats = crossBorderStats();
 
   // --- Print Handling ---
-  const openPrintPreview = (type: DocType, vehicle: Vehicle, payment?: Payment) => {
-    setPreviewDoc({ type, vehicle, payment });
+  const openPrintPreview = (type: DocType, vehicle: Vehicle, selectedItems?: any[]) => {
+    setPreviewDoc({ type, vehicle, selectedItems: selectedItems || [] });
     setIsPreviewMode(true);
   };
 
@@ -855,14 +863,12 @@ export default function GoldLandAutoDMS() {
             const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
             const refDate = v.stockOutDate || v.stockInDate || ''; 
             
-            // Only show if there is a positive balance
-            // Include In-Stock items IF they have pending cross-border fees
             const hasPendingCB = cbFees > 0 && balance > 0;
-            const showItem = (isRelevantStatus && balance > 0) || hasPendingCB;
 
-            return showItem && 
+            return (isRelevantStatus || hasPendingCB) && 
                    (!reportStartDate || refDate >= reportStartDate) &&
-                   (!reportEndDate || refDate <= reportEndDate);
+                   (!reportEndDate || refDate <= reportEndDate) &&
+                   balance > 0; 
         }).map(v => {
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
@@ -875,6 +881,22 @@ export default function GoldLandAutoDMS() {
                 amount: totalReceivable - received, 
                 status: v.status
             };
+        });
+
+        inventory.forEach(v => {
+            (v.crossBorder?.tasks || []).forEach(task => {
+                const isPaid = v.payments?.some(p => p.relatedTaskId === task.id);
+                if (task.fee > 0 && !isPaid && (!data.some(d => d.vehicleId === v.id))) {
+                    data.push({
+                        vehicleId: v.id,
+                        date: v.stockOutDate || v.stockInDate || 'Unknown',
+                        title: `${v.year} ${v.make} ${v.model} (中港業務)`,
+                        regMark: v.regMark,
+                        amount: task.fee,
+                        status: 'Service'
+                    });
+                }
+            });
         });
 
     } else if (reportType === 'payable') {
@@ -905,7 +927,7 @@ export default function GoldLandAutoDMS() {
         ).map(v => {
             const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-            const totalRevenue = (v.price || 0) + cbFees;
+            const totalRevenue = v.price + cbFees;
             const profit = totalRevenue - totalCost;
             return {
                 vehicleId: v.id,
@@ -949,7 +971,7 @@ export default function GoldLandAutoDMS() {
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
     
-    const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
+    const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
@@ -996,7 +1018,7 @@ export default function GoldLandAutoDMS() {
                 <div><label className="text-xs text-gray-500">地址 (Address)</label><input name="customerAddress" defaultValue={v.customerAddress} className="w-full border p-2 rounded"/></div>
             </div>
             
-            {/* 中港車管家模組 (修正：使用 style display 切換顯示) */}
+            {/* 中港車管家模組 */}
             <div className="md:col-span-3 border-t mt-4 pt-4">
                 <div 
                     className="flex items-center justify-between gap-2 mb-4 bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-100 transition"
@@ -1023,11 +1045,11 @@ export default function GoldLandAutoDMS() {
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 1 (Driver 2)</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 2 (Driver 3)</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border p-1 rounded text-sm"/></div>
                     
-                    {/* 口岸選擇 (多選) */}
+                    {/* 口岸選擇 */}
                     <div className="md:col-span-4 border-t border-blue-200 mt-2 pt-2">
-                        <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (Ports - Select multiple)</label>
-                        <div className="flex flex-wrap gap-3">
-                            {AVAILABLE_PORTS.map(port => (
+                        <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (粵港 / 粵澳)</label>
+                        <div className="flex flex-wrap gap-2">
+                            {[...AVAILABLE_PORTS, ...PORTS_MO_GD].map(port => (
                                 <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
                                     <input 
                                         type="checkbox" 
@@ -1112,7 +1134,7 @@ export default function GoldLandAutoDMS() {
 
                 <div className="flex gap-2 mb-4">
                     <button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="px-3 py-1 bg-white border border-blue-300 text-blue-700 rounded text-xs hover:bg-blue-50 flex items-center"><FileText size={12} className="mr-1"/> 買賣合約</button>
-                    <button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="px-3 py-1 bg-white border border-blue-300 text-blue-700 rounded text-xs hover:bg-blue-50 flex items-center"><FileText size={12} className="mr-1"/> 發票</button>
+                    <button type="button" onClick={() => setActiveTab('create_doc')} className="px-3 py-1 bg-white border border-blue-300 text-blue-700 rounded text-xs hover:bg-blue-50 flex items-center"><FileText size={12} className="mr-1"/> 開立單據 (新)</button>
                 </div>
 
                 <table className="w-full text-sm bg-white border mb-4">
@@ -1124,7 +1146,7 @@ export default function GoldLandAutoDMS() {
                         <td className="p-2">{pay.date}</td><td className="p-2">{pay.type}</td><td className="p-2">{pay.method}</td><td className="p-2 font-mono font-bold">{formatCurrency(pay.amount)}</td><td className="p-2 text-gray-500 text-xs">{pay.note}</td>
                         <td className="p-2 flex gap-2">
                              <button type="button" onClick={() => openPrintPreview('receipt', v as Vehicle, pay)} className="text-blue-500 hover:text-blue-700 flex items-center text-xs"><Printer size={12} className="mr-1"/> 收據</button>
-                             {/* 若是中港相關付款，建議不要在此刪除，防止狀態不同步 */}
+                             {/* 若是中港相關付款，禁止在此刪除 */}
                              {!pay.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, pay.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>}
                         </td>
                       </tr>
@@ -1152,7 +1174,7 @@ export default function GoldLandAutoDMS() {
                    <div className="col-span-1"><label className="text-[10px]">方式</label><select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value as any})} className="w-full border p-1 rounded text-xs"><option>Cash</option><option>Cheque</option><option>Transfer</option></select></div>
                    <div className="col-span-1"><label className="text-[10px]">金額</label><input type="text" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-full border p-1 rounded text-xs" placeholder="0"/></div>
                    <div className="col-span-1"><label className="text-[10px]">備注</label><input type="text" value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full border p-1 rounded text-xs" placeholder="支票號/備注"/></div>
-                   <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amount = Number(newPayment.amount.replace(/,/g, '')); if(amount > 0) { addPayment(v.id!, { id: Date.now().toString(), ...newPayment, amount } as Payment); setNewPayment({...newPayment, amount: '', note: ''}); }}} className="w-full bg-blue-600 text-white p-1 rounded text-xs h-[26px]">新增收款</button></div>
+                   <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amount = Number(newPayment.amount.replace(/,/g, '')); if(amount !== 0) { addPayment(v.id!, { id: Date.now().toString(), ...newPayment, amount } as Payment); setNewPayment({...newPayment, amount: '', note: ''}); }}} className="w-full bg-blue-600 text-white p-1 rounded text-xs h-[26px]">新增收款</button></div>
                 </div>
               </div>
             )}
@@ -1181,7 +1203,7 @@ export default function GoldLandAutoDMS() {
                   <div className="col-span-1"><label className="text-[10px]">單號</label><input value={newExpense.invoiceNo} onChange={e => setNewExpense({...newExpense, invoiceNo: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
                   <div className="col-span-1"><label className="text-[10px]">金額</label><input value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-full border p-1 rounded text-xs"/></div>
                   <div className="col-span-1"><label className="text-[10px]">狀態</label><select value={newExpense.status} onChange={e => setNewExpense({...newExpense, status: e.target.value as any})} className="w-full border p-1 rounded text-xs"><option value="Unpaid">未付</option><option value="Paid">已付</option></select></div>
-                  <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0){addExpense(v.id!, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''});}}} className="w-full bg-slate-600 text-white p-1 rounded text-xs h-[26px]">新增</button></div>
+                  <div className="col-span-1"><button type="button" onClick={(e) => {e.preventDefault(); const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt!==0){addExpense(v.id!, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''});}}} className="w-full bg-slate-600 text-white p-1 rounded text-xs h-[26px]">新增</button></div>
                 </div>
               </div>
             )}
@@ -1317,6 +1339,8 @@ export default function GoldLandAutoDMS() {
           note: ''
       });
 
+      const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+
       // State for Quick Payment Modal
       const [paymentModalTask, setPaymentModalTask] = useState<CrossBorderTask | null>(null);
       const [quickPayMethod, setQuickPayMethod] = useState<'Cash'|'Cheque'|'Transfer'>('Cash');
@@ -1337,6 +1361,42 @@ export default function GoldLandAutoDMS() {
           };
           addCbTask(activeCbVehicleId, task);
           setNewTask({ ...newTask, fee: 0, note: '' });
+      };
+
+      const handleUpdateTask = () => {
+        if (!activeCbVehicleId || !editingTaskId) return;
+        
+        const existingTask = activeVehicle?.crossBorder?.tasks?.find(t => t.id === editingTaskId);
+        
+        const updatedTask: CrossBorderTask = {
+            id: editingTaskId,
+            date: newTask.date || existingTask?.date || '',
+            item: newTask.item || existingTask?.item || '',
+            institution: newTask.institution || existingTask?.institution || '',
+            handler: newTask.handler || existingTask?.handler || '',
+            days: newTask.days || existingTask?.days || '',
+            fee: Number(newTask.fee) || 0,
+            currency: (newTask.currency as any) || existingTask?.currency || 'HKD',
+            note: newTask.note || existingTask?.note || '',
+            isPaid: existingTask?.isPaid || false
+        };
+        updateCbTask(activeCbVehicleId, updatedTask);
+        setEditingTaskId(null);
+        setNewTask({ ...newTask, fee: 0, note: '' });
+      };
+
+      const handleEditClick = (task: CrossBorderTask) => {
+          setEditingTaskId(task.id);
+          setNewTask({
+              date: task.date,
+              item: task.item,
+              institution: task.institution,
+              handler: task.handler,
+              days: task.days,
+              fee: task.fee,
+              currency: task.currency,
+              note: task.note
+          });
       };
 
       const handleQuickPay = () => {
@@ -1468,9 +1528,9 @@ export default function GoldLandAutoDMS() {
                                           <td className="p-2 border text-gray-500">{task.handler}</td>
                                           <td className="p-2 border text-center">{task.days}</td>
                                           <td className="p-2 border text-right font-mono font-bold">
-                                              {task.fee > 0 ? (
+                                              {(task.fee && task.fee !== 0) ? (
                                                   <div className="flex items-center justify-end gap-2">
-                                                      <span className={isPaid ? "text-green-600" : "text-amber-600"}>
+                                                      <span className={isPaid ? "text-green-600" : (task.fee < 0 ? "text-red-600" : "text-amber-600")}>
                                                           {task.currency} {task.fee}
                                                       </span>
                                                       {!isPaid && (
@@ -1487,7 +1547,8 @@ export default function GoldLandAutoDMS() {
                                               ) : '-'}
                                           </td>
                                           <td className="p-2 border text-gray-500 text-xs max-w-xs truncate">{task.note}</td>
-                                          <td className="p-2 border text-center">
+                                          <td className="p-2 border text-center flex items-center justify-center gap-2">
+                                              <button onClick={() => handleEditClick(task)} className="text-blue-400 hover:text-blue-600"><Edit size={14}/></button>
                                               <button onClick={() => deleteCbTask(activeVehicle.id, task.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
                                           </td>
                                       </tr>
@@ -1495,7 +1556,7 @@ export default function GoldLandAutoDMS() {
                               </tbody>
                           </table>
 
-                          {/* Add New Task Form */}
+                          {/* Add/Edit Task Form */}
                           <div className="bg-blue-50 p-3 rounded grid grid-cols-8 gap-2 items-end">
                               <div className="col-span-1">
                                   <label className="text-[10px] text-blue-800">日期</label>
@@ -1531,9 +1592,16 @@ export default function GoldLandAutoDMS() {
                                   <input value={newTask.note} onChange={e => setNewTask({...newTask, note: e.target.value})} className="w-full border p-1 rounded text-xs"/>
                               </div>
                               <div className="col-span-1">
-                                  <button onClick={handleAddTask} className="w-full bg-blue-600 text-white p-1.5 rounded text-xs hover:bg-blue-700 flex items-center justify-center font-bold shadow-sm">
-                                      <Plus size={14} className="mr-1"/> 新增
-                                  </button>
+                                  {editingTaskId ? (
+                                    <div className="flex gap-1">
+                                        <button onClick={handleUpdateTask} className="flex-1 bg-green-600 text-white p-1.5 rounded text-xs hover:bg-green-700 flex items-center justify-center font-bold shadow-sm"><RefreshCw size={14}/></button>
+                                        <button onClick={() => {setEditingTaskId(null); setNewTask({fee:0, note:''})}} className="flex-1 bg-gray-400 text-white p-1.5 rounded text-xs hover:bg-gray-500 flex items-center justify-center font-bold shadow-sm"><X size={14}/></button>
+                                    </div>
+                                  ) : (
+                                    <button onClick={handleAddTask} className="w-full bg-blue-600 text-white p-1.5 rounded text-xs hover:bg-blue-700 flex items-center justify-center font-bold shadow-sm">
+                                        <Plus size={14} className="mr-1"/> 新增
+                                    </button>
+                                  )}
                               </div>
                           </div>
                           <div className="text-[10px] text-blue-600 mt-2 flex items-center"><AlertTriangle size={10} className="mr-1"/> 提示：新增收費項目將視為「待收款」，您可以在列表右側點擊「收款」按鈕來建立正式收款單據。</div>
@@ -1632,188 +1700,146 @@ export default function GoldLandAutoDMS() {
   const CompanyStamp = () => (<div className="w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-90 pointer-events-none select-none mix-blend-multiply" style={{ color: '#2b3d90', border: '2px solid #2b3d90', boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', backgroundColor: 'rgba(43, 61, 144, 0.02)', mixBlendMode: 'multiply' }}><div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}><div className="absolute w-full h-full"><svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0"><defs><path id="textCircle" d="M 12, 50 A 38, 38 0 1, 1 88, 50" /></defs><text fontSize="11" fontWeight="bold" fill="#2b3d90" letterSpacing="1"><textPath href="#textCircle" startOffset="50%" textAnchor="middle">GOLD LAND AUTO</textPath></text></svg></div><div className="flex flex-col items-center justify-center mt-2 z-10"><span className="text-[6px] font-bold leading-none tracking-widest" style={{ textShadow: '0 0 0.5px #2b3d90' }}>金田</span><span className="text-[6px] font-bold leading-none tracking-widest mt-[1px]" style={{ textShadow: '0 0 0.5px #2b3d90' }}>汽車</span></div><div className="absolute bottom-1 text-[8px] font-bold text-[#2b3d90]">*</div></div></div>);
   const SignedStamp = () => (<div className="relative w-[50mm] h-[30mm] flex items-center justify-center"><svg viewBox="0 0 200 100" className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{ overflow: 'visible' }}><defs><filter id="ink-spread"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" /><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" /></filter></defs><path d="M20,60 C40,40 60,80 90,50 C110,30 130,70 160,40 C170,30 180,60 190,50" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.85 }} /><path d="M30,70 C60,60 120,60 180,55" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.9 }} /><path d="M50,40 Q40,80 60,70 T80,60" fill="none" stroke="black" strokeWidth="2.5" style={{ filter: 'url(#ink-spread)', opacity: 0.8 }} /></svg><div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-2 w-[22mm] h-[22mm] flex items-center justify-center z-10 pointer-events-none select-none"><CompanyStamp /></div></div>);
   
-  const DocumentTemplate = () => {
-    const activeVehicle = previewDoc?.vehicle || selectedVehicle;
-    const activeType = previewDoc?.type || docType;
-    const activePayment = previewDoc?.payment;
+  // 4. Create Document Module
+  const CreateDocModule = () => {
+      const [selectedCarId, setSelectedCarId] = useState<string>('');
+      const [docType, setDocType] = useState<DocType>('sales_contract');
+      const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
+      
+      const vehicle = inventory.find(v => v.id === selectedCarId);
+      
+      // Combine normal payments and pending CB tasks
+      const allFinancialItems = vehicle ? [
+          ...(vehicle.payments || []).map(p => ({ ...p, isPending: false, source: 'payment' })),
+          ...(vehicle.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(vehicle.payments || []).some(p => p.relatedTaskId === t.id)).map(t => ({
+              id: t.id,
+              date: t.date,
+              type: 'Service Fee',
+              amount: t.fee,
+              method: '-',
+              note: `[中港待收] ${t.item}`,
+              isPending: true,
+              source: 'task'
+          }))
+      ] : [];
 
-    if (!activeVehicle) return null; 
+      const handlePrintDoc = () => {
+          if(!vehicle) return;
+          // Filter selected items for the doc
+          const itemsToPrint = allFinancialItems.filter(i => selectedPayments.includes(i.id));
+          // Map back to Payment structure for preview
+          const paymentData = itemsToPrint.length > 0 ? itemsToPrint[0] as Payment : undefined; 
+          // Note: For multi-item receipts, you might need a custom preview logic, 
+          // but for now we reuse the single payment preview or just vehicle info.
+          
+          openPrintPreview(docType, vehicle, paymentData);
+      };
 
-    const safeVehicleId = activeVehicle.id || 'DRAFT';
-    const displayId = safeVehicleId.length > 6 ? safeVehicleId.slice(0, 6) : safeVehicleId;
+      return (
+          <div className="max-w-5xl mx-auto space-y-6 animate-fade-in p-6 bg-white rounded-lg shadow-sm min-h-screen">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center"><FileText className="mr-2"/> 開立單據 (Create Document)</h2>
+              
+              {/* Step 1: Select Vehicle */}
+              <div className="space-y-2">
+                  <label className="font-bold text-gray-700">1. 選擇車輛</label>
+                  <select 
+                      className="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={selectedCarId}
+                      onChange={(e) => { setSelectedCarId(e.target.value); setSelectedPayments([]); }}
+                  >
+                      <option value="">-- 請選擇 --</option>
+                      {getSortedInventory().map(v => (
+                          <option key={v.id} value={v.id}>
+                              {v.regMark} - {v.make} {v.model} ({v.year})
+                          </option>
+                      ))}
+                  </select>
+              </div>
 
-    const curCustomer = {
-        name: activeVehicle.customerName || customer.name || '',
-        phone: activeVehicle.customerPhone || customer.phone || '',
-        hkid: activeVehicle.customerID || customer.hkid || '',
-        address: activeVehicle.customerAddress || customer.address || ''
-    };
+              {vehicle && (
+                  <>
+                      {/* Step 2: Select Doc Type */}
+                      <div className="space-y-2">
+                          <label className="font-bold text-gray-700">2. 單據類型</label>
+                          <div className="flex gap-4">
+                              {[
+                                  {id: 'sales_contract', label: '買賣合約'},
+                                  {id: 'invoice', label: '發票 (Invoice)'},
+                                  {id: 'receipt', label: '收據 (Receipt)'}
+                              ].map(type => (
+                                  <button
+                                      key={type.id}
+                                      onClick={() => setDocType(type.id as any)}
+                                      className={`px-6 py-3 rounded-lg font-bold border transition ${docType === type.id ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                                  >
+                                      {type.label}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
 
-    const today = formatDate(new Date()); 
-    const totalPaid = (activeVehicle.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0) || deposit || 0;
-    const balance = (activeVehicle.price || 0) - totalPaid;
+                      {/* Step 3: Select Fees (Only for Invoice/Receipt) */}
+                      {docType !== 'sales_contract' && (
+                          <div className="space-y-2">
+                              <label className="font-bold text-gray-700">3. 選擇包含的款項 (可多選)</label>
+                              <div className="border rounded-lg overflow-hidden">
+                                  <table className="w-full text-sm">
+                                      <thead className="bg-gray-100 text-left">
+                                          <tr>
+                                              <th className="p-3 w-10"><input type="checkbox" onChange={(e) => {
+                                                  if(e.target.checked) setSelectedPayments(allFinancialItems.map(i => i.id));
+                                                  else setSelectedPayments([]);
+                                              }}/></th>
+                                              <th className="p-3">日期</th>
+                                              <th className="p-3">項目/備註</th>
+                                              <th className="p-3 text-right">金額</th>
+                                              <th className="p-3 text-center">狀態</th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>
+                                          {allFinancialItems.map((item: any) => (
+                                              <tr key={item.id} className="border-t hover:bg-gray-50">
+                                                  <td className="p-3">
+                                                      <input 
+                                                          type="checkbox" 
+                                                          checked={selectedPayments.includes(item.id)}
+                                                          onChange={(e) => {
+                                                              if(e.target.checked) setSelectedPayments([...selectedPayments, item.id]);
+                                                              else setSelectedPayments(selectedPayments.filter(id => id !== item.id));
+                                                          }}
+                                                      />
+                                                  </td>
+                                                  <td className="p-3">{item.date}</td>
+                                                  <td className="p-3">{item.note || item.type}</td>
+                                                  <td className="p-3 text-right font-mono">{formatCurrency(item.amount)}</td>
+                                                  <td className="p-3 text-center">
+                                                      {item.isPending ? 
+                                                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">待收</span> : 
+                                                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">已收</span>
+                                                      }
+                                                  </td>
+                                              </tr>
+                                          ))}
+                                          {allFinancialItems.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-gray-400">無相關款項紀錄</td></tr>}
+                                      </tbody>
+                                  </table>
+                              </div>
+                          </div>
+                      )}
 
-    const Header = ({ titleEn, titleCh }: { titleEn: string, titleCh: string }) => (
-        <div className="mb-8">
-            <div className="flex items-start justify-between border-b-2 border-black pb-4 mb-2">
-                <div className="w-24 h-24 flex-shrink-0 mr-4 flex items-center justify-center border border-gray-200 bg-white rounded-lg overflow-hidden relative">
-                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-1" onError={(e) => { e.currentTarget.style.display='none'; }}/>
-                    <div className="absolute inset-0 flex items-center justify-center -z-10 text-gray-200"><Building2 size={32} /></div>
-                </div>
-                <div className="flex-1 text-right">
-                    <h1 className="text-3xl font-bold tracking-wide text-black">{COMPANY_INFO.name_en}</h1>
-                    <h2 className="text-2xl font-bold text-gray-800 mb-2">{COMPANY_INFO.name_ch}</h2>
-                    <div className="text-xs text-gray-600 space-y-1">
-                        <p>{COMPANY_INFO.address_en}</p>
-                        <p>{COMPANY_INFO.address_ch}</p>
-                        <p className="font-bold">Tel: {COMPANY_INFO.phone}</p>
-                    </div>
-                </div>
-            </div>
-            <div className="text-center mt-6">
-                <h2 className="text-xl font-bold uppercase underline decoration-2 underline-offset-4">{titleEn}</h2>
-                <h3 className="text-lg font-bold mt-1">{titleCh}</h3>
-            </div>
-        </div>
-    ); 
-
-    const VehicleTable = () => (
-        <table className="w-full border-collapse border border-black mb-6 text-sm">
-            <tbody>
-                <tr>
-                    <td className="border border-black p-2 bg-gray-100 font-bold w-1/4">車牌號碼 (Reg. Mark)</td>
-                    <td className="border border-black p-2 w-1/4 font-mono font-bold text-lg">{activeVehicle.regMark}</td>
-                    <td className="border border-black p-2 bg-gray-100 font-bold w-1/4">製造年份 (Year)</td>
-                    <td className="border border-black p-2 w-1/4">{activeVehicle.year}</td>
-                </tr>
-                <tr>
-                    <td className="border border-black p-2 bg-gray-100 font-bold">廠名 (Make)</td>
-                    <td className="border border-black p-2">{activeVehicle.make}</td>
-                    <td className="border border-black p-2 bg-gray-100 font-bold">型號 (Model)</td>
-                    <td className="border border-black p-2">{activeVehicle.model}</td>
-                </tr>
-                <tr>
-                    <td className="border border-black p-2 bg-gray-100 font-bold">顏色 (Color)</td>
-                    <td className="border border-black p-2">{activeVehicle.colorExt} / {activeVehicle.colorInt}</td>
-                    <td className="border border-black p-2 bg-gray-100 font-bold">收購類別</td>
-                    <td className="border border-black p-2">{activeVehicle.purchaseType === 'New' ? '新車' : (activeVehicle.purchaseType === 'Consignment' ? '寄賣' : '二手')}</td>
-                </tr>
-                <tr>
-                    <td className="border border-black p-2 bg-gray-100 font-bold">底盤號碼 (Chassis)</td>
-                    <td className="border border-black p-2 font-mono" colSpan={3}>{activeVehicle.chassisNo}</td>
-                </tr>
-                <tr>
-                    <td className="border border-black p-2 bg-gray-100 font-bold">引擎號碼 (Engine)</td>
-                    <td className="border border-black p-2 font-mono" colSpan={3}>{activeVehicle.engineNo}</td>
-                </tr>
-            </tbody>
-        </table>
-    );
-
-    if (activeType === 'sales_contract') return (
-        <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black relative">
-            <Header titleEn="Sales & Purchase Agreement" titleCh="汽車買賣合約" />
-            <div className="flex justify-between mb-4 text-sm border-b pb-2">
-                <span>合約編號: <span className="font-mono font-bold">SLA-{today.replace(/\//g,'')}-{displayId}</span></span>
-                <span>日期: {today}</span>
-            </div>
-            <div className="mb-6">
-                <h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">甲、買方資料</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div><p className="text-gray-500 text-xs">姓名</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{curCustomer.name}</p></div>
-                    <div><p className="text-gray-500 text-xs">電話</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{curCustomer.phone}</p></div>
-                    <div><p className="text-gray-500 text-xs">身份證</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{curCustomer.hkid}</p></div>
-                    <div className="col-span-2"><p className="text-gray-500 text-xs">地址</p><p className="font-bold border-b border-gray-300 min-h-[1.5rem]">{curCustomer.address}</p></div>
-                </div>
-            </div>
-            <div className="mb-6">
-                <h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">乙、車輛資料</h3>
-                <VehicleTable />
-            </div>
-            <div className="mb-6">
-                <h3 className="font-bold border-b-2 border-gray-800 mb-2 bg-gray-100 p-1">丙、交易款項</h3>
-                <div className="text-sm space-y-3 px-2">
-                    <div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>成交價:</span><span className="font-bold text-lg">{formatCurrency(activeVehicle.price || 0)}</span></div>
-                    <div className="flex justify-between items-end border-b border-dotted border-gray-400 pb-1"><span>已付訂金/款項:</span><span className="text-lg">{formatCurrency(totalPaid)}</span></div>
-                    <div className="flex justify-between items-end border-b-2 border-black pb-1 mt-2"><span className="font-bold">尚餘尾數:</span><span className="font-bold text-xl">{formatCurrency(balance)}</span></div>
-                </div>
-            </div>
-            <div className="mb-8 text-[11px] text-justify leading-relaxed text-gray-700">
-                <h3 className="font-bold mb-1 text-sm text-black">條款及細則:</h3>
-                <ol className="list-decimal pl-4 space-y-1">
-                    <li>買方已親自驗收上述車輛，同意以「現狀」成交。</li>
-                    <li>如買方悔約，賣方有權沒收所有訂金。</li>
-                    <li>賣方保證上述車輛並無涉及任何未清之財務按揭。</li>
-                </ol>
-            </div>
-            <div className="grid grid-cols-2 gap-16 mt-12">
-                <div className="relative">
-                    <div className="border-t border-black pt-2 text-center">
-                        <p className="font-bold">賣方簽署及公司蓋印</p>
-                        <p className="text-xs text-gray-500">Authorized Signature & Chop</p>
-                        <p className="text-xs font-bold mt-1">For and on behalf of<br/>{COMPANY_INFO.name_en}</p>
-                    </div>
-                    <div className="mb-2 absolute -top-8 left-1/2 transform -translate-x-1/2"><SignedStamp /></div>
-                </div>
-                <div>
-                    <div className="border-t border-black pt-2 text-center">
-                        <p className="font-bold">買方簽署</p>
-                        <p className="text-xs text-gray-500">Purchaser Signature</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-
-    // Default template (Invoice / Receipt)
-    return (
-        <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black">
-            <Header 
-                titleEn={activeType === 'invoice' ? "INVOICE" : (activeType === 'receipt' ? "OFFICIAL RECEIPT" : "DOCUMENT")} 
-                titleCh={activeType === 'invoice' ? "發票" : (activeType === 'receipt' ? "正式收據" : "文件")} 
-            />
-            <div className="flex justify-between mb-8 border p-4 rounded-lg bg-gray-50">
-                <div className="flex-1">
-                    <p className="text-gray-500 text-xs">Customer:</p>
-                    <p className="font-bold text-lg mt-1">{curCustomer.name}</p>
-                </div>
-                <div className="text-right border-l pl-8 ml-8">
-                    <div>
-                        <p className="text-gray-500 text-xs">No.</p>
-                        <p className="font-bold">
-                            {activeType.toUpperCase().slice(0,3)}-{today.replace(/\//g,'')}-{displayId}
-                            {activePayment ? `-${activePayment.id.slice(-4)}` : ''}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-gray-500 text-xs">Date</p>
-                        <p className="font-bold">{today}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <VehicleTable />
-
-            <div className="mt-8 border-t-2 border-black pt-4">
-               {activePayment ? (
-                   <>
-                    <div className="flex justify-between items-center mb-2"><span>Payment Type:</span><span className="font-mono">{activePayment.type} ({activePayment.method})</span></div>
-                    <div className="flex justify-between items-center mb-2"><span>Note:</span><span className="font-mono">{activePayment.note || '-'}</span></div>
-                    <div className="flex justify-between items-center text-xl font-bold mt-4 border-t pt-2"><span>Amount Received:</span><span>{formatCurrency(activePayment.amount)}</span></div>
-                   </>
-               ) : (
-                   <div className="flex justify-between items-center text-xl font-bold"><span>Total:</span><span>{formatCurrency(activeVehicle.price || 0)}</span></div>
-               )}
-            </div>
-
-            <div className="mt-20 relative">
-                <div className="border-t border-black pt-4 w-1/2 text-center">
-                    <p>Authorized Signature</p>
-                </div>
-                <div className="absolute -top-8 left-10"><SignedStamp /></div>
-            </div>
-        </div>
-    );
+                      {/* Step 4: Action */}
+                      <div className="pt-4 border-t flex justify-end">
+                          <button 
+                              onClick={handlePrintDoc}
+                              className="bg-slate-900 text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-slate-800 flex items-center"
+                          >
+                              <Printer className="mr-2"/> 預覽並列印 PDF
+                          </button>
+                      </div>
+                  </>
+              )}
+          </div>
+      );
   };
 
   const Sidebar = () => (
@@ -2018,9 +2044,7 @@ export default function GoldLandAutoDMS() {
           {activeTab === 'settings' && <div className="flex-1 overflow-y-auto"><SettingsManager /></div>}
 
           {/* Create Doc Tab */}
-          {activeTab === 'create_doc' && (
-            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in flex-1 overflow-y-auto"><h2 className="text-xl font-bold text-slate-800 mb-4">開立合約 / 文件</h2>{!selectedVehicle ? (<div className="text-center p-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50"><p className="text-gray-500 mb-4">請先從「車輛管理」頁面選擇一輛車來開單。</p><button onClick={() => setActiveTab('inventory')} className="px-6 py-2 bg-slate-800 text-white rounded hover:bg-slate-700">前往選擇車輛</button></div>) : (/* Legacy Create Doc UI */ <div>Please use Inventory Edit to create docs.</div>)}</div>
-          )}
+          {activeTab === 'create_doc' && <CreateDocModule />}
         </div>
       </main>
     </div>
