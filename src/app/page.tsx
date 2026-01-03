@@ -632,7 +632,6 @@ export default function GoldLandAutoDMS() {
         alert('新車輛已入庫');
       }
       setEditingVehicle(null);
-      // Determine where to go back
       if (activeTab === 'inventory_add') {
           setActiveTab('inventory');
       }
@@ -879,13 +878,10 @@ export default function GoldLandAutoDMS() {
     
     if (reportType === 'receivable') {
         data = inventory.filter(v => {
-            // 計算總應收：車價 + 中港業務待收款項 (Task Fees)
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
-            
             const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
             const balance = totalReceivable - received;
-            
             const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
             const refDate = v.stockOutDate || v.stockInDate || ''; 
             
