@@ -230,6 +230,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
 
 const PORTS_HK_GD = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
 const PORTS_MO_GD = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
+// Combine all ports for easier iteration
+const ALL_CB_PORTS = [...PORTS_HK_GD, ...PORTS_MO_GD];
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -397,9 +399,11 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
+    // 設定 PWA/App Icon 及瀏覽器 Meta (強制覆蓋)
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
+        
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
         existingIcons.forEach(el => el.parentNode?.removeChild(el));
 
@@ -425,10 +429,12 @@ export default function GoldLandAutoDMS() {
         setLink('icon', iconPath);
         setLink('shortcut icon', iconPath);
         setLink('apple-touch-icon', iconPath); 
+
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
         setMeta('mobile-web-app-capable', 'yes');
+
         setMeta('og:title', appName, true);
         setMeta('og:site_name', appName, true);
         setMeta('og:image', iconPath, true);
@@ -522,11 +528,12 @@ export default function GoldLandAutoDMS() {
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
-    // Cross Border Data Capture
+    // Cross Border Data Capture - with safe defaults and multi-select handling
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
+    // Get all selected ports
     const selectedPorts: string[] = [];
-    [...PORTS_HK_GD, ...PORTS_MO_GD].forEach(port => {
+    ALL_CB_PORTS.forEach(port => {
         if (formData.get(`cb_port_${port}`) === 'on') {
             selectedPorts.push(port);
         }
@@ -610,6 +617,7 @@ export default function GoldLandAutoDMS() {
         alert('新車輛已入庫');
       }
       setEditingVehicle(null);
+      // Determine where to go back
       if (activeTab === 'inventory_add') {
           setActiveTab('inventory');
       }
@@ -864,12 +872,14 @@ export default function GoldLandAutoDMS() {
             const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
             const refDate = v.stockOutDate || v.stockInDate || ''; 
             
+            // Only show if there is a positive balance
+            // Include In-Stock items IF they have pending cross-border fees
             const hasPendingCB = cbFees > 0 && balance > 0;
+            const showItem = (isRelevantStatus && balance > 0) || hasPendingCB;
 
-            return (isRelevantStatus || hasPendingCB) && 
+            return showItem && 
                    (!reportStartDate || refDate >= reportStartDate) &&
-                   (!reportEndDate || refDate <= reportEndDate) &&
-                   balance > 0; 
+                   (!reportEndDate || refDate <= reportEndDate);
         }).map(v => {
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
@@ -882,23 +892,6 @@ export default function GoldLandAutoDMS() {
                 amount: totalReceivable - received, 
                 status: v.status
             };
-        });
-
-        // 額外加入單獨的中港業務費用 (如果只是代辦)
-        inventory.forEach(v => {
-            (v.crossBorder?.tasks || []).forEach(task => {
-                const isPaid = v.payments?.some(p => p.relatedTaskId === task.id);
-                if (task.fee > 0 && !isPaid && (!data.some(d => d.vehicleId === v.id))) {
-                    data.push({
-                        vehicleId: v.id,
-                        date: v.stockOutDate || v.stockInDate || 'Unknown',
-                        title: `${v.year} ${v.make} ${v.model} (中港業務)`,
-                        regMark: v.regMark,
-                        amount: task.fee,
-                        status: 'Service'
-                    });
-                }
-            });
         });
 
     } else if (reportType === 'payable') {
@@ -1034,6 +1027,7 @@ export default function GoldLandAutoDMS() {
                     {isCbExpanded ? <ChevronUp size={20} className="text-blue-500"/> : <ChevronDown size={20} className="text-blue-500"/>}
                 </div>
                 
+                {/* 修正點：即使收合也要保留在 DOM 中，以防 saveVehicle 讀取失敗 */}
                 <div 
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded border border-blue-100 animate-fade-in"
                     style={{ display: isCbExpanded ? 'grid' : 'none' }}
@@ -1052,7 +1046,7 @@ export default function GoldLandAutoDMS() {
                     <div className="md:col-span-4 border-t border-blue-200 mt-2 pt-2">
                         <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (Ports - Select multiple)</label>
                         <div className="flex flex-wrap gap-3">
-                            {[...AVAILABLE_PORTS, ...PORTS_MO_GD].map(port => (
+                            {ALL_CB_PORTS.map(port => (
                                 <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
                                     <input 
                                         type="checkbox" 
@@ -1137,7 +1131,7 @@ export default function GoldLandAutoDMS() {
 
                 <div className="flex gap-2 mb-4">
                     <button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="px-3 py-1 bg-white border border-blue-300 text-blue-700 rounded text-xs hover:bg-blue-50 flex items-center"><FileText size={12} className="mr-1"/> 買賣合約</button>
-                    <button type="button" onClick={() => setActiveTab('create_doc')} className="px-3 py-1 bg-white border border-blue-300 text-blue-700 rounded text-xs hover:bg-blue-50 flex items-center"><FileText size={12} className="mr-1"/> 開立單據 (新)</button>
+                    <button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="px-3 py-1 bg-white border border-blue-300 text-blue-700 rounded text-xs hover:bg-blue-50 flex items-center"><FileText size={12} className="mr-1"/> 發票</button>
                 </div>
 
                 <table className="w-full text-sm bg-white border mb-4">
@@ -1701,9 +1695,6 @@ export default function GoldLandAutoDMS() {
     );
   };
 
-  const CompanyStamp = () => (<div className="w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-90 pointer-events-none select-none mix-blend-multiply" style={{ color: '#2b3d90', border: '2px solid #2b3d90', boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', backgroundColor: 'rgba(43, 61, 144, 0.02)', mixBlendMode: 'multiply' }}><div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}><div className="absolute w-full h-full"><svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0"><defs><path id="textCircle" d="M 12, 50 A 38, 38 0 1, 1 88, 50" /></defs><text fontSize="11" fontWeight="bold" fill="#2b3d90" letterSpacing="1"><textPath href="#textCircle" startOffset="50%" textAnchor="middle">GOLD LAND AUTO</textPath></text></svg></div><div className="flex flex-col items-center justify-center mt-2 z-10"><span className="text-[6px] font-bold leading-none tracking-widest" style={{ textShadow: '0 0 0.5px #2b3d90' }}>金田</span><span className="text-[6px] font-bold leading-none tracking-widest mt-[1px]" style={{ textShadow: '0 0 0.5px #2b3d90' }}>汽車</span></div><div className="absolute bottom-1 text-[8px] font-bold text-[#2b3d90]">*</div></div></div>);
-  const SignedStamp = () => (<div className="relative w-[50mm] h-[30mm] flex items-center justify-center"><svg viewBox="0 0 200 100" className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{ overflow: 'visible' }}><defs><filter id="ink-spread"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" /><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" /></filter></defs><path d="M20,60 C40,40 60,80 90,50 C110,30 130,70 160,40 C170,30 180,60 190,50" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.85 }} /><path d="M30,70 C60,60 120,60 180,55" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.9 }} /><path d="M50,40 Q40,80 60,70 T80,60" fill="none" stroke="black" strokeWidth="2.5" style={{ filter: 'url(#ink-spread)', opacity: 0.8 }} /></svg><div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-2 w-[22mm] h-[22mm] flex items-center justify-center z-10 pointer-events-none select-none"><CompanyStamp /></div></div>);
-  
   // 4. Create Document Module
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
@@ -1734,7 +1725,7 @@ export default function GoldLandAutoDMS() {
           // Map back to Payment structure for preview
           const paymentData = itemsToPrint.length > 0 ? itemsToPrint[0] as Payment : undefined; 
           
-          openPrintPreview(docType, vehicle, paymentData);
+          openPrintPreview(docType, vehicle, itemsToPrint);
       };
 
       return (
@@ -2007,41 +1998,6 @@ export default function GoldLandAutoDMS() {
                     </>
                   );
               })()}
-            </div>
-          )}
-
-          {/* Inventory Tab - 固定頂部，Grid 滾動 */}
-          {activeTab === 'inventory' && (
-            <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
-              {/* Header Controls */}
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-none">
-                  <h2 className="text-xl font-bold text-slate-800 whitespace-nowrap">車輛庫存 ({getSortedInventory().length})</h2>
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                      <div className="relative flex-1 md:w-64">
-                          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
-                          <input 
-                              type="text" 
-                              placeholder="搜尋車牌、型號..." 
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
-                          />
-                      </div>
-                      <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus size={16} className="mr-1"/> 入庫</button>
-                  </div>
-              </div>
-              
-              {/* Filter Bar */}
-              <div className="flex gap-2 overflow-x-auto pb-1 flex-none scrollbar-hide">
-                  {['All', 'In Stock', 'Sold', 'Reserved'].map(s => (<button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>{s === 'All' ? '全部' : s}</button>))}
-              </div>
-
-              {/* Grid Container - 捲動區域 */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                    {getSortedInventory().map((car) => { const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>{car.crossBorder?.isEnabled && <Globe size={14} className="ml-1 text-blue-500"/>}</div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
-                </div>
-              </div>
             </div>
           )}
 
