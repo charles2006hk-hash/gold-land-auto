@@ -400,7 +400,6 @@ export default function GoldLandAutoDMS() {
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
-        
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
         existingIcons.forEach(el => el.parentNode?.removeChild(el));
 
@@ -885,6 +884,7 @@ export default function GoldLandAutoDMS() {
             };
         });
 
+        // 額外加入單獨的中港業務費用 (如果只是代辦)
         inventory.forEach(v => {
             (v.crossBorder?.tasks || []).forEach(task => {
                 const isPaid = v.payments?.some(p => p.relatedTaskId === task.id);
@@ -973,6 +973,7 @@ export default function GoldLandAutoDMS() {
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
     
+    // Identify pending CB tasks (not paid)
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
     useEffect(() => {
@@ -1047,10 +1048,10 @@ export default function GoldLandAutoDMS() {
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 1 (Driver 2)</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 2 (Driver 3)</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border p-1 rounded text-sm"/></div>
                     
-                    {/* 口岸選擇 */}
+                    {/* 口岸選擇 (多選) */}
                     <div className="md:col-span-4 border-t border-blue-200 mt-2 pt-2">
-                        <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (粵港 / 粵澳)</label>
-                        <div className="flex flex-wrap gap-2">
+                        <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (Ports - Select multiple)</label>
+                        <div className="flex flex-wrap gap-3">
                             {[...AVAILABLE_PORTS, ...PORTS_MO_GD].map(port => (
                                 <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
                                     <input 
@@ -1327,6 +1328,7 @@ export default function GoldLandAutoDMS() {
 
   // 2. Cross Border View
   const CrossBorderView = () => {
+      // ... same logic as before ...
       const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
       const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
       
@@ -1731,8 +1733,6 @@ export default function GoldLandAutoDMS() {
           const itemsToPrint = allFinancialItems.filter(i => selectedPayments.includes(i.id));
           // Map back to Payment structure for preview
           const paymentData = itemsToPrint.length > 0 ? itemsToPrint[0] as Payment : undefined; 
-          // Note: For multi-item receipts, you might need a custom preview logic, 
-          // but for now we reuse the single payment preview or just vehicle info.
           
           openPrintPreview(docType, vehicle, paymentData);
       };
@@ -1937,7 +1937,10 @@ export default function GoldLandAutoDMS() {
                       return (
                         <tr key={car.id} className="border-b hover:bg-gray-50">
                           <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
-                          <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></td>
+                          <td className="p-3">
+                              <span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
+                              {car.crossBorder?.isEnabled && <Globe size={12} className="inline ml-1 text-blue-500" title="中港業務"/>}
+                          </td>
                           <td className="p-3 font-medium">{car.regMark}</td>
                           <td className="p-3">
                               {car.year} {car.make} {car.model}
@@ -2036,7 +2039,7 @@ export default function GoldLandAutoDMS() {
               {/* Grid Container - 捲動區域 */}
               <div className="flex-1 overflow-y-auto min-h-0 pr-1">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                    {getSortedInventory().map((car) => { const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
+                    {getSortedInventory().map((car) => { const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>{car.crossBorder?.isEnabled && <Globe size={14} className="ml-1 text-blue-500"/>}</div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
                 </div>
               </div>
             </div>
