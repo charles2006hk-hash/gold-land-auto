@@ -415,9 +415,11 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
+    // 設定 PWA/App Icon 及瀏覽器 Meta (強制覆蓋)
     const setAppIcon = () => {
         const iconPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
+        
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
         existingIcons.forEach(el => el.parentNode?.removeChild(el));
 
@@ -443,10 +445,12 @@ export default function GoldLandAutoDMS() {
         setLink('icon', iconPath);
         setLink('shortcut icon', iconPath);
         setLink('apple-touch-icon', iconPath); 
+
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
         setMeta('mobile-web-app-capable', 'yes');
+
         setMeta('og:title', appName, true);
         setMeta('og:site_name', appName, true);
         setMeta('og:image', iconPath, true);
@@ -628,6 +632,7 @@ export default function GoldLandAutoDMS() {
         alert('新車輛已入庫');
       }
       setEditingVehicle(null);
+      // Determine where to go back
       if (activeTab === 'inventory_add') {
           setActiveTab('inventory');
       }
@@ -725,6 +730,7 @@ export default function GoldLandAutoDMS() {
           payments: newPayments
       });
 
+      // Update local state as well
       if (editingVehicle && editingVehicle.id === vehicleId) {
           setEditingVehicle(prev => {
               if(!prev) return null;
@@ -873,13 +879,18 @@ export default function GoldLandAutoDMS() {
     
     if (reportType === 'receivable') {
         data = inventory.filter(v => {
+            // 計算總應收：車價 + 中港業務待收款項 (Task Fees)
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
+            
             const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
             const balance = totalReceivable - received;
+            
             const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
             const refDate = v.stockOutDate || v.stockInDate || ''; 
             
+            // Only show if there is a positive balance
+            // Include In-Stock items IF they have pending cross-border fees
             const hasPendingCB = cbFees > 0 && balance > 0;
             const showItem = (isRelevantStatus && balance > 0) || hasPendingCB;
 
@@ -900,6 +911,7 @@ export default function GoldLandAutoDMS() {
             };
         });
 
+        // 額外加入單獨的中港業務費用 (如果只是代辦)
         inventory.forEach(v => {
             (v.crossBorder?.tasks || []).forEach(task => {
                 const isPaid = v.payments?.some(p => p.relatedTaskId === task.id);
@@ -988,6 +1000,7 @@ export default function GoldLandAutoDMS() {
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
     
+    // Identify pending CB tasks (not paid)
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
     useEffect(() => {
@@ -1035,7 +1048,7 @@ export default function GoldLandAutoDMS() {
                 <div><label className="text-xs text-gray-500">地址 (Address)</label><input name="customerAddress" defaultValue={v.customerAddress} className="w-full border p-2 rounded"/></div>
             </div>
             
-            {/* 中港車管家模組 */}
+            {/* 中港車管家模組 (修正：使用 style display 切換顯示) */}
             <div className="md:col-span-3 border-t mt-4 pt-4">
                 <div 
                     className="flex items-center justify-between gap-2 mb-4 bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-100 transition"
@@ -1048,6 +1061,7 @@ export default function GoldLandAutoDMS() {
                     {isCbExpanded ? <ChevronUp size={20} className="text-blue-500"/> : <ChevronDown size={20} className="text-blue-500"/>}
                 </div>
                 
+                {/* 修正點：即使收合也要保留在 DOM 中，以防 saveVehicle 讀取失敗 */}
                 <div 
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded border border-blue-100 animate-fade-in"
                     style={{ display: isCbExpanded ? 'grid' : 'none' }}
