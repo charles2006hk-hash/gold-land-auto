@@ -625,7 +625,7 @@ export default function GoldLandAutoDMS() {
     }
   };
 
-  // --- Sub-Item Management ---
+  // --- Sub-Item Management (FIXED: Updates Local State) ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder', newItems: any) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -645,6 +645,7 @@ export default function GoldLandAutoDMS() {
 
     await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), updateData);
     
+    // !!! CRITICAL FIX: Update local editing state to prevent data loss on next save !!!
     if (editingVehicle && editingVehicle.id === vehicleId) {
         setEditingVehicle(prev => {
              if (!prev) return null;
@@ -708,6 +709,7 @@ export default function GoldLandAutoDMS() {
           payments: newPayments
       });
 
+      // Update local state as well
       if (editingVehicle && editingVehicle.id === vehicleId) {
           setEditingVehicle(prev => {
               if(!prev) return null;
@@ -1018,7 +1020,7 @@ export default function GoldLandAutoDMS() {
                 <div><label className="text-xs text-gray-500">地址 (Address)</label><input name="customerAddress" defaultValue={v.customerAddress} className="w-full border p-2 rounded"/></div>
             </div>
             
-            {/* 中港車管家模組 */}
+            {/* 中港車管家模組 (修正：使用 style display 切換顯示) */}
             <div className="md:col-span-3 border-t mt-4 pt-4">
                 <div 
                     className="flex items-center justify-between gap-2 mb-4 bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-100 transition"
@@ -1711,7 +1713,7 @@ export default function GoldLandAutoDMS() {
       // Combine normal payments and pending CB tasks
       const allFinancialItems = vehicle ? [
           ...(vehicle.payments || []).map(p => ({ ...p, isPending: false, source: 'payment' })),
-          ...(vehicle.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(vehicle.payments || []).some(p => p.relatedTaskId === t.id)).map(t => ({
+          ...(vehicle.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(vehicle.payments || []).some(p => p.relatedTaskId === t.id)).map(t => ({
               id: t.id,
               date: t.date,
               type: 'Service Fee',
