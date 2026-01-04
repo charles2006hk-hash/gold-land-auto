@@ -427,18 +427,21 @@ export default function GoldLandAutoDMS() {
 
   // --- Auth & Data Loading ---
   useEffect(() => {
-    // 設定 PWA/App Icon 及瀏覽器 Meta (強制覆蓋)
+    // 修正：強化 PWA/App Icon 及瀏覽器 Favicon 更新邏輯
     const setAppIcon = () => {
-        const iconPath = COMPANY_INFO.logo_url;
+        const logoPath = COMPANY_INFO.logo_url;
         const appName = "金田汽車DMS系統";
         
+        // 移除舊的所有 icon 連結
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
         existingIcons.forEach(el => el.parentNode?.removeChild(el));
 
+        // 建立新連結的輔助函數，加入時間戳版本號強制更新緩存
         const setLink = (rel: string, href: string) => {
-            let link = document.createElement('link');
+            const link = document.createElement('link');
             link.rel = rel;
-            link.href = href;
+            // 加入 ?v= 時間戳，確保瀏覽器不會讀取舊緩存
+            link.href = `${href}?v=${new Date().getTime()}`;
             document.getElementsByTagName('head')[0].appendChild(link);
         };
 
@@ -453,23 +456,27 @@ export default function GoldLandAutoDMS() {
             meta.setAttribute('content', content);
         };
 
+        // 設定標題與各類 Icon
         document.title = appName;
-        setLink('icon', iconPath);
-        setLink('shortcut icon', iconPath);
-        setLink('apple-touch-icon', iconPath); 
+        setLink('icon', logoPath);
+        setLink('shortcut icon', logoPath); // 針對舊版或特定瀏覽器
+        setLink('apple-touch-icon', logoPath); 
 
+        // Web App Meta
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
         setMeta('mobile-web-app-capable', 'yes');
 
+        // Social Media / Open Graph Meta
         setMeta('og:title', appName, true);
         setMeta('og:site_name', appName, true);
-        setMeta('og:image', iconPath, true);
+        setMeta('og:image', logoPath, true);
     };
     
     setAppIcon();
     
+    // 監控標題防止被外部竄改
     const observer = new MutationObserver(() => {
         if (document.title !== "金田汽車DMS系統") {
             document.title = "金田汽車DMS系統";
@@ -477,6 +484,7 @@ export default function GoldLandAutoDMS() {
     });
     observer.observe(document.querySelector('title') || document.head, { subtree: true, characterData: true, childList: true });
 
+    // ... (後續 Auth 邏輯保持不變)
     const currentAuth = auth;
     if (!currentAuth) { setLoading(false); return; }
 
