@@ -1798,211 +1798,46 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-  // 4. Create Document Module (開單系統) - 改良版
+  // 4. Create Document Module (開單系統)
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
       const [docType, setDocType] = useState<DocType>('sales_contract');
-      const [selectedItems, setSelectedItems] = useState<string[]>([]); // 儲存選中的項目 ID
+      const [selectedItems, setSelectedItems] = useState<string[]>([]);
       
       const vehicle = inventory.find(v => v.id === selectedCarId);
       
-      // 整合所有可選項目 (一般收款 + 中港待收款)
       const allBillableItems = vehicle ? [
-          // 1. 一般收款紀錄 (已收)
-          ...(vehicle.payments || []).map(p => ({ 
-              id: p.id, 
-              date: p.date, 
-              amount: p.amount, 
-              type: 'payment', 
-              category: p.type, 
-              desc: `[已收] ${p.type} (${p.method}) ${p.note ? '- ' + p.note : ''}`,
-              raw: p // 保留原始物件
-          })),
-          // 2. 中港業務待收款 (未付)
-          ...(vehicle.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(vehicle.payments || []).some(p => p.relatedTaskId === t.id)).map(t => ({
-              id: t.id,
-              date: t.date,
-              amount: t.fee,
-              type: 'task',
-              category: 'Service Fee',
-              desc: `[待收] ${t.item} (${t.institution})`,
-              raw: t // 保留原始物件
-          }))
+          ...(vehicle.payments || []).map(p => ({ id: p.id, date: p.date, amount: p.amount, type: 'payment', category: p.type, desc: `[已收] ${p.type} (${p.method}) ${p.note ? '- ' + p.note : ''}`, raw: p })),
+          ...(vehicle.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(vehicle.payments || []).some(p => p.relatedTaskId === t.id)).map(t => ({ id: t.id, date: t.date, amount: t.fee, type: 'task', category: 'Service Fee', desc: `[待收] ${t.item} (${t.institution})`, raw: t }))
       ] : [];
 
-      // 全選/取消全選
       const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-          if (e.target.checked) {
-              setSelectedItems(allBillableItems.map(i => i.id));
-          } else {
-              setSelectedItems([]);
-          }
+          if (e.target.checked) setSelectedItems(allBillableItems.map(i => i.id));
+          else setSelectedItems([]);
       };
 
-      // 單選
       const handleSelectItem = (id: string) => {
-          if (selectedItems.includes(id)) {
-              setSelectedItems(selectedItems.filter(i => i !== id));
-          } else {
-              setSelectedItems([...selectedItems, id]);
-          }
+          if (selectedItems.includes(id)) setSelectedItems(selectedItems.filter(i => i !== id));
+          else setSelectedItems([...selectedItems, id]);
       };
 
       const handlePrintDoc = () => {
           if(!vehicle) return;
-          
-          // 將選中的項目轉換為 DocumentTemplate 能接受的格式
-          const itemsToPrint = allBillableItems
-              .filter(i => selectedItems.includes(i.id))
-              .map(i => i.raw); // 取出原始的 Payment 或 CrossBorderTask 物件
-          
-          // 呼叫更新後的 openPrintPreview
-          openPrintPreview(docType, vehicle, itemsToPrint);
+          const itemsToPrint = allBillableItems.filter(i => selectedItems.includes(i.id)).map(i => i.raw);
+          openPrintPreview(docType, vehicle, itemsToPrint as any[]); // Cast to any to satisfy TS for now, logic is handled in openPrintPreview
       };
 
       return (
           <div className="max-w-5xl mx-auto space-y-8 animate-fade-in p-8 bg-white rounded-xl shadow-sm min-h-screen border border-slate-100">
-              <div className="flex items-center pb-4 border-b border-slate-100">
-                  <div className="p-2 bg-blue-50 rounded-lg mr-3">
-                      <FileText className="text-blue-600" size={24} />
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-800">開立單據中心</h2>
-              </div>
-              
-              {/* Step 1: Select Vehicle */}
-              <div className="space-y-3">
-                  <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">1. 選擇車輛 (Select Vehicle)</label>
-                  <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <select 
-                          className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-medium text-slate-700"
-                          value={selectedCarId}
-                          onChange={(e) => { setSelectedCarId(e.target.value); setSelectedItems([]); }}
-                      >
-                          <option value="">-- 請選擇車輛 --</option>
-                          {getSortedInventory().map(v => (
-                              <option key={v.id} value={v.id}>
-                                  {v.regMark ? `[${v.regMark}]` : '[未出牌]'} {v.make} {v.model} ({v.year})
-                              </option>
-                          ))}
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                  </div>
-              </div>
-
+              <div className="flex items-center pb-4 border-b border-slate-100"><div className="p-2 bg-blue-50 rounded-lg mr-3"><FileText className="text-blue-600" size={24} /></div><h2 className="text-2xl font-bold text-slate-800">開立單據中心</h2></div>
+              <div className="space-y-3"><label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">1. 選擇車輛 (Select Vehicle)</label><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><select className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-medium text-slate-700" value={selectedCarId} onChange={(e) => { setSelectedCarId(e.target.value); setSelectedItems([]); }}><option value="">-- 請選擇車輛 --</option>{getSortedInventory().map(v => (<option key={v.id} value={v.id}>{v.regMark ? `[${v.regMark}]` : '[未出牌]'} {v.make} {v.model} ({v.year})</option>))}</select><ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} /></div></div>
               {vehicle && (
                   <>
-                      {/* Step 2: Select Doc Type */}
-                      <div className="space-y-3">
-                          <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">2. 單據類型 (Document Type)</label>
-                          <div className="grid grid-cols-3 gap-4">
-                              {[
-                                  {id: 'sales_contract', label: '買賣合約', icon: FileText},
-                                  {id: 'invoice', label: '發票 (Invoice)', icon: Receipt},
-                                  {id: 'receipt', label: '收據 (Receipt)', icon: CheckSquare}
-                              ].map(type => {
-                                  const Icon = type.icon;
-                                  return (
-                                      <button
-                                          key={type.id}
-                                          onClick={() => setDocType(type.id as any)}
-                                          className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
-                                              docType === type.id 
-                                              ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' 
-                                              : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'
-                                          }`}
-                                      >
-                                          <Icon size={24} className="mb-2" />
-                                          <span className="font-bold">{type.label}</span>
-                                      </button>
-                                  )
-                              })}
-                          </div>
-                      </div>
-
-                      {/* Step 3: Select Fees (Only for Invoice/Receipt) */}
+                      <div className="space-y-3"><label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">2. 單據類型 (Document Type)</label><div className="grid grid-cols-3 gap-4">{[{id: 'sales_contract', label: '買賣合約', icon: FileText}, {id: 'invoice', label: '發票 (Invoice)', icon: Receipt}, {id: 'receipt', label: '收據 (Receipt)', icon: CheckSquare}].map(type => { const Icon = type.icon; return (<button key={type.id} onClick={() => setDocType(type.id as any)} className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${docType === type.id ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'}`}><Icon size={24} className="mb-2" /><span className="font-bold">{type.label}</span></button>)})}</div></div>
                       {docType !== 'sales_contract' && (
-                          <div className="space-y-3">
-                              <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">
-                                  3. 選擇包含款項 (Select Items) <span className="text-slate-400 font-normal ml-2 text-xs">已選 {selectedItems.length} 項</span>
-                              </label>
-                              
-                              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                  <table className="w-full text-sm">
-                                      <thead className="bg-slate-50 border-b border-slate-200">
-                                          <tr>
-                                              <th className="p-3 w-12 text-center">
-                                                  <input 
-                                                      type="checkbox" 
-                                                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                                                      onChange={handleSelectAll}
-                                                      checked={allBillableItems.length > 0 && selectedItems.length === allBillableItems.length}
-                                                  />
-                                              </th>
-                                              <th className="p-3 text-left font-bold text-slate-600">日期</th>
-                                              <th className="p-3 text-left font-bold text-slate-600">類別</th>
-                                              <th className="p-3 text-left font-bold text-slate-600">項目說明</th>
-                                              <th className="p-3 text-right font-bold text-slate-600">金額</th>
-                                          </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-100">
-                                          {allBillableItems.map((item) => (
-                                              <tr 
-                                                  key={item.id} 
-                                                  className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedItems.includes(item.id) ? 'bg-blue-50/30' : ''}`}
-                                                  onClick={() => handleSelectItem(item.id)}
-                                              >
-                                                  <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
-                                                      <input 
-                                                          type="checkbox" 
-                                                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                                                          checked={selectedItems.includes(item.id)}
-                                                          onChange={() => handleSelectItem(item.id)}
-                                                      />
-                                                  </td>
-                                                  <td className="p-3 text-slate-500">{item.date}</td>
-                                                  <td className="p-3">
-                                                      <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                          item.type === 'payment' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                                                      }`}>
-                                                          {item.category}
-                                                      </span>
-                                                  </td>
-                                                  <td className="p-3 font-medium text-slate-700">{item.desc}</td>
-                                                  <td className={`p-3 text-right font-mono font-bold ${item.amount < 0 ? 'text-red-500' : 'text-slate-700'}`}>
-                                                      {formatCurrency(item.amount)}
-                                                  </td>
-                                              </tr>
-                                          ))}
-                                          {allBillableItems.length === 0 && (
-                                              <tr>
-                                                  <td colSpan={5} className="p-8 text-center text-slate-400">
-                                                      此車輛暫無任何相關款項紀錄
-                                                  </td>
-                                              </tr>
-                                          )}
-                                      </tbody>
-                                  </table>
-                              </div>
-                          </div>
+                          <div className="space-y-3"><label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">3. 選擇包含款項 (Select Items) <span className="text-slate-400 font-normal ml-2 text-xs">已選 {selectedItems.length} 項</span></label><div className="border border-slate-200 rounded-xl overflow-hidden"><table className="w-full text-sm"><thead className="bg-slate-50 border-b border-slate-200"><tr><th className="p-3 w-12 text-center"><input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" onChange={handleSelectAll} checked={allBillableItems.length > 0 && selectedItems.length === allBillableItems.length}/></th><th className="p-3 text-left font-bold text-slate-600">日期</th><th className="p-3 text-left font-bold text-slate-600">類別</th><th className="p-3 text-left font-bold text-slate-600">項目說明</th><th className="p-3 text-right font-bold text-slate-600">金額</th></tr></thead><tbody className="divide-y divide-slate-100">{allBillableItems.map((item) => (<tr key={item.id} className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedItems.includes(item.id) ? 'bg-blue-50/30' : ''}`} onClick={() => handleSelectItem(item.id)}><td className="p-3 text-center" onClick={e => e.stopPropagation()}><input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" checked={selectedItems.includes(item.id)} onChange={() => handleSelectItem(item.id)}/></td><td className="p-3 text-slate-500">{item.date}</td><td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${item.type === 'payment' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{item.category}</span></td><td className="p-3 font-medium text-slate-700">{item.desc}</td><td className={`p-3 text-right font-mono font-bold ${item.amount < 0 ? 'text-red-500' : 'text-slate-700'}`}>{formatCurrency(item.amount)}</td></tr>))} {allBillableItems.length === 0 && (<tr><td colSpan={5} className="p-8 text-center text-slate-400">此車輛暫無任何相關款項紀錄</td></tr>)}</tbody></table></div></div>
                       )}
-
-                      {/* Action Button */}
-                      <div className="pt-6 border-t border-slate-100 flex justify-end">
-                          <button 
-                              onClick={handlePrintDoc}
-                              disabled={docType !== 'sales_contract' && selectedItems.length === 0}
-                              className={`
-                                  px-8 py-3 rounded-lg font-bold flex items-center shadow-lg transition-all transform active:scale-95
-                                  ${(docType !== 'sales_contract' && selectedItems.length === 0) 
-                                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
-                                      : 'bg-gradient-to-r from-slate-900 to-slate-800 text-white hover:from-slate-800 hover:to-slate-700'}
-                              `}
-                          >
-                              <Printer className="mr-2" size={20} />
-                              產生並預覽 PDF
-                          </button>
-                      </div>
+                      <div className="pt-6 border-t border-slate-100 flex justify-end"><button onClick={handlePrintDoc} disabled={docType !== 'sales_contract' && selectedItems.length === 0} className={`px-8 py-3 rounded-lg font-bold flex items-center shadow-lg transition-all transform active:scale-95 ${(docType !== 'sales_contract' && selectedItems.length === 0) ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-slate-900 to-slate-800 text-white hover:from-slate-800 hover:to-slate-700'}`}><Printer className="mr-2" size={20} /> 產生並預覽 PDF</button></div>
                   </>
               )}
           </div>
