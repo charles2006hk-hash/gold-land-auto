@@ -2275,9 +2275,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           {activeTab === 'settings' && <div className="flex-1 overflow-y-auto"><SettingsManager /></div>}
 
           {/* Create Doc Tab */}
-          {activeTab === 'create_doc' && <CreateDocModule />(
-            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in flex-1 overflow-y-auto"><h2 className="text-xl font-bold text-slate-800 mb-4">開立合約 / 文件</h2>{!selectedVehicle ? (<div className="text-center p-12 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50"><p className="text-gray-500 mb-4">請先從「車輛管理」頁面選擇一輛車來開單。</p><button onClick={() => setActiveTab('inventory')} className="px-6 py-2 bg-slate-800 text-white rounded hover:bg-slate-700">前往選擇車輛</button></div>) : (/* Legacy Create Doc UI */ <div>Please use Inventory Edit to create docs.</div>)}</div>
-          )}
+          {/* Create Doc Tab */}
+          {activeTab === 'create_doc' && <CreateDocModule />}
         </div>
       </main>
     </div>
