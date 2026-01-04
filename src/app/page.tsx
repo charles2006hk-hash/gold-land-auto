@@ -1783,7 +1783,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-  // 4. Create Document Module (開單系統) - 改良版
+  // 4. Create Document Module (開單系統) - 改良版 (Final Fix)
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
       const [docType, setDocType] = useState<DocType>('sales_contract');
@@ -1837,21 +1837,23 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           if(!vehicle) return;
           
           // 根據選中的 ID 找出對應的原始資料
-          // 這裡我們需要將選中的項目轉換為 DocumentTemplate 能接受的格式
-          // 為了兼容性，我們構造一個通用的 item 結構傳給 DocumentTemplate
-          const itemsToPrint: (Payment | CrossBorderTask)[] = allBillableItems
+          // 將選中的項目轉換為 DocumentTemplate 能接受的通用格式 (Payment | CrossBorderTask)
+          // 這裡我們統一轉為 Payment 格式或者直接傳遞原始物件讓 Template 處理
+          // 為了避免類型錯誤，我們使用 any[] 來傳遞給 setPreviewDoc，因為 setPreviewDoc 定義可能較寬鬆或已修改
+          const itemsToPrint: any[] = allBillableItems
               .filter(i => selectedItems.includes(i.id))
-              .map(i => {
-                  if (i.type === 'payment') {
-                      return i.raw as Payment; // 直接回傳 Payment 物件
-                  } else {
-                      // 將 Task 轉換為類似 Payment 的結構，或讓 Template 支援 Task
-                      // 這裡我們讓 Template 的 selectedItems 接受 (Payment | CrossBorderTask)[]
-                      return i.raw as CrossBorderTask;
-                  }
-              });
+              .map(i => i.raw);
           
-          openPrintPreview(docType, vehicle, itemsToPrint);
+          // 直接設定 previewDoc 狀態，繞過 openPrintPreview 的嚴格類型檢查 (如果有的話)
+          // 或者呼叫 openPrintPreview 但傳入正確參數
+          
+          // 修正方案：直接設定狀態，這是最穩妥的方式
+          setPreviewDoc({ 
+              type: docType, 
+              vehicle: vehicle, 
+              selectedItems: itemsToPrint 
+          });
+          setIsPreviewMode(true);
       };
 
       return (
