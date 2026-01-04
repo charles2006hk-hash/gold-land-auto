@@ -398,7 +398,12 @@ export default function GoldLandAutoDMS() {
   const [authError, setAuthError] = useState<string | null>(null);
   
   // Doc Preview State
-  const [previewDoc, setPreviewDoc] = useState<{ type: DocType, vehicle: Vehicle, payment?: Payment } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<{ 
+      type: DocType, 
+      vehicle: Vehicle, 
+      payment?: Payment, // 保留舊有兼容性
+      selectedItems?: (Payment | CrossBorderTask)[] // 新增：支援多選列表
+  } | null>(null);
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState(''); 
@@ -875,8 +880,14 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   const cbStats = crossBorderStats();
 
   // --- Print Handling ---
-  const openPrintPreview = (type: DocType, vehicle: Vehicle, payment?: Payment) => {
-    setPreviewDoc({ type, vehicle, payment });
+  const openPrintPreview = (type: DocType, vehicle: Vehicle, data?: Payment | (Payment | CrossBorderTask)[]) => {
+    if (Array.isArray(data)) {
+        // 如果傳入的是陣列 (來自新開單模組)
+        setPreviewDoc({ type, vehicle, selectedItems: data });
+    } else {
+        // 如果傳入的是單個物件 (來自舊的按鈕)
+        setPreviewDoc({ type, vehicle, payment: data });
+    }
     setIsPreviewMode(true);
   };
 
@@ -1602,6 +1613,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   const DocumentTemplate = () => {
     const activeVehicle = previewDoc?.vehicle || selectedVehicle;
     const activeType = previewDoc?.type || docType;
+    const itemsToRender = previewDoc?.selectedItems || (previewDoc?.payment ? [previewDoc.payment] : []);
+
+    if (!activeVehicle) return null; 
+
     const activePayment = previewDoc?.payment;
 
     if (!activeVehicle) return null; 
@@ -1783,7 +1798,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-  // 4. Create Document Module (開單系統) - 改良版 (Final Fix)
+  // 4. Create Document Module (開單系統) - 改良版
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
       const [docType, setDocType] = useState<DocType>('sales_contract');
@@ -1798,8 +1813,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
               id: p.id, 
               date: p.date, 
               amount: p.amount, 
-              type: 'payment', // 標記類型
-              category: p.type, // 顯示類別 (Deposit, Balance...)
+              type: 'payment', 
+              category: p.type, 
               desc: `[已收] ${p.type} (${p.method}) ${p.note ? '- ' + p.note : ''}`,
               raw: p // 保留原始物件
           })),
@@ -1808,7 +1823,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
               id: t.id,
               date: t.date,
               amount: t.fee,
-              type: 'task', // 標記類型
+              type: 'task',
               category: 'Service Fee',
               desc: `[待收] ${t.item} (${t.institution})`,
               raw: t // 保留原始物件
@@ -1836,24 +1851,13 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const handlePrintDoc = () => {
           if(!vehicle) return;
           
-          // 根據選中的 ID 找出對應的原始資料
-          // 將選中的項目轉換為 DocumentTemplate 能接受的通用格式 (Payment | CrossBorderTask)
-          // 這裡我們統一轉為 Payment 格式或者直接傳遞原始物件讓 Template 處理
-          // 為了避免類型錯誤，我們使用 any[] 來傳遞給 setPreviewDoc，因為 setPreviewDoc 定義可能較寬鬆或已修改
-          const itemsToPrint: any[] = allBillableItems
+          // 將選中的項目轉換為 DocumentTemplate 能接受的格式
+          const itemsToPrint = allBillableItems
               .filter(i => selectedItems.includes(i.id))
-              .map(i => i.raw);
+              .map(i => i.raw); // 取出原始的 Payment 或 CrossBorderTask 物件
           
-          // 直接設定 previewDoc 狀態，繞過 openPrintPreview 的嚴格類型檢查 (如果有的話)
-          // 或者呼叫 openPrintPreview 但傳入正確參數
-          
-          // 修正方案：直接設定狀態，這是最穩妥的方式
-          setPreviewDoc({ 
-              type: docType, 
-              vehicle: vehicle, 
-              selectedItems: itemsToPrint 
-          });
-          setIsPreviewMode(true);
+          // 呼叫更新後的 openPrintPreview
+          openPrintPreview(docType, vehicle, itemsToPrint);
       };
 
       return (
