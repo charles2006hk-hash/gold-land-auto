@@ -232,6 +232,12 @@ const DEFAULT_SETTINGS: SystemSettings = {
   cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸', '港珠澳大橋口岸']
 };
 
+// ★★★ 修改：重新定義口岸分類 ★★★
+const PORTS_HK_GD = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
+const PORTS_MO_GD = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
+// 合併所有口岸以供資料讀取使用
+const ALL_CB_PORTS = [...PORTS_HK_GD, ...PORTS_MO_GD];
+
 const AVAILABLE_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '大橋'];
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
@@ -774,6 +780,14 @@ export default function GoldLandAutoDMS() {
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
     setSortConfig({ key, direction });
   };
+ 
+  // ★★★ 新增：標籤判斷函數 ★★★
+  const getCbTags = (ports: string[] = []) => {
+    const tags = [];
+    if (ports && ports.some(p => PORTS_HK_GD.includes(p))) tags.push({label: '粵港', color: 'bg-blue-100 text-blue-700 border-blue-200'});
+    if (ports && ports.some(p => PORTS_MO_GD.includes(p))) tags.push({label: '粵澳', color: 'bg-green-100 text-green-700 border-green-200'});
+    return tags;
+  };
 
   const getSortedInventory = () => {
     let sorted = [...inventory];
@@ -1058,20 +1072,35 @@ export default function GoldLandAutoDMS() {
                     
                     {/* 口岸選擇 (多選) */}
                     <div className="md:col-span-4 border-t border-blue-200 mt-2 pt-2">
-                        <label className="text-[10px] text-blue-800 font-bold block mb-1">通行口岸 (Ports - Select multiple)</label>
-                        <div className="flex flex-wrap gap-3">
-                            {AVAILABLE_PORTS.map(port => (
-                                <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
-                                    <input 
-                                        type="checkbox" 
-                                        name={`cb_port_${port}`} 
-                                        defaultChecked={v.crossBorder?.ports?.includes(port)} 
-                                        className="mr-1 w-3 h-3"
-                                    />
-                                    {port}
-                                </label>
-                            ))}
-                        </div>
+                      <label className="text-[10px] text-blue-800 font-bold block mb-1">粵港口岸 (HK-GD Ports)</label>
+                      <div className="flex flex-wrap gap-3">
+                        {PORTS_HK_GD.map(port => (
+                            <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
+                                <input 
+                                    type="checkbox" 
+                                    name={`cb_port_${port}`} 
+                                    defaultChecked={v.crossBorder?.ports?.includes(port)} 
+                                    className="mr-1 w-3 h-3"
+                                />
+                                {port}
+                            </label>
+                        ))}
+                      </div>
+                    
+                      <label className="text-[10px] text-blue-800 font-bold block mb-1 mt-2">粵澳口岸 (MO-GD Ports)</label>
+                      <div className="flex flex-wrap gap-3">
+                        {PORTS_MO_GD.map(port => (
+                            <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
+                                <input 
+                                    type="checkbox" 
+                                    name={`cb_port_${port}`} 
+                                    defaultChecked={v.crossBorder?.ports?.includes(port)} 
+                                    className="mr-1 w-3 h-3"
+                                />
+                                {port}
+                            </label>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="md:col-span-4 border-t border-blue-200 my-2"></div>
@@ -1851,24 +1880,46 @@ export default function GoldLandAutoDMS() {
                       const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                       const balance = (car.price || 0) - received;
                       
-                      return (
-                        <tr key={car.id} className="border-b hover:bg-gray-50">
-                          <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
-                          <td className="p-3"><span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></td>
-                          <td className="p-3 font-medium">{car.regMark}</td>
-                          <td className="p-3">
-                              {car.year} {car.make} {car.model}
-                              {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
-                          </td>
-                          <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
-                          <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
-                          <td className="p-3 text-right">
-                              {unpaidExps > 0 && <span className="text-red-500 text-xs font-bold block">{unpaidExps} 筆未付</span>}
-                              {balance > 0 && car.status !== 'In Stock' && <span className="text-blue-500 text-xs font-bold block">欠款 {formatCurrency(balance)}</span>}
-                              {unpaidExps === 0 && (balance <= 0 || car.status === 'In Stock') && <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}
-                          </td>
-                        </tr>
-                      );
+                      const cbTags = getCbTags(car.crossBorder?.ports); // 獲取標籤
+                      
+                  return (
+                    <tr key={car.id} className="border-b hover:bg-gray-50">
+                      {/* ... (前面的欄位) ... */}
+                      <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
+                      <td className="p-3">
+                          <span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
+                      </td>
+
+                      {/* ★★★ 修改：車牌欄位加入標籤 ★★★ */}
+                      <td className="p-3 font-medium">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+                              <span>{car.regMark || '未出牌'}</span>
+                              <div className="flex gap-1">
+                                {car.crossBorder?.isEnabled && cbTags.map(tag => (
+                                    <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color} whitespace-nowrap`}>
+                                        {tag.label}
+                                    </span>
+                                ))}
+                                {/* 若有啟用但沒選口岸，顯示預設地球 */}
+                                {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={12} className="text-blue-500"/>}
+                              </div>
+                          </div>
+                      </td>
+                      
+                      {/* ... (後面的欄位) ... */}
+                      <td className="p-3">
+                          {car.year} {car.make} {car.model}
+                          {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
+                      </td>
+                      <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
+                      <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
+                      <td className="p-3 text-right">
+                          {unpaidExps > 0 && <span className="text-red-500 text-xs font-bold block">{unpaidExps} 筆未付</span>}
+                          {balance > 0 && car.status !== 'In Stock' && <span className="text-blue-500 text-xs font-bold block">欠款 {formatCurrency(balance)}</span>}
+                          {unpaidExps === 0 && (balance <= 0 || car.status === 'In Stock') && <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}
+                      </td>
+                    </tr>
+                  );
                   });
 
                   return (
@@ -1953,7 +2004,42 @@ export default function GoldLandAutoDMS() {
               {/* Grid Container - 捲動區域 */}
               <div className="flex-1 overflow-y-auto min-h-0 pr-1">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                    {getSortedInventory().map((car) => { const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; const balance = (car.price || 0) - received; return (<div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative"><div className="flex justify-between items-start"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span><span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span></div><p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>{(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}</div><div className="text-right flex flex-col items-end"><span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span><div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button><button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button></div></div></div></div>)})}
+                     {getSortedInventory().map((car) => { 
+                    const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
+                    const balance = (car.price || 0) - received; 
+                    
+                    // ★★★ 獲取標籤 ★★★
+                    const cbTags = getCbTags(car.crossBorder?.ports);
+
+                    return (
+                    <div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative">
+                        <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                                {/* ★★★ 修改：標題列加入標籤 ★★★ */}
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                    <span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
+                                    
+                                    {car.crossBorder?.isEnabled && cbTags.map(tag => (
+                                        <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color}`}>
+                                            {tag.label}
+                                        </span>
+                                    ))}
+                                    {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={14} className="text-blue-500"/>}
+                                </div>
+                                <p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>
+                                {(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}
+                            </div>
+                            <div className="text-right flex flex-col items-end">
+                                <span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span>
+                                <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button>
+                                    <button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    )})}
                 </div>
               </div>
             </div>
