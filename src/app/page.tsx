@@ -1648,7 +1648,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         </div>
     );
 
-    // ★★★ 修改重點：Invoice / Receipt 渲染邏輯 ★★★
+    // ★★★ 修改重點：Invoice / Receipt 渲染邏輯 (支援多筆項目) ★★★
     return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-black">
             <Header 
@@ -1727,7 +1727,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             {/* 新增：備註區間 */}
             <div className="mt-6 mb-8">
                 <div className="text-xs font-bold text-gray-500 mb-1">Remarks (備註):</div>
-                <div className="border border-gray-300 rounded p-2 h-20 bg-gray-50"></div>
+                <div className="border border-gray-300 rounded p-2 h-20 bg-gray-50" contentEditable={true}></div>
             </div>
 
             <div className="mt-12 relative">
