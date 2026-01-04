@@ -980,7 +980,9 @@ export default function GoldLandAutoDMS() {
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
     
-    const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
+    //const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
+    const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
+
 
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
@@ -1332,12 +1334,11 @@ export default function GoldLandAutoDMS() {
     );
   };
 
-  // 2. Cross Border View
+  // 2. Cross Border View (中港車管家)
   const CrossBorderView = () => {
       const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
       const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
       
-      // 表單狀態
       const [newTask, setNewTask] = useState<Partial<CrossBorderTask>>({
           date: new Date().toISOString().split('T')[0],
           item: '',
@@ -1349,14 +1350,17 @@ export default function GoldLandAutoDMS() {
           note: ''
       });
 
-      // 新增：編輯模式狀態
+      // 編輯模式狀態
       const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
-      // 支付彈窗狀態
+      // 快速收款彈窗狀態
       const [paymentModalTask, setPaymentModalTask] = useState<CrossBorderTask | null>(null);
       const [quickPayMethod, setQuickPayMethod] = useState<'Cash'|'Cheque'|'Transfer'>('Cash');
 
-      // 新增任務
+      // 計算總費用
+      const totalFees = activeVehicle?.crossBorder?.tasks?.reduce((sum, task) => sum + (task.fee || 0), 0) || 0;
+      
+
       const handleAddTask = () => {
           if (!activeCbVehicleId || !newTask.item) return;
           const task: CrossBorderTask = {
@@ -1372,10 +1376,9 @@ export default function GoldLandAutoDMS() {
               isPaid: false
           };
           addCbTask(activeCbVehicleId, task);
-          setNewTask({ ...newTask, fee: 0, note: '' }); // 重置表單
+          setNewTask({ ...newTask, fee: 0, note: '' });
       };
 
-      // 修改：更新任務邏輯
       const handleUpdateTask = () => {
         if (!activeCbVehicleId || !editingTaskId) return;
         
@@ -1394,11 +1397,10 @@ export default function GoldLandAutoDMS() {
             isPaid: existingTask?.isPaid || false
         };
         updateCbTask(activeCbVehicleId, updatedTask);
-        setEditingTaskId(null); // 退出編輯模式
-        setNewTask({ ...newTask, fee: 0, note: '' }); // 重置表單
+        setEditingTaskId(null);
+        setNewTask({ ...newTask, fee: 0, note: '' });
       };
 
-      // 修改：點擊編輯按鈕
       const handleEditClick = (task: CrossBorderTask) => {
           setEditingTaskId(task.id);
           setNewTask({
@@ -1440,13 +1442,13 @@ export default function GoldLandAutoDMS() {
               <div className="flex justify-between items-center flex-none">
                   <h2 className="text-xl font-bold text-slate-800 flex items-center"><Globe className="mr-2"/> 中港車管家 (Cross-Border Manager)</h2>
                   <div className="flex gap-2">
-                      {renderCard("總車輛", cbStats.total, "border-blue-500")}
-                      {renderCard("已過期", cbStats.expired, "border-red-500")}
-                      {renderCard("即將到期", cbStats.soon, "border-yellow-500")}
+                      {renderCard("總車輛", cbStatsVal.total, "border-blue-500")}
+                      {renderCard("已過期", cbStatsVal.expired, "border-red-500")}
+                      {renderCard("即將到期", cbStatsVal.soon, "border-yellow-500")}
                   </div>
               </div>
 
-              {/* 上方車輛列表 (保持不變) */}
+              {/* TOP SECTION: Vehicle List */}
               <div className="bg-white rounded-lg shadow-sm overflow-hidden flex-none max-h-[40vh] flex flex-col border">
                   <div className="overflow-x-auto flex-1">
                       <table className="w-full text-left text-sm whitespace-nowrap relative">
@@ -1499,7 +1501,7 @@ export default function GoldLandAutoDMS() {
                   </div>
               </div>
 
-              {/* 下方流程列表與操作區 */}
+              {/* BOTTOM SECTION: Tasks & Fees */}
               <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col min-h-0 border overflow-hidden">
                   <div className="flex justify-between items-center mb-4 flex-none border-b pb-2">
                       <h3 className="font-bold flex items-center text-slate-800">
@@ -1508,7 +1510,8 @@ export default function GoldLandAutoDMS() {
                       </h3>
                       {activeVehicle && (
                           <div className="text-xs text-gray-500">
-                              共 {(activeVehicle.crossBorder?.tasks || []).length} 項記錄
+                              {/* 修改：加上總費用顯示 */}
+                              共 {(activeVehicle.crossBorder?.tasks || []).length} 項記錄，總費用: <span className="font-bold text-blue-600 ml-1">{formatCurrency(totalFees)}</span>
                           </div>
                       )}
                   </div>
@@ -1540,7 +1543,7 @@ export default function GoldLandAutoDMS() {
                                           <td className="p-2 border text-gray-500">{task.institution}</td>
                                           <td className="p-2 border text-gray-500">{task.handler}</td>
                                           <td className="p-2 border text-center">{task.days}</td>
-                                          {/* 修改：費用顯示邏輯 */}
+                                          {/* 修改：費用為 0 顯示為空字串，負數顯示紅色 */}
                                           <td className="p-2 border text-right font-mono font-bold">
                                               {(task.fee && task.fee !== 0) ? (
                                                   <div className="flex items-center justify-end gap-2">
@@ -1558,10 +1561,9 @@ export default function GoldLandAutoDMS() {
                                                       )}
                                                       {isPaid && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded">已收</span>}
                                                   </div>
-                                              ) : '-'}
+                                              ) : ''}
                                           </td>
                                           <td className="p-2 border text-gray-500 text-xs max-w-xs truncate">{task.note}</td>
-                                          {/* 修改：操作欄增加編輯按鈕 */}
                                           <td className="p-2 border text-center flex items-center justify-center gap-2">
                                               <button onClick={() => handleEditClick(task)} className="text-blue-400 hover:text-blue-600"><Edit size={14}/></button>
                                               <button onClick={() => deleteCbTask(activeVehicle.id, task.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
@@ -1571,7 +1573,7 @@ export default function GoldLandAutoDMS() {
                               </tbody>
                           </table>
 
-                          {/* 輸入表單區 */}
+                          {/* Add/Edit Task Form */}
                           <div className="bg-blue-50 p-3 rounded grid grid-cols-8 gap-2 items-end">
                               <div className="col-span-1">
                                   <label className="text-[10px] text-blue-800">日期</label>
@@ -1599,12 +1601,10 @@ export default function GoldLandAutoDMS() {
                                   <label className="text-[10px] text-blue-800">收費 (待收)</label>
                                   <div className="flex">
                                       <select value={newTask.currency} onChange={e => setNewTask({...newTask, currency: e.target.value as any})} className="border p-1 rounded-l text-xs bg-gray-100"><option>HKD</option><option>RMB</option></select>
-                                      {/* 修改：允許負數輸入 */}
                                       <input 
                                           type="text" 
                                           value={newTask.fee} 
                                           onChange={e => {
-                                              // 簡單的正則過濾，允許數字和負號
                                               const val = e.target.value.replace(/[^0-9.-]/g, '');
                                               setNewTask({...newTask, fee: Number(val) || 0})
                                           }}
@@ -1618,7 +1618,6 @@ export default function GoldLandAutoDMS() {
                                   <input value={newTask.note} onChange={e => setNewTask({...newTask, note: e.target.value})} className="w-full border p-1 rounded text-xs"/>
                               </div>
                               <div className="col-span-1">
-                                  {/* 修改：根據狀態顯示不同按鈕 */}
                                   {editingTaskId ? (
                                     <div className="flex gap-1">
                                         <button onClick={handleUpdateTask} className="flex-1 bg-green-600 text-white p-1.5 rounded text-xs hover:bg-green-700 flex items-center justify-center font-bold shadow-sm"><RefreshCw size={14}/></button>
