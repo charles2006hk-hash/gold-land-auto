@@ -1505,16 +1505,18 @@ export default function GoldLandAutoDMS() {
               <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col min-h-0 border overflow-hidden">
                   <div className="flex justify-between items-center mb-4 flex-none border-b pb-2">
                       <h3 className="font-bold flex items-center text-slate-800">
-                          <CheckSquare className="mr-2 text-blue-600"/> 
-                          {activeVehicle ? `${activeVehicle.regMark} - 辦理流程與收費 (Service & Fees)` : '請在上表選擇車輛以管理流程'}
+                            <CheckSquare className="mr-2 text-blue-600"/> 
+                            {activeVehicle ? `${activeVehicle.regMark} - 辦理流程與收費 (Service & Fees)` : '請在上表選擇車輛以管理流程'}
                       </h3>
                       {activeVehicle && (
                           <div className="text-xs text-gray-500">
-                              {/* 修改：加上總費用顯示 */}
-                              共 {(activeVehicle.crossBorder?.tasks || []).length} 項記錄，總費用: <span className="font-bold text-blue-600 ml-1">{formatCurrency(totalFees)}</span>
+                          共 {(activeVehicle.crossBorder?.tasks || []).length} 項記錄，
+                          {/* 新增總費用顯示 */}
+                          總費用: <span className={`font-bold ml-1 ${totalFees < 0 ? 'text-red-600' : 'text-blue-600'}`}>{formatCurrency(totalFees)}</span>
                           </div>
-                      )}
+                        )}
                   </div>
+                  
 
                   {activeVehicle ? (
                       <div className="flex-1 overflow-y-auto">
