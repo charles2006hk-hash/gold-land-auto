@@ -1839,7 +1839,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           // 根據選中的 ID 找出對應的原始資料
           // 這裡我們需要將選中的項目轉換為 DocumentTemplate 能接受的格式
           // 為了兼容性，我們構造一個通用的 item 結構傳給 DocumentTemplate
-          const itemsToPrint = allBillableItems
+          const itemsToPrint: (Payment | CrossBorderTask)[] = allBillableItems
               .filter(i => selectedItems.includes(i.id))
               .map(i => {
                   if (i.type === 'payment') {
