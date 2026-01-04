@@ -529,23 +529,22 @@ export default function GoldLandAutoDMS() {
 
   // --- CRUD Actions ---
 
-  const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
+const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !staffId) return;
     const formData = new FormData(e.currentTarget);
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
+    // ... (其他欄位獲取保持不變) ...
     const status = formData.get('status') as any;
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
     const mileageRaw = formData.get('mileage') as string;
-    
     const priceA1Raw = formData.get('priceA1') as string;
     const priceTaxRaw = formData.get('priceTax') as string;
     const valA1 = Number(priceA1Raw.replace(/,/g, '') || 0);
     const valTax = Number(priceTaxRaw.replace(/,/g, '') || 0);
     const valRegistered = valA1 + valTax;
-
     const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
     const engineSizeRaw = formData.get('engineSize') as string;
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
@@ -554,8 +553,9 @@ export default function GoldLandAutoDMS() {
     // Cross Border Data Capture
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
+    // ★★★ 關鍵修正：確保遍歷所有口岸 (ALL_CB_PORTS) ★★★
     const selectedPorts: string[] = [];
-    AVAILABLE_PORTS.forEach(port => {
+    ALL_CB_PORTS.forEach(port => {
         if (formData.get(`cb_port_${port}`) === 'on') {
             selectedPorts.push(port);
         }
@@ -569,7 +569,7 @@ export default function GoldLandAutoDMS() {
         driver3: formData.get('cb_driver3') as string || '',
         insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
         quotaNumber: formData.get('cb_quotaNumber') as string || '',
-        ports: selectedPorts,
+        ports: selectedPorts, // 這裡會儲存正確勾選的口岸
         dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
         dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
         dateBr: formData.get('cb_dateBr') as string || '',
@@ -596,32 +596,26 @@ export default function GoldLandAutoDMS() {
       licenseExpiry: formData.get('licenseExpiry') || '',
       price: Number(priceRaw.replace(/,/g, '')),
       costPrice: Number(costPriceRaw.replace(/,/g, '') || 0),
-      
       previousOwners: formData.get('previousOwners') || '', 
       mileage: Number(mileageRaw.replace(/,/g, '') || 0), 
       remarks: formData.get('remarks') || '', 
-      
       seating: Number(formData.get('seating') || 5), 
       priceA1: valA1,
       priceTax: valTax,
       priceRegistered: valRegistered,
-
       fuelType: fuelType,
       engineSize: engineSize,
       licenseFee: licenseFee,
-
       customerName: formData.get('customerName') as string,
       customerPhone: formData.get('customerPhone') as string,
       customerID: formData.get('customerID') as string,
       customerAddress: formData.get('customerAddress') as string,
-
       status: status,
       stockInDate: formData.get('stockInDate'),
       stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
       expenses: editingVehicle?.expenses || [], 
       payments: editingVehicle?.payments || [], 
       updatedAt: serverTimestamp(),
-
       crossBorder: crossBorderData
     };
 
@@ -644,7 +638,6 @@ export default function GoldLandAutoDMS() {
       }
     } catch (e) { alert('儲存失敗'); console.error(e); }
   };
-
   const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
     if (confirm('確定刪除？資料將無法復原。')) {
@@ -1880,46 +1873,42 @@ export default function GoldLandAutoDMS() {
                       const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                       const balance = (car.price || 0) - received;
                       
-                      const cbTags = getCbTags(car.crossBorder?.ports); // 獲取標籤
+                      // ★★★ 獲取標籤 ★★★
+                      const cbTags = getCbTags(car.crossBorder?.ports);
                       
-                  return (
-                    <tr key={car.id} className="border-b hover:bg-gray-50">
-                      {/* ... (前面的欄位) ... */}
-                      <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
-                      <td className="p-3">
-                          <span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
-                      </td>
-
-                      {/* ★★★ 修改：車牌欄位加入標籤 ★★★ */}
-                      <td className="p-3 font-medium">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-1">
-                              <span>{car.regMark || '未出牌'}</span>
-                              <div className="flex gap-1">
-                                {car.crossBorder?.isEnabled && cbTags.map(tag => (
-                                    <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color} whitespace-nowrap`}>
-                                        {tag.label}
-                                    </span>
-                                ))}
-                                {/* 若有啟用但沒選口岸，顯示預設地球 */}
-                                {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={12} className="text-blue-500"/>}
+                      return (
+                        <tr key={car.id} className="border-b hover:bg-gray-50">
+                          <td className="p-3 text-gray-500 text-xs">{car.stockInDate || 'N/A'}</td>
+                          <td className="p-3">
+                              <span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
+                          </td>
+                          {/* ★★★ 修正點：在車牌旁顯示標籤 ★★★ */}
+                          <td className="p-3 font-medium">
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+                                  <span>{car.regMark || '未出牌'}</span>
+                                  <div className="flex gap-1">
+                                    {car.crossBorder?.isEnabled && cbTags.map(tag => (
+                                        <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color} whitespace-nowrap`}>
+                                            {tag.label}
+                                        </span>
+                                    ))}
+                                    {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={12} className="text-blue-500"/>}
+                                  </div>
                               </div>
-                          </div>
-                      </td>
-                      
-                      {/* ... (後面的欄位) ... */}
-                      <td className="p-3">
-                          {car.year} {car.make} {car.model}
-                          {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
-                      </td>
-                      <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
-                      <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
-                      <td className="p-3 text-right">
-                          {unpaidExps > 0 && <span className="text-red-500 text-xs font-bold block">{unpaidExps} 筆未付</span>}
-                          {balance > 0 && car.status !== 'In Stock' && <span className="text-blue-500 text-xs font-bold block">欠款 {formatCurrency(balance)}</span>}
-                          {unpaidExps === 0 && (balance <= 0 || car.status === 'In Stock') && <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}
-                      </td>
-                    </tr>
-                  );
+                          </td>
+                          <td className="p-3">
+                              {car.year} {car.make} {car.model}
+                              {car.engineSize ? <span className="text-xs text-gray-500 ml-1">({car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'})</span> : ''}
+                          </td>
+                          <td className="p-3 font-bold text-yellow-600">{formatCurrency(car.price)}</td>
+                          <td className="p-3 text-gray-500 text-xs">{car.licenseExpiry || '-'}</td>
+                          <td className="p-3 text-right">
+                              {unpaidExps > 0 && <span className="text-red-500 text-xs font-bold block">{unpaidExps} 筆未付</span>}
+                              {balance > 0 && car.status !== 'In Stock' && <span className="text-blue-500 text-xs font-bold block">欠款 {formatCurrency(balance)}</span>}
+                              {unpaidExps === 0 && (balance <= 0 || car.status === 'In Stock') && <span className="text-green-500 text-xs"><CheckCircle size={14} className="inline"/></span>}
+                          </td>
+                        </tr>
+                      );
                   });
 
                   return (
@@ -2004,42 +1993,43 @@ export default function GoldLandAutoDMS() {
               {/* Grid Container - 捲動區域 */}
               <div className="flex-1 overflow-y-auto min-h-0 pr-1">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                     {getSortedInventory().map((car) => { 
-                    const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
-                    const balance = (car.price || 0) - received; 
-                    
-                    // ★★★ 獲取標籤 ★★★
-                    const cbTags = getCbTags(car.crossBorder?.ports);
+                    {getSortedInventory().map((car) => { 
+                        const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
+                        const balance = (car.price || 0) - received; 
+                        
+                        // ★★★ 獲取標籤 ★★★
+                        const cbTags = getCbTags(car.crossBorder?.ports);
 
-                    return (
-                    <div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative">
-                        <div className="flex justify-between items-start">
-                            <div className="flex-1">
-                                {/* ★★★ 修改：標題列加入標籤 ★★★ */}
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                    <span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
-                                    
-                                    {car.crossBorder?.isEnabled && cbTags.map(tag => (
-                                        <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color}`}>
-                                            {tag.label}
-                                        </span>
-                                    ))}
-                                    {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={14} className="text-blue-500"/>}
+                        return (
+                        <div key={car.id} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative">
+                            <div className="flex justify-between items-start">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span>
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
+                                        
+                                        {/* ★★★ 修正點：顯示 [粵港] / [粵澳] 標籤 ★★★ */}
+                                        {car.crossBorder?.isEnabled && cbTags.map(tag => (
+                                            <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color}`}>
+                                                {tag.label}
+                                            </span>
+                                        ))}
+                                        {/* 如果啟用了但沒選口岸，才顯示地球 */}
+                                        {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={14} className="text-blue-500"/>}
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>
+                                    {(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}
                                 </div>
-                                <p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>
-                                {(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}
-                            </div>
-                            <div className="text-right flex flex-col items-end">
-                                <span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span>
-                                <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button>
-                                    <button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button>
+                                <div className="text-right flex flex-col items-end">
+                                    <span className="text-lg font-bold text-yellow-600">{formatCurrency(car.price)}</span>
+                                    <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => setEditingVehicle(car)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600" title="編輯/交易"><Edit size={14}/></button>
+                                        <button onClick={() => deleteVehicle(car.id)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500" title="刪除"><Trash2 size={14}/></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    )})}
+                        )})}
                 </div>
               </div>
             </div>
