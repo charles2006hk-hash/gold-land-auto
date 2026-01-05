@@ -237,16 +237,6 @@ type Customer = {
 
 type DocType = 'sales_contract' | 'purchase_contract' | 'invoice' | 'receipt';
 
-type DatabaseEntry = {
-    id: string;
-    category: string; // e.g., 'Customer', 'VehicleDoc', 'Driver', 'CrossBorder'
-    title: string; // e.g., '張三', 'GR802 牌簿'
-    description: string;
-    images: string[]; // Base64 strings, limited size
-    tags: string[];
-    relatedId?: string; // 關聯的車輛ID或其他ID (Optional)
-    createdAt: any;
-};
 
 const DEFAULT_SETTINGS: SystemSettings = {
   makes: ['Toyota', 'Honda', 'Mercedes-Benz', 'BMW', 'Tesla', 'Porsche', 'Audi'],
