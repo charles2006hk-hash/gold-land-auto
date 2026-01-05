@@ -747,6 +747,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   };
 
   const updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
+      // ★★★ 修正：確保 db 存在 ★★★
+      if (!db || !staffId) return;
+      
       const v = inventory.find(v => v.id === vehicleId);
       if (!v) return;
       const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === updatedTask.id ? updatedTask : t);
@@ -754,7 +757,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   };
   
   const deleteCbTask = async (vehicleId: string, taskId: string) => {
+      // ★★★ 修正：確保 db 存在 ★★★
       if (!db || !staffId) return;
+      
       const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
       const v = inventory.find(v => v.id === vehicleId);
       if (!v) return;
@@ -762,12 +767,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
       const newPayments = (v.payments || []).filter(p => p.relatedTaskId !== taskId);
 
+      // 這裡 db 已經確保不是 null
       await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
           crossBorder: { ...v.crossBorder, tasks: newTasks },
           payments: newPayments
       });
 
-      // Update local state
       if (editingVehicle && editingVehicle.id === vehicleId) {
           setEditingVehicle(prev => {
               if(!prev) return null;
@@ -1844,15 +1849,17 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
       const handleSave = async (e: React.FormEvent) => {
           e.preventDefault();
+          // ★★★ 修正：確保 db 存在 ★★★
           if (!db || !staffId || !editingEntry) return;
+          
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           
           try {
               if (editingEntry.id) {
                   await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id), { ...editingEntry, updatedAt: serverTimestamp() });
               } else {
-                  // 新增時不需要傳入 id，Firebase 會自動生成，但為了本地狀態更新，我們先用 addDoc 的回傳值
-                  const { id, ...dataToSave } = editingEntry; // 移除空 id
+                  // 移除 id 屬性以避免寫入空字串 ID
+                  const { id, ...dataToSave } = editingEntry; 
                   const newRef = await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), { ...dataToSave, createdAt: serverTimestamp() });
                   setEditingEntry({ ...editingEntry, id: newRef.id }); 
               }
@@ -1865,8 +1872,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       };
       
       const handleDelete = async (id: string) => {
+          // ★★★ 修正：確保 db 存在 ★★★
+          if (!db || !staffId) return;
+          
           if (!confirm('確定刪除此筆資料？無法復原。')) return;
-          const safeStaffId = staffId!.replace(/[^a-zA-Z0-9]/g, '_');
+          const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+          
           await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id));
           if (editingEntry?.id === id) { setEditingEntry(null); setIsEditing(false); }
       };
