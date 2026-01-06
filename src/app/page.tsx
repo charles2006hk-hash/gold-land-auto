@@ -717,12 +717,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
   // --- Sub-Item Management (FIXED: Updates Local State) ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder', newItems: any) => {
+    // ★★★ 修正：使用局部變數 currentDb ★★★
     if (!db || !staffId) return;
+    const currentDb = db;
+
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
 
-    let updateData = {};
+    let updateData: any = {}; // 這裡加了 any 避免類型推斷錯誤
     let newVehicleState = { ...v };
 
     if (field === 'crossBorder') {
@@ -730,10 +733,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         newVehicleState.crossBorder = { ...v.crossBorder!, tasks: newItems };
     } else {
         updateData = { [field]: newItems };
-        newVehicleState[field] = newItems;
+        newVehicleState[field] = newItems as any; // 強制轉型
     }
 
-    await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), updateData);
+    // 使用 currentDb
+    await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), updateData);
     
     if (editingVehicle && editingVehicle.id === vehicleId) {
         setEditingVehicle(prev => {
@@ -777,9 +781,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       updateSubItem(vehicleId, 'crossBorder', newTasks);
   };
 
-  const updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
-      // ★★★ 修正：確保 db 存在 ★★★
+  cconst updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
+      // ★★★ 修正：使用局部變數 currentDb ★★★
       if (!db || !staffId) return;
+      
+      // 注意：updateSubItem 內部也會用到 db，那裡也建議同樣修正，但這裡我們先確保這個函數本身不出錯
+      // 由於 updateSubItem 是封裝好的，這裡我們只要確保邏輯正確
       
       const v = inventory.find(v => v.id === vehicleId);
       if (!v) return;
@@ -788,8 +795,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   };
   
   const deleteCbTask = async (vehicleId: string, taskId: string) => {
-      // ★★★ 修正：確保 db 存在 ★★★
+      // ★★★ 修正：使用局部變數 currentDb ★★★
       if (!db || !staffId) return;
+      const currentDb = db; // 將全域 db 存為局部變數，確保它不是 null
       
       const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
       const v = inventory.find(v => v.id === vehicleId);
@@ -798,8 +806,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
       const newPayments = (v.payments || []).filter(p => p.relatedTaskId !== taskId);
 
-      // 這裡 db 已經確保不是 null
-      await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
+      // 使用 currentDb 替代 db
+      await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
           crossBorder: { ...v.crossBorder, tasks: newTasks },
           payments: newPayments
       });
@@ -1913,11 +1921,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           reader.readAsDataURL(file);
       };
 
-      const handleSave = async (e: React.FormEvent) => {
+      cconst handleSave = async (e: React.FormEvent) => {
           e.preventDefault();
-          // ★★★ 修正：確保 db 不為 null ★★★
+          // ★★★ 修正：使用局部變數 currentDb ★★★
           if (!db || !staffId || !editingEntry) return;
-          const currentDb = db; 
+          const currentDb = db; // 這裡捕捉了 db，它現在是 Firestore 類型，不再是 null
           
           // 自動生成標籤 (根據輸入內容)
           const autoTags = new Set(editingEntry.tags || []);
@@ -1929,7 +1937,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           const finalEntry = { 
               ...editingEntry, 
               tags: Array.from(autoTags),
-              // 清理 undefined 的欄位，避免 Firestore 報錯
+              // 清理 undefined 的欄位
               roles: editingEntry.roles || [],
               attachments: editingEntry.attachments || []
           };
@@ -1938,11 +1946,13 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           
           try {
               if (editingEntry.id) {
+                  // 使用 currentDb
                   const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
                   await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
               } else {
                   // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const { id, ...dataToSave } = finalEntry;
+                  // 使用 currentDb
                   const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
                   const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
                   setEditingEntry({ ...finalEntry, id: newRef.id }); 
@@ -1956,13 +1966,14 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       };
       
       const handleDelete = async (id: string) => {
-          // ★★★ 修正：確保 db 不為 null ★★★
+          // ★★★ 修正：使用局部變數 currentDb ★★★
           if (!db || !staffId) return;
           const currentDb = db;
 
           if (!confirm('確定刪除此筆資料？無法復原。')) return;
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           
+          // 使用 currentDb
           const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
           await deleteDoc(docRef);
           
