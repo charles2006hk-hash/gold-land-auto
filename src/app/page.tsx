@@ -1850,7 +1850,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-  // 5. Database Module (資料庫管理 - 增強版)
+  // 5. Database Module (資料庫管理 - 最終修復版)
   const DatabaseModule = () => {
       const [entries, setEntries] = useState<DatabaseEntry[]>([]);
       const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
@@ -1863,6 +1863,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       // 讀取資料庫
       useEffect(() => {
           if (!db || !staffId) return;
+          // ★★★ 修復：將 db 捕獲為局部變數，避免依賴 hook 閉包中的舊值 ★★★
           const currentDb = db; 
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
@@ -1872,11 +1873,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
               const list: DatabaseEntry[] = [];
               snapshot.forEach(doc => {
                   const data = doc.data();
-                  // 兼容舊資料：如果沒有 attachments 但有 images，轉換它
+                  // 兼容舊資料：轉換舊的 images 數組為 attachments
                   let attachments = data.attachments || [];
                   if (!attachments.length && data.images && Array.isArray(data.images)) {
                       attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
                   }
+                  
                   list.push({ 
                       id: doc.id, 
                       category: data.category || 'Person',
@@ -1944,6 +1946,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                   const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
                   await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
               } else {
+                  // 移除 id 以避免寫入空字串
                   // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const { id, ...dataToSave } = finalEntry;
                   const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
@@ -2051,7 +2054,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                   ) : (
                                       <>
                                           <button type="button" onClick={() => handleDelete(editingEntry.id)} className="p-2 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18}/></button>
-                                          {/* ★★★ 這裡確保了 type="button"，防止觸發 submit ★★★ */}
+                                          {/* ★★★ 修正點：type="button" 阻止自動提交 ★★★ */}
                                           <button type="button" onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center"><Edit size={16} className="mr-1"/> 編輯</button>
                                       </>
                                   )}
@@ -2067,7 +2070,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                               )}
                               
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                  {/* 左側：表單欄位 */}
                                   <div className="space-y-4">
                                       <div><label className="block text-xs font-bold text-slate-500">名稱</label><input disabled={!isEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded" placeholder="姓名/公司名"/></div>
                                       
@@ -2131,22 +2133,53 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                       </div>
                                   </div>
                                   
-                                  {/* 右側：圖片區域 */}
+                                  {/* 右側：圖片區域 (修正：恢復大圖預覽) */}
                                   <div className="space-y-4">
                                       <div className="flex justify-between">
                                           <label className="block text-xs font-bold text-slate-500">附件 ({editingEntry.attachments?.length || 0})</label>
                                           {isEditing && <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded hover:bg-blue-100"><Upload size={14} className="inline mr-1"/> 上傳<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>}
                                       </div>
-                                      <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto">
+                                      
+                                      {/* ★★★ 圖片顯示修正：改回大圖卡片樣式 ★★★ */}
+                                      <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-1">
                                           {editingEntry.attachments?.map((file, idx) => (
-                                              <div key={idx} className="border rounded p-2 flex items-center gap-2">
-                                                  <img src={file.data} className="w-12 h-12 object-cover rounded" />
-                                                  <div className="flex-1 min-w-0">
-                                                      {isEditing ? <input value={file.name} onChange={e => { const n = [...editingEntry.attachments]; n[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: n}); }} className="w-full text-xs border-b outline-none"/> : <div className="text-xs truncate">{file.name}</div>}
+                                              <div key={idx} className="relative group border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col">
+                                                  <div className="w-full bg-slate-100 relative">
+                                                      {/* 讓圖片高度自動，最大高度限制，確保不被拉伸 */}
+                                                      <img src={file.data} className="w-full h-auto max-h-64 object-contain mx-auto" />
+                                                      {isEditing && (
+                                                          <button 
+                                                              type="button"
+                                                              onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)}
+                                                              className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                                                              title="刪除"
+                                                          >
+                                                              <X size={14}/>
+                                                          </button>
+                                                      )}
                                                   </div>
-                                                  {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, attachments: editingEntry.attachments.filter((_, i) => i !== idx)})} className="text-red-500"><X size={14}/></button>}
+                                                  <div className="p-2 border-t bg-slate-50 text-xs text-slate-600 font-medium truncate flex items-center">
+                                                      <File size={12} className="mr-1.5 text-blue-500 flex-shrink-0"/>
+                                                      {isEditing ? (
+                                                          <input 
+                                                              value={file.name} 
+                                                              onChange={e => {
+                                                                  const newAttachments = [...editingEntry.attachments];
+                                                                  newAttachments[idx].name = e.target.value;
+                                                                  setEditingEntry({...editingEntry, attachments: newAttachments});
+                                                              }}
+                                                              className="w-full bg-transparent outline-none focus:border-b border-blue-300"
+                                                          />
+                                                      ) : file.name}
+                                                  </div>
                                               </div>
                                           ))}
+                                          {(!editingEntry.attachments || editingEntry.attachments.length === 0) && (
+                                              <div className="border-2 border-dashed border-slate-200 rounded-lg h-40 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/50">
+                                                  <ImageIcon size={32} className="mb-2 opacity-30"/>
+                                                  暫無附件
+                                              </div>
+                                          )}
                                       </div>
                                   </div>
                               </div>
@@ -2159,7 +2192,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           </div>
       );
   };
-
   // 4. Create Document Module (開單系統) - 最終修復版 (Layout Fixed)
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
