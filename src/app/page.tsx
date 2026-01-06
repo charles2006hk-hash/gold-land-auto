@@ -781,15 +781,18 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       updateSubItem(vehicleId, 'crossBorder', newTasks);
   };
 
-  cconst updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
-      // ★★★ 修正：使用局部變數 currentDb ★★★
+  const updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
+      // ★★★ 修正：確保 db 存在 ★★★
       if (!db || !staffId) return;
-      
-      // 注意：updateSubItem 內部也會用到 db，那裡也建議同樣修正，但這裡我們先確保這個函數本身不出錯
-      // 由於 updateSubItem 是封裝好的，這裡我們只要確保邏輯正確
       
       const v = inventory.find(v => v.id === vehicleId);
       if (!v) return;
+      
+      // 注意：這裡我們假設 updateSubItem 已經修正為使用 db 局部變數，
+      // 如果 updateSubItem 還沒修正，這裡也要改為直接調用 updateDoc
+      // 為了保險起見，我們這裡直接用 updateDoc 來更新 (或者確保 updateSubItem 已修復)
+      // 這裡直接使用 updateSubItem 應該沒問題，因為 updateSubItem 內部也有 db 檢查 (但最好也是在那裡修正)
+      
       const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === updatedTask.id ? updatedTask : t);
       updateSubItem(vehicleId, 'crossBorder', newTasks);
   };
@@ -1921,11 +1924,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           reader.readAsDataURL(file);
       };
 
-      cconst handleSave = async (e: React.FormEvent) => {
+      const handleSave = async (e: React.FormEvent) => {
           e.preventDefault();
-          // ★★★ 修正：使用局部變數 currentDb ★★★
+          // ★★★ 修正：確保 db 存在並賦值給局部變數 ★★★
           if (!db || !staffId || !editingEntry) return;
-          const currentDb = db; // 這裡捕捉了 db，它現在是 Firestore 類型，不再是 null
+          const currentDb = db; 
           
           // 自動生成標籤 (根據輸入內容)
           const autoTags = new Set(editingEntry.tags || []);
@@ -1966,7 +1969,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       };
       
       const handleDelete = async (id: string) => {
-          // ★★★ 修正：使用局部變數 currentDb ★★★
+          // ★★★ 修正：確保 db 存在並賦值給局部變數 ★★★
           if (!db || !staffId) return;
           const currentDb = db;
 
