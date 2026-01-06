@@ -1839,7 +1839,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-// 5. Database Module (資料庫管理 - 增強版)
+  // 5. Database Module (資料庫管理 - 增強版)
   const DatabaseModule = () => {
       const [entries, setEntries] = useState<DatabaseEntry[]>([]);
       const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
@@ -1853,9 +1853,13 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       // 讀取資料庫
       useEffect(() => {
           if (!db || !staffId) return;
-          const currentDb = db; // 抓取局部變數確保非 null
+          const currentDb = db; // Capture db locally
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-          const q = query(collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), orderBy('createdAt', 'desc'));
+          
+          // 使用 collection 函數時傳入 currentDb
+          const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+          const q = query(colRef, orderBy('createdAt', 'desc'));
+          
           const unsub = onSnapshot(q, (snapshot) => {
               const list: DatabaseEntry[] = [];
               snapshot.forEach(doc => {
@@ -1865,7 +1869,20 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                   if (!attachments.length && data.images && Array.isArray(data.images)) {
                       attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
                   }
-                  list.push({ id: doc.id, ...data, attachments } as DatabaseEntry);
+                  
+                  // 確保所有必要欄位存在，避免 undefined 錯誤
+                  list.push({ 
+                      id: doc.id, 
+                      category: data.category || 'Person',
+                      name: data.name || data.title || '', // 兼容舊欄位 title
+                      phone: data.phone || '',
+                      address: data.address || '',
+                      idNumber: data.idNumber || '',
+                      description: data.description || '',
+                      tags: data.tags || [],
+                      attachments: attachments,
+                      ...data // 覆蓋其他可能的欄位
+                  } as DatabaseEntry);
               });
               setEntries(list);
           });
@@ -1888,10 +1905,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
               const base64 = reader.result as string;
               setEditingEntry(prev => {
                   if (!prev) return null;
-                  return { 
-                      ...prev, 
-                      attachments: [...prev.attachments, { name: file.name, data: base64 }] 
-                  };
+                  const newAttachments = prev.attachments ? [...prev.attachments] : [];
+                  newAttachments.push({ name: file.name, data: base64 });
+                  return { ...prev, attachments: newAttachments };
               });
           };
           reader.readAsDataURL(file);
@@ -1899,28 +1915,36 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
       const handleSave = async (e: React.FormEvent) => {
           e.preventDefault();
-          // ★★★ 修正：檢查 db 並賦值給局部變數 currentDb ★★★
+          // ★★★ 修正：確保 db 不為 null ★★★
           if (!db || !staffId || !editingEntry) return;
           const currentDb = db; 
           
           // 自動生成標籤 (根據輸入內容)
-          const autoTags = new Set(editingEntry.tags);
+          const autoTags = new Set(editingEntry.tags || []);
           if(editingEntry.name) autoTags.add(editingEntry.name);
           if(editingEntry.plateNoHK) autoTags.add(editingEntry.plateNoHK);
           if(editingEntry.plateNoCN) autoTags.add(editingEntry.plateNoCN);
           if(editingEntry.quotaNo) autoTags.add(editingEntry.quotaNo);
-          const finalEntry = { ...editingEntry, tags: Array.from(autoTags) };
+          
+          const finalEntry = { 
+              ...editingEntry, 
+              tags: Array.from(autoTags),
+              // 清理 undefined 的欄位，避免 Firestore 報錯
+              roles: editingEntry.roles || [],
+              attachments: editingEntry.attachments || []
+          };
 
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           
           try {
               if (editingEntry.id) {
-                  // 使用 currentDb 替代 db
-                  await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id), { ...finalEntry, updatedAt: serverTimestamp() });
+                  const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
+                  await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
               } else {
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const { id, ...dataToSave } = finalEntry;
-                  // 使用 currentDb 替代 db
-                  const newRef = await addDoc(collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), { ...dataToSave, createdAt: serverTimestamp() });
+                  const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+                  const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
                   setEditingEntry({ ...finalEntry, id: newRef.id }); 
               }
               setIsEditing(false);
@@ -1932,15 +1956,16 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       };
       
       const handleDelete = async (id: string) => {
-          // ★★★ 修正：檢查 db 並賦值給局部變數 currentDb ★★★
+          // ★★★ 修正：確保 db 不為 null ★★★
           if (!db || !staffId) return;
           const currentDb = db;
 
           if (!confirm('確定刪除此筆資料？無法復原。')) return;
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           
-          // 使用 currentDb 替代 db
-          await deleteDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id));
+          const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
+          await deleteDoc(docRef);
+          
           if (editingEntry?.id === id) { setEditingEntry(null); setIsEditing(false); }
       };
 
@@ -1965,7 +1990,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       // 篩選邏輯
       const filteredEntries = entries.filter(entry => {
           const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
-          const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags.join(' ')}`;
+          const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
           const matchSearch = searchContent.toLowerCase().includes(searchTerm.toLowerCase());
           return matchCat && matchSearch;
       });
