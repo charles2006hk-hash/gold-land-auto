@@ -1853,8 +1853,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       // 讀取資料庫
       useEffect(() => {
           if (!db || !staffId) return;
+          const currentDb = db; // 抓取局部變數確保非 null
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-          const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), orderBy('createdAt', 'desc'));
+          const q = query(collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), orderBy('createdAt', 'desc'));
           const unsub = onSnapshot(q, (snapshot) => {
               const list: DatabaseEntry[] = [];
               snapshot.forEach(doc => {
@@ -1898,7 +1899,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
       const handleSave = async (e: React.FormEvent) => {
           e.preventDefault();
+          // ★★★ 修正：檢查 db 並賦值給局部變數 currentDb ★★★
           if (!db || !staffId || !editingEntry) return;
+          const currentDb = db; 
           
           // 自動生成標籤 (根據輸入內容)
           const autoTags = new Set(editingEntry.tags);
@@ -1912,10 +1915,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           
           try {
               if (editingEntry.id) {
-                  await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id), { ...finalEntry, updatedAt: serverTimestamp() });
+                  // 使用 currentDb 替代 db
+                  await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id), { ...finalEntry, updatedAt: serverTimestamp() });
               } else {
                   const { id, ...dataToSave } = finalEntry;
-                  const newRef = await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), { ...dataToSave, createdAt: serverTimestamp() });
+                  // 使用 currentDb 替代 db
+                  const newRef = await addDoc(collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'), { ...dataToSave, createdAt: serverTimestamp() });
                   setEditingEntry({ ...finalEntry, id: newRef.id }); 
               }
               setIsEditing(false);
@@ -1927,9 +1932,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       };
       
       const handleDelete = async (id: string) => {
+          // ★★★ 修正：檢查 db 並賦值給局部變數 currentDb ★★★
+          if (!db || !staffId) return;
+          const currentDb = db;
+
           if (!confirm('確定刪除此筆資料？無法復原。')) return;
-          const safeStaffId = staffId!.replace(/[^a-zA-Z0-9]/g, '_');
-          await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id));
+          const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+          
+          // 使用 currentDb 替代 db
+          await deleteDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id));
           if (editingEntry?.id === id) { setEditingEntry(null); setIsEditing(false); }
       };
 
