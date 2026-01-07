@@ -2597,55 +2597,123 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   const Sidebar = () => (
     <>
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      {/* 修改背景色為深色漸層 */}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-xl`}>
+      
+      {/* 側邊欄容器：深色漸層背景 */}
+      <div className={`fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-2xl border-r border-slate-700/50`}>
         
         {/* ★★★ Logo 區域優化 ★★★ */}
-        <div className="h-20 flex items-center px-6 border-b border-slate-700/50">
-            <div className="flex items-center gap-3 w-full">
-                {/* 使用 Lucide 圖標搭配漸層背景替代圓形白邊圖片 */}
-                <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-yellow-600 rounded-lg shadow-lg flex items-center justify-center text-slate-900 flex-shrink-0">
-                    <Car size={24} strokeWidth={2.5} />
+        <div className="h-24 flex items-center px-4 border-b border-slate-700/50 bg-slate-900/30">
+            <div className={`flex items-center w-full ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+                
+                {/* Logo 容器：使用白色背景容器，解決圖片白邊問題，營造 App Icon 質感 */}
+                <div className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center flex-shrink-0 p-1 transform hover:scale-105 transition-transform duration-300">
+                     <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
                 </div>
+                
                 {!isSidebarCollapsed && (
-                    <div className="flex flex-col">
-                        <h1 className="text-lg font-bold text-white tracking-wide leading-tight">金田汽車</h1>
-                        <p className="text-[10px] text-amber-500 font-bold tracking-wider uppercase">DMS System PRO</p>
+                    <div className="flex flex-col animate-fade-in overflow-hidden">
+                        {/* 主標題：加粗字體 */}
+                        <h1 className="text-lg font-bold text-white tracking-wider leading-none mb-1 whitespace-nowrap drop-shadow-md">
+                            金田汽車
+                        </h1>
+                        {/* 副標題：金色字體，增加層次 */}
+                        <div className="flex items-center">
+                            <span className="text-[10px] font-bold tracking-widest uppercase text-slate-900 bg-amber-400 px-1.5 rounded-sm shadow-sm">
+                                DMS
+                            </span>
+                            <span className="text-[10px] text-slate-400 ml-1 tracking-wide font-medium">System PRO</span>
+                        </div>
                     </div>
                 )}
             </div>
-            <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto"><X size={24} /></button>
+            
+            <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto p-1 rounded-full hover:bg-white/10 transition-colors">
+                <X size={20} />
+            </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><LayoutDashboard size={20} className="mr-3" /> {!isSidebarCollapsed && "系統總覽"}</button>
-          <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'inventory' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Car size={20} className="mr-3" /> {!isSidebarCollapsed && "車輛庫存管理"}</button>
-          <button onClick={() => { setActiveTab('cross_border'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'cross_border' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Globe size={20} className="mr-3" /> {!isSidebarCollapsed && "中港車管家"}</button>
-          
-          <div className="my-2 border-t border-slate-700/50 mx-2"></div>
-          
-          <button onClick={() => { setActiveTab('create_doc'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'create_doc' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><FileText size={20} className="mr-3" /> {!isSidebarCollapsed && "開單系統"}</button>
-          <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'reports' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><FileBarChart size={20} className="mr-3" /> {!isSidebarCollapsed && "統計報表"}</button>
-          <button onClick={() => { setActiveTab('database'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'database' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Database size={20} className="mr-3" /> {!isSidebarCollapsed && "資料庫中心"}</button>
+        {/* 選單導航 */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+          {[
+            { id: 'dashboard', label: '系統總覽', icon: LayoutDashboard },
+            { id: 'inventory', label: '車輛庫存管理', icon: Car },
+            { id: 'cross_border', label: '中港車管家', icon: Globe },
+            { type: 'divider' }, 
+            { id: 'create_doc', label: '開單系統', icon: FileText },
+            { id: 'reports', label: '統計報表', icon: FileBarChart },
+            { id: 'database', label: '資料庫中心', icon: Database },
+          ].map((item: any, idx) => (
+             item.type === 'divider' ? (
+                 <div key={`div-${idx}`} className="my-2 border-t border-slate-700/50 mx-2"></div>
+             ) : (
+                <button 
+                    key={item.id} 
+                    onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
+                    className={`
+                        flex items-center w-full p-3 rounded-xl transition-all duration-200 group relative mb-1
+                        ${activeTab === item.id 
+                            ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-900/20 font-medium border border-amber-400/20' 
+                            : 'hover:bg-slate-700/50 text-slate-400 hover:text-white'
+                        }
+                        ${isSidebarCollapsed ? 'justify-center' : ''}
+                    `}
+                    title={isSidebarCollapsed ? item.label : ''}
+                >
+                    {activeTab === item.id && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white/40 rounded-r-full blur-[1px]" />}
+                    <item.icon size={20} className={`${activeTab === item.id ? 'text-white' : 'group-hover:text-amber-400 transition-colors'} ${!isSidebarCollapsed ? 'mr-3' : ''}`} /> 
+                    {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                    
+                    {isSidebarCollapsed && (
+                        <div className="absolute left-full ml-3 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl border border-slate-600 transition-opacity duration-200">
+                            {item.label}
+                        </div>
+                    )}
+                </button>
+             )
+          ))}
           
           <div className="mt-auto pt-4">
-             <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'settings' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Settings size={20} className="mr-3" /> {!isSidebarCollapsed && "系統設置"}</button>
+             <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'settings' ? 'bg-amber-500 text-white shadow-md' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title={isSidebarCollapsed ? "系統設置" : ""}>
+                <Settings size={20} className={!isSidebarCollapsed ? "mr-3" : ""} /> 
+                {!isSidebarCollapsed && "系統設置"}
+             </button>
           </div>
         </nav>
         
-        <div className="p-4 border-t border-slate-700/50 bg-slate-900/50">
-            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-amber-500 font-bold border border-slate-600">
-                    <UserCircle size={16} />
-                </div>
-                {!isSidebarCollapsed && (
-                    <div className="flex-1 overflow-hidden">
-                        <p className="text-sm font-medium text-white truncate">{staffId}</p>
-                        <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="text-[10px] text-red-400 hover:text-red-300 flex items-center mt-0.5">
-                            <LogOut size={10} className="mr-1" /> 登出系統
-                        </button>
+        {/* 底部操作區 */}
+        <div className="p-4 border-t border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
+            <div className={`flex flex-col gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+                <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+                    <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-xs text-amber-500 font-bold border border-slate-600 shadow-inner">
+                        <UserCircle size={18} />
                     </div>
-                )}
+                    {!isSidebarCollapsed && (
+                        <div className="flex-1 overflow-hidden">
+                            <p className="text-xs font-bold text-slate-200 truncate">{staffId}</p>
+                            <div className="flex items-center mt-0.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
+                                <span className="text-[10px] text-slate-400">Online</span>
+                            </div>
+                        </div>
+                    )}
+                    {!isSidebarCollapsed && (
+                        <button 
+                            onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} 
+                            className="text-slate-400 hover:text-red-400 transition-colors p-1.5 hover:bg-slate-800 rounded-md"
+                            title="登出"
+                        >
+                            <LogOut size={16} />
+                        </button>
+                    )}
+                </div>
+                
+                {/* 伸縮按鈕 */}
+                <button 
+                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                    className="w-full py-2 flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700 group"
+                >
+                    {isSidebarCollapsed ? <ChevronRight size={16} className="group-hover:text-amber-400"/> : <ChevronLeft size={16} className="group-hover:text-amber-400"/>}
+                </button>
             </div>
         </div>
       </div>
