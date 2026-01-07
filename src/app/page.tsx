@@ -21,7 +21,8 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
-  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc 
+  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
+  getDocs, where // ★★★ 新增：getDocs, where ★★★
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -598,13 +599,49 @@ export default function GoldLandAutoDMS() {
 
   // --- CRUD Actions ---
 
+  // ★★★ 新增：自動同步資料至資料庫中心 ★★★
+  const syncToDatabase = async (data: { name: string, phone?: string, plate?: string, quota?: string }, role: string) => {
+      if (!db || !staffId || !data.name) return;
+      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+      const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+      
+      try {
+          // 1. 檢查是否已存在 (根據姓名和分類)
+          const q = query(dbRef, where('category', '==', 'Person'), where('name', '==', data.name));
+          const snapshot = await getDocs(q);
+
+          if (snapshot.empty) {
+              // 2. 若不存在，自動建立新檔案
+              await addDoc(dbRef, {
+                  category: 'Person',
+                  name: data.name,
+                  phone: data.phone || '',
+                  roles: [role], // 自動標記角色 (客戶/司機)
+                  plateNoCN: data.plate || '', // 如果是司機，帶入內地車牌
+                  quotaNo: data.quota || '',   // 如果是司機，帶入指標號
+                  description: `由系統自動建立 (${new Date().toLocaleDateString()})`,
+                  tags: ['自動同步'],
+                  attachments: [],
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp()
+              });
+              console.log(`已自動將 ${data.name} 加入資料庫`);
+          } else {
+              // 3. 若已存在，可選擇是否更新 (這裡暫時選擇不覆蓋現有資料，避免誤刪)
+              console.log(`${data.name} 已存在於資料庫`);
+          }
+      } catch (e) {
+          console.error("Auto-sync failed:", e);
+      }
+  };
+
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !staffId) return;
     const formData = new FormData(e.currentTarget);
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    // ... (其他欄位獲取保持不變) ...
+    // ... (資料讀取部分保持不變) ...
     const status = formData.get('status') as any;
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
@@ -619,10 +656,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
-    // Cross Border Data Capture
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
-    // ★★★ 關鍵修正：確保遍歷所有口岸 (ALL_CB_PORTS) ★★★
     const selectedPorts: string[] = [];
     ALL_CB_PORTS.forEach(port => {
         if (formData.get(`cb_port_${port}`) === 'on') {
@@ -638,7 +673,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         driver3: formData.get('cb_driver3') as string || '',
         insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
         quotaNumber: formData.get('cb_quotaNumber') as string || '',
-        ports: selectedPorts, // 這裡會儲存正確勾選的口岸
+        ports: selectedPorts,
         dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
         dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
         dateBr: formData.get('cb_dateBr') as string || '',
@@ -701,12 +736,37 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         });
         alert('新車輛已入庫');
       }
+
+      // ★★★ 觸發資料連動 ★★★
+      
+      // 1. 同步客戶資料
+      if (vData.customerName) {
+          await syncToDatabase({
+              name: vData.customerName,
+              phone: vData.customerPhone
+          }, '客戶');
+      }
+
+      // 2. 同步司機資料 (如果啟用了中港業務)
+      if (crossBorderData.isEnabled) {
+          if (crossBorderData.driver1) {
+              await syncToDatabase({
+                  name: crossBorderData.driver1,
+                  plate: crossBorderData.mainlandPlate,
+                  quota: crossBorderData.quotaNumber
+              }, '司機');
+          }
+          // 也可以同步副司機
+          if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
+      }
+
       setEditingVehicle(null);
       if (activeTab === 'inventory_add') {
           setActiveTab('inventory');
       }
     } catch (e) { alert('儲存失敗'); console.error(e); }
   };
+
   const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
     if (confirm('確定刪除？資料將無法復原。')) {
@@ -2537,28 +2597,57 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   const Sidebar = () => (
     <>
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden`}>
-        <div className="p-6 border-b border-slate-700 flex items-center gap-3 overflow-hidden">
-            {/* 側邊欄 Logo */}
-            <div className="w-10 h-10 bg-white rounded-full flex-shrink-0 flex items-center justify-center p-0.5">
-                 <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
+      {/* 修改背景色為深色漸層 */}
+      <div className={`fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-xl`}>
+        
+        {/* ★★★ Logo 區域優化 ★★★ */}
+        <div className="h-20 flex items-center px-6 border-b border-slate-700/50">
+            <div className="flex items-center gap-3 w-full">
+                {/* 使用 Lucide 圖標搭配漸層背景替代圓形白邊圖片 */}
+                <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-yellow-600 rounded-lg shadow-lg flex items-center justify-center text-slate-900 flex-shrink-0">
+                    <Car size={24} strokeWidth={2.5} />
+                </div>
+                {!isSidebarCollapsed && (
+                    <div className="flex flex-col">
+                        <h1 className="text-lg font-bold text-white tracking-wide leading-tight">金田汽車</h1>
+                        <p className="text-[10px] text-amber-500 font-bold tracking-wider uppercase">DMS System PRO</p>
+                    </div>
+                )}
             </div>
-            <div>
-                 <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight">金田汽車<br/>DMS系統</h1>
-            </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto"><X size={24} /></button>
+            <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto"><X size={24} /></button>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'dashboard' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><LayoutDashboard size={20} className="mr-3" /> 業務儀表板</button>
-          <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'inventory' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Car size={20} className="mr-3" /> 車輛管理</button>
-          <button onClick={() => { setActiveTab('create_doc'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'create_doc' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileText size={20} className="mr-3" /> 開單系統</button>
-          <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'reports' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileBarChart size={20} className="mr-3" /> 統計報表</button>
-          <button onClick={() => { setActiveTab('cross_border'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'cross_border' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Globe size={20} className="mr-3" /> 中港業務</button>
+
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'dashboard' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><LayoutDashboard size={20} className="mr-3" /> {!isSidebarCollapsed && "系統總覽"}</button>
+          <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'inventory' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Car size={20} className="mr-3" /> {!isSidebarCollapsed && "車輛庫存管理"}</button>
+          <button onClick={() => { setActiveTab('cross_border'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'cross_border' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Globe size={20} className="mr-3" /> {!isSidebarCollapsed && "中港車管家"}</button>
           
-          <button onClick={() => { setActiveTab('database'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'database' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Database size={20} className="mr-3" /> 資料庫中心</button>
-          <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'settings' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Settings size={20} className="mr-3" /> 系統設置</button>
+          <div className="my-2 border-t border-slate-700/50 mx-2"></div>
+          
+          <button onClick={() => { setActiveTab('create_doc'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'create_doc' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><FileText size={20} className="mr-3" /> {!isSidebarCollapsed && "開單系統"}</button>
+          <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'reports' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><FileBarChart size={20} className="mr-3" /> {!isSidebarCollapsed && "統計報表"}</button>
+          <button onClick={() => { setActiveTab('database'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'database' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Database size={20} className="mr-3" /> {!isSidebarCollapsed && "資料庫中心"}</button>
+          
+          <div className="mt-auto pt-4">
+             <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'settings' ? 'bg-amber-500 text-white shadow-md shadow-amber-500/20' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'}`}><Settings size={20} className="mr-3" /> {!isSidebarCollapsed && "系統設置"}</button>
+          </div>
         </nav>
-        <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center"><div className="mt-3 flex items-center justify-center space-x-2 bg-slate-800 p-2 rounded w-full"><UserCircle size={14} className="text-yellow-500"/><span className="font-bold text-white truncate max-w-[80px]">{staffId}</span></div><button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="mt-2 text-[10px] flex items-center text-red-400 hover:text-red-300 transition"><LogOut size={10} className="mr-1" /> Logout</button></div>
+        
+        <div className="p-4 border-t border-slate-700/50 bg-slate-900/50">
+            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-amber-500 font-bold border border-slate-600">
+                    <UserCircle size={16} />
+                </div>
+                {!isSidebarCollapsed && (
+                    <div className="flex-1 overflow-hidden">
+                        <p className="text-sm font-medium text-white truncate">{staffId}</p>
+                        <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="text-[10px] text-red-400 hover:text-red-300 flex items-center mt-0.5">
+                            <LogOut size={10} className="mr-1" /> 登出系統
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
       </div>
     </>
   );
