@@ -1858,14 +1858,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
       const [isEditing, setIsEditing] = useState(false);
       
-      // Tag 輸入狀態
       const [tagInput, setTagInput] = useState('');
 
       // 讀取資料庫
       useEffect(() => {
           if (!db || !staffId) return;
-          // 捕獲 db 為局部變數，確保 useEffect 閉包內部的穩定性
-          const currentDb = db; 
+          const currentDb = db; // 捕獲 db 為局部變數
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
           const q = query(colRef, orderBy('createdAt', 'desc'));
@@ -1925,7 +1923,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const handleSave = async (e: React.FormEvent) => {
           e.preventDefault(); 
           if (!db || !staffId || !editingEntry) return;
-          const currentDb = db; 
+          const currentDb = db; // 解決 TypeScript 錯誤
           
           const autoTags = new Set(editingEntry.tags || []);
           if(editingEntry.name) autoTags.add(editingEntry.name);
@@ -1964,7 +1962,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       
       const handleDelete = async (id: string) => {
           if (!db || !staffId) return;
-          const currentDb = db; 
+          const currentDb = db; // 解決 TypeScript 錯誤
 
           if (!confirm('確定刪除此筆資料？無法復原。')) return;
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -2005,7 +2003,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                       <div className="flex items-center justify-between mb-4">
                           <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫中心</h2>
                           <button 
-                              type="button" 
+                              type="button"
                               onClick={() => {
                                   setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null });
                                   setIsEditing(true);
@@ -2053,10 +2051,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                   <div className="flex-1 min-w-0">
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
                                       <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
-                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category === 'CrossBorder' ? '中港' : (entry.category === 'Vehicle' ? '車輛' : (entry.category === 'Company' ? '公司' : '人員'))}</span>
+                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
                                           {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
                                           {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
-                                          {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
                                       </div>
                                   </div>
                                   {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
@@ -2080,13 +2077,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                               <div className="flex gap-2">
                                   {isEditing || !editingEntry.id ? (
                                       <>
-                                          {/* ★★★ 修正：type="button" 避免觸發提交 ★★★ */}
                                           <button type="button" onClick={() => { setIsEditing(false); if(!editingEntry.id) setEditingEntry(null); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
                                           <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
                                       </>
                                   ) : (
                                       <>
-                                          {/* ★★★ 修正：type="button" 避免觸發提交 ★★★ */}
+                                          {/* ★★★ 修正點：type="button" 防止觸發表單提交 ★★★ */}
                                           <button type="button" onClick={() => handleDelete(editingEntry.id)} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={18}/></button>
                                           <button type="button" onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
                                       </>
@@ -2097,7 +2093,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                           {/* Form Content */}
                           <div className="flex-1 overflow-y-auto p-6 space-y-6">
                               
-                              {/* 1. 分類選擇 (僅編輯時顯示) */}
                               {isEditing && (
                                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
                                       <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
@@ -2197,15 +2192,16 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                           <textarea disabled={!isEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/>
                                       </div>
 
+                                      {/* Tags */}
                                       <div>
-                                          <label className="block text-xs font-bold text-slate-500 mb-1">標籤</label>
+                                          <label className="block text-xs font-bold text-slate-500">標籤</label>
                                           <div className="flex gap-2 mb-2 flex-wrap">
-                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}
+                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500"><X size={10}/></button>}</span>)}
                                           </div>
-                                          {isEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增標籤..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs hover:bg-slate-300"><Plus size={12}/></button></div>}
+                                          {isEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}
                                       </div>
                                   </div>
-
+                                  
                                   {/* Right Column: Attachments (修復：大圖顯示) */}
                                   <div className="space-y-4">
                                       <div className="flex justify-between items-center">
@@ -2218,25 +2214,30 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                           )}
                                       </div>
                                       
-                                      <div className="grid grid-cols-1 gap-4 max-h-[600px] overflow-y-auto pr-1">
+                                      {/* ★★★ 圖片顯示修正：改為單欄大圖顯示 ★★★ */}
+                                      <div className="grid grid-cols-1 gap-6 max-h-[700px] overflow-y-auto pr-2">
                                           {editingEntry.attachments?.map((file, idx) => (
-                                              <div key={idx} className="relative group border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col">
-                                                  {/* 圖片區域：自適應高度，大圖預覽 */}
-                                                  <div className="w-full bg-slate-100 relative">
-                                                      <img src={file.data} className="w-full h-auto object-contain mx-auto" style={{maxHeight: '400px'}} />
+                                              <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
+                                                  {/* 圖片區域：移除固定高度，改為自適應最大高度 */}
+                                                  <div className="w-full bg-slate-50 relative p-2 flex justify-center">
+                                                      <img 
+                                                          src={file.data} 
+                                                          className="w-auto h-auto max-h-[500px] max-w-full object-contain" 
+                                                          style={{ minHeight: '200px' }}
+                                                      />
                                                       {isEditing && (
                                                           <button 
                                                               type="button"
                                                               onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)}
-                                                              className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                                                              className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg"
                                                               title="刪除"
                                                           >
-                                                              <X size={16}/>
+                                                              <X size={18}/>
                                                           </button>
                                                       )}
                                                   </div>
-                                                  <div className="p-3 border-t bg-slate-50 text-sm text-slate-600 font-medium flex items-center">
-                                                      <File size={14} className="mr-2 text-blue-500 flex-shrink-0"/>
+                                                  <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center">
+                                                      <File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>
                                                       {isEditing ? (
                                                           <input 
                                                               value={file.name} 
@@ -2245,7 +2246,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                                                   newAttachments[idx].name = e.target.value;
                                                                   setEditingEntry({...editingEntry, attachments: newAttachments});
                                                               }}
-                                                              className="w-full bg-transparent outline-none focus:border-b border-blue-300"
+                                                              className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1"
                                                               placeholder="輸入檔名..."
                                                           />
                                                       ) : (
@@ -2255,9 +2256,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                               </div>
                                           ))}
                                           {(!editingEntry.attachments || editingEntry.attachments.length === 0) && (
-                                              <div className="border-2 border-dashed border-slate-200 rounded-lg h-48 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/50">
-                                                  <ImageIcon size={32} className="mb-2 opacity-30"/>
-                                                  暫無附件
+                                              <div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30">
+                                                  <ImageIcon size={48} className="mb-3 opacity-30"/>
+                                                  暫無附件圖片
                                               </div>
                                           )}
                                       </div>
@@ -2266,11 +2267,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                           </div>
                       </form>
                   ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-                          <Database size={64} className="mb-4 text-slate-200"/>
-                          <p className="text-lg font-medium text-slate-500">資料庫中心</p>
-                          <p className="text-sm mt-2">請從左側選擇一筆資料查看，或是點擊「+」新增</p>
-                      </div>
+                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>
                   )}
               </div>
           </div>
