@@ -1858,12 +1858,13 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
       const [isEditing, setIsEditing] = useState(false);
       
+      // Tag 輸入狀態
       const [tagInput, setTagInput] = useState('');
 
       // 讀取資料庫
       useEffect(() => {
           if (!db || !staffId) return;
-          // ★★★ 修復：將 db 捕獲為局部變數，避免依賴 hook 閉包中的舊值 ★★★
+          // 捕獲 db 為局部變數，確保 useEffect 閉包內部的穩定性
           const currentDb = db; 
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
@@ -1998,168 +1999,244 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
       return (
           <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+              {/* Left: Sidebar & List */}
               <div className="w-1/3 border-r border-slate-100 flex flex-col bg-slate-50">
                   <div className="p-4 border-b border-slate-200">
                       <div className="flex items-center justify-between mb-4">
                           <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫中心</h2>
                           <button 
-                              type="button"
+                              type="button" 
                               onClick={() => {
                                   setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null });
                                   setIsEditing(true);
                               }}
-                              className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm"
+                              className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"
                           ><Plus size={20}/></button>
                       </div>
+                      
+                      {/* Search & Filter */}
                       <div className="space-y-2">
                           <div className="relative">
                               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-                              <input className="w-full pl-9 p-2 rounded border border-slate-300 text-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋..."/>
+                              <input 
+                                  type="text" 
+                                  placeholder="搜尋姓名、車牌、標籤..." 
+                                  className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                  value={searchTerm}
+                                  onChange={e => setSearchTerm(e.target.value)}
+                              />
                           </div>
                           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                               {['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (
-                                  <button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full border ${selectedCatFilter === cat ? 'bg-slate-800 text-white' : 'bg-white text-slate-600'}`}>
+                                  <button 
+                                      key={cat}
+                                      type="button" 
+                                      onClick={() => setSelectedCatFilter(cat)}
+                                      className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
+                                  >
                                       {cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}
                                   </button>
                               ))}
                           </div>
                       </div>
                   </div>
+
+                  {/* List Content */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
                       {filteredEntries.map(entry => (
-                          <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsEditing(false); }} className={`p-3 rounded-lg border cursor-pointer ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500' : 'bg-white hover:border-blue-300'}`}>
-                              <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
-                              <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
-                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded">{entry.category}</span>
-                                  {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded">{entry.plateNoHK}</span>}
+                          <div 
+                              key={entry.id}
+                              onClick={() => { setEditingEntry(entry); setIsEditing(false); }}
+                              className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}
+                          >
+                              <div className="flex justify-between items-start">
+                                  <div className="flex-1 min-w-0">
+                                      <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
+                                      <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
+                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category === 'CrossBorder' ? '中港' : (entry.category === 'Vehicle' ? '車輛' : (entry.category === 'Company' ? '公司' : '人員'))}</span>
+                                          {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
+                                          {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
+                                          {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
+                                      </div>
+                                  </div>
+                                  {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
                               </div>
                           </div>
                       ))}
+                      {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
                   </div>
               </div>
 
+              {/* Right: Detail / Edit Form */}
               <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
                   {editingEntry ? (
                       <form onSubmit={handleSave} className="flex flex-col h-full">
+                          {/* Toolbar */}
                           <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                              <div className="font-bold text-slate-700 text-lg">
+                              <div className="font-bold text-slate-700 text-lg flex items-center">
                                   {isEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
+                                  {!isEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
                               </div>
                               <div className="flex gap-2">
                                   {isEditing || !editingEntry.id ? (
                                       <>
+                                          {/* ★★★ 修正：type="button" 避免觸發提交 ★★★ */}
                                           <button type="button" onClick={() => { setIsEditing(false); if(!editingEntry.id) setEditingEntry(null); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
-                                          <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
+                                          <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
                                       </>
                                   ) : (
                                       <>
-                                          <button type="button" onClick={() => handleDelete(editingEntry.id)} className="p-2 text-red-500 hover:bg-red-50 rounded"><Trash2 size={18}/></button>
-                                          {/* ★★★ 修正點：type="button" 阻止自動提交 ★★★ */}
-                                          <button type="button" onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center"><Edit size={16} className="mr-1"/> 編輯</button>
+                                          {/* ★★★ 修正：type="button" 避免觸發提交 ★★★ */}
+                                          <button type="button" onClick={() => handleDelete(editingEntry.id)} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={18}/></button>
+                                          <button type="button" onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
                                       </>
                                   )}
                               </div>
                           </div>
 
+                          {/* Form Content */}
                           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                              
+                              {/* 1. 分類選擇 (僅編輯時顯示) */}
                               {isEditing && (
                                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
                                       <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
-                                      <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded border ${editingEntry.category === cat.id ? 'bg-blue-600 text-white' : 'bg-white'}`}>{cat.label}</button>))}</div>
+                                      <div className="flex flex-wrap gap-2">
+                                          {DB_CATEGORIES.map(cat => (
+                                              <button
+                                                  key={cat.id}
+                                                  type="button"
+                                                  onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})}
+                                                  className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}
+                                              >
+                                                  {cat.label}
+                                              </button>
+                                          ))}
+                                      </div>
                                   </div>
                               )}
-                              
+
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                  {/* Left Column: Dynamic Fields */}
                                   <div className="space-y-4">
-                                      <div><label className="block text-xs font-bold text-slate-500">名稱</label><input disabled={!isEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded" placeholder="姓名/公司名"/></div>
-                                      
-                                      {/* Person Fields */}
+                                      <div>
+                                          <label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label>
+                                          <input 
+                                              disabled={!isEditing}
+                                              value={editingEntry.name}
+                                              onChange={e => setEditingEntry({...editingEntry, name: e.target.value})}
+                                              className="w-full p-2 border rounded text-lg font-bold"
+                                              placeholder="姓名 / 公司名"
+                                              required
+                                          />
+                                      </div>
+
+                                      {/* --- Person Fields --- */}
                                       {editingEntry.category === 'Person' && (
                                           <>
                                               <div>
-                                                  <label className="block text-xs font-bold text-slate-500">角色</label>
-                                                  <div className="flex gap-2">{DB_ROLES.map(role => (<button key={role} type="button" disabled={!isEditing} onClick={() => toggleRole(role)} className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300' : 'bg-white'}`}>{role}</button>))}</div>
+                                                  <label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label>
+                                                  <div className="flex flex-wrap gap-2">
+                                                      {DB_ROLES.map(role => (
+                                                          <button
+                                                              key={role}
+                                                              type="button"
+                                                              disabled={!isEditing}
+                                                              onClick={() => toggleRole(role)}
+                                                              className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}
+                                                          >
+                                                              {role}
+                                                          </button>
+                                                      ))}
+                                                  </div>
                                               </div>
                                               <div className="grid grid-cols-2 gap-3">
-                                                  <div><label className="block text-xs font-bold text-slate-500">電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded"/></div>
-                                                  <div><label className="block text-xs font-bold text-slate-500">證件號碼</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded"/></div>
+                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div>
                                               </div>
-                                              <div><label className="block text-xs font-bold text-slate-500">地址</label><input disabled={!isEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                           </>
                                       )}
 
-                                      {/* Company Fields */}
+                                      {/* --- Company Fields --- */}
                                       {editingEntry.category === 'Company' && (
                                           <>
-                                              <div><label className="block text-xs font-bold text-slate-500">商業登記號 (BR)</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500">公司電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500">公司地址</label><input disabled={!isEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                           </>
                                       )}
 
-                                      {/* Vehicle Fields */}
+                                      {/* --- Vehicle Fields --- */}
                                       {editingEntry.category === 'Vehicle' && (
                                           <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500">香港車牌</label><input disabled={!isEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500">國內車牌</label><input disabled={!isEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded text-sm bg-yellow-50 font-mono"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded text-sm bg-blue-50 font-mono"/></div>
                                           </div>
                                       )}
 
-                                      {/* CrossBorder Fields */}
+                                      {/* --- CrossBorder Fields --- */}
                                       {editingEntry.category === 'CrossBorder' && (
                                           <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500">指標號</label><input disabled={!isEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500">回執號</label><input disabled={!isEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                           </div>
                                       )}
 
+                                      {/* 通用欄位 */}
                                       <div>
-                                          <label className="block text-xs font-bold text-slate-500">文件類型</label>
-                                          <select disabled={!isEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded">
+                                          <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
+                                          <select disabled={!isEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50">
                                               <option value="">-- 請選擇 --</option>
                                               {DB_DOC_TYPES[editingEntry.category]?.map(t => <option key={t} value={t}>{t}</option>)}
                                           </select>
                                       </div>
 
-                                      <div><label className="block text-xs font-bold text-slate-500">備註</label><textarea disabled={!isEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded h-24"/></div>
-
-                                      {/* Tags */}
                                       <div>
-                                          <label className="block text-xs font-bold text-slate-500">標籤</label>
+                                          <label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label>
+                                          <textarea disabled={!isEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/>
+                                      </div>
+
+                                      <div>
+                                          <label className="block text-xs font-bold text-slate-500 mb-1">標籤</label>
                                           <div className="flex gap-2 mb-2 flex-wrap">
-                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500"><X size={10}/></button>}</span>)}
+                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}
                                           </div>
-                                          {isEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}
+                                          {isEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增標籤..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs hover:bg-slate-300"><Plus size={12}/></button></div>}
                                       </div>
                                   </div>
-                                  
-                                  {/* 右側：圖片區域 (修正：恢復大圖預覽) */}
+
+                                  {/* Right Column: Attachments (修復：大圖顯示) */}
                                   <div className="space-y-4">
-                                      <div className="flex justify-between">
-                                          <label className="block text-xs font-bold text-slate-500">附件 ({editingEntry.attachments?.length || 0})</label>
-                                          {isEditing && <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded hover:bg-blue-100"><Upload size={14} className="inline mr-1"/> 上傳<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>}
+                                      <div className="flex justify-between items-center">
+                                          <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
+                                          {isEditing && (
+                                              <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors">
+                                                  <Upload size={14} className="mr-1"/> 上傳圖片
+                                                  <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                                              </label>
+                                          )}
                                       </div>
                                       
-                                      {/* ★★★ 圖片顯示修正：改回大圖卡片樣式 ★★★ */}
-                                      <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto pr-1">
+                                      <div className="grid grid-cols-1 gap-4 max-h-[600px] overflow-y-auto pr-1">
                                           {editingEntry.attachments?.map((file, idx) => (
                                               <div key={idx} className="relative group border rounded-lg overflow-hidden bg-white shadow-sm flex flex-col">
+                                                  {/* 圖片區域：自適應高度，大圖預覽 */}
                                                   <div className="w-full bg-slate-100 relative">
-                                                      {/* 讓圖片高度自動，最大高度限制，確保不被拉伸 */}
-                                                      <img src={file.data} className="w-full h-auto max-h-64 object-contain mx-auto" />
+                                                      <img src={file.data} className="w-full h-auto object-contain mx-auto" style={{maxHeight: '400px'}} />
                                                       {isEditing && (
                                                           <button 
                                                               type="button"
                                                               onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)}
-                                                              className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                                                              className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                                                               title="刪除"
                                                           >
-                                                              <X size={14}/>
+                                                              <X size={16}/>
                                                           </button>
                                                       )}
                                                   </div>
-                                                  <div className="p-2 border-t bg-slate-50 text-xs text-slate-600 font-medium truncate flex items-center">
-                                                      <File size={12} className="mr-1.5 text-blue-500 flex-shrink-0"/>
+                                                  <div className="p-3 border-t bg-slate-50 text-sm text-slate-600 font-medium flex items-center">
+                                                      <File size={14} className="mr-2 text-blue-500 flex-shrink-0"/>
                                                       {isEditing ? (
                                                           <input 
                                                               value={file.name} 
@@ -2169,13 +2246,16 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                                                   setEditingEntry({...editingEntry, attachments: newAttachments});
                                                               }}
                                                               className="w-full bg-transparent outline-none focus:border-b border-blue-300"
+                                                              placeholder="輸入檔名..."
                                                           />
-                                                      ) : file.name}
+                                                      ) : (
+                                                          <span className="truncate">{file.name}</span>
+                                                      )}
                                                   </div>
                                               </div>
                                           ))}
                                           {(!editingEntry.attachments || editingEntry.attachments.length === 0) && (
-                                              <div className="border-2 border-dashed border-slate-200 rounded-lg h-40 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/50">
+                                              <div className="border-2 border-dashed border-slate-200 rounded-lg h-48 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/50">
                                                   <ImageIcon size={32} className="mb-2 opacity-30"/>
                                                   暫無附件
                                               </div>
@@ -2186,7 +2266,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                           </div>
                       </form>
                   ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇資料</p></div>
+                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                          <Database size={64} className="mb-4 text-slate-200"/>
+                          <p className="text-lg font-medium text-slate-500">資料庫中心</p>
+                          <p className="text-sm mt-2">請從左側選擇一筆資料查看，或是點擊「+」新增</p>
+                      </div>
                   )}
               </div>
           </div>
