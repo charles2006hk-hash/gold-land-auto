@@ -1850,7 +1850,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-  // 5. Database Module (資料庫管理 - 最終修復版)
+  // 5. Database Module (資料庫管理 - 最終強制修復版)
   const DatabaseModule = () => {
       const [entries, setEntries] = useState<DatabaseEntry[]>([]);
       const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
@@ -1872,7 +1872,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
               const list: DatabaseEntry[] = [];
               snapshot.forEach(doc => {
                   const data = doc.data();
-                  // 兼容舊資料：轉換舊的 images 數組為 attachments
+                  // 兼容舊資料
                   let attachments = data.attachments || [];
                   if (!attachments.length && data.images && Array.isArray(data.images)) {
                       attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
@@ -1923,7 +1923,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       const handleSave = async (e: React.FormEvent) => {
           e.preventDefault(); 
           if (!db || !staffId || !editingEntry) return;
-          const currentDb = db; // 解決 TypeScript 錯誤
+          const currentDb = db; 
           
           const autoTags = new Set(editingEntry.tags || []);
           if(editingEntry.name) autoTags.add(editingEntry.name);
@@ -1962,7 +1962,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       
       const handleDelete = async (id: string) => {
           if (!db || !staffId) return;
-          const currentDb = db; // 解決 TypeScript 錯誤
+          const currentDb = db; 
 
           if (!confirm('確定刪除此筆資料？無法復原。')) return;
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -2003,8 +2003,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                       <div className="flex items-center justify-between mb-4">
                           <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫中心</h2>
                           <button 
-                              type="button"
-                              onClick={() => {
+                              type="button" 
+                              onClick={(e) => {
+                                  e.preventDefault(); // 防止意外提交
                                   setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null });
                                   setIsEditing(true);
                               }}
@@ -2051,7 +2052,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                   <div className="flex-1 min-w-0">
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
                                       <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
-                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
+                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded">{entry.category}</span>
                                           {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
                                           {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
                                       </div>
@@ -2077,14 +2078,27 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                               <div className="flex gap-2">
                                   {isEditing || !editingEntry.id ? (
                                       <>
-                                          <button type="button" onClick={() => { setIsEditing(false); if(!editingEntry.id) setEditingEntry(null); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
+                                          <button 
+                                            type="button" 
+                                            onClick={(e) => { e.preventDefault(); setIsEditing(false); if(!editingEntry.id) setEditingEntry(null); }} 
+                                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded"
+                                          >取消</button>
                                           <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
                                       </>
                                   ) : (
                                       <>
-                                          {/* ★★★ 修正點：type="button" 防止觸發表單提交 ★★★ */}
-                                          <button type="button" onClick={() => handleDelete(editingEntry.id)} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={18}/></button>
-                                          <button type="button" onClick={() => setIsEditing(true)} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
+                                          <button 
+                                            type="button" 
+                                            onClick={(e) => { e.preventDefault(); handleDelete(editingEntry.id); }} 
+                                            className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                          ><Trash2 size={18}/></button>
+                                          
+                                          {/* ★★★ 修正點：加入 e.preventDefault() 強制停止提交 ★★★ */}
+                                          <button 
+                                            type="button" 
+                                            onClick={(e) => { e.preventDefault(); setIsEditing(true); }} 
+                                            className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"
+                                          ><Edit size={16} className="mr-1"/> 編輯</button>
                                       </>
                                   )}
                               </div>
@@ -2096,21 +2110,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                               {isEditing && (
                                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
                                       <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
-                                      <div className="flex flex-wrap gap-2">
-                                          {DB_CATEGORIES.map(cat => (
-                                              <button
-                                                  key={cat.id}
-                                                  type="button"
-                                                  onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})}
-                                                  className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}
-                                              >
-                                                  {cat.label}
-                                              </button>
-                                          ))}
-                                      </div>
+                                      <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
                                   </div>
                               )}
-
+                              
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                   {/* Left Column: Dynamic Fields */}
                                   <div className="space-y-4">
@@ -2214,16 +2217,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                           )}
                                       </div>
                                       
-                                      {/* ★★★ 圖片顯示修正：改為單欄大圖顯示 ★★★ */}
-                                      <div className="grid grid-cols-1 gap-6 max-h-[700px] overflow-y-auto pr-2">
+                                      {/* ★★★ 圖片顯示修正：單欄大圖，移除高度限制，展示完整細節 ★★★ */}
+                                      <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
                                           {editingEntry.attachments?.map((file, idx) => (
                                               <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
                                                   {/* 圖片區域：移除固定高度，改為自適應最大高度 */}
                                                   <div className="w-full bg-slate-50 relative p-2 flex justify-center">
                                                       <img 
                                                           src={file.data} 
-                                                          className="w-auto h-auto max-h-[500px] max-w-full object-contain" 
-                                                          style={{ minHeight: '200px' }}
+                                                          className="w-full h-auto object-contain" 
                                                       />
                                                       {isEditing && (
                                                           <button 
