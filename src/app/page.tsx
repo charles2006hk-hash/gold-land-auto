@@ -1903,18 +1903,61 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           return () => unsub();
       }, [staffId]);
 
-      // 圖片上傳處理
+      // 圖片上傳處理 (自動壓縮 > 500KB 的圖片)
       const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
           const file = files[0];
-          if (file.size > 500 * 1024) {
-              alert(`檔案 ${file.name} 超過 500KB 限制`);
-              return;
-          }
+
+          // 輔助函數：壓縮圖片
+          const compressImage = (base64Str: string, quality: number): Promise<string> => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = base64Str;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) { resolve(base64Str); return; } // Fallback
+
+                    // 如果圖片太大，先縮放尺寸 (例如最大寬度 1024px)
+                    const MAX_WIDTH = 1024;
+                    const scaleSize = MAX_WIDTH / img.width;
+                    if (scaleSize < 1) {
+                        canvas.width = MAX_WIDTH;
+                        canvas.height = img.height * scaleSize;
+                    } else {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                    }
+
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', quality); // 使用 JPEG 壓縮
+                    resolve(compressedBase64);
+                };
+            });
+          };
+
           const reader = new FileReader();
-          reader.onloadend = () => {
-              const base64 = reader.result as string;
+          reader.onloadend = async () => {
+              let base64 = reader.result as string;
+              
+              // 簡單估算 Base64 大小 (字串長度 * 0.75 約等於 bytes)
+              let sizeInBytes = base64.length * 0.75;
+              const limitBytes = 500 * 1024;
+
+              if (sizeInBytes > limitBytes) {
+                  // 如果大於 500KB，嘗試壓縮
+                  // 嘗試 0.7 品質
+                  base64 = await compressImage(base64, 0.7);
+                  sizeInBytes = base64.length * 0.75;
+
+                  // 如果還是太大，再壓縮一次 0.5
+                  if (sizeInBytes > limitBytes) {
+                       base64 = await compressImage(base64, 0.5);
+                  }
+              }
+
+              // 更新狀態
               setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: base64 }] } : null);
           };
           reader.readAsDataURL(file);
