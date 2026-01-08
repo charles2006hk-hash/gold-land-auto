@@ -775,6 +775,14 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     } catch (e) { alert('儲存失敗'); console.error(e); }
   };
 
+const deleteVehicle = async (id: string) => {
+    if (!db || !staffId) return;
+    if (confirm('確定刪除？資料將無法復原。')) {
+      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+      await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', id));
+    }
+  };
+
   // --- Sub-Item Management (FIXED: Updates Local State) ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder', newItems: any) => {
     // ★★★ 修正：使用局部變數 currentDb ★★★
