@@ -21,7 +21,8 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
-  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc 
+  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
+  getDocs, where 
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
