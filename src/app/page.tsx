@@ -598,22 +598,63 @@ export default function GoldLandAutoDMS() {
 
   // --- CRUD Actions ---
 
+// ★★★ 新增：自動同步資料至資料庫中心 (連動邏輯) ★★★
+  const syncToDatabase = async (data: { name: string, phone?: string, plate?: string, quota?: string }, role: string) => {
+      // 確保 db 存在且有姓名才執行
+      if (!db || !staffId || !data.name) return;
+      const currentDb = db;
+      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+      const dbRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+      
+      try {
+          // 1. 檢查是否已存在 (根據姓名和分類)
+          // 這裡我們假設主要檢查 'Person' 類別
+          const q = query(dbRef, where('category', '==', 'Person'), where('name', '==', data.name));
+          const snapshot = await getDocs(q);
+
+          if (snapshot.empty) {
+              // 2. 若不存在，自動建立新檔案
+              await addDoc(dbRef, {
+                  category: 'Person',
+                  name: data.name,
+                  phone: data.phone || '',
+                  roles: [role], // 自動標記角色 (客戶/司機)
+                  plateNoCN: data.plate || '', // 如果是司機，帶入內地車牌
+                  quotaNo: data.quota || '',   // 如果是司機，帶入指標號
+                  description: `[系統自動建立] 來源: ${role} - ${new Date().toLocaleDateString()}`,
+                  tags: ['自動同步', role],
+                  attachments: [],
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp()
+              });
+              console.log(`[DMS] 已自動將 ${data.name} 加入資料庫`);
+          } else {
+              // 3. 若已存在，可選擇是否更新 (這裡暫時選擇不覆蓋，避免誤刪用戶編輯過的資料)
+              console.log(`[DMS] ${data.name} 已存在於資料庫，跳過同步`);
+          }
+      } catch (e) {
+          console.error("Auto-sync failed:", e);
+      }
+  };
+
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !staffId) return;
     const formData = new FormData(e.currentTarget);
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    // ... (其他欄位獲取保持不變) ...
+    // ... (讀取表單資料，保持原樣) ...
     const status = formData.get('status') as any;
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
     const mileageRaw = formData.get('mileage') as string;
+    
     const priceA1Raw = formData.get('priceA1') as string;
     const priceTaxRaw = formData.get('priceTax') as string;
     const valA1 = Number(priceA1Raw.replace(/,/g, '') || 0);
     const valTax = Number(priceTaxRaw.replace(/,/g, '') || 0);
     const valRegistered = valA1 + valTax;
+
     const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
     const engineSizeRaw = formData.get('engineSize') as string;
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
@@ -622,7 +663,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     // Cross Border Data Capture
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
-    // ★★★ 關鍵修正：確保遍歷所有口岸 (ALL_CB_PORTS) ★★★
     const selectedPorts: string[] = [];
     ALL_CB_PORTS.forEach(port => {
         if (formData.get(`cb_port_${port}`) === 'on') {
@@ -638,7 +678,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         driver3: formData.get('cb_driver3') as string || '',
         insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
         quotaNumber: formData.get('cb_quotaNumber') as string || '',
-        ports: selectedPorts, // 這裡會儲存正確勾選的口岸
+        ports: selectedPorts,
         dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
         dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
         dateBr: formData.get('cb_dateBr') as string || '',
@@ -701,18 +741,37 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         });
         alert('新車輛已入庫');
       }
+
+      // ★★★ 觸發資料連動：自動建立客戶與司機檔案 ★★★
+      
+      // 1. 同步客戶資料 (從車輛表單輸入的客戶名)
+      if (vData.customerName) {
+          await syncToDatabase({
+              name: vData.customerName,
+              phone: vData.customerPhone
+          }, '客戶');
+      }
+
+      // 2. 同步司機資料 (如果啟用了中港業務)
+      if (crossBorderData.isEnabled) {
+          // 主司機 (包含車牌和批文號資訊)
+          if (crossBorderData.driver1) {
+              await syncToDatabase({
+                  name: crossBorderData.driver1,
+                  plate: crossBorderData.mainlandPlate,
+                  quota: crossBorderData.quotaNumber
+              }, '司機');
+          }
+          // 副司機 (僅建立檔案)
+          if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
+          if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 }, '司機');
+      }
+
       setEditingVehicle(null);
       if (activeTab === 'inventory_add') {
           setActiveTab('inventory');
       }
     } catch (e) { alert('儲存失敗'); console.error(e); }
-  };
-  const deleteVehicle = async (id: string) => {
-    if (!db || !staffId) return;
-    if (confirm('確定刪除？資料將無法復原。')) {
-      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', id));
-    }
   };
 
   // --- Sub-Item Management (FIXED: Updates Local State) ---
@@ -2300,7 +2359,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           </div>
       );
   };
-  
+
   // 4. Create Document Module (開單系統) - 最終修復版 (Layout Fixed)
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
