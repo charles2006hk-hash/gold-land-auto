@@ -21,8 +21,7 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
-  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
-  getDocs, where // ★★★ 新增：getDocs, where ★★★
+  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc 
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -599,49 +598,13 @@ export default function GoldLandAutoDMS() {
 
   // --- CRUD Actions ---
 
-  // ★★★ 新增：自動同步資料至資料庫中心 ★★★
-  const syncToDatabase = async (data: { name: string, phone?: string, plate?: string, quota?: string }, role: string) => {
-      if (!db || !staffId || !data.name) return;
-      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-      
-      try {
-          // 1. 檢查是否已存在 (根據姓名和分類)
-          const q = query(dbRef, where('category', '==', 'Person'), where('name', '==', data.name));
-          const snapshot = await getDocs(q);
-
-          if (snapshot.empty) {
-              // 2. 若不存在，自動建立新檔案
-              await addDoc(dbRef, {
-                  category: 'Person',
-                  name: data.name,
-                  phone: data.phone || '',
-                  roles: [role], // 自動標記角色 (客戶/司機)
-                  plateNoCN: data.plate || '', // 如果是司機，帶入內地車牌
-                  quotaNo: data.quota || '',   // 如果是司機，帶入指標號
-                  description: `由系統自動建立 (${new Date().toLocaleDateString()})`,
-                  tags: ['自動同步'],
-                  attachments: [],
-                  createdAt: serverTimestamp(),
-                  updatedAt: serverTimestamp()
-              });
-              console.log(`已自動將 ${data.name} 加入資料庫`);
-          } else {
-              // 3. 若已存在，可選擇是否更新 (這裡暫時選擇不覆蓋現有資料，避免誤刪)
-              console.log(`${data.name} 已存在於資料庫`);
-          }
-      } catch (e) {
-          console.error("Auto-sync failed:", e);
-      }
-  };
-
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !staffId) return;
     const formData = new FormData(e.currentTarget);
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    // ... (資料讀取部分保持不變) ...
+    // ... (其他欄位獲取保持不變) ...
     const status = formData.get('status') as any;
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
@@ -656,8 +619,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
+    // Cross Border Data Capture
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
+    // ★★★ 關鍵修正：確保遍歷所有口岸 (ALL_CB_PORTS) ★★★
     const selectedPorts: string[] = [];
     ALL_CB_PORTS.forEach(port => {
         if (formData.get(`cb_port_${port}`) === 'on') {
@@ -673,7 +638,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         driver3: formData.get('cb_driver3') as string || '',
         insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
         quotaNumber: formData.get('cb_quotaNumber') as string || '',
-        ports: selectedPorts,
+        ports: selectedPorts, // 這裡會儲存正確勾選的口岸
         dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
         dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
         dateBr: formData.get('cb_dateBr') as string || '',
@@ -736,37 +701,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         });
         alert('新車輛已入庫');
       }
-
-      // ★★★ 觸發資料連動 ★★★
-      
-      // 1. 同步客戶資料
-      if (vData.customerName) {
-          await syncToDatabase({
-              name: vData.customerName,
-              phone: vData.customerPhone
-          }, '客戶');
-      }
-
-      // 2. 同步司機資料 (如果啟用了中港業務)
-      if (crossBorderData.isEnabled) {
-          if (crossBorderData.driver1) {
-              await syncToDatabase({
-                  name: crossBorderData.driver1,
-                  plate: crossBorderData.mainlandPlate,
-                  quota: crossBorderData.quotaNumber
-              }, '司機');
-          }
-          // 也可以同步副司機
-          if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
-      }
-
       setEditingVehicle(null);
       if (activeTab === 'inventory_add') {
           setActiveTab('inventory');
       }
     } catch (e) { alert('儲存失敗'); console.error(e); }
   };
-
   const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
     if (confirm('確定刪除？資料將無法復原。')) {
@@ -1910,7 +1850,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     );
   };
 
-  // 5. Database Module (資料庫管理 - 最終強制修復版)
+  // 5. Database Module (資料庫管理 - 增強版：修復編輯/新增下載/自由文件類型)
   const DatabaseModule = () => {
       const [entries, setEntries] = useState<DatabaseEntry[]>([]);
       const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
@@ -1923,7 +1863,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       // 讀取資料庫
       useEffect(() => {
           if (!db || !staffId) return;
-          const currentDb = db; // 捕獲 db 為局部變數
+          const currentDb = db; 
           const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
           const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
           const q = query(colRef, orderBy('createdAt', 'desc'));
@@ -1932,12 +1872,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
               const list: DatabaseEntry[] = [];
               snapshot.forEach(doc => {
                   const data = doc.data();
-                  // 兼容舊資料
                   let attachments = data.attachments || [];
                   if (!attachments.length && data.images && Array.isArray(data.images)) {
                       attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
                   }
-                  
                   list.push({ 
                       id: doc.id, 
                       category: data.category || 'Person',
@@ -1963,64 +1901,31 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           return () => unsub();
       }, [staffId]);
 
-      // 圖片上傳處理 (自動壓縮 > 500KB 的圖片)
+      // 圖片上傳處理
       const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
           const file = files[0];
-
-          // 輔助函數：壓縮圖片
-          const compressImage = (base64Str: string, quality: number): Promise<string> => {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.src = base64Str;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) { resolve(base64Str); return; } // Fallback
-
-                    // 如果圖片太大，先縮放尺寸 (例如最大寬度 1024px)
-                    const MAX_WIDTH = 1024;
-                    const scaleSize = MAX_WIDTH / img.width;
-                    if (scaleSize < 1) {
-                        canvas.width = MAX_WIDTH;
-                        canvas.height = img.height * scaleSize;
-                    } else {
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                    }
-
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', quality); // 使用 JPEG 壓縮
-                    resolve(compressedBase64);
-                };
-            });
-          };
-
+          if (file.size > 500 * 1024) {
+              alert(`檔案 ${file.name} 超過 500KB 限制`);
+              return;
+          }
           const reader = new FileReader();
-          reader.onloadend = async () => {
-              let base64 = reader.result as string;
-              
-              // 簡單估算 Base64 大小 (字串長度 * 0.75 約等於 bytes)
-              let sizeInBytes = base64.length * 0.75;
-              const limitBytes = 500 * 1024;
-
-              if (sizeInBytes > limitBytes) {
-                  // 如果大於 500KB，嘗試壓縮
-                  // 嘗試 0.7 品質
-                  base64 = await compressImage(base64, 0.7);
-                  sizeInBytes = base64.length * 0.75;
-
-                  // 如果還是太大，再壓縮一次 0.5
-                  if (sizeInBytes > limitBytes) {
-                       base64 = await compressImage(base64, 0.5);
-                  }
-              }
-
-              // 更新狀態
+          reader.onloadend = () => {
+              const base64 = reader.result as string;
               setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: base64 }] } : null);
           };
           reader.readAsDataURL(file);
+      };
+
+      // 圖片下載功能 (新增)
+      const downloadImage = (dataUrl: string, filename: string) => {
+          const link = document.createElement('a');
+          link.href = dataUrl;
+          link.download = filename || 'download.png';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
       };
 
       const handleSave = async (e: React.FormEvent) => {
@@ -2048,7 +1953,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                   const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
                   await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
               } else {
-                  // 移除 id 以避免寫入空字串
                   // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   const { id, ...dataToSave } = finalEntry;
                   const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
@@ -2108,7 +2012,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                           <button 
                               type="button" 
                               onClick={(e) => {
-                                  e.preventDefault(); // 防止意外提交
+                                  e.preventDefault(); 
                                   setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null });
                                   setIsEditing(true);
                               }}
@@ -2155,9 +2059,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                   <div className="flex-1 min-w-0">
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
                                       <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
-                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded">{entry.category}</span>
+                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
                                           {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
                                           {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
+                                          {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
                                       </div>
                                   </div>
                                   {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
@@ -2192,14 +2097,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                       <>
                                           <button 
                                             type="button" 
-                                            onClick={(e) => { e.preventDefault(); handleDelete(editingEntry.id); }} 
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(editingEntry.id); }} 
                                             className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                            title="刪除"
                                           ><Trash2 size={18}/></button>
                                           
-                                          {/* ★★★ 修正點：加入 e.preventDefault() 強制停止提交 ★★★ */}
+                                          {/* ★★★ 修復：明確的 type="button" 及 preventDefault ★★★ */}
                                           <button 
                                             type="button" 
-                                            onClick={(e) => { e.preventDefault(); setIsEditing(true); }} 
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsEditing(true); }} 
                                             className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"
                                           ><Edit size={16} className="mr-1"/> 編輯</button>
                                       </>
@@ -2271,8 +2177,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                       {/* --- Vehicle Fields --- */}
                                       {editingEntry.category === 'Vehicle' && (
                                           <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded text-sm bg-yellow-50 font-mono"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded text-sm bg-blue-50 font-mono"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div>
                                           </div>
                                       )}
 
@@ -2284,13 +2190,20 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                           </div>
                                       )}
 
-                                      {/* 通用欄位 */}
+                                      {/* 通用欄位 (文件類型：改為 Input + Datalist) */}
                                       <div>
-                                          <label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label>
-                                          <select disabled={!isEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50">
-                                              <option value="">-- 請選擇 --</option>
-                                              {DB_DOC_TYPES[editingEntry.category]?.map(t => <option key={t} value={t}>{t}</option>)}
-                                          </select>
+                                          <label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label>
+                                          <input 
+                                            list="doctype_list"
+                                            disabled={!isEditing} 
+                                            value={editingEntry.docType || ''} 
+                                            onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} 
+                                            className="w-full p-2 border rounded text-sm bg-gray-50"
+                                            placeholder="選擇或輸入新類型..."
+                                          />
+                                          <datalist id="doctype_list">
+                                              {DB_DOC_TYPES[editingEntry.category]?.map(t => <option key={t} value={t}/>)}
+                                          </datalist>
                                       </div>
 
                                       <div>
@@ -2302,13 +2215,13 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                       <div>
                                           <label className="block text-xs font-bold text-slate-500">標籤</label>
                                           <div className="flex gap-2 mb-2 flex-wrap">
-                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500"><X size={10}/></button>}</span>)}
+                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}
                                           </div>
                                           {isEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}
                                       </div>
                                   </div>
                                   
-                                  {/* Right Column: Attachments (修復：大圖顯示) */}
+                                  {/* Right Column: Attachments */}
                                   <div className="space-y-4">
                                       <div className="flex justify-between items-center">
                                           <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
@@ -2320,26 +2233,35 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                                           )}
                                       </div>
                                       
-                                      {/* ★★★ 圖片顯示修正：單欄大圖，移除高度限制，展示完整細節 ★★★ */}
                                       <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
                                           {editingEntry.attachments?.map((file, idx) => (
                                               <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
-                                                  {/* 圖片區域：移除固定高度，改為自適應最大高度 */}
-                                                  <div className="w-full bg-slate-50 relative p-2 flex justify-center">
+                                                  {/* 圖片區域：自適應高度 */}
+                                                  <div className="w-full bg-slate-50 relative p-1">
                                                       <img 
                                                           src={file.data} 
-                                                          className="w-full h-auto object-contain" 
+                                                          className="w-full h-auto object-contain"
+                                                          style={{ maxHeight: 'none' }} 
                                                       />
                                                       {isEditing && (
                                                           <button 
                                                               type="button"
                                                               onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)}
-                                                              className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg"
+                                                              className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg"
                                                               title="刪除"
                                                           >
                                                               <X size={18}/>
                                                           </button>
                                                       )}
+                                                      {/* ★★★ 新增：下載按鈕 ★★★ */}
+                                                      <button 
+                                                          type="button"
+                                                          onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }}
+                                                          className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg"
+                                                          title="下載圖片"
+                                                      >
+                                                          <DownloadCloud size={18}/>
+                                                      </button>
                                                   </div>
                                                   <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center">
                                                       <File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>
@@ -2378,6 +2300,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           </div>
       );
   };
+  
   // 4. Create Document Module (開單系統) - 最終修復版 (Layout Fixed)
   const CreateDocModule = () => {
       const [selectedCarId, setSelectedCarId] = useState<string>('');
@@ -2597,125 +2520,28 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
   const Sidebar = () => (
     <>
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      
-      {/* 側邊欄容器：深色漸層背景 */}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-gradient-to-b from-slate-900 to-slate-800 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-2xl border-r border-slate-700/50`}>
-        
-        {/* ★★★ Logo 區域優化 ★★★ */}
-        <div className="h-24 flex items-center px-4 border-b border-slate-700/50 bg-slate-900/30">
-            <div className={`flex items-center w-full ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-                
-                {/* Logo 容器：使用白色背景容器，解決圖片白邊問題，營造 App Icon 質感 */}
-                <div className="w-10 h-10 bg-white rounded-xl shadow-lg flex items-center justify-center flex-shrink-0 p-1 transform hover:scale-105 transition-transform duration-300">
-                     <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
-                </div>
-                
-                {!isSidebarCollapsed && (
-                    <div className="flex flex-col animate-fade-in overflow-hidden">
-                        {/* 主標題：加粗字體 */}
-                        <h1 className="text-lg font-bold text-white tracking-wider leading-none mb-1 whitespace-nowrap drop-shadow-md">
-                            金田汽車
-                        </h1>
-                        {/* 副標題：金色字體，增加層次 */}
-                        <div className="flex items-center">
-                            <span className="text-[10px] font-bold tracking-widest uppercase text-slate-900 bg-amber-400 px-1.5 rounded-sm shadow-sm">
-                                DMS
-                            </span>
-                            <span className="text-[10px] text-slate-400 ml-1 tracking-wide font-medium">System PRO</span>
-                        </div>
-                    </div>
-                )}
+      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden`}>
+        <div className="p-6 border-b border-slate-700 flex items-center gap-3 overflow-hidden">
+            {/* 側邊欄 Logo */}
+            <div className="w-10 h-10 bg-white rounded-full flex-shrink-0 flex items-center justify-center p-0.5">
+                 <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            
-            <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto p-1 rounded-full hover:bg-white/10 transition-colors">
-                <X size={20} />
-            </button>
+            <div>
+                 <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight">金田汽車<br/>DMS系統</h1>
+            </div>
+          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto"><X size={24} /></button>
         </div>
-
-        {/* 選單導航 */}
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-          {[
-            { id: 'dashboard', label: '系統總覽', icon: LayoutDashboard },
-            { id: 'inventory', label: '車輛庫存管理', icon: Car },
-            { id: 'cross_border', label: '中港車管家', icon: Globe },
-            { type: 'divider' }, 
-            { id: 'create_doc', label: '開單系統', icon: FileText },
-            { id: 'reports', label: '統計報表', icon: FileBarChart },
-            { id: 'database', label: '資料庫中心', icon: Database },
-          ].map((item: any, idx) => (
-             item.type === 'divider' ? (
-                 <div key={`div-${idx}`} className="my-2 border-t border-slate-700/50 mx-2"></div>
-             ) : (
-                <button 
-                    key={item.id} 
-                    onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                    className={`
-                        flex items-center w-full p-3 rounded-xl transition-all duration-200 group relative mb-1
-                        ${activeTab === item.id 
-                            ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-900/20 font-medium border border-amber-400/20' 
-                            : 'hover:bg-slate-700/50 text-slate-400 hover:text-white'
-                        }
-                        ${isSidebarCollapsed ? 'justify-center' : ''}
-                    `}
-                    title={isSidebarCollapsed ? item.label : ''}
-                >
-                    {activeTab === item.id && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white/40 rounded-r-full blur-[1px]" />}
-                    <item.icon size={20} className={`${activeTab === item.id ? 'text-white' : 'group-hover:text-amber-400 transition-colors'} ${!isSidebarCollapsed ? 'mr-3' : ''}`} /> 
-                    {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
-                    
-                    {isSidebarCollapsed && (
-                        <div className="absolute left-full ml-3 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-xl border border-slate-600 transition-opacity duration-200">
-                            {item.label}
-                        </div>
-                    )}
-                </button>
-             )
-          ))}
+        <nav className="flex-1 p-4 space-y-2">
+          <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'dashboard' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><LayoutDashboard size={20} className="mr-3" /> 業務儀表板</button>
+          <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'inventory' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Car size={20} className="mr-3" /> 車輛管理</button>
+          <button onClick={() => { setActiveTab('create_doc'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'create_doc' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileText size={20} className="mr-3" /> 開單系統</button>
+          <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'reports' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileBarChart size={20} className="mr-3" /> 統計報表</button>
+          <button onClick={() => { setActiveTab('cross_border'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'cross_border' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Globe size={20} className="mr-3" /> 中港業務</button>
           
-          <div className="mt-auto pt-4">
-             <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all ${activeTab === 'settings' ? 'bg-amber-500 text-white shadow-md' : 'hover:bg-slate-700/50 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title={isSidebarCollapsed ? "系統設置" : ""}>
-                <Settings size={20} className={!isSidebarCollapsed ? "mr-3" : ""} /> 
-                {!isSidebarCollapsed && "系統設置"}
-             </button>
-          </div>
+          <button onClick={() => { setActiveTab('database'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'database' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Database size={20} className="mr-3" /> 資料庫中心</button>
+          <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'settings' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Settings size={20} className="mr-3" /> 系統設置</button>
         </nav>
-        
-        {/* 底部操作區 */}
-        <div className="p-4 border-t border-slate-700/50 bg-slate-900/50 backdrop-blur-sm">
-            <div className={`flex flex-col gap-4 ${isSidebarCollapsed ? 'items-center' : ''}`}>
-                <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-                    <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-xs text-amber-500 font-bold border border-slate-600 shadow-inner">
-                        <UserCircle size={18} />
-                    </div>
-                    {!isSidebarCollapsed && (
-                        <div className="flex-1 overflow-hidden">
-                            <p className="text-xs font-bold text-slate-200 truncate">{staffId}</p>
-                            <div className="flex items-center mt-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
-                                <span className="text-[10px] text-slate-400">Online</span>
-                            </div>
-                        </div>
-                    )}
-                    {!isSidebarCollapsed && (
-                        <button 
-                            onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} 
-                            className="text-slate-400 hover:text-red-400 transition-colors p-1.5 hover:bg-slate-800 rounded-md"
-                            title="登出"
-                        >
-                            <LogOut size={16} />
-                        </button>
-                    )}
-                </div>
-                
-                {/* 伸縮按鈕 */}
-                <button 
-                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-                    className="w-full py-2 flex items-center justify-center text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700 group"
-                >
-                    {isSidebarCollapsed ? <ChevronRight size={16} className="group-hover:text-amber-400"/> : <ChevronLeft size={16} className="group-hover:text-amber-400"/>}
-                </button>
-            </div>
-        </div>
+        <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center"><div className="mt-3 flex items-center justify-center space-x-2 bg-slate-800 p-2 rounded w-full"><UserCircle size={14} className="text-yellow-500"/><span className="font-bold text-white truncate max-w-[80px]">{staffId}</span></div><button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="mt-2 text-[10px] flex items-center text-red-400 hover:text-red-300 transition"><LogOut size={10} className="mr-1" /> Logout</button></div>
       </div>
     </>
   );
