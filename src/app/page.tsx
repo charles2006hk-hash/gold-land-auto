@@ -233,10 +233,12 @@ type SystemSettings = {
   expenseTypes: string[];
   expenseCompanies: string[]; 
   colors: string[];
-  // 新增設定
   cbItems: string[];
   cbInstitutions: string[];
-  dbCategories: string[]; // 新增：資料庫分類
+  dbCategories: string[];
+  // ★★★ 新增：資料庫設置 ★★★
+  dbRoles: string[]; 
+  dbDocTypes: Record<string, string[]>;
 };
 
 type Customer = {
@@ -269,7 +271,16 @@ const DEFAULT_SETTINGS: SystemSettings = {
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)'],
   cbItems: ['批文延期', '禁區紙續期', '內地驗車', '海關年檢', '封關/解封', '換司機', '換車', '買保險'],
   cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸', '港珠澳大橋口岸'],
-  dbCategories: ['一般客戶', '中港司機', '公司客戶', '車輛文件', '保險文件', '其他']
+  dbCategories: ['一般客戶', '中港司機', '公司客戶', '車輛文件', '保險文件', '其他'],
+  
+  // ★★★ 新增：資料庫預設值 ★★★
+  dbRoles: ['客戶', '員工', '司機', '代辦'],
+  dbDocTypes: {
+    'Person': ['香港身份證', '回鄉證', '護照', '通行證', '地址證明', '香港電子認證', '香港駕照', '國內駕照', '海外駕照', '其他'],
+    'Company': ['商業登記(BR)', '註冊證書(CI)', 'NAR1', '週年申報表', '營業執照', '工商年報', '其他'],
+    'Vehicle': ['牌薄(VRD)', '香港保險', '澳門保險', '國內交強保', '國內商業險', '國內關稅險', '其他'],
+    'CrossBorder': ['批文卡', '新辦回執', '換車回執', '司機更換回執', '中檢資料', '其他']
+  }
 };
 
 // ★★★ 修改：重新定義口岸分類 ★★★
@@ -283,15 +294,16 @@ const AVAILABLE_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦�
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
 const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
+//移除舊的 DB_ROLES 和 DB_DOC_TYPES 常數定義 (因為已經移入 settings)
 // ★★★ 新增：資料庫分類常數 ★★★
-const DB_ROLES = ['客戶', '員工', '司機', '代辦'];
+//const DB_ROLES = ['客戶', '員工', '司機', '代辦'];
 
-const DB_DOC_TYPES: Record<string, string[]> = {
-    'Person': ['香港身份證', '回鄉證', '護照', '通行證', '地址證明', '香港電子認證', '香港駕照', '國內駕照', '海外駕照', '其他'],
-    'Company': ['商業登記(BR)', '註冊證書(CI)', 'NAR1', '週年申報表', '營業執照', '工商年報', '其他'],
-    'Vehicle': ['牌薄(VRD)', '香港保險', '澳門保險', '國內交強保', '國內商業險', '國內關稅險', '其他'],
-    'CrossBorder': ['批文卡', '新辦回執', '換車回執', '司機更換回執', '中檢資料', '其他']
-};
+//const DB_DOC_TYPES: Record<string, string[]> = {
+//    'Person': ['香港身份證', '回鄉證', '護照', '通行證', '地址證明', '香港電子認證', '香港駕照', '國內駕照', '海外駕照', '其他'],
+//    'Company': ['商業登記(BR)', '註冊證書(CI)', 'NAR1', '週年申報表', '營業執照', '工商年報', '其他'],
+//    'Vehicle': ['牌薄(VRD)', '香港保險', '澳門保險', '國內交強保', '國內商業險', '國內關稅險', '其他'],
+//    'CrossBorder': ['批文卡', '新辦回執', '換車回執', '司機更換回執', '中檢資料', '其他']
+//};
 
 const DB_CATEGORIES = [
     { id: 'Person', label: '人員 / 身份資料 (Person)' },
@@ -895,23 +907,30 @@ const deleteVehicle = async (id: string) => {
       }
   };
 
-  // Settings
+  // Settings 更新配合二級菜單
   const updateSettings = async (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     let newSettings = { ...settings };
 
-    if (key === 'models' && parentKey) {
-        const currentModels = newSettings.models[parentKey] || [];
-        let newModelsList = [...currentModels];
-        if (action === 'add' && newItem && !newModelsList.includes(newItem)) newModelsList.push(newItem);
-        else if (action === 'remove') newModelsList = newModelsList.filter(item => item !== newItem);
-        newSettings.models = { ...newSettings.models, [parentKey]: newModelsList };
+    // 處理 models (parentKey = Make) 或 dbDocTypes (parentKey = Category)
+    if ((key === 'models' || key === 'dbDocTypes') && parentKey) {
+        // @ts-ignore - 處理動態 key 存取
+        const currentList = newSettings[key][parentKey] || [];
+        let newList = [...currentList];
+        
+        if (action === 'add' && newItem && !newList.includes(newItem)) newList.push(newItem);
+        else if (action === 'remove') newList = newList.filter((item: string) => item !== newItem);
+        
+        // @ts-ignore
+        newSettings[key] = { ...newSettings[key], [parentKey]: newList };
     } else {
+        // 處理一般單層列表
         const list = settings[key] as string[];
         let newList = [...list];
         if (action === 'add' && newItem && !newList.includes(newItem)) {
             newList.push(newItem);
+            // 如果新增的是廠牌，同時初始化其型號列表
             if (key === 'makes' && !newSettings.models[newItem]) newSettings.models = { ...newSettings.models, [newItem]: [] };
         } else if (action === 'remove') newList = newList.filter(item => item !== newItem);
         (newSettings[key] as string[]) = newList;
@@ -1737,20 +1756,23 @@ const deleteVehicle = async (id: string) => {
       );
   };
 
-  // 3. Settings Manager (系統設置 - 改良版)
-  const SettingsManager = () => {
+// 3. Settings Manager (系統設置 - 升級版)  
+const SettingsManager = () => {
     const [activeTab, setActiveTab] = useState<'dropdowns' | 'users'>('dropdowns');
     const [selectedModule, setSelectedModule] = useState<string>('inventory');
     const [selectedSettingKey, setSelectedSettingKey] = useState<string>('makes');
+    
+    // 用於二級選單的狀態
     const [activeMake, setActiveMake] = useState<string>(settings.makes[0] || '');
+    const [activeDocCat, setActiveDocCat] = useState<string>('Person'); // 新增：用於文件類型分類
 
-    // 模擬用戶資料 (預留功能)
+    // 模擬用戶資料
     const [systemUsers, setSystemUsers] = useState<{id: string, name: string, modules: string[]}[]>([
         { id: 'BOSS', name: '管理員', modules: ['全部權限'] },
         { id: 'SALES', name: '銷售人員', modules: ['車輛管理', '開單系統'] }
     ]);
 
-    // 定義設置結構
+    // 定義設置結構 (新增 database)
     const settingModules = [
         { 
             id: 'inventory', label: '車輛庫存管理', icon: Car,
@@ -1768,6 +1790,13 @@ const deleteVehicle = async (id: string) => {
             ]
         },
         { 
+            id: 'database', label: '資料庫中心', icon: Database,
+            options: [
+                { key: 'dbRoles', label: '人員角色 (Roles)' },
+                { key: 'dbDocTypes', label: '文件類型 (Doc Types)' }
+            ]
+        },
+        { 
             id: 'finance', label: '財務與費用', icon: DollarSign,
             options: [
                 { key: 'expenseTypes', label: '費用類別 (Expense Types)' },
@@ -1776,53 +1805,42 @@ const deleteVehicle = async (id: string) => {
         }
     ];
 
+    // 通用的更新函數 (支援二級結構)
+    const handleUpdate = (newItem: string, action: 'add' | 'remove', parentKey?: string) => {
+        if (!newItem && action === 'add') return;
+        updateSettings(selectedSettingKey as keyof SystemSettings, newItem, action, parentKey);
+    };
+
     const renderDropdownEditor = () => {
-        // 特殊處理：車輛型號 (需關聯廠牌)
+        // --- 情況 A: 車輛型號 (需關聯廠牌) ---
         if (selectedSettingKey === 'models') {
              return (
                  <div className="space-y-4 h-full flex flex-col">
                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 mb-2 flex-none">
-                         <Info size={16} className="inline mr-1"/>
-                         型號需關聯至特定廠牌。請先在左欄選擇廠牌，再於右欄編輯其型號。
+                         <Info size={16} className="inline mr-1"/> 請先在左欄選擇廠牌，再於右欄編輯其型號。
                      </div>
                      <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-                         {/* 左：廠牌選擇 */}
                          <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
                              <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">1. 選擇廠牌</div>
                              <div className="flex-1 overflow-y-auto p-1">
                                  {settings.makes.map(m => (
-                                     <button 
-                                        key={m} 
-                                        onClick={() => setActiveMake(m)}
-                                        className={`w-full text-left p-2 text-sm rounded transition-colors ${activeMake === m ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}
-                                     >
-                                         {m}
-                                     </button>
+                                     <button key={m} onClick={() => setActiveMake(m)} className={`w-full text-left p-2 text-sm rounded transition-colors ${activeMake === m ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}>{m}</button>
                                  ))}
                              </div>
                          </div>
-                         {/* 右：型號編輯 */}
                          <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
-                             <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b flex justify-between items-center">
-                                 <span>2. 編輯 {activeMake} 的型號</span>
-                             </div>
-                             <div className="p-2 border-b bg-white">
-                                 <div className="flex gap-2">
-                                     <input id="new-model-input" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增 ${activeMake} 型號...`} />
-                                     <button onClick={() => {
-                                         const input = document.getElementById('new-model-input') as HTMLInputElement;
-                                         if(input.value) { updateSettings('models', input.value, 'add', activeMake); input.value = ''; }
-                                     }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700 transition-colors"><Plus size={16}/></button>
-                                 </div>
+                             <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">2. 編輯 {activeMake} 的型號</div>
+                             <div className="p-2 border-b bg-white flex gap-2">
+                                 <input id="new-model" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增型號...`} />
+                                 <button onClick={() => { const el = document.getElementById('new-model') as HTMLInputElement; handleUpdate(el.value, 'add', activeMake); el.value = ''; }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700"><Plus size={16}/></button>
                              </div>
                              <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                 {(settings.models[activeMake] || []).map(model => (
-                                     <div key={model} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all">
-                                         <span>{model}</span>
-                                         <button onClick={() => updateSettings('models', model, 'remove', activeMake)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>
+                                 {(settings.models[activeMake] || []).map(item => (
+                                     <div key={item} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200">
+                                         <span>{item}</span>
+                                         <button onClick={() => handleUpdate(item, 'remove', activeMake)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
                                      </div>
                                  ))}
-                                 {(!settings.models[activeMake] || settings.models[activeMake].length === 0) && <div className="text-center text-gray-400 text-xs mt-4">暫無型號資料</div>}
                              </div>
                          </div>
                      </div>
@@ -1830,19 +1848,51 @@ const deleteVehicle = async (id: string) => {
              );
         }
 
-        // 通用列表編輯器 (Makes, Colors, Expenses...)
+        // --- 情況 B: 文件類型 (需關聯分類) ---
+        if (selectedSettingKey === 'dbDocTypes') {
+            return (
+                <div className="space-y-4 h-full flex flex-col">
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-2 flex-none">
+                        <Info size={16} className="inline mr-1"/> 請選擇資料分類 (如: 人員、公司)，再編輯該類別下的文件選項。
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+                        {/* 左：分類選擇 */}
+                        <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
+                            <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">1. 選擇分類</div>
+                            <div className="flex-1 overflow-y-auto p-1">
+                                {DB_CATEGORIES.map(cat => (
+                                    <button key={cat.id} onClick={() => setActiveDocCat(cat.id)} className={`w-full text-left p-2 text-sm rounded transition-colors ${activeDocCat === cat.id ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}>{cat.label.split(' ')[0]}</button>
+                                ))}
+                            </div>
+                        </div>
+                        {/* 右：類型編輯 */}
+                        <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
+                            <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">2. 編輯文件類型</div>
+                            <div className="p-2 border-b bg-white flex gap-2">
+                                <input id="new-doctype" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增文件類型...`} />
+                                <button onClick={() => { const el = document.getElementById('new-doctype') as HTMLInputElement; handleUpdate(el.value, 'add', activeDocCat); el.value = ''; }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700"><Plus size={16}/></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {(settings.dbDocTypes[activeDocCat] || []).map(item => (
+                                    <div key={item} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200">
+                                        <span>{item}</span>
+                                        <button onClick={() => handleUpdate(item, 'remove', activeDocCat)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+       }
+
+        // --- 情況 C: 一般單層列表 ---
         const currentList = (settings[selectedSettingKey as keyof SystemSettings] || []) as string[];
         return (
             <div className="flex flex-col h-full">
                 <div className="flex gap-2 mb-4 flex-none">
-                    <input id="new-item-input" className="flex-1 border p-2 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder={`輸入新的${settingModules.find(m => m.id === selectedModule)?.options.find(o => o.key === selectedSettingKey)?.label.split(' ')[0]}...`} />
-                    <button 
-                        onClick={() => {
-                            const input = document.getElementById('new-item-input') as HTMLInputElement;
-                            if(input.value) { updateSettings(selectedSettingKey as keyof SystemSettings, input.value, 'add'); input.value = ''; }
-                        }}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-blue-700 flex items-center transition-colors"
-                    >
+                    <input id="new-item-input" className="flex-1 border p-2 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder={`輸入新的項目...`} />
+                    <button onClick={() => { const el = document.getElementById('new-item-input') as HTMLInputElement; handleUpdate(el.value, 'add'); el.value = ''; }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-blue-700 flex items-center transition-colors">
                         <Plus size={18} className="mr-1"/> 新增
                     </button>
                 </div>
@@ -1850,16 +1900,10 @@ const deleteVehicle = async (id: string) => {
                     {currentList.map(item => (
                         <div key={item} className="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm group hover:border-blue-300 transition-colors">
                             <span className="font-medium text-gray-700">{item}</span>
-                            <button 
-                                onClick={() => updateSettings(selectedSettingKey as keyof SystemSettings, item, 'remove')}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all opacity-0 group-hover:opacity-100"
-                                title="刪除"
-                            >
-                                <Trash2 size={16}/>
-                            </button>
+                            <button onClick={() => handleUpdate(item, 'remove')} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button>
                         </div>
                     ))}
-                    {currentList.length === 0 && <div className="text-center text-gray-400 py-10">此列表目前是空的</div>}
+                    {currentList.length === 0 && <div className="text-center text-gray-400 py-10">列表是空的</div>}
                 </div>
             </div>
         );
@@ -1867,115 +1911,50 @@ const deleteVehicle = async (id: string) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50">
-            {/* Top Tabs */}
             <div className="bg-white border-b px-8 pt-6 flex space-x-8 shadow-sm z-10 flex-none">
                 <button onClick={() => setActiveTab('dropdowns')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'dropdowns' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    <Settings className="mr-2" size={18}/> 選單內容管理 (Dropdowns)
+                    <Settings className="mr-2" size={18}/> 選單內容管理
                 </button>
                 <button onClick={() => setActiveTab('users')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'users' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    <Users className="mr-2" size={18}/> 系統用戶管理 (Users)
+                    <Users className="mr-2" size={18}/> 系統用戶管理
                 </button>
             </div>
 
             <div className="flex-1 overflow-hidden p-6">
                 {activeTab === 'dropdowns' && (
                     <div className="flex h-full gap-6">
-                        {/* Col 1: Module Selector */}
-                        <div className="w-60 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                            <div className="p-4 bg-gray-50 border-b font-bold text-gray-500 text-xs uppercase tracking-wider">Step 1: 選擇模組</div>
+                        {/* Col 1: Module */}
+                        <div className="w-56 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                            <div className="p-3 bg-gray-50 border-b font-bold text-gray-500 text-xs">Step 1: 選擇模組</div>
                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                 {settingModules.map(mod => (
-                                    <button
-                                        key={mod.id}
-                                        onClick={() => { setSelectedModule(mod.id); setSelectedSettingKey(mod.options[0].key); }}
-                                        className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-all ${selectedModule === mod.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
-                                    >
+                                    <button key={mod.id} onClick={() => { setSelectedModule(mod.id); setSelectedSettingKey(mod.options[0].key); }} className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-all ${selectedModule === mod.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>
                                         <mod.icon size={18} className={`mr-3 ${selectedModule === mod.id ? 'text-blue-600' : 'text-gray-400'}`}/> {mod.label}
                                     </button>
                                 ))}
                             </div>
                         </div>
-
-                        {/* Col 2: Field Selector */}
-                        <div className="w-60 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                             <div className="p-4 bg-gray-50 border-b font-bold text-gray-500 text-xs uppercase tracking-wider">Step 2: 選擇欄位</div>
+                        {/* Col 2: Field */}
+                        <div className="w-56 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                             <div className="p-3 bg-gray-50 border-b font-bold text-gray-500 text-xs">Step 2: 選擇欄位</div>
                              <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                  {settingModules.find(m => m.id === selectedModule)?.options.map(opt => (
-                                     <button
-                                         key={opt.key}
-                                         onClick={() => setSelectedSettingKey(opt.key)}
-                                         className={`w-full text-left p-3 rounded-lg text-sm transition-all ${selectedSettingKey === opt.key ? 'bg-yellow-50 text-yellow-700 font-bold border border-yellow-200 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}
-                                     >
-                                         {opt.label}
-                                     </button>
+                                     <button key={opt.key} onClick={() => setSelectedSettingKey(opt.key)} className={`w-full text-left p-3 rounded-lg text-sm transition-all ${selectedSettingKey === opt.key ? 'bg-yellow-50 text-yellow-700 font-bold border border-yellow-200 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>{opt.label}</button>
                                  ))}
                              </div>
                         </div>
-
                         {/* Col 3: Editor */}
                         <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                             <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                                 <h3 className="font-bold text-gray-800 flex items-center">
-                                     <Edit size={16} className="mr-2 text-blue-500"/>
-                                     編輯內容: <span className="ml-2 text-blue-600">{settingModules.find(m => m.id === selectedModule)?.options.find(o => o.key === selectedSettingKey)?.label}</span>
-                                 </h3>
-                             </div>
-                             <div className="flex-1 overflow-y-auto p-6">
-                                 {renderDropdownEditor()}
-                             </div>
+                             <div className="p-3 border-b flex justify-between items-center bg-gray-50"><h3 className="font-bold text-gray-800 flex items-center"><Edit size={16} className="mr-2 text-blue-500"/> 編輯: <span className="ml-2 text-blue-600">{settingModules.find(m => m.id === selectedModule)?.options.find(o => o.key === selectedSettingKey)?.label}</span></h3></div>
+                             <div className="flex-1 overflow-y-auto p-6">{renderDropdownEditor()}</div>
                         </div>
                     </div>
                 )}
-
                 {activeTab === 'users' && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col h-full">
-                        <div className="flex justify-between items-center mb-6">
-                            <div>
-                                <h2 className="text-xl font-bold text-gray-800">用戶權限管理</h2>
-                                <p className="text-sm text-gray-500 mt-1">管理可登入系統的員工帳號及其模組存取權限。</p>
-                            </div>
-                            <button className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center hover:bg-slate-800 transition-colors">
-                                <Plus size={16} className="mr-2"/> 新增用戶
-                            </button>
-                        </div>
-                        
-                        {/* Mock UI for visualization (Placeholder) */}
-                        <div className="border rounded-lg overflow-hidden">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-gray-50 text-gray-600 border-b">
-                                    <tr>
-                                        <th className="p-4 font-medium">員工編號 (Staff ID)</th>
-                                        <th className="p-4 font-medium">姓名</th>
-                                        <th className="p-4 font-medium">角色</th>
-                                        <th className="p-4 font-medium">可用模組</th>
-                                        <th className="p-4 font-medium text-right">狀態</th>
-                                        <th className="p-4 font-medium text-right">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {systemUsers.map(u => (
-                                        <tr key={u.id} className="hover:bg-gray-50">
-                                            <td className="p-4 font-mono font-bold text-blue-600">{u.id}</td>
-                                            <td className="p-4 font-medium">{u.name}</td>
-                                            <td className="p-4"><span className="bg-gray-100 px-2 py-1 rounded text-xs text-gray-600">{u.id === 'BOSS' ? '管理員' : '一般員工'}</span></td>
-                                            <td className="p-4">
-                                                <div className="flex gap-1 flex-wrap">
-                                                    {u.modules.map(m => <span key={m} className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-xs">{m}</span>)}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-right"><span className="text-green-600 text-xs font-bold bg-green-50 px-2 py-1 rounded-full">啟用中</span></td>
-                                            <td className="p-4 text-right">
-                                                <button className="text-gray-400 hover:text-blue-600 transition-colors"><Edit size={16}/></button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="mt-4 text-center p-4 bg-yellow-50 text-yellow-800 rounded-lg text-sm border border-yellow-200">
-                            <Info size={16} className="inline mr-2"/>
-                            此用戶管理介面目前為預覽版 (Preview)。實際的權限控制邏輯需連接後端驗證系統後啟用。
-                        </div>
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                        <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-gray-800">用戶權限管理 (預覽)</h2><button className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center"><Plus size={16} className="mr-2"/> 新增用戶</button></div>
+                        <table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-600 border-b"><tr><th className="p-4">ID</th><th className="p-4">姓名</th><th className="p-4">角色</th><th className="p-4">權限</th><th className="p-4 text-right">狀態</th></tr></thead>
+                        <tbody className="divide-y">{systemUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{u.id}</td><td className="p-4">{u.name}</td><td className="p-4">一般員工</td><td className="p-4">{u.modules.join(', ')}</td><td className="p-4 text-right"><span className="text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs">啟用</span></td></tr>))}</tbody></table>
                     </div>
                 )}
             </div>
@@ -2408,21 +2387,22 @@ const deleteVehicle = async (id: string) => {
                                       {editingEntry.category === 'Person' && (
                                           <>
                                               <div>
-                                                  <label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label>
-                                                  <div className="flex flex-wrap gap-2">
-                                                      {DB_ROLES.map(role => (
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label>
+                                                    <div className="flex flex-wrap gap-2">
+                                                    {/* ★★★ 修改：使用 settings.dbRoles ★★★ */}
+                                                    {(settings.dbRoles || ['客戶', '司機']).map(role => (
                                                           <button
-                                                              key={role}
-                                                              type="button"
-                                                              disabled={!isEditing}
-                                                              onClick={() => toggleRole(role)}
-                                                              className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}
-                                                          >
-                                                              {role}
+                                                          key={role}
+                                                          type="button"
+                                                          disabled={!isEditing}
+                                                          onClick={() => toggleRole(role)}
+                                                          className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}
+                                                     >
+                                                          {role}
                                                           </button>
-                                                      ))}
-                                                  </div>
-                                              </div>
+                                                    ))}
+                                                    </div>
+                                                </div>
                                               <div className="grid grid-cols-2 gap-3">
                                                   <div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                                   <div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div>
@@ -2468,7 +2448,8 @@ const deleteVehicle = async (id: string) => {
                                             placeholder="選擇或輸入新類型..."
                                           />
                                           <datalist id="doctype_list">
-                                              {DB_DOC_TYPES[editingEntry.category]?.map(t => <option key={t} value={t}/>)}
+                                             {/* ★★★ 修改：使用 settings.dbDocTypes ★★★ */}
+                                             {(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}
                                           </datalist>
                                       </div>
 
