@@ -1756,15 +1756,16 @@ const deleteVehicle = async (id: string) => {
       );
   };
 
-// 3. Settings Manager (系統設置 - 升級版)  
-const SettingsManager = () => {
-    const [activeTab, setActiveTab] = useState<'dropdowns' | 'users'>('dropdowns');
+// 3. Settings Manager (系統設置 - 升級版 + 數據管理)
+  const SettingsManager = () => {
+    const [activeTab, setActiveTab] = useState<'dropdowns' | 'users' | 'data'>('dropdowns');
     const [selectedModule, setSelectedModule] = useState<string>('inventory');
     const [selectedSettingKey, setSelectedSettingKey] = useState<string>('makes');
     
     // 用於二級選單的狀態
     const [activeMake, setActiveMake] = useState<string>(settings.makes[0] || '');
-    const [activeDocCat, setActiveDocCat] = useState<string>('Person'); // 新增：用於文件類型分類
+    const [activeDocCat, setActiveDocCat] = useState<string>('Person');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // 模擬用戶資料
     const [systemUsers, setSystemUsers] = useState<{id: string, name: string, modules: string[]}[]>([
@@ -1772,7 +1773,7 @@ const SettingsManager = () => {
         { id: 'SALES', name: '銷售人員', modules: ['車輛管理', '開單系統'] }
     ]);
 
-    // 定義設置結構 (新增 database)
+    // 定義設置結構
     const settingModules = [
         { 
             id: 'inventory', label: '車輛庫存管理', icon: Car,
@@ -1805,10 +1806,124 @@ const SettingsManager = () => {
         }
     ];
 
-    // 通用的更新函數 (支援二級結構)
     const handleUpdate = (newItem: string, action: 'add' | 'remove', parentKey?: string) => {
         if (!newItem && action === 'add') return;
         updateSettings(selectedSettingKey as keyof SystemSettings, newItem, action, parentKey);
+    };
+
+    // ★★★ 數據匯出 (Export) ★★★
+    const handleExportData = async () => {
+        if (!db || !staffId) return;
+        setIsProcessing(true);
+        try {
+            const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+            
+            // 1. 獲取資料庫中心資料 (因為它不在 inventory state 中)
+            const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+            const dbSnapshot = await getDocs(dbRef);
+            const databaseData = dbSnapshot.docs.map(d => d.data());
+
+            // 2. 打包所有資料
+            const backupData = {
+                version: "2.0",
+                timestamp: new Date().toISOString(),
+                exportedBy: staffId,
+                settings: settings,
+                inventory: inventory, // 包含車輛、費用、收款、中港資料
+                database: databaseData // 資料庫中心資料
+            };
+
+            // 3. 下載檔案
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `GL_DMS_Backup_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            alert("數據匯出成功！");
+        } catch (e) {
+            console.error(e);
+            alert("匯出失敗，請檢查網絡或權限。");
+        }
+        setIsProcessing(false);
+    };
+
+    // ★★★ 數據匯入 (Import) ★★★
+    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !db || !staffId) return;
+        
+        if (!confirm("警告：匯入數據將會寫入系統。\n\n- 系統設定：將被覆蓋\n- 車輛與資料庫：將以「新增」方式加入 (避免覆蓋現有資料)\n\n確定要繼續嗎？")) {
+            e.target.value = ''; // Reset input
+            return;
+        }
+
+        setIsProcessing(true);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = JSON.parse(event.target?.result as string);
+                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                const batch = writeBatch(db!);
+                let operationCount = 0;
+                const BATCH_LIMIT = 450; // Firestore batch limit safety
+
+                // 1. 還原設定 (Overwrite)
+                if (data.settings) {
+                    const settingsRef = doc(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
+                    batch.set(settingsRef, data.settings);
+                    setSettings(data.settings); // Update local state immediately
+                    operationCount++;
+                }
+
+                // 2. 還原車輛庫存 (Append)
+                if (Array.isArray(data.inventory)) {
+                    data.inventory.forEach((car: any) => {
+                        if (operationCount < BATCH_LIMIT) {
+                            const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
+                            // 移除舊 ID，賦予新 ID，並加入匯入標記
+                            const { id, ...carData } = car;
+                            batch.set(newDocRef, { 
+                                ...carData, 
+                                id: newDocRef.id, 
+                                importedAt: serverTimestamp(),
+                                regMark: `${car.regMark} (匯入)` // 避免車牌重複混淆
+                            });
+                            operationCount++;
+                        }
+                    });
+                }
+
+                // 3. 還原資料庫中心 (Append)
+                if (Array.isArray(data.database)) {
+                    data.database.forEach((entry: any) => {
+                        if (operationCount < BATCH_LIMIT) {
+                            const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
+                            const { id, ...entryData } = entry;
+                            batch.set(newDocRef, { 
+                                ...entryData, 
+                                id: newDocRef.id, 
+                                importedAt: serverTimestamp(),
+                                name: `${entry.name} (匯入)`
+                            });
+                            operationCount++;
+                        }
+                    });
+                }
+
+                await batch.commit();
+                alert(`匯入完成！\n共處理了約 ${operationCount} 筆資料。\n(超過 450 筆的資料需分批處理)`);
+                
+            } catch (err) {
+                console.error("Import failed:", err);
+                alert("匯入失敗：檔案格式錯誤或網絡問題。");
+            }
+            setIsProcessing(false);
+            e.target.value = ''; // Reset input
+        };
+        reader.readAsText(file);
     };
 
     const renderDropdownEditor = () => {
@@ -1911,12 +2026,17 @@ const SettingsManager = () => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50">
+            {/* Top Tabs */}
             <div className="bg-white border-b px-8 pt-6 flex space-x-8 shadow-sm z-10 flex-none">
                 <button onClick={() => setActiveTab('dropdowns')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'dropdowns' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     <Settings className="mr-2" size={18}/> 選單內容管理
                 </button>
                 <button onClick={() => setActiveTab('users')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'users' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     <Users className="mr-2" size={18}/> 系統用戶管理
+                </button>
+                {/* ★★★ 新增：數據匯入/匯出 Tab ★★★ */}
+                <button onClick={() => setActiveTab('data')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    <Database className="mr-2" size={18}/> 數據備份與還原
                 </button>
             </div>
 
@@ -1955,6 +2075,47 @@ const SettingsManager = () => {
                         <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-gray-800">用戶權限管理 (預覽)</h2><button className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center"><Plus size={16} className="mr-2"/> 新增用戶</button></div>
                         <table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-600 border-b"><tr><th className="p-4">ID</th><th className="p-4">姓名</th><th className="p-4">角色</th><th className="p-4">權限</th><th className="p-4 text-right">狀態</th></tr></thead>
                         <tbody className="divide-y">{systemUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{u.id}</td><td className="p-4">{u.name}</td><td className="p-4">一般員工</td><td className="p-4">{u.modules.join(', ')}</td><td className="p-4 text-right"><span className="text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs">啟用</span></td></tr>))}</tbody></table>
+                    </div>
+                )}
+                
+                {/* ★★★ 新增：數據管理 Tab UI ★★★ */}
+                {activeTab === 'data' && (
+                    <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
+                        <div className="text-center">
+                            <h2 className="text-2xl font-bold text-slate-800">系統數據管理</h2>
+                            <p className="text-gray-500 mt-2">您可以備份 (匯出) 所有系統資料，或從備份檔還原 (匯入) 資料。</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-8">
+                            {/* 匯出區塊 */}
+                            <div className="border border-blue-100 bg-blue-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                                    <DownloadCloud size={32}/>
+                                </div>
+                                <h3 className="font-bold text-lg text-blue-900">匯出備份 (Export)</h3>
+                                <p className="text-xs text-blue-700/70 mt-2 mb-6">下載包含系統設定、車輛庫存及資料庫中心的完整 JSON 備份檔。</p>
+                                <button 
+                                    onClick={handleExportData}
+                                    disabled={isProcessing}
+                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-sm transition-colors disabled:opacity-50"
+                                >
+                                    {isProcessing ? '處理中...' : '下載備份檔案'}
+                                </button>
+                            </div>
+
+                            {/* 匯入區塊 */}
+                            <div className="border border-yellow-100 bg-yellow-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                                <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4">
+                                    <Upload size={32}/>
+                                </div>
+                                <h3 className="font-bold text-lg text-yellow-900">匯入還原 (Import)</h3>
+                                <p className="text-xs text-yellow-700/70 mt-2 mb-6">上傳 JSON 備份檔。注意：這將覆蓋系統設定並新增資料。</p>
+                                <label className={`w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer text-center block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    {isProcessing ? '匯入中...' : '選擇檔案匯入'}
+                                    <input type="file" accept=".json" className="hidden" onChange={handleImportData} disabled={isProcessing}/>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
