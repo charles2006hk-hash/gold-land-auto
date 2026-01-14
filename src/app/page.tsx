@@ -316,9 +316,6 @@ const DB_CATEGORIES = [
     { id: 'CrossBorder', label: '中港指標文件 (Quota Doc)' }
 ];
 
-const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
-const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
-
 const formatNumberInput = (value: string) => {
   // 1. 移除非數字、非小數點、非負號的字符
   let cleanVal = value.replace(/[^0-9.-]/g, '');
