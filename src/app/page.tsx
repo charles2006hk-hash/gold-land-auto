@@ -2492,7 +2492,7 @@ const deleteVehicle = async (id: string) => {
 
                   {/* List Content */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                      {filteredEntries.map(entry => (
+                      {filteredEntries.map(entry => {
                         // ★★★ 新增：計算過期狀態顯示 ★★★
                           const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
                           const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
@@ -2522,7 +2522,8 @@ const deleteVehicle = async (id: string) => {
                                   {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
                               </div>
                           </div>
-                      ))}
+                         );
+                    })}
                       {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
                   </div>
               </div>
