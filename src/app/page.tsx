@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
