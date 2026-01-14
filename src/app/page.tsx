@@ -2306,6 +2306,13 @@ const deleteVehicle = async (id: string) => {
                       attachments: attachments,
                       createdAt: data.createdAt,
                       updatedAt: data.updatedAt
+
+                      // ★★★ 新增：這裡必須加入讀取新欄位的邏輯，否則存檔後會消失 ★★★
+                      reminderEnabled: data.reminderEnabled || false,
+                      expiryDate: data.expiryDate || '',
+                      renewalCount: data.renewalCount || 0,
+                      renewalDuration: data.renewalDuration || 1,
+                      renewalUnit: data.renewalUnit || 'year'
                   } as DatabaseEntry);
               });
               setEntries(list);
