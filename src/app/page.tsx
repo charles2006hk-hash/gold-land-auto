@@ -109,6 +109,12 @@ type DatabaseEntry = {
     
     createdAt: any;
     updatedAt?: any;
+    // ★★★ 新增：提醒與續期功能欄位 ★★★
+    reminderEnabled?: boolean;      // 是否激活提醒
+    expiryDate?: string;            // 到期日 (YYYY-MM-DD)
+    renewalCount?: number;          // 續期次數
+    renewalDuration?: number;       // 續期區間數值 (例如: 1)
+    renewalUnit?: 'year' | 'month'; // 續期區間單位 (年/月)
 };
 
 // --- 類型定義 ---
@@ -2334,6 +2340,37 @@ const deleteVehicle = async (id: string) => {
           document.body.removeChild(link);
       };
 
+      // ★★★ 新增：執行快速續期邏輯 ★★★
+      const handleQuickRenew = () => {
+          if (!editingEntry || !editingEntry.expiryDate) {
+              alert("請先設定當前的到期日");
+              return;
+          }
+
+          const duration = Number(editingEntry.renewalDuration) || 1;
+          const unit = editingEntry.renewalUnit || 'year';
+          
+          // 解析當前日期
+          const currentDate = new Date(editingEntry.expiryDate);
+          
+          // 計算新日期
+          if (unit === 'year') {
+              currentDate.setFullYear(currentDate.getFullYear() + duration);
+          } else {
+              currentDate.setMonth(currentDate.getMonth() + duration);
+          }
+          
+          // 格式化回 YYYY-MM-DD
+          const newDateStr = currentDate.toISOString().split('T')[0];
+          
+          // 更新狀態：日期更新，次數+1
+          setEditingEntry({
+              ...editingEntry,
+              expiryDate: newDateStr,
+              renewalCount: (editingEntry.renewalCount || 0) + 1
+          });
+      };
+
       const handleSave = async (e: React.FormEvent) => {
           e.preventDefault(); 
           if (!db || !staffId || !editingEntry) return;
@@ -2456,6 +2493,11 @@ const deleteVehicle = async (id: string) => {
                   {/* List Content */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
                       {filteredEntries.map(entry => (
+                        // ★★★ 新增：計算過期狀態顯示 ★★★
+                          const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
+                          const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
+                          
+                          return (
                           <div 
                               key={entry.id}
                               onClick={() => { setEditingEntry(entry); setIsEditing(false); }}
@@ -2463,7 +2505,13 @@ const deleteVehicle = async (id: string) => {
                           >
                               <div className="flex justify-between items-start">
                                   <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
+                                      {/* ★★★ 新增：提醒圖標 ★★★ */}
+                                          {entry.reminderEnabled && (
+                                              <Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />
+                                          )}
+                                      </div>
                                       <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
                                           <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
                                           {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
@@ -2612,6 +2660,93 @@ const deleteVehicle = async (id: string) => {
                                              {/* ★★★ 修改：使用 settings.dbDocTypes ★★★ */}
                                              {(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}
                                           </datalist>
+                                      </div>
+
+{/* ★★★ 新增：到期日與續期管理模塊 ★★★ */}
+                                      <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                                          <div className="flex justify-between items-center mb-3">
+                                              <label className="flex items-center cursor-pointer">
+                                                  <input 
+                                                      type="checkbox" 
+                                                      disabled={!isEditing}
+                                                      checked={editingEntry.reminderEnabled || false} 
+                                                      onChange={e => setEditingEntry({
+                                                          ...editingEntry, 
+                                                          reminderEnabled: e.target.checked,
+                                                          // 如果開啟且無預設值，自動填入預設
+                                                          renewalDuration: editingEntry.renewalDuration || 1,
+                                                          renewalUnit: editingEntry.renewalUnit || 'year',
+                                                          renewalCount: editingEntry.renewalCount || 0
+                                                      })} 
+                                                      className="w-4 h-4 text-amber-600 rounded mr-2"
+                                                  />
+                                                  <span className={`text-sm font-bold flex items-center ${editingEntry.reminderEnabled ? 'text-amber-800' : 'text-gray-500'}`}>
+                                                      <Bell size={16} className="mr-1"/> 啟用到期提醒功能
+                                                  </span>
+                                              </label>
+                                              {editingEntry.reminderEnabled && (
+                                                  <div className="text-xs text-amber-700 font-mono bg-white px-2 py-1 rounded border border-amber-200">
+                                                      已續期次數: <span className="font-bold">{editingEntry.renewalCount || 0}</span>
+                                                  </div>
+                                              )}
+                                          </div>
+
+                                          {/* 展開的設定區域 */}
+                                          {editingEntry.reminderEnabled && (
+                                              <div className="grid grid-cols-2 gap-4 animate-fade-in">
+                                                  
+                                                  {/* 1. 到期日設定 */}
+                                                  <div className="col-span-2 md:col-span-1">
+                                                      <label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label>
+                                                      <input 
+                                                          type="date" 
+                                                          disabled={!isEditing}
+                                                          value={editingEntry.expiryDate || ''} 
+                                                          onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} 
+                                                          className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold"
+                                                      />
+                                                      {/* 顯示剩餘天數 */}
+                                                      <div className="mt-1">
+                                                          <DateStatusBadge date={editingEntry.expiryDate} label="狀態" />
+                                                      </div>
+                                                  </div>
+
+                                                  {/* 2. 續期規則與操作 */}
+                                                  <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100">
+                                                      <label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label>
+                                                      <div className="flex gap-2 mb-2">
+                                                          <input 
+                                                              type="number" 
+                                                              disabled={!isEditing}
+                                                              value={editingEntry.renewalDuration} 
+                                                              onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} 
+                                                              className="w-16 p-1 border rounded text-center text-sm"
+                                                              min="1"
+                                                          />
+                                                          <select 
+                                                              disabled={!isEditing}
+                                                              value={editingEntry.renewalUnit} 
+                                                              onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} 
+                                                              className="flex-1 p-1 border rounded text-sm"
+                                                          >
+                                                              <option value="year">年 (Years)</option>
+                                                              <option value="month">月 (Months)</option>
+                                                          </select>
+                                                      </div>
+                                                      
+                                                      {isEditing && (
+                                                          <button 
+                                                              type="button" 
+                                                              onClick={handleQuickRenew}
+                                                              className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"
+                                                          >
+                                                              <RefreshCw size={12} className="mr-1"/> 
+                                                              立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})
+                                                          </button>
+                                                      )}
+                                                  </div>
+                                              </div>
+                                          )}
                                       </div>
 
                                       <div>
