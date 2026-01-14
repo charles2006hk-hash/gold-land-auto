@@ -2359,7 +2359,8 @@ const deleteVehicle = async (id: string) => {
   const DatabaseModule = () => {
       // 使用父層傳遞的 dbEntries 狀態 (如果父層已提升)，否則使用本地狀態
       // 為了保險起見，這裡我們保留本地讀取邏輯，但建議與主程式同步
-      const [entries, setEntries] = useState<DatabaseEntry[]>([]);
+      //const [entries, setEntries] = useState<DatabaseEntry[]>([]);
+      const entries = dbEntries; 
       const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
       const [searchTerm, setSearchTerm] = useState('');
       const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
