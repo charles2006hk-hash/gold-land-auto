@@ -3097,31 +3097,119 @@ const deleteVehicle = async (id: string) => {
       );
   };
 
+  // --- Sidebar Component (Updated) ---
   const Sidebar = () => (
     <>
+      {/* Mobile Overlay */}
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden`}>
-        <div className="p-6 border-b border-slate-700 flex items-center gap-3 overflow-hidden">
-            {/* 側邊欄 Logo */}
-            <div className="w-10 h-10 bg-white rounded-full flex-shrink-0 flex items-center justify-center p-0.5">
-                 <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
+      
+      {/* Sidebar Container */}
+      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
+        
+        {/* Sidebar Header */}
+        <div className={`p-4 h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} transition-all`}>
+            <div className="flex items-center gap-3 overflow-hidden">
+                {/* ★★★ 修改 2: Logo 去除白圈背景，直接顯示圖片 ★★★ */}
+                <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center">
+                     <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                </div>
+                
+                {/* 標題文字 (縮排時隱藏) */}
+                <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
+                     <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight whitespace-nowrap">金田汽車<br/><span className="text-xs text-slate-400">DMS系統</span></h1>
+                </div>
             </div>
-            <div>
-                 <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight">金田汽車<br/>DMS系統</h1>
-            </div>
-          <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white ml-auto"><X size={24} /></button>
+
+            {/* ★★★ 修改 1: Desktop 縮排切換按鈕 ★★★ */}
+            <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+                className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors"
+                title={isSidebarCollapsed ? "展開選單" : "縮起選單"}
+            >
+                {isSidebarCollapsed ? null : <ChevronLeft size={20} />}
+            </button>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <button onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'dashboard' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><LayoutDashboard size={20} className="mr-3" /> 業務儀表板</button>
-          <button onClick={() => { setActiveTab('inventory'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'inventory' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Car size={20} className="mr-3" /> 車輛管理</button>
-          <button onClick={() => { setActiveTab('create_doc'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'create_doc' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileText size={20} className="mr-3" /> 開單系統</button>
-          <button onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'reports' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><FileBarChart size={20} className="mr-3" /> 統計報表</button>
-          <button onClick={() => { setActiveTab('cross_border'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'cross_border' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Globe size={20} className="mr-3" /> 中港業務</button>
-          
-          <button onClick={() => { setActiveTab('database'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'database' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Database size={20} className="mr-3" /> 資料庫中心</button>
-          <button onClick={() => { setActiveTab('settings'); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded transition ${activeTab === 'settings' ? 'bg-yellow-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}><Settings size={20} className="mr-3" /> 系統設置</button>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden">
+          {[
+            { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard },
+            { id: 'inventory', label: '車輛管理', icon: Car },
+            { id: 'create_doc', label: '開單系統', icon: FileText },
+            { id: 'reports', label: '統計報表', icon: FileBarChart },
+            { id: 'cross_border', label: '中港業務', icon: Globe },
+            { id: 'database', label: '資料庫中心', icon: Database },
+            { id: 'settings', label: '系統設置', icon: Settings }
+          ].map(item => (
+             <button 
+                key={item.id}
+                onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
+                className={`flex items-center w-full p-3 rounded-lg transition-all duration-200 group relative
+                    ${activeTab === item.id 
+                        ? 'bg-yellow-600 text-white shadow-md' 
+                        : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+                    }
+                    ${isSidebarCollapsed ? 'justify-center' : ''}
+                `}
+                title={isSidebarCollapsed ? item.label : ''}
+             >
+                <item.icon size={22} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                
+                {/* 文字 (縮排時隱藏) */}
+                {!isSidebarCollapsed && (
+                    <span className="whitespace-nowrap font-medium">{item.label}</span>
+                )}
+
+                {/* 縮排時的懸浮提示 (Tooltip) */}
+                {isSidebarCollapsed && (
+                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">
+                        {item.label}
+                    </div>
+                )}
+             </button>
+          ))}
         </nav>
-        <div className="p-4 text-xs text-slate-500 text-center border-t border-slate-800 flex flex-col items-center"><div className="mt-3 flex items-center justify-center space-x-2 bg-slate-800 p-2 rounded w-full"><UserCircle size={14} className="text-yellow-500"/><span className="font-bold text-white truncate max-w-[80px]">{staffId}</span></div><button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="mt-2 text-[10px] flex items-center text-red-400 hover:text-red-300 transition"><LogOut size={10} className="mr-1" /> Logout</button></div>
+
+        {/* Footer User Info */}
+        <div className="p-4 bg-slate-900 border-t border-slate-800">
+             {isSidebarCollapsed ? (
+                 // 縮排模式：只顯示登出圖標
+                 <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="w-full flex justify-center text-red-400 hover:text-red-300 transition" title="登出">
+                     <LogOut size={20} />
+                 </button>
+             ) : (
+                 // 展開模式：顯示完整資訊
+                 <div className="flex items-center justify-between">
+                     <div className="flex items-center space-x-2 overflow-hidden">
+                         <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500">
+                            <UserCircle size={20} />
+                         </div>
+                         <div className="flex-1 min-w-0">
+                             <p className="text-sm font-bold text-white truncate">{staffId}</p>
+                             <p className="text-[10px] text-slate-500">已登入</p>
+                         </div>
+                     </div>
+                     <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="text-slate-500 hover:text-red-400 transition p-2">
+                         <LogOut size={18} />
+                     </button>
+                 </div>
+             )}
+             
+             {/* 縮排展開按鈕 (縮排時顯示在底部方便操作) */}
+             {isSidebarCollapsed && (
+                 <button 
+                    onClick={() => setIsSidebarCollapsed(false)} 
+                    className="w-full mt-4 flex justify-center text-slate-500 hover:text-white py-2 border-t border-slate-800 md:flex hidden"
+                 >
+                    <ChevronRight size={20} />
+                 </button>
+             )}
+        </div>
+
+        {/* Mobile Close Button (Absolute Top Right) */}
+        <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white">
+            <X size={24} />
+        </button>
       </div>
     </>
   );
