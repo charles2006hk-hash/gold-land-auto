@@ -459,7 +459,7 @@ export default function GoldLandAutoDMS() {
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
-  
+  const [dbEntries, setDbEntries] = useState<DatabaseEntry[]>([]);
   // UI States
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null); 
@@ -613,7 +613,36 @@ export default function GoldLandAutoDMS() {
     return () => { unsubInv(); };
   }, [staffId]);
 
+useEffect(() => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+        
+        // 這裡只需要監聽，不用太複雜的排序，減輕負載
+        const unsubDb = onSnapshot(dbRef, (snapshot) => {
+            const list: DatabaseEntry[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                // 我們只需要計算提醒，所以只讀取必要欄位即可，不需要讀圖片
+                list.push({ 
+                    id: doc.id, 
+                    category: data.category || 'Person',
+                    name: data.name || '',
+                    reminderEnabled: data.reminderEnabled || false,
+                    expiryDate: data.expiryDate || '',
+                    // 其他欄位對於統計來說不重要，可以省略或給預設值
+                    attachments: [], tags: [], description: '', createdAt: null 
+                } as DatabaseEntry);
+            });
+            setDbEntries(list);
+        }, (err) => console.error("Db sync error", err));
+
+        return () => unsubDb();
+    }, [staffId]);
+
   if (!staffId) return <StaffLoginScreen onLogin={setStaffId} />;
+
+
 
   // --- CRUD Actions ---
 
@@ -2305,7 +2334,7 @@ const deleteVehicle = async (id: string) => {
                       roles: data.roles || [],
                       attachments: attachments,
                       createdAt: data.createdAt,
-                      updatedAt: data.updatedAt,
+                      updatedAt: data.updatedAt
 
                       // ★★★ 新增：這裡必須加入讀取新欄位的邏輯，否則存檔後會消失 ★★★
                       reminderEnabled: data.reminderEnabled || false,
@@ -3125,12 +3154,13 @@ const deleteVehicle = async (id: string) => {
           {/* Cross Border Tab - 讓它內部也可以滾動 */}
           {activeTab === 'cross_border' && <div className="flex-1 overflow-y-auto"><CrossBorderView /></div>}
 
-          {/* Dashboard Tab - Split into Two Sections */}
+          
+          {/* Dashboard Tab - Split into Sections */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
               <h2 className="text-2xl font-bold text-slate-800 flex-none">業務儀表板</h2>
               
-              {/* Stats Cards - 固定高度 */}
+              {/* 1. 原有的財務卡片 (Financial Cards) - 保持不變 */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-none">
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><p className="text-xs text-gray-500 uppercase">庫存總值</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalStockValue)}</p></div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500"><p className="text-xs text-gray-500 uppercase">未付費用</p><p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalPayable)}</p></div>
@@ -3138,7 +3168,75 @@ const deleteVehicle = async (id: string) => {
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* Data Calculation */}
+              {/* ★★★ 2. 新增：提醒中心 (Notification Center) ★★★ */}
+              {(() => {
+                  // A. 計算資料庫文件提醒
+                  let docExpired = 0;
+                  let docSoon = 0;
+                  dbEntries.forEach(d => {
+                      if (d.reminderEnabled && d.expiryDate) {
+                          const days = getDaysRemaining(d.expiryDate);
+                          if (days !== null) {
+                              if (days < 0) docExpired++;
+                              else if (days <= 30) docSoon++;
+                          }
+                      }
+                  });
+
+                  // B. 獲取中港業務提醒 (使用已有的 cbStats)
+                  // 注意：cbStats 是在組件上層定義的，如果報錯，請確保 crossBorderStats() 已被調用
+                  // 這裡我們直接使用 cbStats 變數 (因為它在主要組件 render 範圍內)
+                  
+                  return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
+                          {/* 中港業務提醒卡片 */}
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex items-center justify-between relative overflow-hidden">
+                              <div className="z-10">
+                                  <div className="flex items-center text-slate-300 text-xs uppercase font-bold mb-1"><Globe size={14} className="mr-1"/> 中港業務提醒 (Cross-Border)</div>
+                                  <div className="flex gap-6 mt-2">
+                                      <div className="text-center">
+                                          <div className="text-2xl font-bold text-red-400">{cbStats.expired}</div>
+                                          <div className="text-[10px] text-slate-400">已過期</div>
+                                      </div>
+                                      <div className="text-center">
+                                          <div className="text-2xl font-bold text-amber-400">{cbStats.soon}</div>
+                                          <div className="text-[10px] text-slate-400">即將 (30天)</div>
+                                      </div>
+                                      <div className="text-center border-l border-slate-600 pl-6">
+                                          <div className="text-2xl font-bold text-white">{cbStats.total}</div>
+                                          <div className="text-[10px] text-slate-400">總車輛數</div>
+                                      </div>
+                                  </div>
+                              </div>
+                              <Globe size={80} className="absolute -right-4 -bottom-4 text-slate-600 opacity-20" />
+                          </div>
+
+                          {/* 資料庫文件提醒卡片 */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex items-center justify-between relative overflow-hidden">
+                              <div className="z-10">
+                                  <div className="flex items-center text-blue-200 text-xs uppercase font-bold mb-1"><Database size={14} className="mr-1"/> 文件到期提醒 (Documents)</div>
+                                  <div className="flex gap-6 mt-2">
+                                      <div className="text-center">
+                                          <div className="text-2xl font-bold text-red-400">{docExpired}</div>
+                                          <div className="text-[10px] text-blue-300">已過期</div>
+                                      </div>
+                                      <div className="text-center">
+                                          <div className="text-2xl font-bold text-amber-400">{docSoon}</div>
+                                          <div className="text-[10px] text-blue-300">即將 (30天)</div>
+                                      </div>
+                                      <div className="text-center border-l border-blue-700 pl-6">
+                                          <div className="text-2xl font-bold text-white">{dbEntries.filter(d => d.reminderEnabled).length}</div>
+                                          <div className="text-[10px] text-blue-300">監控中文件</div>
+                                      </div>
+                                  </div>
+                              </div>
+                              <Bell size={80} className="absolute -right-4 -bottom-4 text-blue-500 opacity-20" />
+                          </div>
+                      </div>
+                  );
+              })()}
+
+              {/* Data Calculation & Tables (保持原有的車輛列表邏輯) */}
               {(() => {
                   const allVehicles = getSortedInventory();
                   const unfinished: Vehicle[] = [];
@@ -3159,8 +3257,6 @@ const deleteVehicle = async (id: string) => {
                       const unpaidExps = (car.expenses || []).filter(e => e.status === 'Unpaid').length || 0;
                       const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                       const balance = (car.price || 0) - received;
-                      
-                      // ★★★ 獲取標籤 ★★★
                       const cbTags = getCbTags(car.crossBorder?.ports);
                       
                       return (
@@ -3169,7 +3265,6 @@ const deleteVehicle = async (id: string) => {
                           <td className="p-3">
                               <span className={`px-2 py-1 rounded text-xs ${car.status === 'In Stock' ? 'bg-green-100 text-green-800' : (car.status === 'Sold' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
                           </td>
-                          {/* ★★★ 修正點：在車牌旁顯示標籤 ★★★ */}
                           <td className="p-3 font-medium">
                               <div className="flex flex-col sm:flex-row sm:items-center gap-1">
                                   <span>{car.regMark || '未出牌'}</span>
@@ -3200,8 +3295,8 @@ const deleteVehicle = async (id: string) => {
 
                   return (
                     <>
-                      {/* Section 1: In Progress (Fixed Height, Scrollable) */}
-                      <div className="bg-white rounded-lg shadow-sm p-4 flex-none flex flex-col overflow-hidden max-h-[40vh]">
+                      {/* Section 1: In Progress (Fixed Height) */}
+                      <div className="bg-white rounded-lg shadow-sm p-4 flex-none flex flex-col overflow-hidden max-h-[35vh]">
                         <h3 className="font-bold mb-4 flex-none text-yellow-600 flex items-center"><AlertTriangle size={18} className="mr-2"/> 進行中的車輛 (In Progress)</h3>
                         <div className="flex-1 overflow-y-auto border rounded-lg">
                           <table className="w-full text-left text-sm whitespace-nowrap relative">
@@ -3223,7 +3318,7 @@ const deleteVehicle = async (id: string) => {
                         </div>
                       </div>
 
-                      {/* Section 2: Completed (Fills Remaining Space, Scrollable) */}
+                      {/* Section 2: Completed (Fills Remaining Space) */}
                       <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
                         <h3 className="font-bold mb-4 flex-none text-green-600 flex items-center"><CheckCircle size={18} className="mr-2"/> 已成交車輛 (Completed)</h3>
                         <div className="flex-1 overflow-y-auto border rounded-lg">
