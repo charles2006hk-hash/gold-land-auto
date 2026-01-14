@@ -1,12 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer 
-} from 'recharts';
-import { initializeApp } from "firebase/app";
+  Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
+  Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, 
+  Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
+  Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
+  ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
+  StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
+  Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
+  CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File
+} from 'lucide-react';
+// --- Firebase Imports ---
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { 
-  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy, writeBatch
+  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, 
+  User, initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth 
+} from "firebase/auth";
+import { 
+  getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
+  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
+  getDocs, where
 } from "firebase/firestore";
 
 // ------------------------------------------------------------------
@@ -62,7 +74,13 @@ const COMPANY_INFO = {
   phone: "+852 3490 6112",
   logo_url: "/GL_APPLOGO.png" 
 };
+// --- 類型定義 ---
+type DatabaseAttachment = {
+    name: string;
+    data: string;
+};
 
+// ★★★ 資料庫條目類型 (含提醒與續期欄位) ★★★
 type DatabaseEntry = {
     id: string;
     category: 'Person' | 'Company' | 'Vehicle' | 'CrossBorder'; 
@@ -298,7 +316,9 @@ const DB_CATEGORIES = [
     { id: 'CrossBorder', label: '中港指標文件 (Quota Doc)' }
 ];
 
-// ... existing code ...
+const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(amount);
+const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
 const formatNumberInput = (value: string) => {
   // 1. 移除非數字、非小數點、非負號的字符
   let cleanVal = value.replace(/[^0-9.-]/g, '');
@@ -3352,7 +3372,8 @@ const deleteVehicle = async (id: string) => {
           {activeTab === 'create_doc' && <CreateDocModule />}
           {/* ★★★ 新增：資料庫模塊渲染 ★★★ */}
           {activeTab === 'database' && <DatabaseModule />}
-        </div>
+          {activeTab === 'dashboard' && <Dashboard />}
+         </div>
       </main>
     </div>
   );
