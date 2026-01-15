@@ -3098,67 +3098,88 @@ const deleteVehicle = async (id: string) => {
   };
 
 
-// --- Info Widget Component (Sidebar 資訊看板) ---
+// --- Info Widget Component (Debug Version) ---
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [portStatus, setPortStatus] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [debugMsg, setDebugMsg] = useState(''); // 用於顯示錯誤訊息
 
-    // 口岸代碼映射 (只顯示主要車輛口岸)
+    // 擴充口岸代碼映射 (加入更多可能的代碼以防萬一)
     const TARGET_PORTS: Record<string, string> = {
         'SZB': '深圳灣',
         'LMC': '落馬洲(皇崗)',
         'HZMB': '港珠澳大橋',
-        'LKT': '蓮塘/香園圍', 
+        'LKT': '蓮塘/香園圍',
+        'HYW': '香園圍', // 備用代碼
         'MKM': '文錦渡',
-        'STK': '沙頭角'
+        'STK': '沙頭角',
+        'KCR': '羅湖',       // 測試用
+        'LMCSpur': '落馬洲支線' // 測試用
     };
 
-    // 1. 時間更新 (每秒)
+    // 1. 時間更新
     useEffect(() => {
-        // 解決 Hydration Mismatch: 確保只在客戶端啟動計時器
-        setCurrentTime(new Date()); 
+        setCurrentTime(new Date());
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // 2. 抓取口岸數據 (每 5 分鐘)
+    // 2. 抓取口岸數據
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
-                // ★★★ 修改重點：改為呼叫自己的 Next.js API Route ★★★
-                // 這樣瀏覽器是請求同源的 '/api/traffic'，不會有 CORS 問題
+                // 呼叫我們自己的 API
                 const res = await fetch('/api/traffic');
                 
-                if (!res.ok) throw new Error('Network response was not ok');
+                if (!res.ok) {
+                    throw new Error(`API Error: ${res.status}`);
+                }
                 
                 const data = await res.json();
-                
-                // 解析數據結構
+                console.log("口岸原始數據:", data); // ★ 按 F12 在 Console 查看
+
                 if (data && data.body && Array.isArray(data.body)) {
                     const filtered = data.body
-                        .filter((item: any) => TARGET_PORTS[item.control_point])
-                        .map((item: any) => ({
-                            name: TARGET_PORTS[item.control_point],
-                            up: item.departure_status || '正常', // 北上 (出境)
-                            down: item.arrival_status || '正常'  // 南下 (入境)
-                        }));
-                    setPortStatus(filtered);
+                        .map((item: any) => {
+                            // 嘗試匹配口岸名稱
+                            const name = TARGET_PORTS[item.control_point];
+                            if (!name) return null; // 如果不在我們的列表中，跳過
+
+                            return {
+                                name: name,
+                                code: item.control_point, // 保留代碼以便除錯
+                                up: item.departure_status || '正常',
+                                down: item.arrival_status || '正常'
+                            };
+                        })
+                        .filter((item: any) => item !== null); // 移除未匹配的項目
+
+                    console.log("過濾後的數據:", filtered);
+                    
+                    if (filtered.length === 0) {
+                        setDebugMsg("數據已抓取但無匹配口岸");
+                    } else {
+                        setPortStatus(filtered);
+                        setDebugMsg("");
+                    }
+                } else {
+                    setDebugMsg("數據格式錯誤 (無 body)");
                 }
-            } catch (e) {
-                console.warn("Traffic data fetch failed:", e);
-                setPortStatus([]); // 失敗時隱藏
+            } catch (e: any) {
+                console.error("Traffic fetch error:", e);
+                setDebugMsg(`讀取錯誤: ${e.message}`);
+                setPortStatus([]);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchTraffic();
-        const trafficTimer = setInterval(fetchTraffic, 300000); // 5分鐘更新一次
+        const trafficTimer = setInterval(fetchTraffic, 300000);
         return () => clearInterval(trafficTimer);
     }, []);
 
-    // 農曆計算 (使用 Intl API)
     const getLunarDate = () => {
         try {
             return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
@@ -3168,8 +3189,9 @@ const InfoWidget = () => {
     };
 
     const getStatusColor = (status: string) => {
-        if (status?.includes('Busy') || status?.includes('繁忙')) return 'text-red-400';
-        if (status?.includes('Crowded') || status?.includes('擠擁')) return 'text-amber-400';
+        if (!status) return 'text-green-400';
+        if (status.includes('Busy') || status.includes('繁忙')) return 'text-red-400';
+        if (status.includes('Crowded') || status.includes('擠擁')) return 'text-amber-400';
         return 'text-green-400';
     };
 
@@ -3189,7 +3211,14 @@ const InfoWidget = () => {
                 </div>
             </div>
 
-            {/* 口岸狀況 (如果有數據) */}
+            {/* 錯誤訊息 (除錯用) */}
+            {debugMsg && (
+                <div className="text-red-400 mb-2 border border-red-900 bg-red-900/20 p-1 rounded">
+                    {debugMsg}
+                </div>
+            )}
+
+            {/* 口岸狀況 */}
             {portStatus.length > 0 ? (
                 <div className="space-y-1.5 animate-fade-in">
                     <div className="flex justify-between text-slate-500 text-[10px] mb-1">
@@ -3203,8 +3232,12 @@ const InfoWidget = () => {
                         <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0">
                             <span className="truncate mr-2 font-medium">{port.name}</span>
                             <div className="flex gap-3 text-right font-bold whitespace-nowrap">
-                                <span className={getStatusColor(port.up)}>{port.up === 'Normal' ? '正常' : port.up}</span>
-                                <span className={getStatusColor(port.down)}>{port.down === 'Normal' ? '正常' : port.down}</span>
+                                <span className={getStatusColor(port.up)}>
+                                    {port.up === 'Normal' ? '正常' : port.up}
+                                </span>
+                                <span className={getStatusColor(port.down)}>
+                                    {port.down === 'Normal' ? '正常' : port.down}
+                                </span>
                             </div>
                         </div>
                     ))}
@@ -3212,7 +3245,7 @@ const InfoWidget = () => {
                 </div>
             ) : (
                 <div className="text-center text-slate-600 italic py-2">
-                    {loading ? '載入數據中...' : ''}
+                    {loading ? '載入數據中...' : '暫無數據'}
                 </div>
             )}
         </div>
