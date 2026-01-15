@@ -3396,69 +3396,160 @@ const InfoWidget = () => {
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* ★★★ 2. 新增：提醒中心 (Notification Center) ★★★ */}
+              {/* ★★★ 2. 新增：提醒中心 (Notification Center) - 列表滾動版 ★★★ */}
               {(() => {
-                  // A. 計算資料庫文件提醒
-                  let docExpired = 0;
-                  let docSoon = 0;
+                  // --- A. 處理資料庫文件提醒 (Database) ---
+                  const docAlerts: any[] = [];
                   dbEntries.forEach(d => {
                       if (d.reminderEnabled && d.expiryDate) {
                           const days = getDaysRemaining(d.expiryDate);
-                          if (days !== null) {
-                              if (days < 0) docExpired++;
-                              else if (days <= 30) docSoon++;
+                          if (days !== null && days <= 30) {
+                              docAlerts.push({
+                                  id: d.id,
+                                  title: d.name,
+                                  desc: d.docType || d.category,
+                                  date: d.expiryDate,
+                                  days: days,
+                                  status: days < 0 ? 'expired' : 'soon',
+                                  raw: d
+                              });
                           }
                       }
                   });
+                  // 排序：過期的排前面
+                  docAlerts.sort((a, b) => a.days - b.days);
 
-                  // B. 獲取中港業務提醒 (使用已有的 cbStats)
-                  // 注意：cbStats 是在組件上層定義的，如果報錯，請確保 crossBorderStats() 已被調用
-                  // 這裡我們直接使用 cbStats 變數 (因為它在主要組件 render 範圍內)
-                  
+                  // --- B. 處理中港業務提醒 (Cross-Border) ---
+                  const cbAlerts: any[] = [];
+                  const cbDateFields = {
+                      dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)',
+                      dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險',
+                      dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證',
+                      dateHkInspection: '香港驗車'
+                  };
+
+                  inventory.filter(v => v.crossBorder?.isEnabled).forEach(v => {
+                      // 檢查 10 個日期欄位
+                      Object.entries(cbDateFields).forEach(([field, label]) => {
+                          // @ts-ignore
+                          const dateStr = v.crossBorder?.[field];
+                          if (dateStr) {
+                              const days = getDaysRemaining(dateStr);
+                              if (days !== null && days <= 30) {
+                                  cbAlerts.push({
+                                      id: v.id, // 車輛 ID
+                                      title: v.regMark || '未出牌',
+                                      desc: label, // 項目名稱 (如：香港保險)
+                                      date: dateStr,
+                                      days: days,
+                                      status: days < 0 ? 'expired' : 'soon',
+                                      raw: v
+                                  });
+                              }
+                          }
+                      });
+                  });
+                  // 排序：過期的排前面
+                  cbAlerts.sort((a, b) => a.days - b.days);
+
+                  // 統計數字
+                  const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
+                  const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
+                  const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
+                  const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
+
+                  // 共用的列表渲染組件
+                  const AlertList = ({ items, onItemClick }: { items: any[], onItemClick: (item:any)=>void }) => (
+                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32 md:h-36">
+                          {items.length > 0 ? (
+                              <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
+                                  {items.map((item, idx) => (
+                                      <div 
+                                          key={`${item.id}-${idx}`}
+                                          onClick={() => onItemClick(item)}
+                                          className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer transition-colors hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}
+                                      >
+                                          <div className="flex-1 min-w-0 mr-2">
+                                              <div className="font-bold truncate text-white">{item.title}</div>
+                                              <div className="text-white/60 truncate">{item.desc}</div>
+                                          </div>
+                                          <div className="text-right whitespace-nowrap">
+                                              <div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>
+                                                  {item.status === 'expired' ? `過期 ${Math.abs(item.days)}天` : `剩 ${item.days}天`}
+                                              </div>
+                                              <div className="text-white/40 scale-90">{item.date}</div>
+                                          </div>
+                                          <ArrowRight size={12} className="ml-2 text-white/30" />
+                                      </div>
+                                  ))}
+                              </div>
+                          ) : (
+                              <div className="flex items-center justify-center h-full text-white/30 text-xs italic">
+                                  目前沒有需要提醒的項目
+                              </div>
+                          )}
+                      </div>
+                  );
+
                   return (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                          {/* 中港業務提醒卡片 */}
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex items-center justify-between relative overflow-hidden">
-                              <div className="z-10">
-                                  <div className="flex items-center text-slate-300 text-xs uppercase font-bold mb-1"><Globe size={14} className="mr-1"/> 中港業務提醒 (Cross-Border)</div>
-                                  <div className="flex gap-6 mt-2">
-                                      <div className="text-center">
-                                          <div className="text-2xl font-bold text-red-400">{cbStats.expired}</div>
-                                          <div className="text-[10px] text-slate-400">已過期</div>
+                          {/* 1. 中港業務提醒卡片 */}
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
+                              {/* 左側：統計 */}
+                              <div className="w-1/3 flex flex-col justify-center z-10 border-r border-white/10 pr-4">
+                                  <div className="flex items-center text-slate-300 text-xs uppercase font-bold mb-2"><Globe size={14} className="mr-1"/> 中港提醒</div>
+                                  <div className="space-y-2">
+                                      <div>
+                                          <div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div>
+                                          <div className="text-[10px] text-slate-400">過期項目</div>
                                       </div>
-                                      <div className="text-center">
-                                          <div className="text-2xl font-bold text-amber-400">{cbStats.soon}</div>
-                                          <div className="text-[10px] text-slate-400">即將 (30天)</div>
-                                      </div>
-                                      <div className="text-center border-l border-slate-600 pl-6">
-                                          <div className="text-2xl font-bold text-white">{cbStats.total}</div>
-                                          <div className="text-[10px] text-slate-400">總車輛數</div>
+                                      <div>
+                                          <div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div>
+                                          <div className="text-[10px] text-slate-400">即將到期</div>
                                       </div>
                                   </div>
                               </div>
-                              <Globe size={80} className="absolute -right-4 -bottom-4 text-slate-600 opacity-20" />
+                              {/* 右側：滾動列表 */}
+                              <AlertList 
+                                  items={cbAlerts} 
+                                  onItemClick={(item) => {
+                                      // 跳轉邏輯：切換 Tab -> 設定選中車輛 ID -> 設定編輯車輛 (為了確保數據加載)
+                                      setActiveTab('cross_border');
+                                      setActiveCbVehicleId(item.id);
+                                      // 這裡不需要 setEditingVehicle，因為 CrossBorderView 是靠 activeCbVehicleId 驅動的
+                                      // 但如果是編輯車輛詳情，可以考慮: setEditingVehicle(item.raw);
+                                  }} 
+                              />
+                              <Globe size={100} className="absolute -left-6 -bottom-6 text-slate-950 opacity-20 pointer-events-none" />
                           </div>
 
-                          {/* 資料庫文件提醒卡片 */}
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex items-center justify-between relative overflow-hidden">
-                              <div className="z-10">
-                                  <div className="flex items-center text-blue-200 text-xs uppercase font-bold mb-1"><Database size={14} className="mr-1"/> 文件到期提醒 (Documents)</div>
-                                  <div className="flex gap-6 mt-2">
-                                      <div className="text-center">
-                                          <div className="text-2xl font-bold text-red-400">{docExpired}</div>
-                                          <div className="text-[10px] text-blue-300">已過期</div>
+                          {/* 2. 資料庫文件提醒卡片 */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
+                              {/* 左側：統計 */}
+                              <div className="w-1/3 flex flex-col justify-center z-10 border-r border-white/10 pr-4">
+                                  <div className="flex items-center text-blue-200 text-xs uppercase font-bold mb-2"><Database size={14} className="mr-1"/> 文件提醒</div>
+                                  <div className="space-y-2">
+                                      <div>
+                                          <div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div>
+                                          <div className="text-[10px] text-blue-300">過期文件</div>
                                       </div>
-                                      <div className="text-center">
-                                          <div className="text-2xl font-bold text-amber-400">{docSoon}</div>
-                                          <div className="text-[10px] text-blue-300">即將 (30天)</div>
-                                      </div>
-                                      <div className="text-center border-l border-blue-700 pl-6">
-                                          <div className="text-2xl font-bold text-white">{dbEntries.filter(d => d.reminderEnabled).length}</div>
-                                          <div className="text-[10px] text-blue-300">監控中文件</div>
+                                      <div>
+                                          <div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div>
+                                          <div className="text-[10px] text-blue-300">即將到期</div>
                                       </div>
                                   </div>
                               </div>
-                              <Bell size={80} className="absolute -right-4 -bottom-4 text-blue-500 opacity-20" />
+                              {/* 右側：滾動列表 */}
+                              <AlertList 
+                                  items={docAlerts} 
+                                  onItemClick={(item) => {
+                                      // 跳轉邏輯：切換 Tab -> 設定正在編輯的 Entry -> 開啟編輯模式
+                                      setActiveTab('database');
+                                      setEditingEntry(item.raw);
+                                      setIsEditing(true);
+                                  }} 
+                              />
+                              <Bell size={100} className="absolute -left-6 -bottom-6 text-blue-950 opacity-20 pointer-events-none" />
                           </div>
                       </div>
                   );
