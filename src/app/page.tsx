@@ -3097,7 +3097,122 @@ const deleteVehicle = async (id: string) => {
       );
   };
 
-  // --- Sidebar Component (Updated) ---
+// --- Info Widget Component (Sidebar 資訊看板) ---
+const InfoWidget = () => {
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [portStatus, setPortStatus] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // 口岸代碼映射 (只顯示主要車輛口岸)
+    const TARGET_PORTS: Record<string, string> = {
+        'SZB': '深圳灣',
+        'LMC': '落馬洲(皇崗)',
+        'HZMB': '港珠澳大橋',
+        'LKT': '蓮塘/香園圍', // 根據入境處代碼可能有變，通常是 HYW 或 LKT
+        'MKM': '文錦渡',
+        'STK': '沙頭角'
+    };
+
+    // 1. 時間更新 (每秒)
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // 2. 抓取口岸數據 (每 5 分鐘)
+    useEffect(() => {
+        const fetchTraffic = async () => {
+            try {
+                // 注意：若遇到 CORS 錯誤，需後端 Proxy。這裡做 try-catch 處理
+                const res = await fetch('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json');
+                const data = await res.json();
+                
+                // 解析數據結構
+                if (data && data.body && Array.isArray(data.body)) {
+                    const filtered = data.body
+                        .filter((item: any) => TARGET_PORTS[item.control_point])
+                        .map((item: any) => ({
+                            name: TARGET_PORTS[item.control_point],
+                            // status: 1=正常, 2=繁忙, 3=非常繁忙 (假設，具體視 JSON 而定，通常它給的是等待時間文字)
+                            // 入境處 JSON 通常返回: "arrival_status": "Normal", "departure_status": "Busy"
+                            up: item.departure_status || '正常', // 北上 (出境)
+                            down: item.arrival_status || '正常'  // 南下 (入境)
+                        }));
+                    setPortStatus(filtered);
+                }
+            } catch (e) {
+                // 抓取失敗 (可能是 CORS 或 網絡問題)，設為空數組以隱藏
+                console.warn("Traffic data fetch failed:", e);
+                setPortStatus([]); 
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchTraffic();
+        const trafficTimer = setInterval(fetchTraffic, 300000); // 5分鐘更新一次
+        return () => clearInterval(trafficTimer);
+    }, []);
+
+    // 農曆計算 (使用 Intl API)
+    const getLunarDate = () => {
+        try {
+            // 使用瀏覽器原生 API 轉換農曆 (需現代瀏覽器支持)
+            return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const getStatusColor = (status: string) => {
+        if (status?.includes('Busy') || status?.includes('繁忙')) return 'text-red-400';
+        if (status?.includes('Crowded') || status?.includes('擠擁')) return 'text-amber-400';
+        return 'text-green-400'; // Normal
+    };
+
+    return (
+        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm">
+            {/* 時間與日曆 */}
+            <div className="mb-3 border-b border-slate-700 pb-2">
+                <div className="text-xl font-mono font-bold text-white tracking-widest text-center">
+                    {currentTime.toLocaleTimeString('en-GB', { hour12: false })}
+                </div>
+                <div className="flex justify-between mt-1 text-slate-400">
+                    <span>{currentTime.toLocaleDateString('zh-HK')}</span>
+                    <span>{['日','一','二','三','四','五','六'][currentTime.getDay()]}</span>
+                </div>
+                <div className="text-center mt-1 text-yellow-500 font-medium">
+                    {getLunarDate().replace('年', '年 ')}
+                </div>
+            </div>
+
+            {/* 口岸狀況 (如果有數據) */}
+            {portStatus.length > 0 && (
+                <div className="space-y-1.5">
+                    <div className="flex justify-between text-slate-500 text-[10px] mb-1">
+                        <span>口岸</span>
+                        <div className="flex gap-2">
+                            <span>北上</span>
+                            <span>南下</span>
+                        </div>
+                    </div>
+                    {portStatus.map((port, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-slate-300">
+                            <span className="truncate mr-2">{port.name}</span>
+                            <div className="flex gap-3 text-right font-bold whitespace-nowrap">
+                                <span className={getStatusColor(port.up)}>{port.up === 'Normal' ? '正常' : port.up}</span>
+                                <span className={getStatusColor(port.down)}>{port.down === 'Normal' ? '正常' : port.down}</span>
+                            </div>
+                        </div>
+                    ))}
+                    <div className="text-[10px] text-right text-slate-600 mt-1">資料來源: 香港入境處</div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+  // --- Sidebar Component (Updated with Info Widget) ---
   const Sidebar = () => (
     <>
       {/* Mobile Overlay */}
@@ -3107,20 +3222,17 @@ const deleteVehicle = async (id: string) => {
       <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
         
         {/* Sidebar Header */}
-        <div className={`p-4 h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} transition-all`}>
+        <div className={`p-4 h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} transition-all flex-none`}>
             <div className="flex items-center gap-3 overflow-hidden">
-                {/* ★★★ 修改 2: Logo 去除白圈背景，直接顯示圖片 ★★★ */}
                 <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center">
                      <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
                 </div>
                 
-                {/* 標題文字 (縮排時隱藏) */}
                 <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
                      <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight whitespace-nowrap">金田汽車<br/><span className="text-xs text-slate-400">DMS系統</span></h1>
                 </div>
             </div>
 
-            {/* ★★★ 修改 1: Desktop 縮排切換按鈕 ★★★ */}
             <button 
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
                 className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors"
@@ -3130,8 +3242,8 @@ const deleteVehicle = async (id: string) => {
             </button>
         </div>
 
-        {/* Navigation Links */}
-        <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden">
+        {/* Navigation Links (Scrollable Area) */}
+        <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
           {[
             { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard },
             { id: 'inventory', label: '車輛管理', icon: Car },
@@ -3155,12 +3267,10 @@ const deleteVehicle = async (id: string) => {
              >
                 <item.icon size={22} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
                 
-                {/* 文字 (縮排時隱藏) */}
                 {!isSidebarCollapsed && (
                     <span className="whitespace-nowrap font-medium">{item.label}</span>
                 )}
 
-                {/* 縮排時的懸浮提示 (Tooltip) */}
                 {isSidebarCollapsed && (
                     <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">
                         {item.label}
@@ -3170,15 +3280,16 @@ const deleteVehicle = async (id: string) => {
           ))}
         </nav>
 
+        {/* ★★★ 新增：資訊看板 (只在展開時顯示) ★★★ */}
+        {!isSidebarCollapsed && <InfoWidget />}
+
         {/* Footer User Info */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800">
+        <div className="p-4 bg-slate-900 border-t border-slate-800 flex-none">
              {isSidebarCollapsed ? (
-                 // 縮排模式：只顯示登出圖標
                  <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="w-full flex justify-center text-red-400 hover:text-red-300 transition" title="登出">
                      <LogOut size={20} />
                  </button>
              ) : (
-                 // 展開模式：顯示完整資訊
                  <div className="flex items-center justify-between">
                      <div className="flex items-center space-x-2 overflow-hidden">
                          <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500">
@@ -3195,7 +3306,6 @@ const deleteVehicle = async (id: string) => {
                  </div>
              )}
              
-             {/* 縮排展開按鈕 (縮排時顯示在底部方便操作) */}
              {isSidebarCollapsed && (
                  <button 
                     onClick={() => setIsSidebarCollapsed(false)} 
@@ -3206,7 +3316,7 @@ const deleteVehicle = async (id: string) => {
              )}
         </div>
 
-        {/* Mobile Close Button (Absolute Top Right) */}
+        {/* Mobile Close Button */}
         <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white">
             <X size={24} />
         </button>
