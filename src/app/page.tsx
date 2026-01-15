@@ -3098,77 +3098,79 @@ const deleteVehicle = async (id: string) => {
   };
 
 
-// --- Info Widget Component (Debug Version) ---
+// --- Info Widget Component (Fixed for Real Data) ---
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [portStatus, setPortStatus] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [debugMsg, setDebugMsg] = useState(''); // 用於顯示錯誤訊息
 
-    // 擴充口岸代碼映射 (加入更多可能的代碼以防萬一)
-    const TARGET_PORTS: Record<string, string> = {
-        'SZB': '深圳灣',
-        'LMC': '落馬洲(皇崗)',
-        'HZMB': '港珠澳大橋',
-        'LKT': '蓮塘/香園圍',
-        'HYW': '香園圍', // 備用代碼
-        'MKM': '文錦渡',
-        'STK': '沙頭角',
-        'KCR': '羅湖',       // 測試用
-        'LMCSpur': '落馬洲支線' // 測試用
+    // 1. 口岸名稱映射 (根據真實數據 Key)
+    const PORT_MAPPING: Record<string, string> = {
+        'SBC': '深圳灣',
+        'LMC': '皇崗(落馬洲)',
+        'HZM': '港珠澳大橋',
+        'HYW': '蓮塘/香園圍',
+        'MKT': '文錦渡',
+        'STK': '沙頭角'
     };
 
-    // 1. 時間更新
+    // 2. 狀態代碼轉換 (數值 -> 文字)
+    const getStatusText = (code: number) => {
+        if (code === 0) return '正常';
+        if (code === 1) return '繁忙';
+        if (code === 2) return '擠塞';
+        if (code === 99) return '關閉';
+        return '-';
+    };
+
+    // 3. 狀態顏色轉換
+    const getStatusColor = (code: number) => {
+        if (code === 0) return 'text-green-400'; // 正常
+        if (code === 1) return 'text-amber-400'; // 繁忙
+        if (code === 2) return 'text-red-500 font-bold'; // 擠塞
+        return 'text-slate-600'; // 關閉 (99)
+    };
+
+    // 時間更新
     useEffect(() => {
         setCurrentTime(new Date());
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
 
-    // 2. 抓取口岸數據
+    // 抓取數據
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
-                // 呼叫我們自己的 API
+                // 呼叫後端 API
                 const res = await fetch('/api/traffic');
-                
-                if (!res.ok) {
-                    throw new Error(`API Error: ${res.status}`);
-                }
+                if (!res.ok) throw new Error('API Error');
                 
                 const data = await res.json();
-                console.log("口岸原始數據:", data); // ★ 按 F12 在 Console 查看
-
-                if (data && data.body && Array.isArray(data.body)) {
-                    const filtered = data.body
-                        .map((item: any) => {
-                            // 嘗試匹配口岸名稱
-                            const name = TARGET_PORTS[item.control_point];
-                            if (!name) return null; // 如果不在我們的列表中，跳過
-
+                
+                // ★★★ 修正解析邏輯：處理 Object 結構 ★★★
+                // 原始數據是 { "HZM": { "arrQueue": 0, "depQueue": 0 }, ... }
+                if (data && typeof data === 'object') {
+                    const formatted = Object.keys(data)
+                        .filter(key => PORT_MAPPING[key]) // 只保留我們定義的車輛口岸
+                        .map(key => {
+                            const info = data[key]; // { arrQueue: x, depQueue: y }
                             return {
-                                name: name,
-                                code: item.control_point, // 保留代碼以便除錯
-                                up: item.departure_status || '正常',
-                                down: item.arrival_status || '正常'
+                                name: PORT_MAPPING[key],
+                                // arrQueue = 南下(入境), depQueue = 北上(出境)
+                                up: info.depQueue,   
+                                down: info.arrQueue 
                             };
-                        })
-                        .filter((item: any) => item !== null); // 移除未匹配的項目
-
-                    console.log("過濾後的數據:", filtered);
+                        });
                     
-                    if (filtered.length === 0) {
-                        setDebugMsg("數據已抓取但無匹配口岸");
-                    } else {
-                        setPortStatus(filtered);
-                        setDebugMsg("");
-                    }
-                } else {
-                    setDebugMsg("數據格式錯誤 (無 body)");
+                    // 排序優化：常用的放前面 (深圳灣 > 皇崗 > 大橋 > 蓮塘)
+                    const sortOrder = ['深圳灣', '皇崗(落馬洲)', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
+                    formatted.sort((a, b) => sortOrder.indexOf(a.name) - sortOrder.indexOf(b.name));
+
+                    setPortStatus(formatted);
                 }
-            } catch (e: any) {
-                console.error("Traffic fetch error:", e);
-                setDebugMsg(`讀取錯誤: ${e.message}`);
+            } catch (e) {
+                console.error("Traffic fetch failed:", e);
                 setPortStatus([]);
             } finally {
                 setLoading(false);
@@ -3176,28 +3178,19 @@ const InfoWidget = () => {
         };
 
         fetchTraffic();
-        const trafficTimer = setInterval(fetchTraffic, 300000);
+        const trafficTimer = setInterval(fetchTraffic, 300000); // 5分鐘更新
         return () => clearInterval(trafficTimer);
     }, []);
 
     const getLunarDate = () => {
         try {
             return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
-        } catch (e) {
-            return '';
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        if (!status) return 'text-green-400';
-        if (status.includes('Busy') || status.includes('繁忙')) return 'text-red-400';
-        if (status.includes('Crowded') || status.includes('擠擁')) return 'text-amber-400';
-        return 'text-green-400';
+        } catch (e) { return ''; }
     };
 
     return (
         <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80">
-            {/* 時間與日曆 */}
+            {/* 時間顯示 */}
             <div className="mb-3 border-b border-slate-700 pb-2">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">
                     {currentTime.toLocaleTimeString('en-GB', { hour12: false })}
@@ -3211,41 +3204,38 @@ const InfoWidget = () => {
                 </div>
             </div>
 
-            {/* 錯誤訊息 (除錯用) */}
-            {debugMsg && (
-                <div className="text-red-400 mb-2 border border-red-900 bg-red-900/20 p-1 rounded">
-                    {debugMsg}
-                </div>
-            )}
-
-            {/* 口岸狀況 */}
+            {/* 口岸列表 */}
             {portStatus.length > 0 ? (
                 <div className="space-y-1.5 animate-fade-in">
-                    <div className="flex justify-between text-slate-500 text-[10px] mb-1">
+                    <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1">
                         <span>口岸</span>
-                        <div className="flex gap-2">
+                        <div className="flex gap-3">
                             <span>北上</span>
                             <span>南下</span>
                         </div>
                     </div>
                     {portStatus.map((port, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0">
-                            <span className="truncate mr-2 font-medium">{port.name}</span>
-                            <div className="flex gap-3 text-right font-bold whitespace-nowrap">
+                        <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
+                            <span className="truncate mr-2 font-medium text-slate-200">{port.name}</span>
+                            <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end">
+                                {/* 北上 */}
                                 <span className={getStatusColor(port.up)}>
-                                    {port.up === 'Normal' ? '正常' : port.up}
+                                    {getStatusText(port.up)}
                                 </span>
+                                {/* 南下 */}
                                 <span className={getStatusColor(port.down)}>
-                                    {port.down === 'Normal' ? '正常' : port.down}
+                                    {getStatusText(port.down)}
                                 </span>
                             </div>
                         </div>
                     ))}
-                    <div className="text-[10px] text-right text-slate-600 mt-2 italic">資料來源: 香港入境處</div>
+                    <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">
+                        數據: 入境處 (每5分鐘更新)
+                    </div>
                 </div>
             ) : (
                 <div className="text-center text-slate-600 italic py-2">
-                    {loading ? '載入數據中...' : '暫無數據'}
+                    {loading ? '更新數據中...' : '暫無即時數據'}
                 </div>
             )}
         </div>
