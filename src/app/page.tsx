@@ -3097,6 +3097,7 @@ const deleteVehicle = async (id: string) => {
       );
   };
 
+
 // --- Info Widget Component (Sidebar 資訊看板) ---
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -3108,13 +3109,15 @@ const InfoWidget = () => {
         'SZB': '深圳灣',
         'LMC': '落馬洲(皇崗)',
         'HZMB': '港珠澳大橋',
-        'LKT': '蓮塘/香園圍', // 根據入境處代碼可能有變，通常是 HYW 或 LKT
+        'LKT': '蓮塘/香園圍', 
         'MKM': '文錦渡',
         'STK': '沙頭角'
     };
 
     // 1. 時間更新 (每秒)
     useEffect(() => {
+        // 解決 Hydration Mismatch: 確保只在客戶端啟動計時器
+        setCurrentTime(new Date()); 
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
@@ -3123,8 +3126,12 @@ const InfoWidget = () => {
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
-                // 注意：若遇到 CORS 錯誤，需後端 Proxy。這裡做 try-catch 處理
-                const res = await fetch('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json');
+                // ★★★ 修改重點：改為呼叫自己的 Next.js API Route ★★★
+                // 這樣瀏覽器是請求同源的 '/api/traffic'，不會有 CORS 問題
+                const res = await fetch('/api/traffic');
+                
+                if (!res.ok) throw new Error('Network response was not ok');
+                
                 const data = await res.json();
                 
                 // 解析數據結構
@@ -3133,17 +3140,14 @@ const InfoWidget = () => {
                         .filter((item: any) => TARGET_PORTS[item.control_point])
                         .map((item: any) => ({
                             name: TARGET_PORTS[item.control_point],
-                            // status: 1=正常, 2=繁忙, 3=非常繁忙 (假設，具體視 JSON 而定，通常它給的是等待時間文字)
-                            // 入境處 JSON 通常返回: "arrival_status": "Normal", "departure_status": "Busy"
                             up: item.departure_status || '正常', // 北上 (出境)
                             down: item.arrival_status || '正常'  // 南下 (入境)
                         }));
                     setPortStatus(filtered);
                 }
             } catch (e) {
-                // 抓取失敗 (可能是 CORS 或 網絡問題)，設為空數組以隱藏
                 console.warn("Traffic data fetch failed:", e);
-                setPortStatus([]); 
+                setPortStatus([]); // 失敗時隱藏
             } finally {
                 setLoading(false);
             }
@@ -3157,7 +3161,6 @@ const InfoWidget = () => {
     // 農曆計算 (使用 Intl API)
     const getLunarDate = () => {
         try {
-            // 使用瀏覽器原生 API 轉換農曆 (需現代瀏覽器支持)
             return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
         } catch (e) {
             return '';
@@ -3167,11 +3170,11 @@ const InfoWidget = () => {
     const getStatusColor = (status: string) => {
         if (status?.includes('Busy') || status?.includes('繁忙')) return 'text-red-400';
         if (status?.includes('Crowded') || status?.includes('擠擁')) return 'text-amber-400';
-        return 'text-green-400'; // Normal
+        return 'text-green-400';
     };
 
     return (
-        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm">
+        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80">
             {/* 時間與日曆 */}
             <div className="mb-3 border-b border-slate-700 pb-2">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">
@@ -3187,8 +3190,8 @@ const InfoWidget = () => {
             </div>
 
             {/* 口岸狀況 (如果有數據) */}
-            {portStatus.length > 0 && (
-                <div className="space-y-1.5">
+            {portStatus.length > 0 ? (
+                <div className="space-y-1.5 animate-fade-in">
                     <div className="flex justify-between text-slate-500 text-[10px] mb-1">
                         <span>口岸</span>
                         <div className="flex gap-2">
@@ -3197,15 +3200,19 @@ const InfoWidget = () => {
                         </div>
                     </div>
                     {portStatus.map((port, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-slate-300">
-                            <span className="truncate mr-2">{port.name}</span>
+                        <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0">
+                            <span className="truncate mr-2 font-medium">{port.name}</span>
                             <div className="flex gap-3 text-right font-bold whitespace-nowrap">
                                 <span className={getStatusColor(port.up)}>{port.up === 'Normal' ? '正常' : port.up}</span>
                                 <span className={getStatusColor(port.down)}>{port.down === 'Normal' ? '正常' : port.down}</span>
                             </div>
                         </div>
                     ))}
-                    <div className="text-[10px] text-right text-slate-600 mt-1">資料來源: 香港入境處</div>
+                    <div className="text-[10px] text-right text-slate-600 mt-2 italic">資料來源: 香港入境處</div>
+                </div>
+            ) : (
+                <div className="text-center text-slate-600 italic py-2">
+                    {loading ? '載入數據中...' : ''}
                 </div>
             )}
         </div>
