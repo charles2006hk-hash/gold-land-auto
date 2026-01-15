@@ -464,6 +464,10 @@ export default function GoldLandAutoDMS() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null); 
   
+  // ★★★ 新增：將資料庫編輯狀態提升到這裡，讓 Dashboard 也能控制 ★★★
+  const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
+  const [isDbEditing, setIsDbEditing] = useState(false);
+
   // Cross Border UI State
   const [activeCbVehicleId, setActiveCbVehicleId] = useState<string | null>(null);
 
@@ -2292,12 +2296,14 @@ const deleteVehicle = async (id: string) => {
   };
 
   // 5. Database Module (資料庫管理 - 增強版：修復編輯/新增下載/自由文件類型)
+  // 5. Database Module (修正版：狀態提升與變數名稱統一)
   const DatabaseModule = () => {
       const [entries, setEntries] = useState<DatabaseEntry[]>([]);
       const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
       const [searchTerm, setSearchTerm] = useState('');
-      const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
-      const [isEditing, setIsEditing] = useState(false);
+      
+      // ★★★ 修正 1: 移除了這裡原本的 editingEntry 和 isEditing 的 useState 定義 ★★★
+      // 因為這些狀態已經提升到主組件 GoldLandAutoDMS 管理，這裡直接使用閉包變數
       
       const [tagInput, setTagInput] = useState('');
 
@@ -2335,8 +2341,7 @@ const deleteVehicle = async (id: string) => {
                       attachments: attachments,
                       createdAt: data.createdAt,
                       updatedAt: data.updatedAt,
-
-                      // ★★★ 新增：這裡必須加入讀取新欄位的邏輯，否則存檔後會消失 ★★★
+                      // 讀取新欄位
                       reminderEnabled: data.reminderEnabled || false,
                       expiryDate: data.expiryDate || '',
                       renewalCount: data.renewalCount || 0,
@@ -2366,7 +2371,7 @@ const deleteVehicle = async (id: string) => {
           reader.readAsDataURL(file);
       };
 
-      // 圖片下載功能 (新增)
+      // 圖片下載功能
       const downloadImage = (dataUrl: string, filename: string) => {
           const link = document.createElement('a');
           link.href = dataUrl;
@@ -2376,7 +2381,7 @@ const deleteVehicle = async (id: string) => {
           document.body.removeChild(link);
       };
 
-      // ★★★ 新增：執行快速續期邏輯 ★★★
+      // 執行快速續期邏輯
       const handleQuickRenew = () => {
           if (!editingEntry || !editingEntry.expiryDate) {
               alert("請先設定當前的到期日");
@@ -2386,20 +2391,16 @@ const deleteVehicle = async (id: string) => {
           const duration = Number(editingEntry.renewalDuration) || 1;
           const unit = editingEntry.renewalUnit || 'year';
           
-          // 解析當前日期
           const currentDate = new Date(editingEntry.expiryDate);
           
-          // 計算新日期
           if (unit === 'year') {
               currentDate.setFullYear(currentDate.getFullYear() + duration);
           } else {
               currentDate.setMonth(currentDate.getMonth() + duration);
           }
           
-          // 格式化回 YYYY-MM-DD
           const newDateStr = currentDate.toISOString().split('T')[0];
           
-          // 更新狀態：日期更新，次數+1
           setEditingEntry({
               ...editingEntry,
               expiryDate: newDateStr,
@@ -2438,7 +2439,7 @@ const deleteVehicle = async (id: string) => {
                   const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
                   setEditingEntry({ ...finalEntry, id: newRef.id }); 
               }
-              setIsEditing(false); 
+              setIsDbEditing(false); // ★★★ 修正 2: 改為 setIsDbEditing ★★★
               alert('資料已儲存');
           } catch (err) {
               console.error(err);
@@ -2456,7 +2457,7 @@ const deleteVehicle = async (id: string) => {
           const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
           await deleteDoc(docRef);
           
-          if (editingEntry?.id === id) { setEditingEntry(null); setIsEditing(false); }
+          if (editingEntry?.id === id) { setEditingEntry(null); setIsDbEditing(false); } // ★★★ 修正 3: 改為 setIsDbEditing ★★★
       };
 
       const toggleRole = (role: string) => {
@@ -2493,7 +2494,7 @@ const deleteVehicle = async (id: string) => {
                               onClick={(e) => {
                                   e.preventDefault(); 
                                   setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null });
-                                  setIsEditing(true);
+                                  setIsDbEditing(true); // ★★★ 修正 4: 改為 setIsDbEditing ★★★
                               }}
                               className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"
                           ><Plus size={20}/></button>
@@ -2529,21 +2530,19 @@ const deleteVehicle = async (id: string) => {
                   {/* List Content */}
                   <div className="flex-1 overflow-y-auto p-2 space-y-2">
                       {filteredEntries.map(entry => {
-                        // ★★★ 新增：計算過期狀態顯示 ★★★
                           const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
                           const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
                           
                           return (
                           <div 
                               key={entry.id}
-                              onClick={() => { setEditingEntry(entry); setIsEditing(false); }}
+                              onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} // ★★★ 修正 5: 改為 setIsDbEditing ★★★
                               className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}
                           >
                               <div className="flex justify-between items-start">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
-                                      {/* ★★★ 新增：提醒圖標 ★★★ */}
                                           {entry.reminderEnabled && (
                                               <Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />
                                           )}
@@ -2571,15 +2570,16 @@ const deleteVehicle = async (id: string) => {
                           {/* Toolbar */}
                           <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                               <div className="font-bold text-slate-700 text-lg flex items-center">
-                                  {isEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
-                                  {!isEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
+                                  {/* ★★★ 修正 6: 改為 isDbEditing ★★★ */}
+                                  {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
+                                  {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
                               </div>
                               <div className="flex gap-2">
-                                  {isEditing || !editingEntry.id ? (
+                                  {isDbEditing || !editingEntry.id ? ( // ★★★ 修正 7: 改為 isDbEditing ★★★
                                       <>
                                           <button 
                                             type="button" 
-                                            onClick={(e) => { e.preventDefault(); setIsEditing(false); if(!editingEntry.id) setEditingEntry(null); }} 
+                                            onClick={(e) => { e.preventDefault(); setIsDbEditing(false); if(!editingEntry.id) setEditingEntry(null); }} // ★★★ 修正 8: 改為 setIsDbEditing ★★★
                                             className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded"
                                           >取消</button>
                                           <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
@@ -2593,10 +2593,9 @@ const deleteVehicle = async (id: string) => {
                                             title="刪除"
                                           ><Trash2 size={18}/></button>
                                           
-                                          {/* ★★★ 修復：明確的 type="button" 及 preventDefault ★★★ */}
                                           <button 
                                             type="button" 
-                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsEditing(true); }} 
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsDbEditing(true); }} // ★★★ 修正 9: 改為 setIsDbEditing ★★★
                                             className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"
                                           ><Edit size={16} className="mr-1"/> 編輯</button>
                                       </>
@@ -2607,7 +2606,7 @@ const deleteVehicle = async (id: string) => {
                           {/* Form Content */}
                           <div className="flex-1 overflow-y-auto p-6 space-y-6">
                               
-                              {isEditing && (
+                              {isDbEditing && ( // ★★★ 修正 10: 改為 isDbEditing ★★★
                                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
                                       <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
                                       <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
@@ -2620,7 +2619,7 @@ const deleteVehicle = async (id: string) => {
                                       <div>
                                           <label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label>
                                           <input 
-                                              disabled={!isEditing}
+                                              disabled={!isDbEditing} // ★★★ 修正 11: 改為 !isDbEditing ★★★
                                               value={editingEntry.name}
                                               onChange={e => setEditingEntry({...editingEntry, name: e.target.value})}
                                               className="w-full p-2 border rounded text-lg font-bold"
@@ -2635,12 +2634,11 @@ const deleteVehicle = async (id: string) => {
                                               <div>
                                                     <label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label>
                                                     <div className="flex flex-wrap gap-2">
-                                                    {/* ★★★ 修改：使用 settings.dbRoles ★★★ */}
                                                     {(settings.dbRoles || ['客戶', '司機']).map(role => (
                                                           <button
                                                           key={role}
                                                           type="button"
-                                                          disabled={!isEditing}
+                                                          disabled={!isDbEditing} // ★★★ 修正 12: 改為 !isDbEditing ★★★
                                                           onClick={() => toggleRole(role)}
                                                           className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}
                                                      >
@@ -2650,67 +2648,65 @@ const deleteVehicle = async (id: string) => {
                                                     </div>
                                                 </div>
                                               <div className="grid grid-cols-2 gap-3">
-                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div>
+                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div>
                                               </div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                           </>
                                       )}
 
                                       {/* --- Company Fields --- */}
                                       {editingEntry.category === 'Company' && (
                                           <>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                           </>
                                       )}
 
                                       {/* --- Vehicle Fields --- */}
                                       {editingEntry.category === 'Vehicle' && (
                                           <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div>
                                           </div>
                                       )}
 
                                       {/* --- CrossBorder Fields --- */}
                                       {editingEntry.category === 'CrossBorder' && (
                                           <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isDbEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                           </div>
                                       )}
 
-                                      {/* 通用欄位 (文件類型：改為 Input + Datalist) */}
+                                      {/* 通用欄位 */}
                                       <div>
                                           <label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label>
                                           <input 
                                             list="doctype_list"
-                                            disabled={!isEditing} 
+                                            disabled={!isDbEditing} 
                                             value={editingEntry.docType || ''} 
                                             onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} 
                                             className="w-full p-2 border rounded text-sm bg-gray-50"
                                             placeholder="選擇或輸入新類型..."
                                           />
                                           <datalist id="doctype_list">
-                                             {/* ★★★ 修改：使用 settings.dbDocTypes ★★★ */}
                                              {(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}
                                           </datalist>
                                       </div>
 
-{/* ★★★ 新增：到期日與續期管理模塊 ★★★ */}
+                                      {/* 到期日與續期管理模塊 */}
                                       <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                                           <div className="flex justify-between items-center mb-3">
                                               <label className="flex items-center cursor-pointer">
                                                   <input 
                                                       type="checkbox" 
-                                                      disabled={!isEditing}
+                                                      disabled={!isDbEditing} // ★★★ 修正 13: 改為 !isDbEditing ★★★
                                                       checked={editingEntry.reminderEnabled || false} 
                                                       onChange={e => setEditingEntry({
                                                           ...editingEntry, 
                                                           reminderEnabled: e.target.checked,
-                                                          // 如果開啟且無預設值，自動填入預設
                                                           renewalDuration: editingEntry.renewalDuration || 1,
                                                           renewalUnit: editingEntry.renewalUnit || 'year',
                                                           renewalCount: editingEntry.renewalCount || 0
@@ -2728,40 +2724,35 @@ const deleteVehicle = async (id: string) => {
                                               )}
                                           </div>
 
-                                          {/* 展開的設定區域 */}
                                           {editingEntry.reminderEnabled && (
                                               <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                                                  
-                                                  {/* 1. 到期日設定 */}
                                                   <div className="col-span-2 md:col-span-1">
                                                       <label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label>
                                                       <input 
                                                           type="date" 
-                                                          disabled={!isEditing}
+                                                          disabled={!isDbEditing} // ★★★ 修正 14: 改為 !isDbEditing ★★★
                                                           value={editingEntry.expiryDate || ''} 
                                                           onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} 
                                                           className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold"
                                                       />
-                                                      {/* 顯示剩餘天數 */}
                                                       <div className="mt-1">
                                                           <DateStatusBadge date={editingEntry.expiryDate} label="狀態" />
                                                       </div>
                                                   </div>
 
-                                                  {/* 2. 續期規則與操作 */}
                                                   <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100">
                                                       <label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label>
                                                       <div className="flex gap-2 mb-2">
                                                           <input 
                                                               type="number" 
-                                                              disabled={!isEditing}
+                                                              disabled={!isDbEditing} // ★★★ 修正 15: 改為 !isDbEditing ★★★
                                                               value={editingEntry.renewalDuration} 
                                                               onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} 
                                                               className="w-16 p-1 border rounded text-center text-sm"
                                                               min="1"
                                                           />
                                                           <select 
-                                                              disabled={!isEditing}
+                                                              disabled={!isDbEditing} // ★★★ 修正 16: 改為 !isDbEditing ★★★
                                                               value={editingEntry.renewalUnit} 
                                                               onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} 
                                                               className="flex-1 p-1 border rounded text-sm"
@@ -2771,7 +2762,7 @@ const deleteVehicle = async (id: string) => {
                                                           </select>
                                                       </div>
                                                       
-                                                      {isEditing && (
+                                                      {isDbEditing && ( // ★★★ 修正 17: 改為 isDbEditing ★★★
                                                           <button 
                                                               type="button" 
                                                               onClick={handleQuickRenew}
@@ -2788,16 +2779,16 @@ const deleteVehicle = async (id: string) => {
 
                                       <div>
                                           <label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label>
-                                          <textarea disabled={!isEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/>
+                                          <textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/>
                                       </div>
 
                                       {/* Tags */}
                                       <div>
                                           <label className="block text-xs font-bold text-slate-500">標籤</label>
                                           <div className="flex gap-2 mb-2 flex-wrap">
-                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}
+                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}
                                           </div>
-                                          {isEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}
+                                          {isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}
                                       </div>
                                   </div>
                                   
@@ -2805,7 +2796,7 @@ const deleteVehicle = async (id: string) => {
                                   <div className="space-y-4">
                                       <div className="flex justify-between items-center">
                                           <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
-                                          {isEditing && (
+                                          {isDbEditing && (
                                               <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors">
                                                   <Upload size={14} className="mr-1"/> 上傳圖片
                                                   <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
@@ -2823,7 +2814,7 @@ const deleteVehicle = async (id: string) => {
                                                           className="w-full h-auto object-contain"
                                                           style={{ maxHeight: 'none' }} 
                                                       />
-                                                      {isEditing && (
+                                                      {isDbEditing && (
                                                           <button 
                                                               type="button"
                                                               onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)}
@@ -2833,7 +2824,6 @@ const deleteVehicle = async (id: string) => {
                                                               <X size={18}/>
                                                           </button>
                                                       )}
-                                                      {/* ★★★ 新增：下載按鈕 ★★★ */}
                                                       <button 
                                                           type="button"
                                                           onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }}
@@ -2845,7 +2835,7 @@ const deleteVehicle = async (id: string) => {
                                                   </div>
                                                   <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center">
                                                       <File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>
-                                                      {isEditing ? (
+                                                      {isDbEditing ? (
                                                           <input 
                                                               value={file.name} 
                                                               onChange={e => {
@@ -3546,7 +3536,7 @@ const InfoWidget = () => {
                                       // 跳轉邏輯：切換 Tab -> 設定正在編輯的 Entry -> 開啟編輯模式
                                       setActiveTab('database');
                                       setEditingEntry(item.raw);
-                                      setIsEditing(true);
+                                      setIsDbEditing(true);
                                   }} 
                               />
                               <Bell size={100} className="absolute -left-6 -bottom-6 text-blue-950 opacity-20 pointer-events-none" />
