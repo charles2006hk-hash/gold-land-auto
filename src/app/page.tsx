@@ -450,6 +450,395 @@ const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
   );
 };
 
+
+// --- 1. InfoWidget (外部組件) ---
+const InfoWidget = () => {
+    const [currentTime, setCurrentTime] = useState(new Date());
+    const [portStatus, setPortStatus] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const PORT_MAPPING: Record<string, string> = {
+        'SBC': '深圳灣', 'LMC': '皇崗(落馬洲)', 'HZM': '港珠澳大橋',
+        'HYW': '蓮塘/香園圍', 'MKT': '文錦渡', 'STK': '沙頭角'
+    };
+
+    const getStatusText = (code: number) => {
+        if (code === 0) return '正常'; if (code === 1) return '繁忙';
+        if (code === 2) return '擠塞'; if (code === 99) return '關閉'; return '-';
+    };
+
+    const getStatusColor = (code: number) => {
+        if (code === 0) return 'text-green-400'; if (code === 1) return 'text-amber-400';
+        if (code === 2) return 'text-red-500 font-bold'; return 'text-slate-600';
+    };
+
+    useEffect(() => {
+        setCurrentTime(new Date());
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        const fetchTraffic = async () => {
+            try {
+                const res = await fetch('/api/traffic');
+                if (!res.ok) throw new Error('API Error');
+                const data = await res.json();
+                if (data && typeof data === 'object') {
+                    const formatted = Object.keys(data).filter(key => PORT_MAPPING[key]).map(key => {
+                        const info = data[key];
+                        return { name: PORT_MAPPING[key], up: info.depQueue, down: info.arrQueue };
+                    });
+                    const sortOrder = ['深圳灣', '皇崗(落馬洲)', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
+                    formatted.sort((a, b) => sortOrder.indexOf(a.name) - sortOrder.indexOf(b.name));
+                    setPortStatus(formatted);
+                }
+            } catch (e) { console.error("Traffic fetch failed:", e); setPortStatus([]); } 
+            finally { setLoading(false); }
+        };
+        fetchTraffic();
+        const trafficTimer = setInterval(fetchTraffic, 300000);
+        return () => clearInterval(trafficTimer);
+    }, []);
+
+    const getLunarDate = () => {
+        try { return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime); } catch (e) { return ''; }
+    };
+
+    return (
+        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80">
+            <div className="mb-3 border-b border-slate-700 pb-2">
+                <div className="text-xl font-mono font-bold text-white tracking-widest text-center">{currentTime.toLocaleTimeString('en-GB', { hour12: false })}</div>
+                <div className="flex justify-between mt-1 text-slate-400"><span>{currentTime.toLocaleDateString('zh-HK')}</span><span>{['日','一','二','三','四','五','六'][currentTime.getDay()]}</span></div>
+                <div className="text-center mt-1 text-yellow-500 font-medium">{getLunarDate().replace('年', '年 ')}</div>
+            </div>
+            {portStatus.length > 0 ? (
+                <div className="space-y-1.5 animate-fade-in">
+                    <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1"><span>口岸</span><div className="flex gap-3"><span>北上</span><span>南下</span></div></div>
+                    {portStatus.map((port, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
+                            <span className="truncate mr-2 font-medium text-slate-200">{port.name}</span>
+                            <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end">
+                                <span className={getStatusColor(port.up)}>{getStatusText(port.up)}</span>
+                                <span className={getStatusColor(port.down)}>{getStatusText(port.down)}</span>
+                            </div>
+                        </div>
+                    ))}
+                    <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">數據: 入境處 (每5分鐘更新)</div>
+                </div>
+            ) : (<div className="text-center text-slate-600 italic py-2">{loading ? '更新數據中...' : '暫無即時數據'}</div>)}
+        </div>
+    );
+};
+
+// --- 2. Sidebar (外部組件) ---
+type SidebarProps = {
+    activeTab: string;
+    setActiveTab: (tab: any) => void;
+    isMobileMenuOpen: boolean;
+    setIsMobileMenuOpen: (open: boolean) => void;
+    isSidebarCollapsed: boolean;
+    setIsSidebarCollapsed: (collapsed: boolean) => void;
+    staffId: string | null;
+    setStaffId: (id: string | null) => void;
+};
+
+const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId }: SidebarProps) => (
+    <>
+      {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
+      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
+        <div className={`p-4 h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} transition-all flex-none`}>
+            <div className="flex items-center gap-3 overflow-hidden">
+                <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center"><img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" /></div>
+                <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}><h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight whitespace-nowrap">金田汽車<br/><span className="text-xs text-slate-400">DMS系統</span></h1></div>
+            </div>
+            <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors" title={isSidebarCollapsed ? "展開選單" : "縮起選單"}>{isSidebarCollapsed ? null : <ChevronLeft size={20} />}</button>
+        </div>
+        <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+          {[
+            { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard }, { id: 'inventory', label: '車輛管理', icon: Car },
+            { id: 'create_doc', label: '開單系統', icon: FileText }, { id: 'reports', label: '統計報表', icon: FileBarChart },
+            { id: 'cross_border', label: '中港業務', icon: Globe }, { id: 'database', label: '資料庫中心', icon: Database },
+            { id: 'settings', label: '系統設置', icon: Settings }
+          ].map(item => (
+             <button key={item.id} onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title={isSidebarCollapsed ? item.label : ''}>
+                <item.icon size={22} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                {!isSidebarCollapsed && <span className="whitespace-nowrap font-medium">{item.label}</span>}
+                {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
+             </button>
+          ))}
+        </nav>
+        {!isSidebarCollapsed && <InfoWidget />}
+        <div className="p-4 bg-slate-900 border-t border-slate-800 flex-none">
+             {isSidebarCollapsed ? (
+                 <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="w-full flex justify-center text-red-400 hover:text-red-300 transition" title="登出"><LogOut size={20} /></button>
+             ) : (
+                 <div className="flex items-center justify-between">
+                     <div className="flex items-center space-x-2 overflow-hidden">
+                         <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500"><UserCircle size={20} /></div>
+                         <div className="flex-1 min-w-0"><p className="text-sm font-bold text-white truncate">{staffId}</p><p className="text-[10px] text-slate-500">已登入</p></div>
+                     </div>
+                     <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="text-slate-500 hover:text-red-400 transition p-2"><LogOut size={18} /></button>
+                 </div>
+             )}
+             {isSidebarCollapsed && <button onClick={() => setIsSidebarCollapsed(false)} className="w-full mt-4 flex justify-center text-slate-500 hover:text-white py-2 border-t border-slate-800 md:flex hidden"><ChevronRight size={20} /></button>}
+        </div>
+        <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white"><X size={24} /></button>
+      </div>
+    </>
+);
+
+// --- 3. DatabaseModule (外部組件) ---
+type DatabaseModuleProps = {
+    db: Firestore | null;
+    staffId: string | null;
+    appId: string;
+    settings: SystemSettings;
+    editingEntry: DatabaseEntry | null;
+    setEditingEntry: React.Dispatch<React.SetStateAction<DatabaseEntry | null>>;
+    isDbEditing: boolean;
+    setIsDbEditing: React.Dispatch<React.SetStateAction<boolean>>;
+};
+
+const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing }: DatabaseModuleProps) => {
+    const [entries, setEntries] = useState<DatabaseEntry[]>([]);
+    const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [tagInput, setTagInput] = useState('');
+
+    useEffect(() => {
+        if (!db || !staffId) return;
+        const currentDb = db; 
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+        const q = query(colRef, orderBy('createdAt', 'desc'));
+        
+        const unsub = onSnapshot(q, (snapshot) => {
+            const list: DatabaseEntry[] = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                let attachments = data.attachments || [];
+                if (!attachments.length && data.images && Array.isArray(data.images)) {
+                    attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
+                }
+                list.push({ 
+                    id: doc.id, category: data.category || 'Person', name: data.name || data.title || '',
+                    phone: data.phone || '', address: data.address || '', idNumber: data.idNumber || '',
+                    plateNoHK: data.plateNoHK || '', plateNoCN: data.plateNoCN || '', quotaNo: data.quotaNo || '',
+                    receiptNo: data.receiptNo || '', docType: data.docType || '', description: data.description || '',
+                    tags: data.tags || [], roles: data.roles || [], attachments: attachments,
+                    createdAt: data.createdAt, updatedAt: data.updatedAt,
+                    reminderEnabled: data.reminderEnabled || false, expiryDate: data.expiryDate || '',
+                    renewalCount: data.renewalCount || 0, renewalDuration: data.renewalDuration || 1, renewalUnit: data.renewalUnit || 'year'
+                } as DatabaseEntry);
+            });
+            setEntries(list);
+        });
+        return () => unsub();
+    }, [staffId, db, appId]);
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        if (file.size > 500 * 1024) { alert(`檔案 ${file.name} 超過 500KB 限制`); return; }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64 = reader.result as string;
+            setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: base64 }] } : null);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const downloadImage = (dataUrl: string, filename: string) => {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = filename || 'download.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleQuickRenew = () => {
+        if (!editingEntry || !editingEntry.expiryDate) { alert("請先設定當前的到期日"); return; }
+        const duration = Number(editingEntry.renewalDuration) || 1;
+        const unit = editingEntry.renewalUnit || 'year';
+        const currentDate = new Date(editingEntry.expiryDate);
+        if (unit === 'year') { currentDate.setFullYear(currentDate.getFullYear() + duration); } 
+        else { currentDate.setMonth(currentDate.getMonth() + duration); }
+        const newDateStr = currentDate.toISOString().split('T')[0];
+        setEditingEntry({ ...editingEntry, expiryDate: newDateStr, renewalCount: (editingEntry.renewalCount || 0) + 1 });
+    };
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault(); 
+        if (!db || !staffId || !editingEntry) return;
+        const currentDb = db; 
+        const autoTags = new Set(editingEntry.tags || []);
+        if(editingEntry.name) autoTags.add(editingEntry.name);
+        if(editingEntry.plateNoHK) autoTags.add(editingEntry.plateNoHK);
+        if(editingEntry.plateNoCN) autoTags.add(editingEntry.plateNoCN);
+        if(editingEntry.quotaNo) autoTags.add(editingEntry.quotaNo);
+        const finalEntry = { ...editingEntry, tags: Array.from(autoTags), roles: editingEntry.roles || [], attachments: editingEntry.attachments || [] };
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        try {
+            if (editingEntry.id) {
+                const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
+                await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
+            } else {
+                const { id, ...dataToSave } = finalEntry;
+                const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+                const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
+                setEditingEntry({ ...finalEntry, id: newRef.id }); 
+            }
+            setIsDbEditing(false); 
+            alert('資料已儲存');
+        } catch (err) { console.error(err); alert('儲存失敗'); }
+    };
+    
+    const handleDelete = async (id: string) => {
+        if (!db || !staffId) return;
+        const currentDb = db; 
+        if (!confirm('確定刪除此筆資料？無法復原。')) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
+        await deleteDoc(docRef);
+        if (editingEntry?.id === id) { setEditingEntry(null); setIsDbEditing(false); }
+    };
+
+    const toggleRole = (role: string) => {
+        setEditingEntry(prev => { if (!prev) return null; const currentRoles = prev.roles || []; if (currentRoles.includes(role)) return { ...prev, roles: currentRoles.filter(r => r !== role) }; return { ...prev, roles: [...currentRoles, role] }; });
+    };
+
+    const addTag = () => {
+        if (tagInput.trim() && editingEntry) { setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] }); setTagInput(''); }
+    };
+
+    const filteredEntries = entries.filter(entry => {
+        const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
+        const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
+        return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+
+    return (
+        <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="w-1/3 border-r border-slate-100 flex flex-col bg-slate-50">
+                <div className="p-4 border-b border-slate-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫中心</h2>
+                        <button type="button" onClick={(e) => { e.preventDefault(); setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); setIsDbEditing(true); }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
+                    </div>
+                    <div className="space-y-2">
+                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="搜尋姓名、車牌、標籤..." className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (<button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}>{cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}</button>))}</div>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {filteredEntries.map(entry => {
+                        const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
+                        const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
+                        return (
+                        <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+                            <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2"><div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>{entry.reminderEnabled && (<Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />)}</div>
+                                    <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
+                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
+                                        {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
+                                        {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
+                                        {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
+                                    </div>
+                                </div>
+                                {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
+                            </div>
+                        </div>
+                       );
+                  })}
+                    {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
+                </div>
+            </div>
+            <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+                {editingEntry ? (
+                    <form onSubmit={handleSave} className="flex flex-col h-full">
+                        <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div className="font-bold text-slate-700 text-lg flex items-center">
+                                {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
+                                {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
+                            </div>
+                            <div className="flex gap-2">
+                                {isDbEditing || !editingEntry.id ? (
+                                    <>
+                                        <button type="button" onClick={(e) => { e.preventDefault(); setIsDbEditing(false); if(!editingEntry.id) setEditingEntry(null); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
+                                        <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(editingEntry.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><Trash2 size={18}/></button>
+                                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsDbEditing(true); }} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {isDbEditing && (
+                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
+                                    <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
+                                    <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label><input disabled={!isDbEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded text-lg font-bold" placeholder="姓名 / 公司名" required /></div>
+                                    {editingEntry.category === 'Person' && (
+                                        <>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label><div className="flex flex-wrap gap-2">{(settings.dbRoles || ['客戶', '司機']).map(role => (<button key={role} type="button" disabled={!isDbEditing} onClick={() => toggleRole(role)} className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}>{role}</button>))}</div></div>
+                                            <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div></div>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                        </>
+                                    )}
+                                    {editingEntry.category === 'Company' && (
+                                        <>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                        </>
+                                    )}
+                                    {editingEntry.category === 'Vehicle' && (
+                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div></div>
+                                    )}
+                                    {editingEntry.category === 'CrossBorder' && (
+                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isDbEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div></div>
+                                    )}
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
+                                    <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <label className="flex items-center cursor-pointer"><input type="checkbox" disabled={!isDbEditing} checked={editingEntry.reminderEnabled || false} onChange={e => setEditingEntry({ ...editingEntry, reminderEnabled: e.target.checked, renewalDuration: editingEntry.renewalDuration || 1, renewalUnit: editingEntry.renewalUnit || 'year', renewalCount: editingEntry.renewalCount || 0 })} className="w-4 h-4 text-amber-600 rounded mr-2" /><span className={`text-sm font-bold flex items-center ${editingEntry.reminderEnabled ? 'text-amber-800' : 'text-gray-500'}`}><Bell size={16} className="mr-1"/> 啟用到期提醒功能</span></label>
+                                            {editingEntry.reminderEnabled && (<div className="text-xs text-amber-700 font-mono bg-white px-2 py-1 rounded border border-amber-200">已續期次數: <span className="font-bold">{editingEntry.renewalCount || 0}</span></div>)}
+                                        </div>
+                                        {editingEntry.reminderEnabled && (
+                                            <div className="grid grid-cols-2 gap-4 animate-fade-in">
+                                                <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label><input type="date" disabled={!isDbEditing} value={editingEntry.expiryDate || ''} onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold" /><div className="mt-1"><DateStatusBadge date={editingEntry.expiryDate} label="狀態" /></div></div>
+                                                <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100"><label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label><div className="flex gap-2 mb-2"><input type="number" disabled={!isDbEditing} value={editingEntry.renewalDuration} onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} className="w-16 p-1 border rounded text-center text-sm" min="1" /><select disabled={!isDbEditing} value={editingEntry.renewalUnit} onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} className="flex-1 p-1 border rounded text-sm"><option value="year">年 (Years)</option><option value="month">月 (Months)</option></select></div>{isDbEditing && (<button type="button" onClick={handleQuickRenew} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"><RefreshCw size={12} className="mr-1"/> 立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})</button>)}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label><textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/></div>
+                                    <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>)}</div>
+                                    <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">{editingEntry.attachments?.map((file, idx) => (<div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col"><div className="w-full bg-slate-50 relative p-1"><img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />{isDbEditing && (<button type="button" onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg" title="刪除"><X size={18}/></button>)}<button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button></div><div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center"><File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>{isDbEditing ? (<input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />) : (<span className="truncate">{file.name}</span>)}</div></div>))}{(!editingEntry.attachments || editingEntry.attachments.length === 0) && (<div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30"><ImageIcon size={48} className="mb-3 opacity-30"/>暫無附件圖片</div>)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                ) : (<div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>)}
+            </div>
+        </div>
+    );
+};
+
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
@@ -2295,581 +2684,7 @@ const deleteVehicle = async (id: string) => {
     );
   };
 
-  // 5. Database Module (資料庫管理 - 增強版：修復編輯/新增下載/自由文件類型)
-  // 5. Database Module (修正版：狀態提升與變數名稱統一)
-  const DatabaseModule = () => {
-      const [entries, setEntries] = useState<DatabaseEntry[]>([]);
-      const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
-      const [searchTerm, setSearchTerm] = useState('');
-      
-      // ★★★ 修正 1: 移除了這裡原本的 editingEntry 和 isEditing 的 useState 定義 ★★★
-      // 因為這些狀態已經提升到主組件 GoldLandAutoDMS 管理，這裡直接使用閉包變數
-      
-      const [tagInput, setTagInput] = useState('');
-
-      // 讀取資料庫
-      useEffect(() => {
-          if (!db || !staffId) return;
-          const currentDb = db; 
-          const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-          const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-          const q = query(colRef, orderBy('createdAt', 'desc'));
-          
-          const unsub = onSnapshot(q, (snapshot) => {
-              const list: DatabaseEntry[] = [];
-              snapshot.forEach(doc => {
-                  const data = doc.data();
-                  let attachments = data.attachments || [];
-                  if (!attachments.length && data.images && Array.isArray(data.images)) {
-                      attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
-                  }
-                  list.push({ 
-                      id: doc.id, 
-                      category: data.category || 'Person',
-                      name: data.name || data.title || '',
-                      phone: data.phone || '',
-                      address: data.address || '',
-                      idNumber: data.idNumber || '',
-                      plateNoHK: data.plateNoHK || '',
-                      plateNoCN: data.plateNoCN || '',
-                      quotaNo: data.quotaNo || '',
-                      receiptNo: data.receiptNo || '',
-                      docType: data.docType || '',
-                      description: data.description || '',
-                      tags: data.tags || [],
-                      roles: data.roles || [],
-                      attachments: attachments,
-                      createdAt: data.createdAt,
-                      updatedAt: data.updatedAt,
-                      // 讀取新欄位
-                      reminderEnabled: data.reminderEnabled || false,
-                      expiryDate: data.expiryDate || '',
-                      renewalCount: data.renewalCount || 0,
-                      renewalDuration: data.renewalDuration || 1,
-                      renewalUnit: data.renewalUnit || 'year'
-                  } as DatabaseEntry);
-              });
-              setEntries(list);
-          });
-          return () => unsub();
-      }, [staffId]);
-
-      // 圖片上傳處理
-      const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-          const files = e.target.files;
-          if (!files || files.length === 0) return;
-          const file = files[0];
-          if (file.size > 500 * 1024) {
-              alert(`檔案 ${file.name} 超過 500KB 限制`);
-              return;
-          }
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              const base64 = reader.result as string;
-              setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: base64 }] } : null);
-          };
-          reader.readAsDataURL(file);
-      };
-
-      // 圖片下載功能
-      const downloadImage = (dataUrl: string, filename: string) => {
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = filename || 'download.png';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-      };
-
-      // 執行快速續期邏輯
-      const handleQuickRenew = () => {
-          if (!editingEntry || !editingEntry.expiryDate) {
-              alert("請先設定當前的到期日");
-              return;
-          }
-
-          const duration = Number(editingEntry.renewalDuration) || 1;
-          const unit = editingEntry.renewalUnit || 'year';
-          
-          const currentDate = new Date(editingEntry.expiryDate);
-          
-          if (unit === 'year') {
-              currentDate.setFullYear(currentDate.getFullYear() + duration);
-          } else {
-              currentDate.setMonth(currentDate.getMonth() + duration);
-          }
-          
-          const newDateStr = currentDate.toISOString().split('T')[0];
-          
-          setEditingEntry({
-              ...editingEntry,
-              expiryDate: newDateStr,
-              renewalCount: (editingEntry.renewalCount || 0) + 1
-          });
-      };
-
-      const handleSave = async (e: React.FormEvent) => {
-          e.preventDefault(); 
-          if (!db || !staffId || !editingEntry) return;
-          const currentDb = db; 
-          
-          const autoTags = new Set(editingEntry.tags || []);
-          if(editingEntry.name) autoTags.add(editingEntry.name);
-          if(editingEntry.plateNoHK) autoTags.add(editingEntry.plateNoHK);
-          if(editingEntry.plateNoCN) autoTags.add(editingEntry.plateNoCN);
-          if(editingEntry.quotaNo) autoTags.add(editingEntry.quotaNo);
-          
-          const finalEntry = { 
-              ...editingEntry, 
-              tags: Array.from(autoTags),
-              roles: editingEntry.roles || [],
-              attachments: editingEntry.attachments || []
-          };
-
-          const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-          
-          try {
-              if (editingEntry.id) {
-                  const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
-                  await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
-              } else {
-                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                  const { id, ...dataToSave } = finalEntry;
-                  const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-                  const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
-                  setEditingEntry({ ...finalEntry, id: newRef.id }); 
-              }
-              setIsDbEditing(false); // ★★★ 修正 2: 改為 setIsDbEditing ★★★
-              alert('資料已儲存');
-          } catch (err) {
-              console.error(err);
-              alert('儲存失敗');
-          }
-      };
-      
-      const handleDelete = async (id: string) => {
-          if (!db || !staffId) return;
-          const currentDb = db; 
-
-          if (!confirm('確定刪除此筆資料？無法復原。')) return;
-          const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-          
-          const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
-          await deleteDoc(docRef);
-          
-          if (editingEntry?.id === id) { setEditingEntry(null); setIsDbEditing(false); } // ★★★ 修正 3: 改為 setIsDbEditing ★★★
-      };
-
-      const toggleRole = (role: string) => {
-          setEditingEntry(prev => {
-              if (!prev) return null;
-              const currentRoles = prev.roles || [];
-              if (currentRoles.includes(role)) return { ...prev, roles: currentRoles.filter(r => r !== role) };
-              return { ...prev, roles: [...currentRoles, role] };
-          });
-      };
-
-      const addTag = () => {
-          if (tagInput.trim() && editingEntry) {
-              setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] });
-              setTagInput('');
-          }
-      };
-
-      const filteredEntries = entries.filter(entry => {
-          const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
-          const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
-          return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
-      });
-
-      return (
-          <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-              {/* Left: Sidebar & List */}
-              <div className="w-1/3 border-r border-slate-100 flex flex-col bg-slate-50">
-                  <div className="p-4 border-b border-slate-200">
-                      <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫中心</h2>
-                          <button 
-                              type="button" 
-                              onClick={(e) => {
-                                  e.preventDefault(); 
-                                  setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null });
-                                  setIsDbEditing(true); // ★★★ 修正 4: 改為 setIsDbEditing ★★★
-                              }}
-                              className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"
-                          ><Plus size={20}/></button>
-                      </div>
-                      
-                      {/* Search & Filter */}
-                      <div className="space-y-2">
-                          <div className="relative">
-                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-                              <input 
-                                  type="text" 
-                                  placeholder="搜尋姓名、車牌、標籤..." 
-                                  className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                  value={searchTerm}
-                                  onChange={e => setSearchTerm(e.target.value)}
-                              />
-                          </div>
-                          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                              {['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (
-                                  <button 
-                                      key={cat}
-                                      type="button" 
-                                      onClick={() => setSelectedCatFilter(cat)}
-                                      className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
-                                  >
-                                      {cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}
-                                  </button>
-                              ))}
-                          </div>
-                      </div>
-                  </div>
-
-                  {/* List Content */}
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                      {filteredEntries.map(entry => {
-                          const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
-                          const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
-                          
-                          return (
-                          <div 
-                              key={entry.id}
-                              onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} // ★★★ 修正 5: 改為 setIsDbEditing ★★★
-                              className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}
-                          >
-                              <div className="flex justify-between items-start">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
-                                          {entry.reminderEnabled && (
-                                              <Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />
-                                          )}
-                                      </div>
-                                      <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
-                                          <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
-                                          {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
-                                          {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
-                                          {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
-                                      </div>
-                                  </div>
-                                  {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
-                              </div>
-                          </div>
-                         );
-                    })}
-                      {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
-                  </div>
-              </div>
-
-              {/* Right: Detail / Edit Form */}
-              <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
-                  {editingEntry ? (
-                      <form onSubmit={handleSave} className="flex flex-col h-full">
-                          {/* Toolbar */}
-                          <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                              <div className="font-bold text-slate-700 text-lg flex items-center">
-                                  {/* ★★★ 修正 6: 改為 isDbEditing ★★★ */}
-                                  {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
-                                  {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
-                              </div>
-                              <div className="flex gap-2">
-                                  {isDbEditing || !editingEntry.id ? ( // ★★★ 修正 7: 改為 isDbEditing ★★★
-                                      <>
-                                          <button 
-                                            type="button" 
-                                            onClick={(e) => { e.preventDefault(); setIsDbEditing(false); if(!editingEntry.id) setEditingEntry(null); }} // ★★★ 修正 8: 改為 setIsDbEditing ★★★
-                                            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded"
-                                          >取消</button>
-                                          <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
-                                      </>
-                                  ) : (
-                                      <>
-                                          <button 
-                                            type="button" 
-                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(editingEntry.id); }} 
-                                            className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
-                                            title="刪除"
-                                          ><Trash2 size={18}/></button>
-                                          
-                                          <button 
-                                            type="button" 
-                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsDbEditing(true); }} // ★★★ 修正 9: 改為 setIsDbEditing ★★★
-                                            className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"
-                                          ><Edit size={16} className="mr-1"/> 編輯</button>
-                                      </>
-                                  )}
-                              </div>
-                          </div>
-
-                          {/* Form Content */}
-                          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                              
-                              {isDbEditing && ( // ★★★ 修正 10: 改為 isDbEditing ★★★
-                                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
-                                      <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
-                                      <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
-                                  </div>
-                              )}
-                              
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                  {/* Left Column: Dynamic Fields */}
-                                  <div className="space-y-4">
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label>
-                                          <input 
-                                              disabled={!isDbEditing} // ★★★ 修正 11: 改為 !isDbEditing ★★★
-                                              value={editingEntry.name}
-                                              onChange={e => setEditingEntry({...editingEntry, name: e.target.value})}
-                                              className="w-full p-2 border rounded text-lg font-bold"
-                                              placeholder="姓名 / 公司名"
-                                              required
-                                          />
-                                      </div>
-
-                                      {/* --- Person Fields --- */}
-                                      {editingEntry.category === 'Person' && (
-                                          <>
-                                              <div>
-                                                    <label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label>
-                                                    <div className="flex flex-wrap gap-2">
-                                                    {(settings.dbRoles || ['客戶', '司機']).map(role => (
-                                                          <button
-                                                          key={role}
-                                                          type="button"
-                                                          disabled={!isDbEditing} // ★★★ 修正 12: 改為 !isDbEditing ★★★
-                                                          onClick={() => toggleRole(role)}
-                                                          className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}
-                                                     >
-                                                          {role}
-                                                          </button>
-                                                    ))}
-                                                    </div>
-                                                </div>
-                                              <div className="grid grid-cols-2 gap-3">
-                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                                  <div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div>
-                                              </div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                          </>
-                                      )}
-
-                                      {/* --- Company Fields --- */}
-                                      {editingEntry.category === 'Company' && (
-                                          <>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                          </>
-                                      )}
-
-                                      {/* --- Vehicle Fields --- */}
-                                      {editingEntry.category === 'Vehicle' && (
-                                          <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div>
-                                          </div>
-                                      )}
-
-                                      {/* --- CrossBorder Fields --- */}
-                                      {editingEntry.category === 'CrossBorder' && (
-                                          <div className="grid grid-cols-2 gap-3">
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                              <div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isDbEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                          </div>
-                                      )}
-
-                                      {/* 通用欄位 */}
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label>
-                                          <input 
-                                            list="doctype_list"
-                                            disabled={!isDbEditing} 
-                                            value={editingEntry.docType || ''} 
-                                            onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} 
-                                            className="w-full p-2 border rounded text-sm bg-gray-50"
-                                            placeholder="選擇或輸入新類型..."
-                                          />
-                                          <datalist id="doctype_list">
-                                             {(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}
-                                          </datalist>
-                                      </div>
-
-                                      {/* 到期日與續期管理模塊 */}
-                                      <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
-                                          <div className="flex justify-between items-center mb-3">
-                                              <label className="flex items-center cursor-pointer">
-                                                  <input 
-                                                      type="checkbox" 
-                                                      disabled={!isDbEditing} // ★★★ 修正 13: 改為 !isDbEditing ★★★
-                                                      checked={editingEntry.reminderEnabled || false} 
-                                                      onChange={e => setEditingEntry({
-                                                          ...editingEntry, 
-                                                          reminderEnabled: e.target.checked,
-                                                          renewalDuration: editingEntry.renewalDuration || 1,
-                                                          renewalUnit: editingEntry.renewalUnit || 'year',
-                                                          renewalCount: editingEntry.renewalCount || 0
-                                                      })} 
-                                                      className="w-4 h-4 text-amber-600 rounded mr-2"
-                                                  />
-                                                  <span className={`text-sm font-bold flex items-center ${editingEntry.reminderEnabled ? 'text-amber-800' : 'text-gray-500'}`}>
-                                                      <Bell size={16} className="mr-1"/> 啟用到期提醒功能
-                                                  </span>
-                                              </label>
-                                              {editingEntry.reminderEnabled && (
-                                                  <div className="text-xs text-amber-700 font-mono bg-white px-2 py-1 rounded border border-amber-200">
-                                                      已續期次數: <span className="font-bold">{editingEntry.renewalCount || 0}</span>
-                                                  </div>
-                                              )}
-                                          </div>
-
-                                          {editingEntry.reminderEnabled && (
-                                              <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                                                  <div className="col-span-2 md:col-span-1">
-                                                      <label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label>
-                                                      <input 
-                                                          type="date" 
-                                                          disabled={!isDbEditing} // ★★★ 修正 14: 改為 !isDbEditing ★★★
-                                                          value={editingEntry.expiryDate || ''} 
-                                                          onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} 
-                                                          className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold"
-                                                      />
-                                                      <div className="mt-1">
-                                                          <DateStatusBadge date={editingEntry.expiryDate} label="狀態" />
-                                                      </div>
-                                                  </div>
-
-                                                  <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100">
-                                                      <label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label>
-                                                      <div className="flex gap-2 mb-2">
-                                                          <input 
-                                                              type="number" 
-                                                              disabled={!isDbEditing} // ★★★ 修正 15: 改為 !isDbEditing ★★★
-                                                              value={editingEntry.renewalDuration} 
-                                                              onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} 
-                                                              className="w-16 p-1 border rounded text-center text-sm"
-                                                              min="1"
-                                                          />
-                                                          <select 
-                                                              disabled={!isDbEditing} // ★★★ 修正 16: 改為 !isDbEditing ★★★
-                                                              value={editingEntry.renewalUnit} 
-                                                              onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} 
-                                                              className="flex-1 p-1 border rounded text-sm"
-                                                          >
-                                                              <option value="year">年 (Years)</option>
-                                                              <option value="month">月 (Months)</option>
-                                                          </select>
-                                                      </div>
-                                                      
-                                                      {isDbEditing && ( // ★★★ 修正 17: 改為 isDbEditing ★★★
-                                                          <button 
-                                                              type="button" 
-                                                              onClick={handleQuickRenew}
-                                                              className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"
-                                                          >
-                                                              <RefreshCw size={12} className="mr-1"/> 
-                                                              立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})
-                                                          </button>
-                                                      )}
-                                                  </div>
-                                              </div>
-                                          )}
-                                      </div>
-
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label>
-                                          <textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/>
-                                      </div>
-
-                                      {/* Tags */}
-                                      <div>
-                                          <label className="block text-xs font-bold text-slate-500">標籤</label>
-                                          <div className="flex gap-2 mb-2 flex-wrap">
-                                              {editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}
-                                          </div>
-                                          {isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}
-                                      </div>
-                                  </div>
-                                  
-                                  {/* Right Column: Attachments */}
-                                  <div className="space-y-4">
-                                      <div className="flex justify-between items-center">
-                                          <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
-                                          {isDbEditing && (
-                                              <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors">
-                                                  <Upload size={14} className="mr-1"/> 上傳圖片
-                                                  <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-                                              </label>
-                                          )}
-                                      </div>
-                                      
-                                      <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
-                                          {editingEntry.attachments?.map((file, idx) => (
-                                              <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
-                                                  {/* 圖片區域：自適應高度 */}
-                                                  <div className="w-full bg-slate-50 relative p-1">
-                                                      <img 
-                                                          src={file.data} 
-                                                          className="w-full h-auto object-contain"
-                                                          style={{ maxHeight: 'none' }} 
-                                                      />
-                                                      {isDbEditing && (
-                                                          <button 
-                                                              type="button"
-                                                              onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)}
-                                                              className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg"
-                                                              title="刪除"
-                                                          >
-                                                              <X size={18}/>
-                                                          </button>
-                                                      )}
-                                                      <button 
-                                                          type="button"
-                                                          onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }}
-                                                          className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg"
-                                                          title="下載圖片"
-                                                      >
-                                                          <DownloadCloud size={18}/>
-                                                      </button>
-                                                  </div>
-                                                  <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center">
-                                                      <File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>
-                                                      {isDbEditing ? (
-                                                          <input 
-                                                              value={file.name} 
-                                                              onChange={e => {
-                                                                  const newAttachments = [...editingEntry.attachments];
-                                                                  newAttachments[idx].name = e.target.value;
-                                                                  setEditingEntry({...editingEntry, attachments: newAttachments});
-                                                              }}
-                                                              className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1"
-                                                              placeholder="輸入檔名..."
-                                                          />
-                                                      ) : (
-                                                          <span className="truncate">{file.name}</span>
-                                                      )}
-                                                  </div>
-                                              </div>
-                                          ))}
-                                          {(!editingEntry.attachments || editingEntry.attachments.length === 0) && (
-                                              <div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30">
-                                                  <ImageIcon size={48} className="mb-3 opacity-30"/>
-                                                  暫無附件圖片
-                                              </div>
-                                          )}
-                                      </div>
-                                  </div>
-                              </div>
-                          </div>
-                      </form>
-                  ) : (
-                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>
-                  )}
-              </div>
-          </div>
-      );
-  };
+  
 
   // 4. Create Document Module (開單系統) - 最終修復版 (Layout Fixed)
   const CreateDocModule = () => {
@@ -3088,265 +2903,19 @@ const deleteVehicle = async (id: string) => {
   };
 
 
-// --- Info Widget Component (Fixed for Real Data) ---
-const InfoWidget = () => {
-    const [currentTime, setCurrentTime] = useState(new Date());
-    const [portStatus, setPortStatus] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    // 1. 口岸名稱映射 (根據真實數據 Key)
-    const PORT_MAPPING: Record<string, string> = {
-        'SBC': '深圳灣',
-        'LMC': '皇崗(落馬洲)',
-        'HZM': '港珠澳大橋',
-        'HYW': '蓮塘/香園圍',
-        'MKT': '文錦渡',
-        'STK': '沙頭角'
-    };
-
-    // 2. 狀態代碼轉換 (數值 -> 文字)
-    const getStatusText = (code: number) => {
-        if (code === 0) return '正常';
-        if (code === 1) return '繁忙';
-        if (code === 2) return '擠塞';
-        if (code === 99) return '關閉';
-        return '-';
-    };
-
-    // 3. 狀態顏色轉換
-    const getStatusColor = (code: number) => {
-        if (code === 0) return 'text-green-400'; // 正常
-        if (code === 1) return 'text-amber-400'; // 繁忙
-        if (code === 2) return 'text-red-500 font-bold'; // 擠塞
-        return 'text-slate-600'; // 關閉 (99)
-    };
-
-    // 時間更新
-    useEffect(() => {
-        setCurrentTime(new Date());
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    // 抓取數據
-    useEffect(() => {
-        const fetchTraffic = async () => {
-            try {
-                // 呼叫後端 API
-                const res = await fetch('/api/traffic');
-                if (!res.ok) throw new Error('API Error');
-                
-                const data = await res.json();
-                
-                // ★★★ 修正解析邏輯：處理 Object 結構 ★★★
-                // 原始數據是 { "HZM": { "arrQueue": 0, "depQueue": 0 }, ... }
-                if (data && typeof data === 'object') {
-                    const formatted = Object.keys(data)
-                        .filter(key => PORT_MAPPING[key]) // 只保留我們定義的車輛口岸
-                        .map(key => {
-                            const info = data[key]; // { arrQueue: x, depQueue: y }
-                            return {
-                                name: PORT_MAPPING[key],
-                                // arrQueue = 南下(入境), depQueue = 北上(出境)
-                                up: info.depQueue,   
-                                down: info.arrQueue 
-                            };
-                        });
-                    
-                    // 排序優化：常用的放前面 (深圳灣 > 皇崗 > 大橋 > 蓮塘)
-                    const sortOrder = ['深圳灣', '皇崗(落馬洲)', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
-                    formatted.sort((a, b) => sortOrder.indexOf(a.name) - sortOrder.indexOf(b.name));
-
-                    setPortStatus(formatted);
-                }
-            } catch (e) {
-                console.error("Traffic fetch failed:", e);
-                setPortStatus([]);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchTraffic();
-        const trafficTimer = setInterval(fetchTraffic, 300000); // 5分鐘更新
-        return () => clearInterval(trafficTimer);
-    }, []);
-
-    const getLunarDate = () => {
-        try {
-            return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
-        } catch (e) { return ''; }
-    };
-
-    return (
-        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80">
-            {/* 時間顯示 */}
-            <div className="mb-3 border-b border-slate-700 pb-2">
-                <div className="text-xl font-mono font-bold text-white tracking-widest text-center">
-                    {currentTime.toLocaleTimeString('en-GB', { hour12: false })}
-                </div>
-                <div className="flex justify-between mt-1 text-slate-400">
-                    <span>{currentTime.toLocaleDateString('zh-HK')}</span>
-                    <span>{['日','一','二','三','四','五','六'][currentTime.getDay()]}</span>
-                </div>
-                <div className="text-center mt-1 text-yellow-500 font-medium">
-                    {getLunarDate().replace('年', '年 ')}
-                </div>
-            </div>
-
-            {/* 口岸列表 */}
-            {portStatus.length > 0 ? (
-                <div className="space-y-1.5 animate-fade-in">
-                    <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1">
-                        <span>口岸</span>
-                        <div className="flex gap-3">
-                            <span>北上</span>
-                            <span>南下</span>
-                        </div>
-                    </div>
-                    {portStatus.map((port, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
-                            <span className="truncate mr-2 font-medium text-slate-200">{port.name}</span>
-                            <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end">
-                                {/* 北上 */}
-                                <span className={getStatusColor(port.up)}>
-                                    {getStatusText(port.up)}
-                                </span>
-                                {/* 南下 */}
-                                <span className={getStatusColor(port.down)}>
-                                    {getStatusText(port.down)}
-                                </span>
-                            </div>
-                        </div>
-                    ))}
-                    <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">
-                        數據: 入境處 (每5分鐘更新)
-                    </div>
-                </div>
-            ) : (
-                <div className="text-center text-slate-600 italic py-2">
-                    {loading ? '更新數據中...' : '暫無即時數據'}
-                </div>
-            )}
-        </div>
-    );
-};
-
-  // --- Sidebar Component (Updated with Info Widget) ---
-  const Sidebar = () => (
-    <>
-      {/* Mobile Overlay */}
-      {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      
-      {/* Sidebar Container */}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
-        
-        {/* Sidebar Header */}
-        <div className={`p-4 h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} transition-all flex-none`}>
-            <div className="flex items-center gap-3 overflow-hidden">
-                <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center">
-                     <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" />
-                </div>
-                
-                <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
-                     <h1 className="text-lg font-bold text-yellow-500 tracking-tight leading-tight whitespace-nowrap">金田汽車<br/><span className="text-xs text-slate-400">DMS系統</span></h1>
-                </div>
-            </div>
-
-            <button 
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-                className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors"
-                title={isSidebarCollapsed ? "展開選單" : "縮起選單"}
-            >
-                {isSidebarCollapsed ? null : <ChevronLeft size={20} />}
-            </button>
-        </div>
-
-        {/* Navigation Links (Scrollable Area) */}
-        <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-          {[
-            { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard },
-            { id: 'inventory', label: '車輛管理', icon: Car },
-            { id: 'create_doc', label: '開單系統', icon: FileText },
-            { id: 'reports', label: '統計報表', icon: FileBarChart },
-            { id: 'cross_border', label: '中港業務', icon: Globe },
-            { id: 'database', label: '資料庫中心', icon: Database },
-            { id: 'settings', label: '系統設置', icon: Settings }
-          ].map(item => (
-             <button 
-                key={item.id}
-                onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                className={`flex items-center w-full p-3 rounded-lg transition-all duration-200 group relative
-                    ${activeTab === item.id 
-                        ? 'bg-yellow-600 text-white shadow-md' 
-                        : 'hover:bg-slate-800 text-slate-300 hover:text-white'
-                    }
-                    ${isSidebarCollapsed ? 'justify-center' : ''}
-                `}
-                title={isSidebarCollapsed ? item.label : ''}
-             >
-                <item.icon size={22} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
-                
-                {!isSidebarCollapsed && (
-                    <span className="whitespace-nowrap font-medium">{item.label}</span>
-                )}
-
-                {isSidebarCollapsed && (
-                    <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">
-                        {item.label}
-                    </div>
-                )}
-             </button>
-          ))}
-        </nav>
-
-        {/* ★★★ 新增：資訊看板 (只在展開時顯示) ★★★ */}
-        {!isSidebarCollapsed && <InfoWidget />}
-
-        {/* Footer User Info */}
-        <div className="p-4 bg-slate-900 border-t border-slate-800 flex-none">
-             {isSidebarCollapsed ? (
-                 <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="w-full flex justify-center text-red-400 hover:text-red-300 transition" title="登出">
-                     <LogOut size={20} />
-                 </button>
-             ) : (
-                 <div className="flex items-center justify-between">
-                     <div className="flex items-center space-x-2 overflow-hidden">
-                         <div className="w-8 h-8 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500">
-                            <UserCircle size={20} />
-                         </div>
-                         <div className="flex-1 min-w-0">
-                             <p className="text-sm font-bold text-white truncate">{staffId}</p>
-                             <p className="text-[10px] text-slate-500">已登入</p>
-                         </div>
-                     </div>
-                     <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="text-slate-500 hover:text-red-400 transition p-2">
-                         <LogOut size={18} />
-                     </button>
-                 </div>
-             )}
-             
-             {isSidebarCollapsed && (
-                 <button 
-                    onClick={() => setIsSidebarCollapsed(false)} 
-                    className="w-full mt-4 flex justify-center text-slate-500 hover:text-white py-2 border-t border-slate-800 md:flex hidden"
-                 >
-                    <ChevronRight size={20} />
-                 </button>
-             )}
-        </div>
-
-        {/* Mobile Close Button */}
-        <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white">
-            <X size={24} />
-        </button>
-      </div>
-    </>
-  );
 
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
-      <Sidebar />
+      <Sidebar 
+      activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+          isSidebarCollapsed={isSidebarCollapsed}
+          setIsSidebarCollapsed={setIsSidebarCollapsed}
+          staffId={staffId}
+          setStaffId={setStaffId}/>
+
       <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
         <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land</span><div className="w-7"></div></div>
 
@@ -3732,7 +3301,15 @@ const InfoWidget = () => {
           {/* Create Doc Tab */}
           {activeTab === 'create_doc' && <CreateDocModule />}
           {/* ★★★ 新增：資料庫模塊渲染 ★★★ */}
-          {activeTab === 'database' && <DatabaseModule />}
+          {activeTab === 'database' && <DatabaseModule 
+          db={db}
+                  staffId={staffId}
+                  appId={appId}
+                  settings={settings}
+                  editingEntry={editingEntry}
+                  setEditingEntry={setEditingEntry}
+                  isDbEditing={isDbEditing}
+                  setIsDbEditing={setIsDbEditing}/>}
         </div>
       </main>
     </div>
