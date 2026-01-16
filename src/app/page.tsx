@@ -637,18 +637,75 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         return () => unsub();
     }, [staffId, db, appId]);
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-        const file = files[0];
-        if (file.size > 500 * 1024) { alert(`檔案 ${file.name} 超過 500KB 限制`); return; }
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64 = reader.result as string;
-            setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: base64 }] } : null);
-        };
-        reader.readAsDataURL(file);
-    };
+    // 圖片上傳處理 (已升級：支援 5MB 上傳 -> 自動壓縮至約 120KB)
+      const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) return;
+          const file = files[0];
+
+          // 1. 檢查原始大小：限制放寬至 5MB
+          if (file.size > 5 * 1024 * 1024) {
+              alert(`檔案 ${file.name} 超過 5MB 限制，請選擇較小的照片。`);
+              return;
+          }
+
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          
+          reader.onload = (event) => {
+              const img = new Image();
+              img.src = event.target?.result as string;
+              
+              img.onload = () => {
+                  // 2. 建立 Canvas
+                  const canvas = document.createElement('canvas');
+                  let width = img.width;
+                  let height = img.height;
+
+                  // 3. 調整尺寸 (若寬或高超過 1024px 則等比縮小，這是壓縮體積的關鍵)
+                  const MAX_DIMENSION = 1024;
+                  if (width > height) {
+                      if (width > MAX_DIMENSION) {
+                          height *= MAX_DIMENSION / width;
+                          width = MAX_DIMENSION;
+                      }
+                  } else {
+                      if (height > MAX_DIMENSION) {
+                          width *= MAX_DIMENSION / height;
+                          height = MAX_DIMENSION;
+                      }
+                  }
+
+                  canvas.width = width;
+                  canvas.height = height;
+                  
+                  const ctx = canvas.getContext('2d');
+                  if (!ctx) return;
+                  
+                  // 繪製圖片到 Canvas
+                  ctx.drawImage(img, 0, 0, width, height);
+
+                  // 4. 循環壓縮品質
+                  // 目標：120KB (Bytes) 約等於 Base64 字串長度 160,000 左右
+                  // (Base64 = Bytes * 1.33)
+                  const TARGET_SIZE = 160000; 
+                  let quality = 0.9;
+                  let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+                  // 如果大於目標大小，逐步降低品質 (最低降到 0.3)
+                  while (dataUrl.length > TARGET_SIZE && quality > 0.3) {
+                      quality -= 0.1;
+                      dataUrl = canvas.toDataURL('image/jpeg', quality);
+                  }
+
+                  // 5. 更新狀態
+                  setEditingEntry(prev => prev ? { 
+                      ...prev, 
+                      attachments: [...prev.attachments, { name: file.name, data: dataUrl }] 
+                  } : null);
+              };
+          };
+      };
 
     const downloadImage = (dataUrl: string, filename: string) => {
         const link = document.createElement('a');
