@@ -9,6 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
+  Check, AlertCircle, Link,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File // Added Upload, Image as ImageIcon, File
 } from 'lucide-react';
 
@@ -182,6 +183,52 @@ type CrossBorderData = {
     tasks?: CrossBorderTask[];
 };
 
+// --- 新增：業務辦理模組類型定義 ---
+
+// 1. 流程模板 (配置用，存於 Settings)
+type WorkflowTemplate = {
+  id: string;
+  name: string; // e.g., "港車北上 (2026)"
+  description: string;
+  steps: WorkflowStepTemplate[];
+};
+
+// 2. 流程步驟定義
+type WorkflowStepTemplate = {
+  id: string;
+  stepName: string; // e.g., "網上抽籤"
+  description: string; // 操作指引
+  externalLink?: string; // 政府網址
+  requiredDocs: string[]; // 需收集的文件名稱 (對應資料庫)
+  defaultFee: number; // 標準收費
+  estimatedDays: number; // 預計耗時
+};
+
+// 3. 實際辦理案件 (存於 Database/Inventory 或獨立 Collection)
+type ServiceCase = {
+  id: string;
+  vehicleId: string; // 關聯車輛
+  templateId: string; // 使用哪個模板
+  status: 'Active' | 'Completed' | 'Suspended';
+  currentStepIndex: number; // 當前走到第幾步
+  startDate: string;
+  
+  // 每個步驟的執行狀況
+  stepsData: {
+    stepId: string;
+    status: 'Pending' | 'In Progress' | 'Done' | 'Skipped';
+    startDate?: string;
+    completedDate?: string;
+    collectedDocs: string[]; // 已收集的文件 ID (關聯 dbEntries)
+    fee: number; // 實際收費
+    isPaid: boolean;
+    notes?: string;
+  }[];
+  
+  createdAd: any;
+  updatedAt: any;
+};
+
 type Vehicle = {
   id: string;
   regMark: string;
@@ -287,6 +334,59 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Vehicle': ['牌薄(VRD)', '香港保險', '澳門保險', '國內交強保', '國內商業險', '國內關稅險', '其他'],
     'CrossBorder': ['批文卡', '新辦回執', '換車回執', '司機更換回執', '中檢資料', '其他']
   }
+};
+
+const HZMB_WORKFLOW: WorkflowTemplate = {
+  id: 'hzmb_northbound_2026',
+  name: '港車北上 (HZMB Northbound 2026)',
+  description: '適用於 8 座以下非營運私家車，需每年續期',
+  steps: [
+    {
+      id: 'step_1',
+      stepName: '1. 登記與抽籤 (Lottery)',
+      description: '於官網登記電腦抽籤。中籤後 72 小時內需遞交正式申請。',
+      externalLink: 'https://www.hzmbqfs.gov.hk/', // 官方指定網站
+      requiredDocs: ['香港身份證', '回鄉證', '車輛牌簿(VRD)'],
+      defaultFee: 0,
+      estimatedDays: 14 
+    },
+    {
+      id: 'step_2',
+      stepName: '2. 內地審核與驗車 (Vetting & Inspection)',
+      description: '待運輸署初步審核後，預約並前往香港指定地點(中檢)驗車。',
+      externalLink: 'https://www.cic.com.hk/', // 中檢預約
+      requiredDocs: ['驗車合格紙(中檢)', '審核通知書'],
+      defaultFee: 800, // 假設代辦費
+      estimatedDays: 10
+    },
+    {
+      id: 'step_3',
+      stepName: '3. 購買保險 (Insurance)',
+      description: '購買「等效先認」保險或內地「交強險」，並上傳至內地系統。',
+      externalLink: '', 
+      requiredDocs: ['內地交強險單', '內地商業險單(選購)'],
+      defaultFee: 3000, // 假設保費+手續費
+      estimatedDays: 3
+    },
+    {
+      id: 'step_4',
+      stepName: '4. 獲發牌證 (Permit Issuance)',
+      description: '內地審核通過發出「電子牌證」，運輸署發出「封閉道路通行許可證」。',
+      externalLink: '',
+      requiredDocs: ['電子牌證', '封閉道路通行許可證', '電子批准信'],
+      defaultFee: 540, // 港府許可證費用
+      estimatedDays: 5
+    },
+    {
+      id: 'step_5',
+      stepName: '5. 預約出行 (Booking)',
+      description: '透過系統預約日子，需留意每年停留不超過 180 天限制。',
+      externalLink: 'https://www.hzmbqfs.gov.hk/tc/booking/',
+      requiredDocs: ['出行預約單'],
+      defaultFee: 0,
+      estimatedDays: 1
+    }
+  ]
 };
 
 // ★★★ 修改：重新定義口岸分類 ★★★
@@ -559,7 +659,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
             { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard }, { id: 'inventory', label: '車輛管理', icon: Car },
             { id: 'create_doc', label: '開單系統', icon: FileText }, { id: 'reports', label: '統計報表', icon: FileBarChart },
             { id: 'cross_border', label: '中港業務', icon: Globe }, { id: 'database', label: '資料庫中心', icon: Database },
-            { id: 'settings', label: '系統設置', icon: Settings }
+            { id: 'business', label: '業務辦理流程', icon: Briefcase }, { id: 'settings', label: '系統設置', icon: Settings }
           ].map(item => (
              <button key={item.id} onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title={isSidebarCollapsed ? item.label : ''}>
                 <item.icon size={22} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
@@ -900,7 +1000,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'database'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'>('dashboard');
   
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
@@ -2741,7 +2841,325 @@ const deleteVehicle = async (id: string) => {
     );
   };
 
-  
+//5.  --- 新增組件: BusinessProcessModule ---
+// 請確保引入了 lucide-react 的圖標: Check, Clock, AlertCircle, FileText, Link, ArrowRight
+// 需要傳入 props: db, staffId, appId, inventory, dbEntries (資料庫中心資料)
+
+const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any) => {
+    const [cases, setCases] = useState<ServiceCase[]>([]);
+    const [selectedCase, setSelectedCase] = useState<ServiceCase | null>(null);
+    const [isCreating, setIsCreating] = useState(false);
+    
+    // 用於新建案件的 Form State
+    const [newCaseVehicleId, setNewCaseVehicleId] = useState('');
+    
+    // 假設目前只有一個模板，未來可從 Settings 讀取
+    const activeTemplate = HZMB_WORKFLOW; 
+
+    // 1. 初始化讀取案件 (useEffect)
+    useEffect(() => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        // 這裡建立一個新的 collection 'service_cases'
+        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'service_cases'), orderBy('updatedAt', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            const list: ServiceCase[] = [];
+            snap.forEach(d => list.push({ id: d.id, ...d.data() } as ServiceCase));
+            setCases(list);
+        });
+        return () => unsub();
+    }, [db, staffId]);
+
+    // 2. 創建新案件
+    const handleCreateCase = async () => {
+        if (!newCaseVehicleId || !db) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        const newCase: any = {
+            vehicleId: newCaseVehicleId,
+            templateId: activeTemplate.id,
+            status: 'Active',
+            currentStepIndex: 0,
+            startDate: new Date().toISOString().split('T')[0],
+            stepsData: activeTemplate.steps.map(step => ({
+                stepId: step.id,
+                status: 'Pending',
+                collectedDocs: [],
+                fee: step.defaultFee,
+                isPaid: false
+            })),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        };
+
+        // 將第一個步驟設為進行中
+        newCase.stepsData[0].status = 'In Progress';
+        newCase.stepsData[0].startDate = new Date().toISOString().split('T')[0];
+
+        await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'service_cases'), newCase);
+        setIsCreating(false);
+        setNewCaseVehicleId('');
+    };
+
+    // 3. 更新步驟狀態邏輯
+    const updateStep = async (caseId: string, stepIndex: number, updates: any) => {
+        if (!db || !selectedCase) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        const newStepsData = [...selectedCase.stepsData];
+        newStepsData[stepIndex] = { ...newStepsData[stepIndex], ...updates };
+        
+        // 自動判斷是否進入下一步
+        let newIndex = selectedCase.currentStepIndex;
+        if (updates.status === 'Done' && stepIndex === selectedCase.currentStepIndex) {
+            // 完成當前步，開啟下一步
+            if (newIndex < activeTemplate.steps.length - 1) {
+                newIndex++;
+                newStepsData[newIndex].status = 'In Progress';
+                newStepsData[newIndex].startDate = new Date().toISOString().split('T')[0];
+            } else {
+               // 全部完成
+               // 這裡可以加入邏輯：自動將狀態改為 Completed
+            }
+        }
+
+        await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'service_cases', caseId), {
+            stepsData: newStepsData,
+            currentStepIndex: newIndex,
+            updatedAt: serverTimestamp()
+        });
+    };
+
+    // 4. 輔助函數：從資料庫中心尋找相關文件
+    const findRelatedDocs = (docNameKeyword: string, vehicleId: string) => {
+        const vehicle = inventory.find((v:any) => v.id === vehicleId);
+        if (!vehicle) return [];
+        // 簡單關鍵字匹配，實際可加強
+        return dbEntries.filter((entry:any) => {
+            const matchName = entry.name.includes(vehicle.regMark) || entry.name.includes(vehicle.customerName);
+            const matchType = entry.docType?.includes(docNameKeyword) || entry.tags?.includes(docNameKeyword);
+            return matchName || matchType;
+        });
+    };
+
+    return (
+        <div className="flex h-full bg-slate-50 gap-4">
+            {/* 左側：案件列表 */}
+            <div className="w-1/3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-100">
+                    <h2 className="font-bold text-slate-700">辦理中案件</h2>
+                    <button onClick={() => setIsCreating(true)} className="bg-slate-800 text-white p-1.5 rounded hover:bg-slate-700"><Plus size={18}/></button>
+                </div>
+                {isCreating && (
+                    <div className="p-3 bg-blue-50 border-b animate-fade-in">
+                        <label className="text-xs font-bold text-blue-800">選擇車輛開啟「{activeTemplate.name}」</label>
+                        <select 
+                            className="w-full mt-1 p-2 border rounded text-sm"
+                            value={newCaseVehicleId}
+                            onChange={(e) => setNewCaseVehicleId(e.target.value)}
+                        >
+                            <option value="">-- 請選擇 --</option>
+                            {inventory.filter((v:any) => !cases.some(c => c.vehicleId === v.id && c.status === 'Active')).map((v:any) => (
+                                <option key={v.id} value={v.id}>{v.regMark} - {v.make} {v.model}</option>
+                            ))}
+                        </select>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={handleCreateCase} className="flex-1 bg-blue-600 text-white text-xs py-1.5 rounded">確認開啟</button>
+                            <button onClick={() => setIsCreating(false)} className="flex-1 bg-gray-200 text-gray-600 text-xs py-1.5 rounded">取消</button>
+                        </div>
+                    </div>
+                )}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {cases.map(c => {
+                        const v = inventory.find((car:any) => car.id === c.vehicleId);
+                        const step = activeTemplate.steps[c.currentStepIndex];
+                        return (
+                            <div 
+                                key={c.id} 
+                                onClick={() => setSelectedCase(c)}
+                                className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedCase?.id === c.id ? 'bg-blue-50 border-blue-500 shadow-md' : 'bg-white border-slate-200 hover:border-blue-300'}`}
+                            >
+                                <div className="flex justify-between items-start">
+                                    <div className="font-bold text-slate-800">{v?.regMark || 'Unknown'}</div>
+                                    <div className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{c.status}</div>
+                                </div>
+                                <div className="text-xs text-slate-500 mt-1">{activeTemplate.name}</div>
+                                <div className="mt-2 flex items-center text-xs font-medium text-blue-600">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-pulse"></div>
+                                    當前: {step?.stepName.split(' ')[1]}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* 右側：流程詳情 (Visual Workflow) */}
+            <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                {selectedCase ? (
+                    <>
+                        <div className="p-6 border-b bg-slate-50">
+                            <div className="flex justify-between items-center mb-4">
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                                        {inventory.find((v:any) => v.id === selectedCase.vehicleId)?.regMark} - 流程進度
+                                    </h2>
+                                    <p className="text-sm text-slate-500">{activeTemplate.name}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs text-slate-400">總耗時</p>
+                                    <p className="font-mono font-bold text-lg">
+                                        {Math.ceil((new Date().getTime() - new Date(selectedCase.startDate).getTime()) / (1000 * 3600 * 24))} 天
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            {/* 頂部箭頭流程圖 */}
+                            <div className="flex items-center w-full overflow-x-auto pb-2 scrollbar-hide">
+                                {activeTemplate.steps.map((step, idx) => {
+                                    const stepData = selectedCase.stepsData[idx];
+                                    const isCurrent = idx === selectedCase.currentStepIndex;
+                                    const isDone = stepData.status === 'Done';
+                                    
+                                    return (
+                                        <div key={step.id} className="flex items-center flex-shrink-0">
+                                            <div className={`flex flex-col items-center w-32 px-2 relative`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold mb-2 border-2 transition-colors ${isDone ? 'bg-green-500 border-green-500 text-white' : (isCurrent ? 'bg-blue-600 border-blue-600 text-white shadow-lg scale-110' : 'bg-white border-gray-300 text-gray-400')}`}>
+                                                    {isDone ? <CheckSquare size={14}/> : idx + 1}
+                                                </div>
+                                                <div className={`text-[10px] text-center font-bold ${isCurrent ? 'text-blue-700' : 'text-gray-500'}`}>{step.stepName.split(' ')[1]}</div>
+                                                {isCurrent && <div className="text-[9px] text-blue-500 bg-blue-50 px-1 rounded mt-1">進行中</div>}
+                                            </div>
+                                            {idx < activeTemplate.steps.length - 1 && (
+                                                <div className={`h-1 w-10 ${isDone ? 'bg-green-500' : 'bg-gray-200'}`}></div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* 步驟詳細內容 */}
+                        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                            {activeTemplate.steps.map((step, idx) => {
+                                const stepData = selectedCase.stepsData[idx];
+                                const isActive = idx === selectedCase.currentStepIndex;
+                                if (idx > selectedCase.currentStepIndex) return null; // 只顯示到當前步驟
+
+                                return (
+                                    <div key={step.id} className={`mb-6 rounded-xl border overflow-hidden transition-all ${isActive ? 'bg-white shadow-lg border-blue-200 ring-1 ring-blue-100' : 'bg-gray-50 border-gray-200 opacity-80'}`}>
+                                        <div className={`p-4 border-b flex justify-between items-center ${isActive ? 'bg-blue-50' : 'bg-gray-100'}`}>
+                                            <h3 className="font-bold text-slate-800 flex items-center">
+                                                <span className={`mr-2 w-6 h-6 rounded-full flex items-center justify-center text-xs text-white ${isActive ? 'bg-blue-600' : 'bg-gray-500'}`}>{idx+1}</span>
+                                                {step.stepName}
+                                            </h3>
+                                            <div className="flex gap-2">
+                                                {step.externalLink && (
+                                                    <a href={step.externalLink} target="_blank" rel="noreferrer" className="flex items-center px-3 py-1 bg-white border border-blue-200 text-blue-600 text-xs rounded-full hover:bg-blue-50">
+                                                        <ExternalLink size={12} className="mr-1"/> 開啟辦理網頁
+                                                    </a>
+                                                )}
+                                                {isActive && (
+                                                    <button 
+                                                        onClick={() => updateStep(selectedCase.id, idx, { status: 'Done', completedDate: new Date().toISOString().split('T')[0] })}
+                                                        className="flex items-center px-3 py-1 bg-green-600 text-white text-xs rounded-full hover:bg-green-700 shadow-sm"
+                                                    >
+                                                        <CheckSquare size={12} className="mr-1"/> 完成此步驟
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            {/* 左：文件收集 */}
+                                            <div>
+                                                <h4 className="text-xs font-bold text-slate-500 mb-2 uppercase flex items-center"><FileText size={12} className="mr-1"/> 所需文件 (Documents)</h4>
+                                                <div className="space-y-2">
+                                                    {step.requiredDocs.map(docReq => {
+                                                        const isCollected = stepData.collectedDocs.includes(docReq);
+                                                        // 模擬：尋找資料庫是否有此文件
+                                                        const matchedDbEntries = findRelatedDocs(docReq, selectedCase.vehicleId);
+                                                        
+                                                        return (
+                                                            <div key={docReq} className="flex justify-between items-center p-2 bg-slate-50 border rounded text-sm">
+                                                                <span className={isCollected ? 'text-green-700 font-bold decoration-green-500' : 'text-gray-600'}>{docReq}</span>
+                                                                {isCollected ? (
+                                                                    <span className="text-green-600 text-xs flex items-center"><CheckCircle size={12} className="mr-1"/> 已存檔</span>
+                                                                ) : (
+                                                                    <div className="flex gap-1">
+                                                                        {matchedDbEntries.length > 0 ? (
+                                                                            <button 
+                                                                                onClick={() => updateStep(selectedCase.id, idx, { collectedDocs: [...stepData.collectedDocs, docReq] })}
+                                                                                className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded border border-blue-200 hover:bg-blue-200"
+                                                                            >
+                                                                                連結資料庫 ({matchedDbEntries.length})
+                                                                            </button>
+                                                                        ) : (
+                                                                           <span className="text-[10px] text-red-400">未在庫</span>
+                                                                        )}
+                                                                        <button 
+                                                                            onClick={() => updateStep(selectedCase.id, idx, { collectedDocs: [...stepData.collectedDocs, docReq] })} // 簡化：直接標記
+                                                                            className="text-[10px] bg-gray-200 text-gray-600 px-2 py-1 rounded hover:bg-gray-300"
+                                                                        >
+                                                                            手動確認
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            {/* 右：費用與備註 */}
+                                            <div>
+                                                <h4 className="text-xs font-bold text-slate-500 mb-2 uppercase flex items-center"><DollarSign size={12} className="mr-1"/> 費用與狀態 (Fees & Status)</h4>
+                                                <div className="bg-yellow-50 p-3 rounded border border-yellow-100 space-y-2">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-sm text-yellow-800">本環節費用</span>
+                                                        <input 
+                                                            type="number" 
+                                                            value={stepData.fee}
+                                                            onChange={(e) => updateStep(selectedCase.id, idx, { fee: Number(e.target.value) })}
+                                                            className="w-20 p-1 text-right text-sm border rounded"
+                                                            disabled={!isActive}
+                                                        />
+                                                    </div>
+                                                    <label className="flex items-center cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={stepData.isPaid}
+                                                            onChange={(e) => updateStep(selectedCase.id, idx, { isPaid: e.target.checked })}
+                                                            disabled={!isActive}
+                                                            className="mr-2"
+                                                        />
+                                                        <span className={`text-sm font-bold ${stepData.isPaid ? 'text-green-600' : 'text-red-500'}`}>{stepData.isPaid ? '已付款 (Paid)' : '未付款 (Unpaid)'}</span>
+                                                    </label>
+                                                </div>
+                                                <textarea 
+                                                    className="w-full mt-2 p-2 text-sm border rounded h-16 resize-none"
+                                                    placeholder="備註..."
+                                                    value={stepData.notes || ''}
+                                                    onChange={(e) => updateStep(selectedCase.id, idx, { notes: e.target.value })}
+                                                    disabled={!isActive}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                        <Briefcase size={64} className="mb-4 opacity-20"/>
+                        <p>請選擇或建立一個業務案件</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
   // 4. Create Document Module (開單系統) - 最終修復版 (Layout Fixed)
   const CreateDocModule = () => {
@@ -3354,6 +3772,16 @@ const deleteVehicle = async (id: string) => {
 
           {/* Settings Tab */}
           {activeTab === 'settings' && <div className="flex-1 overflow-y-auto"><SettingsManager /></div>}
+
+        {activeTab === 'business' && (
+             <BusinessProcessModule 
+             db={db} 
+            staffId={staffId} 
+            appId={appId} 
+            inventory={inventory} 
+            dbEntries={dbEntries} 
+            />
+        )}
 
           {/* Create Doc Tab */}
           {activeTab === 'create_doc' && <CreateDocModule />}
