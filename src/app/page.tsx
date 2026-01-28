@@ -724,7 +724,7 @@ type DatabaseModuleProps = {
     inventory: Vehicle[];
 };
 
-const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing }: DatabaseModuleProps) => {
+const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory }: DatabaseModuleProps) => {
     const [entries, setEntries] = useState<DatabaseEntry[]>([]);
     const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
     const [searchTerm, setSearchTerm] = useState('');
