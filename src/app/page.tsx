@@ -1283,30 +1283,28 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     const formData = new FormData(e.currentTarget);
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    // ... (讀取表單資料，保持原樣) ...
+    // 基本欄位讀取
     const status = formData.get('status') as any;
     const priceRaw = formData.get('price') as string;
     const costPriceRaw = formData.get('costPrice') as string;
     const mileageRaw = formData.get('mileage') as string;
     
+    // 價格計算
     const priceA1Raw = formData.get('priceA1') as string;
     const priceTaxRaw = formData.get('priceTax') as string;
     const valA1 = Number(priceA1Raw.replace(/,/g, '') || 0);
     const valTax = Number(priceTaxRaw.replace(/,/g, '') || 0);
     const valRegistered = valA1 + valTax;
 
+    // 車輛規格
     const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
+    
+    // ★★★ 新增：波箱 (Transmission) ★★★
+    const transmission = formData.get('transmission') as 'Automatic' | 'Manual';
+
     const engineSizeRaw = formData.get('engineSize') as string;
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
-
-    // 讀取 Transmission
-    const transmission = formData.get('transmission') as 'Automatic' | 'Manual';
-
-    // 讀取 Cross Border Companies
-    const crossBorderData: CrossBorderData = {
-        hkCompany: formData.get('cb_hkCompany') as string || '',
-        mainlandCompany: formData.get('cb_mainlandCompany') as string || '',
 
     // Cross Border Data Capture
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
@@ -1318,9 +1316,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         }
     });
 
+    // 構建中港資料物件
     const crossBorderData: CrossBorderData = {
         isEnabled: cbEnabled,
         mainlandPlate: formData.get('cb_mainlandPlate') as string || '',
+        
+        // ★★★ 新增：公司資料 ★★★
+        hkCompany: formData.get('cb_hkCompany') as string || '',
+        mainlandCompany: formData.get('cb_mainlandCompany') as string || '',
+        
         driver1: formData.get('cb_driver1') as string || '',
         driver2: formData.get('cb_driver2') as string || '',
         driver3: formData.get('cb_driver3') as string || '',
@@ -1340,6 +1344,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         tasks: editingVehicle?.crossBorder?.tasks || []
     };
 
+    // 構建主車輛資料物件
     const vData = {
       purchaseType: formData.get('purchaseType'),
       regMark: (formData.get('regMark') as string).toUpperCase(),
@@ -1361,6 +1366,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       priceTax: valTax,
       priceRegistered: valRegistered,
       fuelType: fuelType,
+      
+      // ★★★ 新增：波箱 ★★★
+      transmission: transmission,
+      
       engineSize: engineSize,
       licenseFee: licenseFee,
       customerName: formData.get('customerName') as string,
@@ -1373,8 +1382,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       expenses: editingVehicle?.expenses || [], 
       payments: editingVehicle?.payments || [], 
       updatedAt: serverTimestamp(),
-      crossBorder: crossBorderData,
-      transmission: transmission
+      crossBorder: crossBorderData
     };
 
     try {
@@ -1391,9 +1399,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         alert('新車輛已入庫');
       }
 
-      // ★★★ 觸發資料連動：自動建立客戶與司機檔案 ★★★
+      // ★★★ 資料連動邏輯：自動建立客戶與司機檔案 ★★★
       
-      // 1. 同步客戶資料 (從車輛表單輸入的客戶名)
+      // 1. 同步客戶資料
       if (vData.customerName) {
           await syncToDatabase({
               name: vData.customerName,
@@ -1401,9 +1409,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
           }, '客戶');
       }
 
-      // 2. 同步司機資料 (如果啟用了中港業務)
+      // 2. 同步司機資料
       if (crossBorderData.isEnabled) {
-          // 主司機 (包含車牌和批文號資訊)
           if (crossBorderData.driver1) {
               await syncToDatabase({
                   name: crossBorderData.driver1,
@@ -1411,7 +1418,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                   quota: crossBorderData.quotaNumber
               }, '司機');
           }
-          // 副司機 (僅建立檔案)
           if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
           if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 }, '司機');
       }
