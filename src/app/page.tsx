@@ -2217,9 +2217,8 @@ const deleteVehicle = async (id: string) => {
   };
 
   // 2. Cross Border View (中港車管家) - 修復版
-  const CrossBorderView = () => {
       // 1. 篩選資料
-      const CrossBorderView = () => {
+    const CrossBorderView = () => {
       // ★★★ 修改：加入智慧排序邏輯 ★★★
       // 1. 篩選資料並排序 (已過期 -> 即將到期 -> 正常)
       const cbVehicles = inventory
@@ -2257,7 +2256,7 @@ const deleteVehicle = async (id: string) => {
         });
 
       const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
-      
+
       // 2. 本地計算統計數據 (解決 cbStatsVal 未定義錯誤)
       const calculateStats = () => {
           let expired = 0, soon = 0;
