@@ -67,6 +67,25 @@ const initFirebaseSystem = () => {
   }
 };
 
+// --- 輔助函數：將顏色名稱轉為 CSS 顏色代碼 ---
+const getColorHex = (colorName: string) => {
+    if (!colorName) return '#e2e8f0'; // Default gray
+    const lower = colorName.toLowerCase();
+    if (lower.includes('white') || lower.includes('白')) return '#ffffff';
+    if (lower.includes('black') || lower.includes('黑')) return '#000000';
+    if (lower.includes('silver') || lower.includes('銀')) return '#c0c0c0';
+    if (lower.includes('grey') || lower.includes('gray') || lower.includes('灰')) return '#808080';
+    if (lower.includes('blue') || lower.includes('藍')) return '#3b82f6';
+    if (lower.includes('red') || lower.includes('紅')) return '#ef4444';
+    if (lower.includes('gold') || lower.includes('金')) return '#eab308';
+    if (lower.includes('green') || lower.includes('綠')) return '#22c55e';
+    if (lower.includes('purple') || lower.includes('紫')) return '#a855f7';
+    if (lower.includes('brown') || lower.includes('啡')) return '#a52a2a';
+    if (lower.includes('yellow') || lower.includes('黃')) return '#facc15';
+    if (lower.includes('orange') || lower.includes('橙')) return '#f97316';
+    return '#94a3b8'; // Unknown color
+};
+
 const isFirebaseReady = initFirebaseSystem();
 const appId = firebaseConfig.projectId || 'gold-land-auto';
 
@@ -84,6 +103,7 @@ type DatabaseEntry = {
     id: string;
     // 四大核心分類
     category: 'Person' | 'Company' | 'Vehicle' | 'CrossBorder'; 
+    relatedPlateNo?: string;
     
     // 1. 人員資料
     roles?: string[]; // 角色: 客戶/員工/司機/代辦 (可多選)
@@ -166,6 +186,8 @@ type CrossBorderData = {
     insuranceAgent?: string; 
     quotaNumber?: string; // 指標號
     ports?: string[]; // 口岸 (多選)
+    hkCompany?: string;       // 香港公司
+    mainlandCompany?: string; // 內地公司
     
     // 日期管理 (YYYY-MM-DD)
     dateHkInsurance?: string; 
@@ -240,7 +262,8 @@ type Vehicle = {
   purchaseType: 'Used' | 'New' | 'Consignment'; 
   colorExt: string; 
   colorInt: string; 
-  licenseExpiry: string; 
+  licenseExpiry: string;
+  transmission?: 'Automatic' | 'Manual';
   
   previousOwners?: string; 
   mileage?: number;      
@@ -698,6 +721,7 @@ type DatabaseModuleProps = {
     setEditingEntry: React.Dispatch<React.SetStateAction<DatabaseEntry | null>>;
     isDbEditing: boolean;
     setIsDbEditing: React.Dispatch<React.SetStateAction<boolean>>;
+    inventory: Vehicle[];
 };
 
 const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing }: DatabaseModuleProps) => {
@@ -964,7 +988,25 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                         <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div></div>
                                     )}
                                     {editingEntry.category === 'CrossBorder' && (
-                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isDbEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div></div>
+                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                        <div>
+                                                <label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>
+                                                {isDbEditing ? (
+                                                    <select 
+                                                        value={editingEntry.relatedPlateNo || ''} 
+                                                        onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})}
+                                                        className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold"
+                                                    >
+                                                        <option value="">-- 無關聯 --</option>
+                                                        {inventory.map(v => (
+                                                            <option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>
+                                                )}
+                                            </div>
+                                        <div><label className="block text-xs font-bold text-slate-500 mb-1">回執號</label><input disabled={!isDbEditing} value={editingEntry.receiptNo || ''} onChange={e => setEditingEntry({...editingEntry, receiptNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div></div>
                                     )}
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
                                     <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
@@ -1258,6 +1300,14 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     const engineSize = Number(engineSizeRaw.replace(/,/g, '') || 0);
     const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
+    // 讀取 Transmission
+    const transmission = formData.get('transmission') as 'Automatic' | 'Manual';
+
+    // 讀取 Cross Border Companies
+    const crossBorderData: CrossBorderData = {
+        hkCompany: formData.get('cb_hkCompany') as string || '',
+        mainlandCompany: formData.get('cb_mainlandCompany') as string || '',
+
     // Cross Border Data Capture
     const cbEnabled = formData.get('cb_isEnabled') === 'on';
     
@@ -1323,7 +1373,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
       expenses: editingVehicle?.expenses || [], 
       payments: editingVehicle?.payments || [], 
       updatedAt: serverTimestamp(),
-      crossBorder: crossBorderData
+      crossBorder: crossBorderData,
+      transmission: transmission
     };
 
     try {
@@ -1735,6 +1786,7 @@ const deleteVehicle = async (id: string) => {
     const isNew = !v.id; 
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); // Default collapsed
+    const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
     
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
@@ -1848,6 +1900,8 @@ const deleteVehicle = async (id: string) => {
                 >
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">內地車牌 (Mainland Plate)</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} placeholder="粵Z..." className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">指標號 (Quota No.)</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">香港公司 (HK Co.)</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full border p-1 rounded text-sm" placeholder="從資料庫關聯..."/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">內地公司 (CN Co.)</label><input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">保險代理 (Agent)</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"></div>
 
@@ -1919,6 +1973,13 @@ const deleteVehicle = async (id: string) => {
             
             <div className="md:col-span-3 bg-slate-50 p-2 rounded border mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div><label className="block text-xs font-bold text-gray-500">燃料 (Fuel Type)</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full border p-2 rounded"><option value="Petrol">汽油 (Petrol)</option><option value="Diesel">柴油 (Diesel)</option><option value="Electric">電動 (Electric)</option></select></div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500">波箱 (Transmission)</label>
+                    <select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full border p-2 rounded">
+                        <option value="Automatic">自動波 (Automatic)</option>
+                        <option value="Manual">棍波 (Manual)</option>
+                    </select>
+                </div>
                 <div><label className="block text-xs font-bold text-gray-500">動力 ({fuelType === 'Electric' ? 'KW' : 'cc'})</label><input name="engineSize" type="text" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full border p-2 rounded font-mono" placeholder="0"/></div>
                 <div><label className="block text-xs font-bold text-gray-500">預計每年牌費</label><div className="w-full border p-2 rounded bg-gray-100 font-bold text-blue-700">{formatCurrency(autoLicenseFee)}</div></div>
             </div>
@@ -2272,17 +2333,52 @@ const deleteVehicle = async (id: string) => {
                   <div className="overflow-x-auto flex-1">
                       <table className="w-full text-left text-sm whitespace-nowrap relative">
                           <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
-                              <tr><th className="p-3">香港車牌</th><th className="p-3">內地車牌</th><th className="p-3">主司機</th><th className="p-3">香港保險</th><th className="p-3">留牌紙</th><th className="p-3">BR</th><th className="p-3">牌照費</th><th className="p-3">內地交強險</th><th className="p-3">內地商業險</th><th className="p-3">禁區紙</th><th className="p-3">批文卡</th><th className="p-3">行駛證</th><th className="p-3">香港驗車</th><th className="p-3">操作</th></tr>
-                          </thead>
+    <tr>
+        <th className="p-3">香港車牌</th>
+        <th className="p-3">內地車牌</th>
+        <th className="p-3 bg-yellow-50 text-yellow-800 border-x border-yellow-100">指標號</th> {/* 新增 */}
+        <th className="p-3">主司機</th>
+        {/* 下面全部改為中文標題 */}
+        <th className="p-3">香港保險</th>
+        <th className="p-3">留牌紙</th>
+        <th className="p-3">商業登記</th>
+        <th className="p-3">牌照費</th>
+        <th className="p-3">內地交強險</th>
+        <th className="p-3">內地商業險</th>
+        <th className="p-3">禁區紙</th>
+        <th className="p-3">批文卡</th>
+        <th className="p-3">行駛證</th>
+        <th className="p-3">香港驗車</th>
+        <th className="p-3">操作</th>
+    </tr>
+</thead>
                           <tbody>
-                              {cbVehicles.map(v => (
-                                  <tr key={v.id} className={`border-b cursor-pointer transition ${activeCbVehicleId === v.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`} onClick={() => setActiveCbVehicleId(v.id)}>
-                                      <td className="p-3 font-bold">{v.regMark}</td><td className="p-3 text-blue-600">{v.crossBorder?.mainlandPlate || '-'}</td><td className="p-3 text-gray-600">{v.crossBorder?.driver1 || '-'}</td>
-                                      <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="HK Ins"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateReservedPlate} label="Reserve"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateBr} label="BR"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateLicenseFee} label="Lic Fee"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandJqx} label="CN JQX"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandSyx} label="CN SYX"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateClosedRoad} label="Closed Rd"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateApproval} label="Approval"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="CN Lic"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInspection} label="HK Insp"/></td>
-                                      <td className="p-3"><button onClick={(e) => { e.stopPropagation(); setEditingVehicle(v); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><Edit size={14}/></button></td>
-                                  </tr>
-                              ))}
-                          </tbody>
+    {cbVehicles.map(v => (
+        <tr key={v.id} className={`border-b cursor-pointer transition ${activeCbVehicleId === v.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`} onClick={() => setActiveCbVehicleId(v.id)}>
+            <td className="p-3 font-bold">{v.regMark}</td>
+            <td className="p-3 text-blue-600">{v.crossBorder?.mainlandPlate || '-'}</td>
+            
+            {/* 新增指標號顯示 */}
+            <td className="p-3 text-yellow-700 font-mono font-bold bg-yellow-50/50 border-x border-yellow-100">{v.crossBorder?.quotaNumber || '-'}</td>
+            
+            <td className="p-3 text-gray-600">{v.crossBorder?.driver1 || '-'}</td>
+            
+            {/* 修改 Badge 的 label 為中文，並移除英文簡寫 */}
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="香港保險"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateReservedPlate} label="留牌紙"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateBr} label="商業登記"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateLicenseFee} label="牌照費"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandJqx} label="交強險"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandSyx} label="商業險"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateClosedRoad} label="禁區紙"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateApproval} label="批文卡"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="行駛證"/></td>
+            <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInspection} label="香港驗車"/></td>
+            
+            <td className="p-3"><button onClick={(e) => { e.stopPropagation(); setEditingVehicle(v); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><Edit size={14}/></button></td>
+        </tr>
+    ))}
+</tbody>
                       </table>
                   </div>
               </div>
@@ -3740,10 +3836,17 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
                             <div className="flex justify-between items-start">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        {/* ★★★ 新增：顏色色塊 (Color Block) ★★★ */}
+                                        <div 
+                                            className="w-4 h-4 rounded-full border border-gray-300 shadow-sm flex-shrink-0" 
+                                            style={{ backgroundColor: getColorHex(car.colorExt) }} 
+                                            title={`外觀顏色: ${car.colorExt}`}
+                                        />
+
                                         <span className="font-bold text-base text-slate-800">{car.regMark || '未出牌'}</span>
                                         <span className={`text-[10px] px-1.5 py-0.5 rounded border ${car.status==='In Stock'?'bg-green-50 text-green-700':(car.status==='Sold'?'bg-gray-100 text-gray-600':'bg-yellow-50 text-yellow-700')}`}>{car.status}</span>
                                         
-                                        {/* ★★★ 修正點：顯示 [粵港] / [粵澳] 標籤 ★★★ */}
+                                        {/* 中港標籤 */}
                                         {car.crossBorder?.isEnabled && cbTags.map(tag => (
                                             <span key={tag.label} className={`text-[10px] px-1 rounded border ${tag.color}`}>
                                                 {tag.label}
@@ -3752,7 +3855,23 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
                                         {/* 如果啟用了但沒選口岸，才顯示地球 */}
                                         {car.crossBorder?.isEnabled && cbTags.length === 0 && <Globe size={14} className="text-blue-500"/>}
                                     </div>
-                                    <p className="text-sm font-medium text-gray-700">{car.year} {car.make} {car.model}</p>
+                                    
+                                    <div className="flex items-center text-sm font-medium text-gray-700 mb-1">
+                                        {car.year} {car.make} {car.model}
+                                    </div>
+
+                                    {/* ★★★ 新增：波箱與動力顯示 (Transmission & Engine) ★★★ */}
+                                    <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border">
+                                            {car.transmission === 'Manual' ? '棍波 (MT)' : '自動波 (AT)'}
+                                        </span>
+                                        {car.engineSize ? (
+                                            <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                                                {car.engineSize} {car.fuelType === 'Electric' ? 'KW' : 'cc'}
+                                            </span>
+                                        ) : ''}
+                                    </div>
+
                                     {(car.status === 'Sold' || car.status === 'Reserved') && (<div className="mt-2 text-xs bg-slate-50 p-1 rounded inline-block border border-slate-100"><span className="text-green-600 mr-2">已收: {formatCurrency(received)}</span><span className={`font-bold ${balance > 0 ? 'text-red-500' : 'text-gray-400'}`}>餘: {formatCurrency(balance)}</span></div>)}
                                 </div>
                                 <div className="text-right flex flex-col items-end">
@@ -3794,7 +3913,9 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
                   editingEntry={editingEntry}
                   setEditingEntry={setEditingEntry}
                   isDbEditing={isDbEditing}
-                  setIsDbEditing={setIsDbEditing}/>}
+                  setIsDbEditing={setIsDbEditing}
+                  inventory={inventory}/>}
+                  
         </div>
       </main>
     </div>
