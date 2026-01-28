@@ -2498,6 +2498,216 @@ const deleteVehicle = async (id: string) => {
         updateSettings(selectedSettingKey as keyof SystemSettings, newItem, action, parentKey);
     };
 
+
+    // --- 專用工具：解析舊系統 CSV 並轉換為新系統格式 (含新欄位) ---
+const parseLegacyCSV = (csvText: string): Partial<Vehicle>[] => {
+    // 1. 拆分行與標題
+    const lines = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
+    if (lines.length < 2) return []; // 只有標題或為空
+
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    // 輔助：日期格式化 (支援 2026/3/25 或 2026-03-25 -> 2026-03-25)
+    const fmtDate = (val: string) => {
+        if (!val || val === '-' || val.trim() === '') return '';
+        try {
+            // 處理 Excel 可能出現的日期格式
+            let dateStr = val.replace(/\//g, '-').trim();
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return '';
+            return date.toISOString().split('T')[0];
+        } catch (e) { return ''; }
+    };
+
+    const result: Partial<Vehicle>[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+        // 處理 CSV 的逗號分隔 (簡單版，假設內容無逗號)
+        const row = lines[i].split(',').map(c => c.trim());
+        
+        // 輔助函數：根據標題名稱取值
+        const getData = (headerName: string) => {
+            const index = headers.indexOf(headerName);
+            return (index > -1 && row[index]) ? row[index] : '';
+        };
+
+        const regMark = getData('香港車牌');
+        if (!regMark) continue; // 沒有車牌則跳過
+
+        // 讀取中港相關欄位
+        const mainlandPlate = getData('內地車牌');
+        const quotaNo = getData('指標號');
+        const hkCo = getData('香港商號');
+        const cnCo = getData('內承單位');
+        
+        // 判斷是否啟用中港模組：只要有任一關鍵資料就啟用
+        const hasCBData = mainlandPlate || quotaNo || hkCo || cnCo || getData('批文卡到期');
+
+        // 3. 轉換為新系統結構
+        const vehicle: any = {
+            id: `IMP-${Date.now()}-${i}`, // 暫時 ID
+            regMark: regMark,
+            
+            // 預設值 (因為 CSV 沒有這些資料)
+            year: new Date().getFullYear().toString(),
+            make: 'TOYOTA', 
+            model: 'Alphard', 
+            purchaseType: 'Used',
+            status: 'Sold', // 假設匯入的舊車都是已售/管理中
+            transmission: 'Automatic', // 預設自動波
+            colorExt: 'Black', // 預設顏色
+            
+            // 客戶資料
+            customerName: getData('負責司機'), // 這裡對應 CSV 的負責司機作為主要聯絡人
+            customerPhone: getData('聯絡電話'),
+            remarks: getData('備註'),
+            
+            // 牌費與保險
+            licenseExpiry: fmtDate(getData('牌照費')),
+            
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            
+            // ★ 重點：中港車管家資料對應 (包含新欄位) ★
+            crossBorder: {
+                isEnabled: !!hasCBData,
+                mainlandPlate: mainlandPlate,
+                quotaNumber: quotaNo, // 對應「指標號」
+                
+                // 新增公司欄位
+                hkCompany: hkCo,     // 對應「香港商號」
+                mainlandCompany: cnCo, // 對應「內承單位」
+                
+                insuranceAgent: getData('保險代理'),
+                
+                // 司機資料
+                driver1: getData('司機1') || getData('負責司機'),
+                driver2: getData('司機2'),
+                driver3: getData('司機3'),
+                
+                // 口岸 (轉為陣列)
+                ports: getData('通行口岸') ? [getData('通行口岸')] : [],
+
+                // 十大日期欄位對應
+                dateReservedPlate: fmtDate(getData('留牌紙到期')),
+                dateBr: fmtDate(getData('BR到期')),
+                dateLicenseFee: fmtDate(getData('牌照費')), // 與車輛牌費共用
+                dateHkInsurance: fmtDate(getData('香港保險到期')),
+                dateMainlandJqx: fmtDate(getData('內地交強險到期')),
+                dateMainlandSyx: fmtDate(getData('內地商業險到期')),
+                dateClosedRoad: fmtDate(getData('禁區紙到期')),
+                dateApproval: fmtDate(getData('批文卡到期')),
+                dateMainlandLicense: fmtDate(getData('行駛証')),
+                dateHkInspection: fmtDate(getData('香港驗車日期')),
+                
+                tasks: [] // 初始化空任務列表
+            },
+            
+            expenses: [],
+            payments: []
+        };
+        result.push(vehicle);
+    }
+    return result;
+};
+
+// ★★★ 處理舊 CSV 匯入 (包含新欄位與資料連動) ★★★
+    const handleLegacyCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !db || !staffId) return;
+
+        if (!confirm("確定匯入舊系統 CSV？\n\n系統將會：\n1. 建立車輛庫存\n2. 自動填入指標號、香港/內地公司資料\n3. 同步建立客戶與司機的資料庫檔案")) {
+            e.target.value = '';
+            return;
+        }
+
+        setIsProcessing(true);
+        const reader = new FileReader();
+        
+        reader.onload = async (event) => {
+            try {
+                const csvText = event.target?.result as string;
+                const vehicles = parseLegacyCSV(csvText);
+                
+                if (vehicles.length === 0) {
+                    alert("無法解析 CSV 或沒有有效資料。請檢查檔案格式。");
+                    setIsProcessing(false);
+                    return;
+                }
+
+                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                const batch = writeBatch(db!);
+                let count = 0;
+                const BATCH_LIMIT = 450; // Firestore 批次限制
+
+                // 寫入 Firestore
+                for (const v of vehicles) {
+                    if (count >= BATCH_LIMIT) break; 
+                    
+                    // 1. 寫入車輛庫存
+                    const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
+                    const { id, ...vData } = v; // 移除暫時 ID
+                    
+                    batch.set(newDocRef, {
+                        ...vData,
+                        id: newDocRef.id,
+                        importedAt: serverTimestamp()
+                    });
+                    
+                    // 2. 自動同步：建立「客戶」檔案 (根據負責司機)
+                    if (vData.customerName) {
+                        const clientRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
+                        batch.set(clientRef, {
+                            category: 'Person',
+                            name: vData.customerName,
+                            phone: vData.customerPhone || '',
+                            roles: ['客戶'],
+                            tags: ['CSV匯入', '車主'],
+                            description: `匯入自車輛: ${vData.regMark}`,
+                            createdAt: serverTimestamp()
+                        });
+                        count++;
+                    }
+
+                    // 3. 自動同步：建立「司機」檔案 (根據司機1, 2, 3)
+                    const drivers = [
+                        vData.crossBorder?.driver1, 
+                        vData.crossBorder?.driver2, 
+                        vData.crossBorder?.driver3
+                    ].filter(d => d && d !== vData.customerName); // 避免重複建立同一個人
+
+                    for (const driverName of drivers) {
+                        if (driverName) {
+                            const driverRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
+                            batch.set(driverRef, {
+                                category: 'Person',
+                                name: driverName,
+                                roles: ['司機'],
+                                tags: ['CSV匯入', '中港司機'],
+                                relatedPlateNo: vData.regMark, // 關聯車牌
+                                createdAt: serverTimestamp()
+                            });
+                            count++;
+                        }
+                    }
+
+                    count++;
+                }
+
+                await batch.commit();
+                alert(`匯入成功！共處理了約 ${count} 筆資料 (包含車輛與關聯人員)。\n請至「車輛庫存」與「資料庫中心」查看。`);
+                
+            } catch (err) {
+                console.error("CSV Import failed:", err);
+                alert("匯入失敗，請檢查檔案格式或網路連線。");
+            }
+            setIsProcessing(false);
+            e.target.value = ''; // 重置 input
+        };
+        // 使用 readAsText 讀取 CSV
+        reader.readAsText(file); 
+    };
+
     // ★★★ 數據匯出 (Export) ★★★
     const handleExportData = async () => {
         if (!db || !staffId) return;
@@ -2774,6 +2984,18 @@ const deleteVehicle = async (id: string) => {
                         </div>
 
                         <div className="grid grid-cols-2 gap-8">
+                            
+                            {/* 舊系統 CSV 遷移區塊 */}
+                            <div className="col-span-2 border border-green-100 bg-green-50 rounded-xl p-6 flex flex-row items-center hover:shadow-md transition-shadow mt-4">
+                                {/* ... 圖示與標題 ... */}
+                                    <div className="ml-4">
+                                         <label className={`px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                            {isProcessing ? '資料分析中...' : '選擇 CSV 檔案匯入'}
+                                            <input type="file" accept=".csv" className="hidden" onChange={handleLegacyCsvImport} disabled={isProcessing}/>
+                                        </label>
+                                    </div>
+                            </div>
+                            
                             {/* 匯出區塊 */}
                             <div className="border border-blue-100 bg-blue-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
                                 <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
