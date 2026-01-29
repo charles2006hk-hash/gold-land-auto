@@ -731,24 +731,23 @@ type DatabaseModuleProps = {
     inventory: Vehicle[];
 };
 
-// 3. DatabaseModule (含重複比對功能 + 儲存優化)
+// 3. DatabaseModule (完整修復版：含列表渲染、刪除、標籤功能)
 const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory }: DatabaseModuleProps) => {
     const [entries, setEntries] = useState<DatabaseEntry[]>([]);
     const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
     const [searchTerm, setSearchTerm] = useState('');
     const [tagInput, setTagInput] = useState('');
     
-    // ★★★ 新增：重複資料處理狀態 ★★★
+    // 重複資料處理狀態
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
     const [showDupeModal, setShowDupeModal] = useState(false);
 
+    // 資料讀取
     useEffect(() => {
         if (!db || !staffId) return;
         const currentDb = db; 
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-        
-        // 依照建立時間排序
         const q = query(colRef, orderBy('createdAt', 'desc'));
         
         const unsub = onSnapshot(q, (snapshot) => {
@@ -756,7 +755,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             snapshot.forEach(doc => {
                 const data = doc.data();
                 let attachments = data.attachments || [];
-                // 兼容舊資料的 images 欄位
                 if (!attachments.length && data.images && Array.isArray(data.images)) {
                     attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
                 }
@@ -783,7 +781,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     renewalCount: data.renewalCount || 0, 
                     renewalDuration: data.renewalDuration || 1, 
                     renewalUnit: data.renewalUnit || 'year',
-                    relatedPlateNo: data.relatedPlateNo || '' // 確保讀取關聯車牌
+                    relatedPlateNo: data.relatedPlateNo || ''
                 } as DatabaseEntry);
             });
             setEntries(list);
@@ -791,12 +789,49 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         return () => unsub();
     }, [staffId, db, appId]);
 
-    // ... (handleFileUpload, downloadImage, handleQuickRenew 保持不變) ...
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... 保留原有代碼 ... */ };
-    const downloadImage = (dataUrl: string, filename: string) => { /* ... 保留原有代碼 ... */ };
-    const handleQuickRenew = () => { /* ... 保留原有代碼 ... */ };
+    // 工具函數
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) return;
+          const file = files[0];
+          if (file.size > 5 * 1024 * 1024) { alert(`檔案 ${file.name} 超過 5MB 限制`); return; }
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = (event) => {
+              const img = new Image();
+              img.src = event.target?.result as string;
+              img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  let width = img.width; let height = img.height;
+                  const MAX_DIMENSION = 1024;
+                  if (width > height) { if (width > MAX_DIMENSION) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } } 
+                  else { if (height > MAX_DIMENSION) { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; } }
+                  canvas.width = width; canvas.height = height;
+                  const ctx = canvas.getContext('2d');
+                  if (!ctx) return;
+                  ctx.drawImage(img, 0, 0, width, height);
+                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                  setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: dataUrl }] } : null);
+              };
+          };
+    };
 
-    // ★★★ 修改：handleSave (儲存後不跳回列表，保留在編輯頁面) ★★★
+    const downloadImage = (dataUrl: string, filename: string) => {
+        const link = document.createElement('a'); link.href = dataUrl; link.download = filename || 'download.png';
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+
+    const handleQuickRenew = () => {
+        if (!editingEntry || !editingEntry.expiryDate) { alert("請先設定當前的到期日"); return; }
+        const duration = Number(editingEntry.renewalDuration) || 1;
+        const unit = editingEntry.renewalUnit || 'year';
+        const currentDate = new Date(editingEntry.expiryDate);
+        if (unit === 'year') { currentDate.setFullYear(currentDate.getFullYear() + duration); } 
+        else { currentDate.setMonth(currentDate.getMonth() + duration); }
+        const newDateStr = currentDate.toISOString().split('T')[0];
+        setEditingEntry({ ...editingEntry, expiryDate: newDateStr, renewalCount: (editingEntry.renewalCount || 0) + 1 });
+    };
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         if (!db || !staffId || !editingEntry) return;
@@ -812,54 +847,62 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
                 await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
                 alert('資料已更新 (已保留在當前頁面)');
-                // ★★★ 重點：這裡刪除了 setIsDbEditing(false)，讓用戶繼續編輯 ★★★
             } else {
                 const { id, ...dataToSave } = finalEntry;
                 const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
                 const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
-                // ★★★ 重點：更新當前 ID，讓它變成編輯模式，而不是新增模式 ★★★
                 setEditingEntry({ ...finalEntry, id: newRef.id }); 
                 alert('新資料已建立');
             }
         } catch (err) { console.error(err); alert('儲存失敗'); }
     };
 
-    // ... (handleDelete, toggleRole, addTag 保持不變) ...
-    const handleDelete = async (id: string) => { /* ... 保留原有代碼 ... */ };
-    const toggleRole = (role: string) => { /* ... 保留原有代碼 ... */ };
-    const addTag = () => { /* ... 保留原有代碼 ... */ };
+    // 恢復被省略的函數
+    const handleDelete = async (id: string) => {
+        if (!db || !staffId) return;
+        const currentDb = db; 
+        if (!confirm('確定刪除此筆資料？無法復原。')) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
+        await deleteDoc(docRef);
+        if (editingEntry?.id === id) { setEditingEntry(null); setIsDbEditing(false); }
+    };
 
-    // ★★★ 新增：檢查重複邏輯 ★★★
+    const toggleRole = (role: string) => {
+        setEditingEntry(prev => { if (!prev) return null; const currentRoles = prev.roles || []; if (currentRoles.includes(role)) return { ...prev, roles: currentRoles.filter(r => r !== role) }; return { ...prev, roles: [...currentRoles, role] }; });
+    };
+
+    const addTag = () => {
+        if (tagInput.trim() && editingEntry) { setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] }); setTagInput(''); }
+    };
+
+    // 恢復被省略的過濾邏輯
+    const filteredEntries = entries.filter(entry => {
+        const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
+        const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
+        return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+
+    // 重複檢查邏輯
     const scanForDuplicates = () => {
         const nameMap = new Map<string, DatabaseEntry[]>();
         entries.forEach(e => {
-            const key = e.name.trim(); // 以名稱做為比對鍵值 (也可加入電話)
+            const key = e.name.trim(); 
             if (!key) return;
             if (!nameMap.has(key)) nameMap.set(key, []);
             nameMap.get(key)?.push(e);
         });
-
         const duplicates: DatabaseEntry[][] = [];
-        nameMap.forEach((group) => {
-            if (group.length > 1) duplicates.push(group);
-        });
-
-        if (duplicates.length === 0) {
-            alert("未發現重複資料 (根據名稱)");
-        } else {
-            setDupeGroups(duplicates);
-            setShowDupeModal(true);
-        }
+        nameMap.forEach((group) => { if (group.length > 1) duplicates.push(group); });
+        if (duplicates.length === 0) { alert("未發現重複資料 (根據名稱)"); } 
+        else { setDupeGroups(duplicates); setShowDupeModal(true); }
     };
 
-    // ★★★ 新增：合併/保留邏輯 ★★★
     const resolveDuplicate = async (keepId: string, group: DatabaseEntry[]) => {
         if (!confirm("確定保留選中的資料，並刪除其他重複項？")) return;
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        
         const deleteIds = group.filter(e => e.id !== keepId).map(e => e.id);
-        
         try {
             const batch = writeBatch(db);
             deleteIds.forEach(id => {
@@ -867,16 +910,11 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 batch.delete(ref);
             });
             await batch.commit();
-            
-            // 更新 UI
             const newGroups = dupeGroups.map(g => g.filter(e => !deleteIds.includes(e.id))).filter(g => g.length > 1);
             setDupeGroups(newGroups);
             if (newGroups.length === 0) setShowDupeModal(false);
-            
         } catch (e) { console.error(e); alert("處理失敗"); }
     };
-
-    const filteredEntries = entries.filter(entry => { /* ... 保留原有過濾邏輯 ... */ return true; }); // 請保留原本的 filter 代碼
 
     return (
         <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden relative">
@@ -886,29 +924,140 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
                         <div className="flex gap-2">
-                             {/* ★★★ 新增：重複比對按鈕 ★★★ */}
                             <button onClick={scanForDuplicates} className="bg-amber-100 text-amber-700 p-2 rounded-full hover:bg-amber-200" title="檢查重複"><RefreshCw size={18}/></button>
-                            <button onClick={(e) => { e.preventDefault(); setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); setIsDbEditing(true); }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700"><Plus size={20}/></button>
+                            <button onClick={(e) => { e.preventDefault(); setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); setIsDbEditing(true); }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
                         </div>
                     </div>
-                    {/* ... (Search & Filter UI 保持不變) ... */}
+                    {/* 搜尋與過濾 UI (恢復) */}
+                    <div className="space-y-2">
+                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="搜尋姓名、車牌、標籤..." className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (<button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}>{cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}</button>))}</div>
+                    </div>
                 </div>
-                {/* ... (列表渲染保持不變) ... */}
+                {/* 列表渲染 (恢復) */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {filteredEntries.map(entry => {
+                        const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
+                        const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
+                        return (
+                        <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+                            <div className="flex justify-between items-start">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2"><div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>{entry.reminderEnabled && (<Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />)}</div>
+                                    <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
+                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
+                                        {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
+                                        {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
+                                        {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
+                                    </div>
+                                </div>
+                                {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
+                            </div>
+                        </div>
+                       );
+                  })}
+                    {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
+                </div>
             </div>
 
             {/* 右側編輯區 */}
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
-                {/* ... (編輯表單 UI 保持不變，注意 handleSave 已更新) ... */}
                 {editingEntry ? (
-                     <form onSubmit={handleSave} className="flex flex-col h-full">
-                         {/* ... (保留原本的 Form 內容) ... */}
-                     </form>
-                ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>
-                )}
+                    <form onSubmit={handleSave} className="flex flex-col h-full">
+                        <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div className="font-bold text-slate-700 text-lg flex items-center">
+                                {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
+                                {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
+                            </div>
+                            <div className="flex gap-2">
+                                {isDbEditing || !editingEntry.id ? (
+                                    <>
+                                        <button type="button" onClick={(e) => { e.preventDefault(); setIsDbEditing(false); if(!editingEntry.id) setEditingEntry(null); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
+                                        <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(editingEntry.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><Trash2 size={18}/></button>
+                                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsDbEditing(true); }} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {isDbEditing && (
+                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
+                                    <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
+                                    <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label><input disabled={!isDbEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded text-lg font-bold" placeholder="姓名 / 公司名" required /></div>
+                                    {editingEntry.category === 'Person' && (
+                                        <>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label><div className="flex flex-wrap gap-2">{(settings.dbRoles || ['客戶', '司機']).map(role => (<button key={role} type="button" disabled={!isDbEditing} onClick={() => toggleRole(role)} className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}>{role}</button>))}</div></div>
+                                            <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div></div>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                        </>
+                                    )}
+                                    {editingEntry.category === 'Company' && (
+                                        <>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                        </>
+                                    )}
+                                    {editingEntry.category === 'Vehicle' && (
+                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div></div>
+                                    )}
+                                    {editingEntry.category === 'CrossBorder' && (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>
+                                                {isDbEditing ? (
+                                                    <select 
+                                                        value={editingEntry.relatedPlateNo || ''} 
+                                                        onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})}
+                                                        className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold"
+                                                    >
+                                                        <option value="">-- 無關聯 --</option>
+                                                        {inventory.map(v => (
+                                                            <option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
+                                    <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <label className="flex items-center cursor-pointer"><input type="checkbox" disabled={!isDbEditing} checked={editingEntry.reminderEnabled || false} onChange={e => setEditingEntry({ ...editingEntry, reminderEnabled: e.target.checked, renewalDuration: editingEntry.renewalDuration || 1, renewalUnit: editingEntry.renewalUnit || 'year', renewalCount: editingEntry.renewalCount || 0 })} className="w-4 h-4 text-amber-600 rounded mr-2" /><span className={`text-sm font-bold flex items-center ${editingEntry.reminderEnabled ? 'text-amber-800' : 'text-gray-500'}`}><Bell size={16} className="mr-1"/> 啟用到期提醒功能</span></label>
+                                            {editingEntry.reminderEnabled && (<div className="text-xs text-amber-700 font-mono bg-white px-2 py-1 rounded border border-amber-200">已續期次數: <span className="font-bold">{editingEntry.renewalCount || 0}</span></div>)}
+                                        </div>
+                                        {editingEntry.reminderEnabled && (
+                                            <div className="grid grid-cols-2 gap-4 animate-fade-in">
+                                                <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label><input type="date" disabled={!isDbEditing} value={editingEntry.expiryDate || ''} onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold" /><div className="mt-1"><DateStatusBadge date={editingEntry.expiryDate} label="狀態" /></div></div>
+                                                <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100"><label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label><div className="flex gap-2 mb-2"><input type="number" disabled={!isDbEditing} value={editingEntry.renewalDuration} onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} className="w-16 p-1 border rounded text-center text-sm" min="1" /><select disabled={!isDbEditing} value={editingEntry.renewalUnit} onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} className="flex-1 p-1 border rounded text-sm"><option value="year">年 (Years)</option><option value="month">月 (Months)</option></select></div>{isDbEditing && (<button type="button" onClick={handleQuickRenew} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"><RefreshCw size={12} className="mr-1"/> 立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})</button>)}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label><textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/></div>
+                                    <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>)}</div>
+                                    <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">{editingEntry.attachments?.map((file, idx) => (<div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col"><div className="w-full bg-slate-50 relative p-1"><img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />{isDbEditing && (<button type="button" onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg" title="刪除"><X size={18}/></button>)}<button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button></div><div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center"><File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>{isDbEditing ? (<input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />) : (<span className="truncate">{file.name}</span>)}</div></div>))}{(!editingEntry.attachments || editingEntry.attachments.length === 0) && (<div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30"><ImageIcon size={48} className="mb-3 opacity-30"/>暫無附件圖片</div>)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                ) : (<div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>)}
             </div>
 
-            {/* ★★★ 新增：重複處理 Modal ★★★ */}
             {showDupeModal && (
                 <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
@@ -928,12 +1077,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                     <div><span className="font-bold">電話:</span> {item.phone || '-'}</div>
                                                     <div><span className="font-bold">建立:</span> {item.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}</div>
                                                 </div>
-                                                <button 
-                                                    onClick={() => resolveDuplicate(item.id, group)}
-                                                    className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-                                                >
-                                                    保留此筆 (刪除其他)
-                                                </button>
+                                                <button onClick={() => resolveDuplicate(item.id, group)} className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">保留此筆 (刪除其他)</button>
                                             </div>
                                         ))}
                                     </div>
@@ -2411,368 +2555,7 @@ const deleteVehicle = async (id: string) => {
           </div>
       );
   };
-  // 3. DatabaseModule (完整修復版：含列表渲染、刪除、標籤功能)
-const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory }: DatabaseModuleProps) => {
-    const [entries, setEntries] = useState<DatabaseEntry[]>([]);
-    const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [tagInput, setTagInput] = useState('');
-    
-    // 重複資料處理狀態
-    const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
-    const [showDupeModal, setShowDupeModal] = useState(false);
-
-    // 資料讀取
-    useEffect(() => {
-        if (!db || !staffId) return;
-        const currentDb = db; 
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-        const q = query(colRef, orderBy('createdAt', 'desc'));
-        
-        const unsub = onSnapshot(q, (snapshot) => {
-            const list: DatabaseEntry[] = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                let attachments = data.attachments || [];
-                if (!attachments.length && data.images && Array.isArray(data.images)) {
-                    attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
-                }
-                list.push({ 
-                    id: doc.id, 
-                    category: data.category || 'Person', 
-                    name: data.name || data.title || '',
-                    phone: data.phone || '', 
-                    address: data.address || '', 
-                    idNumber: data.idNumber || '',
-                    plateNoHK: data.plateNoHK || '', 
-                    plateNoCN: data.plateNoCN || '', 
-                    quotaNo: data.quotaNo || '',
-                    receiptNo: data.receiptNo || '', 
-                    docType: data.docType || '', 
-                    description: data.description || '',
-                    tags: data.tags || [], 
-                    roles: data.roles || [], 
-                    attachments: attachments,
-                    createdAt: data.createdAt, 
-                    updatedAt: data.updatedAt,
-                    reminderEnabled: data.reminderEnabled || false, 
-                    expiryDate: data.expiryDate || '',
-                    renewalCount: data.renewalCount || 0, 
-                    renewalDuration: data.renewalDuration || 1, 
-                    renewalUnit: data.renewalUnit || 'year',
-                    relatedPlateNo: data.relatedPlateNo || ''
-                } as DatabaseEntry);
-            });
-            setEntries(list);
-        });
-        return () => unsub();
-    }, [staffId, db, appId]);
-
-    // 工具函數
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-          const files = e.target.files;
-          if (!files || files.length === 0) return;
-          const file = files[0];
-          if (file.size > 5 * 1024 * 1024) { alert(`檔案 ${file.name} 超過 5MB 限制`); return; }
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = (event) => {
-              const img = new Image();
-              img.src = event.target?.result as string;
-              img.onload = () => {
-                  const canvas = document.createElement('canvas');
-                  let width = img.width; let height = img.height;
-                  const MAX_DIMENSION = 1024;
-                  if (width > height) { if (width > MAX_DIMENSION) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } } 
-                  else { if (height > MAX_DIMENSION) { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; } }
-                  canvas.width = width; canvas.height = height;
-                  const ctx = canvas.getContext('2d');
-                  if (!ctx) return;
-                  ctx.drawImage(img, 0, 0, width, height);
-                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                  setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: dataUrl }] } : null);
-              };
-          };
-    };
-
-    const downloadImage = (dataUrl: string, filename: string) => {
-        const link = document.createElement('a'); link.href = dataUrl; link.download = filename || 'download.png';
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    };
-
-    const handleQuickRenew = () => {
-        if (!editingEntry || !editingEntry.expiryDate) { alert("請先設定當前的到期日"); return; }
-        const duration = Number(editingEntry.renewalDuration) || 1;
-        const unit = editingEntry.renewalUnit || 'year';
-        const currentDate = new Date(editingEntry.expiryDate);
-        if (unit === 'year') { currentDate.setFullYear(currentDate.getFullYear() + duration); } 
-        else { currentDate.setMonth(currentDate.getMonth() + duration); }
-        const newDateStr = currentDate.toISOString().split('T')[0];
-        setEditingEntry({ ...editingEntry, expiryDate: newDateStr, renewalCount: (editingEntry.renewalCount || 0) + 1 });
-    };
-
-    const handleSave = async (e: React.FormEvent) => {
-        e.preventDefault(); 
-        if (!db || !staffId || !editingEntry) return;
-        const currentDb = db; 
-        const autoTags = new Set(editingEntry.tags || []);
-        if(editingEntry.name) autoTags.add(editingEntry.name);
-        
-        const finalEntry = { ...editingEntry, tags: Array.from(autoTags), roles: editingEntry.roles || [], attachments: editingEntry.attachments || [] };
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        
-        try {
-            if (editingEntry.id) {
-                const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
-                await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
-                alert('資料已更新 (已保留在當前頁面)');
-            } else {
-                const { id, ...dataToSave } = finalEntry;
-                const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-                const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
-                setEditingEntry({ ...finalEntry, id: newRef.id }); 
-                alert('新資料已建立');
-            }
-        } catch (err) { console.error(err); alert('儲存失敗'); }
-    };
-
-    // 恢復被省略的函數
-    const handleDelete = async (id: string) => {
-        if (!db || !staffId) return;
-        const currentDb = db; 
-        if (!confirm('確定刪除此筆資料？無法復原。')) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
-        await deleteDoc(docRef);
-        if (editingEntry?.id === id) { setEditingEntry(null); setIsDbEditing(false); }
-    };
-
-    const toggleRole = (role: string) => {
-        setEditingEntry(prev => { if (!prev) return null; const currentRoles = prev.roles || []; if (currentRoles.includes(role)) return { ...prev, roles: currentRoles.filter(r => r !== role) }; return { ...prev, roles: [...currentRoles, role] }; });
-    };
-
-    const addTag = () => {
-        if (tagInput.trim() && editingEntry) { setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] }); setTagInput(''); }
-    };
-
-    // 恢復被省略的過濾邏輯
-    const filteredEntries = entries.filter(entry => {
-        const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
-        const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
-        return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
-    });
-
-    // 重複檢查邏輯
-    const scanForDuplicates = () => {
-        const nameMap = new Map<string, DatabaseEntry[]>();
-        entries.forEach(e => {
-            const key = e.name.trim(); 
-            if (!key) return;
-            if (!nameMap.has(key)) nameMap.set(key, []);
-            nameMap.get(key)?.push(e);
-        });
-        const duplicates: DatabaseEntry[][] = [];
-        nameMap.forEach((group) => { if (group.length > 1) duplicates.push(group); });
-        if (duplicates.length === 0) { alert("未發現重複資料 (根據名稱)"); } 
-        else { setDupeGroups(duplicates); setShowDupeModal(true); }
-    };
-
-    const resolveDuplicate = async (keepId: string, group: DatabaseEntry[]) => {
-        if (!confirm("確定保留選中的資料，並刪除其他重複項？")) return;
-        if (!db || !staffId) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const deleteIds = group.filter(e => e.id !== keepId).map(e => e.id);
-        try {
-            const batch = writeBatch(db);
-            deleteIds.forEach(id => {
-                const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
-                batch.delete(ref);
-            });
-            await batch.commit();
-            const newGroups = dupeGroups.map(g => g.filter(e => !deleteIds.includes(e.id))).filter(g => g.length > 1);
-            setDupeGroups(newGroups);
-            if (newGroups.length === 0) setShowDupeModal(false);
-        } catch (e) { console.error(e); alert("處理失敗"); }
-    };
-
-    return (
-        <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden relative">
-            {/* 左側列表 */}
-            <div className="w-1/3 border-r border-slate-100 flex flex-col bg-slate-50">
-                <div className="p-4 border-b border-slate-200">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
-                        <div className="flex gap-2">
-                            <button onClick={scanForDuplicates} className="bg-amber-100 text-amber-700 p-2 rounded-full hover:bg-amber-200" title="檢查重複"><RefreshCw size={18}/></button>
-                            <button onClick={(e) => { e.preventDefault(); setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); setIsDbEditing(true); }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
-                        </div>
-                    </div>
-                    {/* 搜尋與過濾 UI (恢復) */}
-                    <div className="space-y-2">
-                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="搜尋姓名、車牌、標籤..." className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
-                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (<button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}>{cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}</button>))}</div>
-                    </div>
-                </div>
-                {/* 列表渲染 (恢復) */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {filteredEntries.map(entry => {
-                        const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
-                        const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
-                        return (
-                        <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
-                            <div className="flex justify-between items-start">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2"><div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>{entry.reminderEnabled && (<Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />)}</div>
-                                    <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
-                                        <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
-                                        {entry.roles?.map(r => <span key={r} className="bg-green-50 text-green-700 px-1.5 py-0.5 rounded border border-green-100">{r}</span>)}
-                                        {entry.plateNoHK && <span className="bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-100">{entry.plateNoHK}</span>}
-                                        {entry.quotaNo && <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100">{entry.quotaNo}</span>}
-                                    </div>
-                                </div>
-                                {entry.attachments?.length > 0 && <span className="text-xs text-slate-400 flex items-center bg-gray-50 px-1.5 py-0.5 rounded"><File size={10} className="mr-1"/>{entry.attachments.length}</span>}
-                            </div>
-                        </div>
-                       );
-                  })}
-                    {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
-                </div>
-            </div>
-
-            {/* 右側編輯區 */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
-                {editingEntry ? (
-                    <form onSubmit={handleSave} className="flex flex-col h-full">
-                        <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div className="font-bold text-slate-700 text-lg flex items-center">
-                                {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
-                                {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
-                            </div>
-                            <div className="flex gap-2">
-                                {isDbEditing || !editingEntry.id ? (
-                                    <>
-                                        <button type="button" onClick={(e) => { e.preventDefault(); setIsDbEditing(false); if(!editingEntry.id) setEditingEntry(null); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
-                                        <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 shadow-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>
-                                    </>
-                                ) : (
-                                    <>
-                                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(editingEntry.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><Trash2 size={18}/></button>
-                                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsDbEditing(true); }} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            {isDbEditing && (
-                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mb-4">
-                                    <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
-                                    <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
-                                </div>
-                            )}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="space-y-4">
-                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label><input disabled={!isDbEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded text-lg font-bold" placeholder="姓名 / 公司名" required /></div>
-                                    {editingEntry.category === 'Person' && (
-                                        <>
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label><div className="flex flex-wrap gap-2">{(settings.dbRoles || ['客戶', '司機']).map(role => (<button key={role} type="button" disabled={!isDbEditing} onClick={() => toggleRole(role)} className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}>{role}</button>))}</div></div>
-                                            <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">證件號碼</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="HKID / 回鄉證"/></div></div>
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                        </>
-                                    )}
-                                    {editingEntry.category === 'Company' && (
-                                        <>
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">商業登記號 (BR)</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">公司電話</label><input disabled={!isDbEditing} value={editingEntry.phone || ''} onChange={e => setEditingEntry({...editingEntry, phone: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                        </>
-                                    )}
-                                    {editingEntry.category === 'Vehicle' && (
-                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div></div>
-                                    )}
-                                    {editingEntry.category === 'CrossBorder' && (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>
-                                                {isDbEditing ? (
-                                                    <select 
-                                                        value={editingEntry.relatedPlateNo || ''} 
-                                                        onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})}
-                                                        className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold"
-                                                    >
-                                                        <option value="">-- 無關聯 --</option>
-                                                        {inventory.map(v => (
-                                                            <option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>
-                                                        ))}
-                                                    </select>
-                                                ) : (
-                                                    <div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型 (Document Type)</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
-                                    <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
-                                        <div className="flex justify-between items-center mb-3">
-                                            <label className="flex items-center cursor-pointer"><input type="checkbox" disabled={!isDbEditing} checked={editingEntry.reminderEnabled || false} onChange={e => setEditingEntry({ ...editingEntry, reminderEnabled: e.target.checked, renewalDuration: editingEntry.renewalDuration || 1, renewalUnit: editingEntry.renewalUnit || 'year', renewalCount: editingEntry.renewalCount || 0 })} className="w-4 h-4 text-amber-600 rounded mr-2" /><span className={`text-sm font-bold flex items-center ${editingEntry.reminderEnabled ? 'text-amber-800' : 'text-gray-500'}`}><Bell size={16} className="mr-1"/> 啟用到期提醒功能</span></label>
-                                            {editingEntry.reminderEnabled && (<div className="text-xs text-amber-700 font-mono bg-white px-2 py-1 rounded border border-amber-200">已續期次數: <span className="font-bold">{editingEntry.renewalCount || 0}</span></div>)}
-                                        </div>
-                                        {editingEntry.reminderEnabled && (
-                                            <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                                                <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label><input type="date" disabled={!isDbEditing} value={editingEntry.expiryDate || ''} onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold" /><div className="mt-1"><DateStatusBadge date={editingEntry.expiryDate} label="狀態" /></div></div>
-                                                <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100"><label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label><div className="flex gap-2 mb-2"><input type="number" disabled={!isDbEditing} value={editingEntry.renewalDuration} onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} className="w-16 p-1 border rounded text-center text-sm" min="1" /><select disabled={!isDbEditing} value={editingEntry.renewalUnit} onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} className="flex-1 p-1 border rounded text-sm"><option value="year">年 (Years)</option><option value="month">月 (Months)</option></select></div>{isDbEditing && (<button type="button" onClick={handleQuickRenew} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"><RefreshCw size={12} className="mr-1"/> 立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})</button>)}</div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label><textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/></div>
-                                    <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
-                                </div>
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>)}</div>
-                                    <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">{editingEntry.attachments?.map((file, idx) => (<div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col"><div className="w-full bg-slate-50 relative p-1"><img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />{isDbEditing && (<button type="button" onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg" title="刪除"><X size={18}/></button>)}<button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button></div><div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center"><File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>{isDbEditing ? (<input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />) : (<span className="truncate">{file.name}</span>)}</div></div>))}{(!editingEntry.attachments || editingEntry.attachments.length === 0) && (<div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30"><ImageIcon size={48} className="mb-3 opacity-30"/>暫無附件圖片</div>)}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                ) : (<div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>)}
-            </div>
-
-            {showDupeModal && (
-                <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-                        <div className="p-4 border-b flex justify-between items-center bg-amber-50 rounded-t-xl">
-                            <h3 className="font-bold text-amber-800 flex items-center"><AlertTriangle className="mr-2"/> 發現重複資料 ({dupeGroups.length} 組)</h3>
-                            <button onClick={() => setShowDupeModal(false)}><X/></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                            {dupeGroups.map((group, idx) => (
-                                <div key={idx} className="border rounded-lg p-3 bg-slate-50">
-                                    <h4 className="font-bold mb-2 text-slate-700">名稱: {group[0].name}</h4>
-                                    <div className="space-y-2">
-                                        {group.map(item => (
-                                            <div key={item.id} className="flex justify-between items-center bg-white p-2 rounded border">
-                                                <div className="text-xs">
-                                                    <div><span className="font-bold">ID:</span> {item.id}</div>
-                                                    <div><span className="font-bold">電話:</span> {item.phone || '-'}</div>
-                                                    <div><span className="font-bold">建立:</span> {item.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}</div>
-                                                </div>
-                                                <button onClick={() => resolveDuplicate(item.id, group)} className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">保留此筆 (刪除其他)</button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-
-
+  
 
 
 // 3. Settings Manager (系統設置 - 升級版 + 數據管理)
