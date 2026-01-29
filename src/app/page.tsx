@@ -2976,59 +2976,80 @@ const parseLegacyCSV = (csvText: string): Partial<Vehicle>[] => {
              );
         }
 
+        // ★★★ 修復：中港項目設定 (解決輸入跳動問題：改為手動儲存) ★★★
         if (selectedSettingKey === 'cbItems') {
+             // 確保 items 是物件陣列
              const items = settings.cbItems.map((i: any) => typeof i === 'string' ? { name: i, defaultInst: '', defaultFee: 0, defaultDays: '' } : i);
              
+             // 1. 只更新本地狀態 (不寫入資料庫，解決跳動問題)
              const handleCbItemUpdate = (idx: number, field: string, value: any) => {
                  const newItems = [...items];
                  newItems[idx] = { ...newItems[idx], [field]: value };
-                 // 更新整個陣列
                  const newSettings = { ...settings, cbItems: newItems };
-                 setSettings(newSettings);
-                 // 觸發 Firestore 更新 (簡化版，建議使用 updateSettings 的變體)
-                 if(db && staffId) {
-                    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-                    setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
-                 }
+                 setSettings(newSettings); // 只更新畫面，不存檔
              };
 
              const addCbItem = () => {
                  const newItems = [...items, { name: '新項目', defaultInst: '', defaultFee: 0, defaultDays: '' }];
                  setSettings({ ...settings, cbItems: newItems });
-                 // 觸發 Firestore 更新
              };
              
              const removeCbItem = (idx: number) => {
                  if(!confirm('確定刪除？')) return;
                  const newItems = items.filter((_, i) => i !== idx);
                  setSettings({ ...settings, cbItems: newItems });
-                 // 觸發 Firestore 更新
+             };
+
+             // 2. 新增：手動儲存函數
+             const saveCbSettings = async () => {
+                 if(!db || !staffId) return;
+                 try {
+                    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                    await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), settings);
+                    alert('設定已儲存！');
+                 } catch(e) {
+                     console.error(e);
+                     alert('儲存失敗');
+                 }
              };
 
              return (
                  <div className="h-full flex flex-col">
-                     <div className="flex justify-between items-center mb-4">
-                         <div className="text-sm text-gray-500 bg-yellow-50 p-2 rounded"><Info size={14} className="inline mr-1"/> 設定辦理項目的預設值 (機構/費用/天數)，開單時將自動帶入。</div>
-                         <button onClick={addCbItem} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm flex items-center"><Plus size={14} className="mr-1"/> 新增項目</button>
+                     <div className="flex justify-between items-center mb-4 bg-white p-2 sticky top-0 z-10">
+                         <div className="text-sm text-gray-500 bg-yellow-50 p-2 rounded flex-1 mr-4">
+                             <Info size={14} className="inline mr-1"/> 
+                             編輯完畢後，請務必點擊右側 
+                             <span className="font-bold text-green-700 mx-1">儲存設定</span> 
+                             按鈕。
+                         </div>
+                         <div className="flex gap-2">
+                             <button onClick={addCbItem} className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm flex items-center hover:bg-gray-200 border border-gray-300">
+                                 <Plus size={14} className="mr-1"/> 新增項目
+                             </button>
+                             {/* ★★★ 新增：儲存按鈕 ★★★ */}
+                             <button onClick={saveCbSettings} className="bg-green-600 text-white px-4 py-1.5 rounded text-sm flex items-center font-bold shadow-sm hover:bg-green-700 transition-transform active:scale-95">
+                                 <Save size={14} className="mr-1"/> 儲存設定
+                             </button>
+                         </div>
                      </div>
                      <div className="flex-1 overflow-y-auto border rounded-lg">
                          <table className="w-full text-sm text-left">
-                             <thead className="bg-gray-100 sticky top-0">
+                             <thead className="bg-gray-100 sticky top-0 z-0">
                                  <tr>
-                                     <th className="p-2">項目名稱</th>
-                                     <th className="p-2">預設機構</th>
+                                     <th className="p-2 w-1/4">項目名稱</th>
+                                     <th className="p-2 w-1/4">預設機構</th>
                                      <th className="p-2 w-24">預設費用</th>
-                                     <th className="p-2 w-16">天數</th>
+                                     <th className="p-2 w-20">天數</th>
                                      <th className="p-2 w-10"></th>
                                  </tr>
                              </thead>
                              <tbody className="divide-y">
                                  {items.map((item: any, idx: number) => (
                                      <tr key={idx} className="hover:bg-gray-50">
-                                         <td className="p-2"><input value={item.name} onChange={e => handleCbItemUpdate(idx, 'name', e.target.value)} className="w-full border p-1 rounded"/></td>
-                                         <td className="p-2"><input value={item.defaultInst} onChange={e => handleCbItemUpdate(idx, 'defaultInst', e.target.value)} className="w-full border p-1 rounded" placeholder="例如: 運輸署"/></td>
-                                         <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemUpdate(idx, 'defaultFee', Number(e.target.value))} className="w-full border p-1 rounded"/></td>
-                                         <td className="p-2"><input value={item.defaultDays} onChange={e => handleCbItemUpdate(idx, 'defaultDays', e.target.value)} className="w-full border p-1 rounded"/></td>
+                                         <td className="p-2"><input value={item.name} onChange={e => handleCbItemUpdate(idx, 'name', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
+                                         <td className="p-2"><input value={item.defaultInst} onChange={e => handleCbItemUpdate(idx, 'defaultInst', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如: 運輸署"/></td>
+                                         <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemUpdate(idx, 'defaultFee', Number(e.target.value))} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
+                                         <td className="p-2"><input value={item.defaultDays} onChange={e => handleCbItemUpdate(idx, 'defaultDays', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
                                          <td className="p-2"><button onClick={() => removeCbItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
                                      </tr>
                                  ))}
