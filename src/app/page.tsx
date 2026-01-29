@@ -13,6 +13,7 @@ import {
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File // Added Upload, Image as ImageIcon, File
 } from 'lucide-react';
 
+import * as pdfjsLib from 'pdfjs-dist';
 
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
@@ -791,11 +792,66 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         return () => unsub();
     }, [staffId, db, appId]);
 
-    // 圖片上傳
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 設定 PDF Worker (使用 CDN 避免打包問題)
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        }
+    }, []);
+
+    // ★★★ 修改：支援圖片與 PDF 轉圖片上傳 ★★★
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
           const file = files[0];
+
+          // --- A. 處理 PDF 檔案 ---
+          if (file.type === 'application/pdf') {
+              if (file.size > 10 * 1024 * 1024) { alert("PDF 檔案過大 (限制 10MB)"); return; }
+              
+              try {
+                  const arrayBuffer = await file.arrayBuffer();
+                  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                  const newAttachments: DatabaseAttachment[] = [];
+                  
+                  // 限制最大處理頁數 (避免瀏覽器當機)
+                  const MAX_PAGES = 5; 
+                  const numPages = Math.min(pdf.numPages, MAX_PAGES);
+
+                  for (let i = 1; i <= numPages; i++) {
+                      const page = await pdf.getPage(i);
+                      // 設定縮放比例 (2.0 為高清晰度，若要檔案小一點可改 1.5)
+                      const viewport = page.getViewport({ scale: 2.0 }); 
+                      
+                      const canvas = document.createElement('canvas');
+                      const context = canvas.getContext('2d');
+                      canvas.height = viewport.height;
+                      canvas.width = viewport.width;
+
+                      if (context) {
+                          await page.render({ canvasContext: context, viewport: viewport }).promise;
+                          
+                          // 壓縮為 JPG (品質 0.8)
+                          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                          newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: dataUrl });
+                      }
+                  }
+                  
+                  setEditingEntry(prev => prev ? { 
+                      ...prev, 
+                      attachments: [...prev.attachments, ...newAttachments] 
+                  } : null);
+                  
+                  alert(`成功匯入 PDF 前 ${numPages} 頁！`);
+
+              } catch (err) {
+                  console.error(err);
+                  alert("PDF 解析失敗，請確認檔案未損毀。");
+              }
+              return;
+          }
+
+          // --- B. 處理一般圖片 (保留原有邏輯) ---
           if (file.size > 5 * 1024 * 1024) { alert(`檔案 ${file.name} 超過 5MB 限制`); return; }
           const reader = new FileReader();
           reader.readAsDataURL(file);
@@ -1050,7 +1106,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                     <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
                                 </div>
                                 <div className="space-y-4">
-                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>)}</div>
+                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} /></label>)}</div>
                                     <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">{editingEntry.attachments?.map((file, idx) => (<div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col"><div className="w-full bg-slate-50 relative p-1"><img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />{isDbEditing && (<button type="button" onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg" title="刪除"><X size={18}/></button>)}<button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button></div><div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center"><File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>{isDbEditing ? (<input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />) : (<span className="truncate">{file.name}</span>)}</div></div>))}{(!editingEntry.attachments || editingEntry.attachments.length === 0) && (<div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30"><ImageIcon size={48} className="mb-3 opacity-30"/>暫無附件圖片</div>)}</div>
                                 </div>
                             </div>
