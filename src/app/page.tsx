@@ -731,7 +731,8 @@ type DatabaseModuleProps = {
     inventory: Vehicle[];
 };
 
-// 3. DatabaseModule (完整修復版：含列表渲染、刪除、標籤功能)
+// 3. DatabaseModule (修復版：含資料讀取、重複比對、儲存不跳轉)
+// ★★★ 請確保此組件定義在 GoldLandAutoDMS 主函數的「外面」 ★★★
 const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory }: DatabaseModuleProps) => {
     const [entries, setEntries] = useState<DatabaseEntry[]>([]);
     const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
@@ -742,12 +743,13 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
     const [showDupeModal, setShowDupeModal] = useState(false);
 
-    // 資料讀取
+    // ★★★ 修復：資料讀取監聽 (這段回來了，資料就會出現) ★★★
     useEffect(() => {
         if (!db || !staffId) return;
         const currentDb = db; 
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+        
         const q = query(colRef, orderBy('createdAt', 'desc'));
         
         const unsub = onSnapshot(q, (snapshot) => {
@@ -789,7 +791,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         return () => unsub();
     }, [staffId, db, appId]);
 
-    // 工具函數
+    // 圖片上傳
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
@@ -832,6 +834,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         setEditingEntry({ ...editingEntry, expiryDate: newDateStr, renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
+    // ★★★ 修復：儲存邏輯 (保留在當前頁面，不跳轉) ★★★
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         if (!db || !staffId || !editingEntry) return;
@@ -847,17 +850,17 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
                 await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
                 alert('資料已更新 (已保留在當前頁面)');
+                // 注意：這裡移除了 setIsDbEditing(false)，所以不會跳回列表
             } else {
                 const { id, ...dataToSave } = finalEntry;
                 const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
                 const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
-                setEditingEntry({ ...finalEntry, id: newRef.id }); 
+                setEditingEntry({ ...finalEntry, id: newRef.id }); // 更新 ID，進入編輯模式
                 alert('新資料已建立');
             }
         } catch (err) { console.error(err); alert('儲存失敗'); }
     };
 
-    // 恢復被省略的函數
     const handleDelete = async (id: string) => {
         if (!db || !staffId) return;
         const currentDb = db; 
@@ -876,7 +879,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         if (tagInput.trim() && editingEntry) { setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] }); setTagInput(''); }
     };
 
-    // 恢復被省略的過濾邏輯
+    // 搜尋與過濾
     const filteredEntries = entries.filter(entry => {
         const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
         const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
@@ -928,13 +931,11 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                             <button onClick={(e) => { e.preventDefault(); setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); setIsDbEditing(true); }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
                         </div>
                     </div>
-                    {/* 搜尋與過濾 UI (恢復) */}
                     <div className="space-y-2">
                         <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="搜尋姓名、車牌、標籤..." className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (<button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}>{cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}</button>))}</div>
                     </div>
                 </div>
-                {/* 列表渲染 (恢復) */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                     {filteredEntries.map(entry => {
                         const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
