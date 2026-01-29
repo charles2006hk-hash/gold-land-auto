@@ -792,8 +792,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     }, [staffId, db, appId]);
 
 
-    // ★★★ 修改：支援圖片與 PDF 轉圖片上傳 (修復 TypeScript 類型錯誤) ★★★
-    // ★★★ 修改：動態引入 PDF 套件 (解決 Build Error) ★★★
+    // ★★★ 最終修復：PDF 上傳功能 (更換穩定的 Worker 來源) ★★★
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
@@ -804,22 +803,33 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
               if (file.size > 10 * 1024 * 1024) { alert("PDF 檔案過大 (限制 10MB)"); return; }
               
               try {
-                  // ★★★ 關鍵：動態載入 pdfjs-dist，避開 Server Side 報錯 ★★★
+                  // 1. 動態載入套件
                   const pdfjsLib = await import('pdfjs-dist');
                   
-                  // 設定 Worker (動態載入後再設定)
-                  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+                  // 2. ★★★ 關鍵修正：使用 unpkg 來源，並指定 .mjs 模組格式 ★★★
+                  // 使用 as any 避免 TypeScript 版本檢查錯誤
+                  (pdfjsLib as any).GlobalWorkerOptions.workerSrc = 
+                      `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/build/pdf.worker.min.mjs`;
 
                   const arrayBuffer = await file.arrayBuffer();
-                  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                  
+                  // 3. 讀取 PDF (加入 cMap 以支援中文字型，雖然轉圖片不一定需要，但較保險)
+                  const loadingTask = pdfjsLib.getDocument({ 
+                      data: arrayBuffer,
+                      cMapUrl: `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/cmaps/`,
+                      cMapPacked: true,
+                  });
+                  
+                  const pdf = await loadingTask.promise;
                   const newAttachments: DatabaseAttachment[] = [];
                   
+                  // 限制處理前 5 頁
                   const MAX_PAGES = 5; 
                   const numPages = Math.min(pdf.numPages, MAX_PAGES);
 
                   for (let i = 1; i <= numPages; i++) {
                       const page = await pdf.getPage(i);
-                      // 清晰度設定
+                      // 設定縮放比例 (2.0 為清晰度平衡點)
                       const viewport = page.getViewport({ scale: 2.0 }); 
                       
                       const canvas = document.createElement('canvas');
@@ -831,6 +841,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                           // 使用 as any 繞過 TypeScript 檢查
                           await page.render({ canvasContext: context, viewport: viewport } as any).promise;
                           
+                          // 壓縮為 JPG (0.8 品質)
                           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                           newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: dataUrl });
                       }
@@ -843,10 +854,13 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                   
                   alert(`成功匯入 PDF 前 ${numPages} 頁！`);
 
-              } catch (err) {
-                  console.error(err);
-                  alert("PDF 解析失敗。請確認網路連線正常 (需下載 PDF Worker)。");
+              } catch (err: any) {
+                  // ★★★ 印出詳細錯誤到 Console (按 F12 查看) ★★★
+                  console.error("PDF 解析錯誤詳情:", err);
+                  alert(`PDF 解析失敗: ${err.message || "未知錯誤"}`);
               }
+              // 清空 input 讓同個檔案可以再選一次
+              e.target.value = '';
               return;
           }
 
@@ -871,6 +885,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                   setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: dataUrl }] } : null);
               };
           };
+          // 清空 input
+          e.target.value = '';
     };
 
     const downloadImage = (dataUrl: string, filename: string) => {
