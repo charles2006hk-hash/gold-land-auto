@@ -1092,6 +1092,860 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     );
 };
 
+// ------------------------------------------------------------------
+// ★★★ 1. CrossBorderView (已移至外部，解決輸入跳走問題) ★★★
+// ------------------------------------------------------------------
+type CrossBorderViewProps = {
+    inventory: Vehicle[];
+    settings: SystemSettings;
+    activeCbVehicleId: string | null;
+    setActiveCbVehicleId: (id: string | null) => void;
+    setEditingVehicle: (v: Vehicle | null) => void;
+    addCbTask: (vid: string, task: CrossBorderTask) => void;
+    updateCbTask: (vid: string, task: CrossBorderTask) => void;
+    deleteCbTask: (vid: string, tid: string) => void;
+    addPayment: (vid: string, payment: Payment) => void;
+};
+
+const CrossBorderView = ({ 
+    inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, 
+    addCbTask, updateCbTask, deleteCbTask, addPayment 
+}: CrossBorderViewProps) => {
+    
+    // 搜尋與金額狀態
+    const [cbSearchTerm, setCbSearchTerm] = useState('');
+    const [feeStr, setFeeStr] = useState(''); 
+    
+    // 表單狀態
+    const [newTask, setNewTask] = useState<Partial<CrossBorderTask>>({
+        date: new Date().toISOString().split('T')[0],
+        item: '', institution: '', handler: '', days: '', fee: 0, currency: 'HKD', note: ''
+    });
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [paymentModalTask, setPaymentModalTask] = useState<CrossBorderTask | null>(null);
+    const [quickPayMethod, setQuickPayMethod] = useState<'Cash'|'Cheque'|'Transfer'>('Cash');
+
+    // 篩選與排序邏輯
+    const cbVehicles = inventory
+      .filter(v => v.crossBorder?.isEnabled)
+      .filter(v => {
+          if (!cbSearchTerm) return true;
+          const term = cbSearchTerm.toLowerCase();
+          return (
+              v.regMark.toLowerCase().includes(term) ||
+              (v.crossBorder?.mainlandPlate || '').toLowerCase().includes(term) ||
+              (v.crossBorder?.driver1 || '').toLowerCase().includes(term) ||
+              (v.crossBorder?.quotaNumber || '').includes(term)
+          );
+      })
+      .sort((a, b) => {
+          const getMinDays = (v: Vehicle) => {
+              const dates = [
+                  v.crossBorder?.dateHkInsurance, v.crossBorder?.dateReservedPlate, v.crossBorder?.dateBr,
+                  v.crossBorder?.dateLicenseFee, v.crossBorder?.dateMainlandJqx, v.crossBorder?.dateMainlandSyx,
+                  v.crossBorder?.dateClosedRoad, v.crossBorder?.dateApproval, v.crossBorder?.dateMainlandLicense,
+                  v.crossBorder?.dateHkInspection
+              ];
+              let minDays = 9999; 
+              let hasValidDate = false;
+              dates.forEach(d => {
+                  if (d) {
+                      const days = getDaysRemaining(d);
+                      if (days !== null) {
+                          if (days < minDays) minDays = days;
+                          hasValidDate = true;
+                      }
+                  }
+              });
+              return hasValidDate ? minDays : 9999;
+          };
+          return getMinDays(a) - getMinDays(b);
+      });
+
+    const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
+    
+    // 統計數據
+    const stats = (() => {
+        let expired = 0, soon = 0;
+        cbVehicles.forEach(v => {
+            const dates = [
+                v.crossBorder?.dateHkInsurance, v.crossBorder?.dateReservedPlate, v.crossBorder?.dateBr,
+                v.crossBorder?.dateLicenseFee, v.crossBorder?.dateMainlandJqx, v.crossBorder?.dateMainlandSyx,
+                v.crossBorder?.dateClosedRoad, v.crossBorder?.dateApproval, v.crossBorder?.dateMainlandLicense,
+                v.crossBorder?.dateHkInspection
+            ];
+            let hasE = false, hasS = false;
+            dates.forEach(d => {
+                if(d) {
+                    const days = getDaysRemaining(d);
+                    if (days !== null) {
+                        if (days < 0) hasE = true;
+                        else if (days <= 30) hasS = true;
+                    }
+                }
+            });
+            if (hasE) expired++; else if (hasS) soon++;
+        });
+        return { total: cbVehicles.length, expired, soon };
+    })();
+
+    const totalFees = activeVehicle?.crossBorder?.tasks?.reduce((sum, task) => sum + (task.fee || 0), 0) || 0;
+
+    // 操作函數
+    const handleItemChange = (itemName: string) => {
+        const config = settings.cbItems.find((i: any) => (typeof i === 'string' ? i === itemName : i.name === itemName));
+        let updates: any = { item: itemName };
+        if (config && typeof config !== 'string') {
+            updates.institution = config.defaultInst || '';
+            updates.days = config.defaultDays || '';
+            updates.fee = config.defaultFee || 0;
+            setFeeStr(config.defaultFee ? formatNumberInput(config.defaultFee.toString()) : ''); 
+        }
+        setNewTask(prev => ({ ...prev, ...updates }));
+    };
+
+    const handleFeeChange = (val: string) => {
+        const formatted = formatNumberInput(val);
+        setFeeStr(formatted);
+        const numVal = Number(formatted.replace(/,/g, ''));
+        setNewTask(prev => ({ ...prev, fee: isNaN(numVal) ? 0 : numVal }));
+    };
+
+    const handleAddTask = () => {
+        if (!activeCbVehicleId || !newTask.item) return;
+        const task: CrossBorderTask = {
+            id: Date.now().toString(),
+            date: newTask.date || '',
+            item: newTask.item || '',
+            institution: newTask.institution || '',
+            handler: newTask.handler || '',
+            days: newTask.days || '',
+            fee: Number(feeStr.replace(/,/g, '')) || 0,
+            currency: (newTask.currency as any) || 'HKD',
+            note: newTask.note || '',
+            isPaid: false
+        };
+        addCbTask(activeCbVehicleId, task);
+        setNewTask({ ...newTask, fee: 0, note: '', item: '', institution: '', days: '' });
+        setFeeStr('');
+    };
+
+    const handleUpdateTask = () => { 
+        if(!activeCbVehicleId || !editingTaskId) return;
+        updateCbTask(activeCbVehicleId, { ...newTask, id: editingTaskId, fee: Number(feeStr.replace(/,/g, '')) } as any); 
+        setEditingTaskId(null); 
+        setNewTask({fee:0, note:''}); 
+        setFeeStr(''); 
+    };
+    
+    const handleEditClick = (task: CrossBorderTask) => { 
+        setEditingTaskId(task.id); 
+        setNewTask({ ...task }); 
+        setFeeStr(formatNumberInput(task.fee.toString())); 
+    };
+    
+    const handleQuickPay = () => {
+        if (!activeCbVehicleId || !paymentModalTask) return;
+        const newPayment: Payment = {
+            id: `CB-${Date.now()}`, date: new Date().toISOString().split('T')[0], type: 'Service Fee',
+            amount: paymentModalTask.fee, method: quickPayMethod, note: `代辦費用: ${paymentModalTask.item}`, relatedTaskId: paymentModalTask.id
+        };
+        addPayment(activeCbVehicleId, newPayment);
+        setPaymentModalTask(null);
+    };
+
+    const renderCard = (label: string, value: number, color: string) => ( <div className={`bg-white p-4 rounded-lg shadow-sm border-l-4 ${color}`}><p className="text-xs text-gray-500 uppercase">{label}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div> );
+
+    return (
+        <div className="flex flex-col h-full space-y-4">
+            <div className="flex flex-col md:flex-row justify-between items-center flex-none gap-4">
+                <h2 className="text-xl font-bold text-slate-800 flex items-center"><Globe className="mr-2"/> 中港車管家</h2>
+                <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
+                    <input className="w-full pl-9 p-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500" placeholder="搜尋車牌、司機、指標..." value={cbSearchTerm} onChange={e => setCbSearchTerm(e.target.value)} />
+                </div>
+                <div className="flex gap-2">
+                    {renderCard("總車輛", stats.total, "border-blue-500")}
+                    {renderCard("已過期", stats.expired, "border-red-500")}
+                    {renderCard("即將到期", stats.soon, "border-yellow-500")}
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden flex-none max-h-[40vh] flex flex-col border">
+                <div className="overflow-x-auto flex-1">
+                    <table className="w-full text-left text-sm whitespace-nowrap relative">
+                        <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th className="p-3">香港車牌</th><th className="p-3">內地車牌</th><th className="p-3 bg-yellow-50 text-yellow-800 border-x border-yellow-100">指標號</th><th className="p-3">主司機</th><th className="p-3">香港保險</th><th className="p-3">留牌紙</th><th className="p-3">商業登記</th><th className="p-3">牌照費</th><th className="p-3">內地交強險</th><th className="p-3">內地商業險</th><th className="p-3">禁區紙</th><th className="p-3">批文卡</th><th className="p-3">行駛證</th><th className="p-3">香港驗車</th><th className="p-3">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {cbVehicles.map(v => (
+                                <tr key={v.id} className={`border-b cursor-pointer transition ${activeCbVehicleId === v.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`} onClick={() => setActiveCbVehicleId(v.id)}>
+                                    <td className="p-3 font-bold">{v.regMark}</td><td className="p-3 text-blue-600">{v.crossBorder?.mainlandPlate || '-'}</td><td className="p-3 text-yellow-700 font-mono font-bold bg-yellow-50/50 border-x border-yellow-100">{v.crossBorder?.quotaNumber || '-'}</td><td className="p-3 text-gray-600">{v.crossBorder?.driver1 || '-'}</td>
+                                    <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="香港保險"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateReservedPlate} label="留牌紙"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateBr} label="商業登記"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateLicenseFee} label="牌照費"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandJqx} label="交強險"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandSyx} label="商業險"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateClosedRoad} label="禁區紙"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateApproval} label="批文卡"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="行駛證"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInspection} label="香港驗車"/></td>
+                                    <td className="p-3"><button onClick={(e) => { e.stopPropagation(); setEditingVehicle(v); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><Edit size={14}/></button></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col min-h-0 border overflow-hidden">
+                <div className="flex justify-between items-center mb-4 flex-none border-b pb-2">
+                    <h3 className="font-bold flex items-center text-slate-800"><CheckSquare className="mr-2 text-blue-600"/> {activeVehicle ? `${activeVehicle.regMark} - 辦理流程與收費` : '請在上表選擇車輛'}</h3>
+                    {activeVehicle && (<div className="text-xs text-gray-500">共 {(activeVehicle.crossBorder?.tasks || []).length} 項記錄，總費用: <span className={`font-bold ml-1 ${totalFees < 0 ? 'text-red-600' : 'text-blue-600'}`}>{formatCurrency(totalFees)}</span></div>)}
+                </div>
+                
+                {activeVehicle ? (
+                    <div className="flex-1 overflow-y-auto">
+                        <table className="w-full text-sm border-collapse mb-4">
+                            <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10"><tr><th className="p-2 border">日期</th><th className="p-2 border">項目</th><th className="p-2 border">辦理機構</th><th className="p-2 border">辦理人</th><th className="p-2 border">天數</th><th className="p-2 border text-right">費用</th><th className="p-2 border">備注</th><th className="p-2 border text-center">操作</th></tr></thead>
+                            <tbody>
+                                {(activeVehicle.crossBorder?.tasks || []).map(task => {
+                                    const isPaid = !!activeVehicle.payments?.find(p => p.relatedTaskId === task.id);
+                                    return (
+                                    <tr key={task.id} className="border-b hover:bg-gray-50"><td className="p-2 border">{task.date}</td><td className="p-2 border font-medium">{task.item}</td><td className="p-2 border text-gray-500">{task.institution}</td><td className="p-2 border text-gray-500">{task.handler}</td><td className="p-2 border text-center">{task.days}</td>
+                                        <td className="p-2 border text-right font-mono font-bold"><div className="flex items-center justify-end gap-2"><span className={isPaid ? "text-green-600" : (task.fee < 0 ? "text-red-600" : "text-amber-600")}>{task.currency} {task.fee}</span>{!isPaid && (<button onClick={() => setPaymentModalTask(task)} className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200 hover:bg-green-200 flex items-center" title="收款"><DollarSign size={10} className="mr-0.5"/> 收款</button>)}{isPaid && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded">已收</span>}</div></td>
+                                        <td className="p-2 border text-gray-500 text-xs max-w-xs truncate">{task.note}</td><td className="p-2 border text-center flex items-center justify-center gap-2"><button onClick={() => handleEditClick(task)} className="text-blue-400 hover:text-blue-600"><Edit size={14}/></button><button onClick={() => deleteCbTask(activeVehicle.id, task.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td></tr>
+                                    )})}
+                            </tbody>
+                        </table>
+                        <div className="bg-blue-50 p-3 rounded grid grid-cols-8 gap-2 items-end">
+                            <div className="col-span-1"><label className="text-[10px]">日期</label><input type="date" value={newTask.date} onChange={e => setNewTask({...newTask, date: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
+                            <div className="col-span-1"><label className="text-[10px]">項目</label><select value={newTask.item} onChange={e => handleItemChange(e.target.value)} className="w-full border p-1 rounded text-xs"><option value="">請選擇...</option>{settings.cbItems.map((i: any) => { const name = typeof i === 'string' ? i : i.name; return <option key={name} value={name}>{name}</option> })}</select></div>
+                            <div className="col-span-1"><label className="text-[10px]">機構</label><input list="cb_inst_list" value={newTask.institution} onChange={e => setNewTask({...newTask, institution: e.target.value})} className="w-full border p-1 rounded text-xs"/><datalist id="cb_inst_list">{settings.cbInstitutions.map(i => <option key={i} value={i}/>)}</datalist></div>
+                            <div className="col-span-1"><label className="text-[10px]">辦理人</label><input value={newTask.handler} onChange={e => setNewTask({...newTask, handler: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
+                            <div className="col-span-1"><label className="text-[10px]">天數</label><input value={newTask.days} onChange={e => setNewTask({...newTask, days: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
+                            <div className="col-span-1"><label className="text-[10px]">費用 (可負數)</label><div className="flex"><select value={newTask.currency} onChange={e => setNewTask({...newTask, currency: e.target.value as any})} className="border p-1 rounded-l text-xs bg-gray-100"><option>HKD</option><option>RMB</option></select><input type="text" value={feeStr} onChange={e => handleFeeChange(e.target.value)} className="w-full border p-1 rounded-r text-xs text-right font-mono" placeholder="0"/></div></div>
+                            <div className="col-span-1"><label className="text-[10px]">備注</label><input value={newTask.note} onChange={e => setNewTask({...newTask, note: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
+                            <div className="col-span-1">{editingTaskId ? (<div className="flex gap-1"><button onClick={handleUpdateTask} className="flex-1 bg-green-600 text-white p-1.5 rounded text-xs hover:bg-green-700 flex items-center justify-center font-bold shadow-sm"><RefreshCw size={14}/></button><button onClick={() => {setEditingTaskId(null); setNewTask({fee:0, note:''}); setFeeStr('');}} className="flex-1 bg-gray-400 text-white p-1.5 rounded text-xs hover:bg-gray-500 flex items-center justify-center font-bold shadow-sm"><X size={14}/></button></div>) : (<button onClick={handleAddTask} className="w-full bg-blue-600 text-white p-1.5 rounded text-xs hover:bg-blue-700 flex items-center justify-center font-bold shadow-sm"><Plus size={14} className="mr-1"/> 新增</button>)}</div>
+                        </div>
+                    </div>
+                ) : (<div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50 rounded border-dashed border-2"><p>請先在上表點選一台車輛</p></div>)}
+            </div>
+            
+            {paymentModalTask && (<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"><div className="bg-white p-6 rounded-lg shadow-xl w-96"><h3 className="text-lg font-bold mb-4 flex items-center"><PaymentIcon className="mr-2"/> 確認收款</h3><div className="space-y-4"><div className="p-3 bg-gray-50 rounded border"><p className="text-sm text-gray-500">項目: <span className="text-gray-900 font-bold">{paymentModalTask.item}</span></p><p className="text-sm text-gray-500">金額: <span className="text-blue-600 font-bold text-lg">{paymentModalTask.currency} {paymentModalTask.fee}</span></p></div><div><label className="block text-sm font-bold mb-1">支付方式</label><div className="flex gap-2">{['Cash', 'Cheque', 'Transfer'].map(m => (<button key={m} onClick={() => setQuickPayMethod(m as any)} className={`flex-1 py-2 rounded text-sm border ${quickPayMethod === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{m}</button>))}</div></div><div className="flex gap-2 pt-2"><button onClick={() => setPaymentModalTask(null)} className="flex-1 py-2 bg-gray-200 rounded text-gray-700 hover:bg-gray-300">取消</button><button onClick={handleQuickPay} className="flex-1 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow">確認收款</button></div></div></div></div>)}
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
+// ★★★ 2. SettingsManager (已移至外部，解決存檔跳轉與輸入跳走問題) ★★★
+// ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
+// ------------------------------------------------------------------
+type SettingsManagerProps = {
+    settings: SystemSettings;
+    setSettings: React.Dispatch<React.SetStateAction<SystemSettings>>;
+    db: Firestore | null;
+    staffId: string | null;
+    appId: string;
+    inventory: Vehicle[];
+    updateSettings: (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => void;
+};
+
+const SettingsManager = ({ settings, setSettings, db, staffId, appId, inventory, updateSettings }: SettingsManagerProps) => {
+    const [activeTab, setActiveTab] = useState<'dropdowns' | 'users' | 'data'>('dropdowns');
+    const [selectedModule, setSelectedModule] = useState<string>('inventory');
+    const [selectedSettingKey, setSelectedSettingKey] = useState<string>('makes');
+    const [activeMake, setActiveMake] = useState<string>(settings.makes[0] || '');
+    const [activeDocCat, setActiveDocCat] = useState<string>('Person');
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    // 模擬用戶資料
+    const [systemUsers, setSystemUsers] = useState<{id: string, name: string, modules: string[]}[]>([
+        { id: 'BOSS', name: '管理員', modules: ['全部權限'] },
+        { id: 'SALES', name: '銷售人員', modules: ['車輛管理', '開單系統'] }
+    ]);
+
+    const settingModules = [
+        { 
+            id: 'inventory', label: '車輛庫存管理', icon: Car,
+            options: [
+                { key: 'makes', label: '車輛廠牌 (Makes)' },
+                { key: 'models', label: '車輛型號 (Models)' },
+                { key: 'colors', label: '顏色列表 (Colors)' }
+            ]
+        },
+        { 
+            id: 'cross_border', label: '中港業務', icon: Globe,
+            options: [
+                { key: 'cbItems', label: '辦理項目 (Service Items)' },
+                { key: 'cbInstitutions', label: '辦理機構 (Institutions)' }
+            ]
+        },
+        { 
+            id: 'database', label: '資料庫中心', icon: Database,
+            options: [
+                { key: 'dbRoles', label: '人員角色 (Roles)' },
+                { key: 'dbDocTypes', label: '文件類型 (Doc Types)' }
+            ]
+        },
+        { 
+            id: 'finance', label: '財務與費用', icon: DollarSign,
+            options: [
+                { key: 'expenseTypes', label: '費用類別 (Expense Types)' },
+                { key: 'expenseCompanies', label: '供應商/負責公司' }
+            ]
+        }
+    ];
+
+    const handleUpdate = (newItem: string, action: 'add' | 'remove', parentKey?: string) => {
+        if (!newItem && action === 'add') return;
+        updateSettings(selectedSettingKey as keyof SystemSettings, newItem, action, parentKey);
+    };
+
+    // ★★★ 數據匯出 (Export) ★★★
+    const handleExportData = async () => {
+        if (!db || !staffId) return;
+        setIsProcessing(true);
+        try {
+            const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+            const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+            const dbSnapshot = await getDocs(dbRef);
+            const databaseData = dbSnapshot.docs.map(d => d.data());
+
+            const backupData = {
+                version: "2.0",
+                timestamp: new Date().toISOString(),
+                exportedBy: staffId,
+                settings: settings,
+                inventory: inventory, 
+                database: databaseData 
+            };
+
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `GL_DMS_Backup_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            alert("數據匯出成功！");
+        } catch (e) {
+            console.error(e);
+            alert("匯出失敗，請檢查網絡或權限。");
+        }
+        setIsProcessing(false);
+    };
+
+    // ★★★ 數據匯入 (Import JSON Backup) ★★★
+    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !db || !staffId) return;
+        if (!confirm("確定要還原備份？現有設定將被覆蓋，資料將會新增。")) { e.target.value = ''; return; }
+
+        setIsProcessing(true);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const data = JSON.parse(event.target?.result as string);
+                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                const batch = writeBatch(db!);
+                let count = 0;
+                
+                // 還原設定
+                if (data.settings) {
+                    const settingsRef = doc(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
+                    batch.set(settingsRef, data.settings);
+                    setSettings(data.settings); 
+                    count++;
+                }
+                
+                // 還原庫存
+                if (Array.isArray(data.inventory)) {
+                    data.inventory.forEach((car: any) => {
+                        if (count < 450) {
+                            const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
+                            const { id, ...carData } = car;
+                            batch.set(newDocRef, { ...carData, id: newDocRef.id, importedAt: serverTimestamp() });
+                            count++;
+                        }
+                    });
+                }
+                
+                await batch.commit();
+                alert(`還原完成！`);
+            } catch (err) { console.error(err); alert("匯入失敗"); }
+            setIsProcessing(false); e.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    // ★★★ 舊 CSV 匯入邏輯 (內含 parseLegacyCSV) ★★★
+    const handleLegacyCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !db || !staffId) return;
+
+        if (!confirm("確定匯入舊系統 CSV？\n系統將自動建立車輛庫存，並填入中港公司與指標號資料。")) {
+            e.target.value = '';
+            return;
+        }
+
+        setIsProcessing(true);
+        const reader = new FileReader();
+        
+        reader.onload = async (event) => {
+            try {
+                const csvText = event.target?.result as string;
+                
+                // --- 解析 CSV ---
+                const lines = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
+                if (lines.length < 2) throw new Error("無效的 CSV 格式");
+
+                const headers = lines[0].split(',').map(h => h.trim());
+                const fmtDate = (val: string) => {
+                    if (!val || val === '-' || val.trim() === '') return '';
+                    try { return new Date(val.replace(/\//g, '-').trim()).toISOString().split('T')[0]; } catch (e) { return ''; }
+                };
+
+                const vehicles = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const row = lines[i].split(',').map(c => c.trim());
+                    const getData = (headerName: string) => {
+                        const index = headers.indexOf(headerName);
+                        return (index > -1 && row[index]) ? row[index] : '';
+                    };
+
+                    const regMark = getData('香港車牌');
+                    if (!regMark) continue;
+
+                    const mainlandPlate = getData('內地車牌');
+                    const quotaNo = getData('指標號');
+                    const hkCo = getData('香港商號');
+                    const cnCo = getData('內承單位');
+                    const hasCBData = mainlandPlate || quotaNo || hkCo || cnCo || getData('批文卡到期');
+
+                    vehicles.push({
+                        regMark,
+                        year: new Date().getFullYear().toString(),
+                        make: 'TOYOTA', model: 'Alphard', purchaseType: 'Used', status: 'Sold', transmission: 'Automatic', colorExt: 'Black',
+                        customerName: getData('負責司機'),
+                        customerPhone: getData('聯絡電話'),
+                        remarks: getData('備註'),
+                        licenseExpiry: fmtDate(getData('牌照費')),
+                        crossBorder: {
+                            isEnabled: !!hasCBData,
+                            mainlandPlate, quotaNumber: quotaNo, hkCompany: hkCo, mainlandCompany: cnCo,
+                            insuranceAgent: getData('保險代理'),
+                            driver1: getData('司機1') || getData('負責司機'),
+                            driver2: getData('司機2'), driver3: getData('司機3'),
+                            ports: getData('通行口岸') ? [getData('通行口岸')] : [],
+                            dateReservedPlate: fmtDate(getData('留牌紙到期')), dateBr: fmtDate(getData('BR到期')),
+                            dateLicenseFee: fmtDate(getData('牌照費')), dateHkInsurance: fmtDate(getData('香港保險到期')),
+                            dateMainlandJqx: fmtDate(getData('內地交強險到期')), dateMainlandSyx: fmtDate(getData('內地商業險到期')),
+                            dateClosedRoad: fmtDate(getData('禁區紙到期')), dateApproval: fmtDate(getData('批文卡到期')),
+                            dateMainlandLicense: fmtDate(getData('行駛証')), dateHkInspection: fmtDate(getData('香港驗車日期')),
+                            tasks: []
+                        },
+                        expenses: [], payments: []
+                    });
+                }
+
+                // --- 寫入 Firestore ---
+                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                const batch = writeBatch(db!);
+                let count = 0;
+                const BATCH_LIMIT = 450;
+
+                for (const v of vehicles) {
+                    if (count >= BATCH_LIMIT) break;
+                    
+                    const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
+                    // @ts-ignore
+                    const { id, ...vData } = v; 
+                    
+                    batch.set(newDocRef, { ...vData, id: newDocRef.id, importedAt: serverTimestamp() });
+                    
+                    if (v.customerName) {
+                        const clientRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
+                        batch.set(clientRef, {
+                            category: 'Person', name: v.customerName, phone: v.customerPhone || '',
+                            roles: ['客戶'], tags: ['CSV匯入'], createdAt: serverTimestamp()
+                        });
+                        count++;
+                    }
+                    count++;
+                }
+
+                await batch.commit();
+                alert(`匯入成功！共處理了約 ${count} 筆資料。`);
+                
+            } catch (err) { console.error(err); alert("匯入失敗"); }
+            setIsProcessing(false); e.target.value = '';
+        };
+        reader.readAsText(file); 
+    };
+
+    // ★★★ VRD JSON 匯入邏輯 ★★★
+    const handleVrdJsonImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !db || !staffId) return;
+        if (!confirm("確定匯入 VRD JSON 資料？")) { e.target.value = ''; return; }
+
+        setIsProcessing(true);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const jsonData = JSON.parse(event.target?.result as string);
+                if (!Array.isArray(jsonData)) throw new Error("JSON 格式錯誤");
+
+                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                const batch = writeBatch(db!);
+                let count = 0;
+                
+                for (const vrd of jsonData) {
+                    if (count >= 450) break;
+                    
+                    const existingCar = inventory.find(v => v.regMark === vrd.regMark);
+                    const carData: any = {
+                        make: vrd.make, model: vrd.model, chassisNo: vrd.chassisNo, engineNo: vrd.engineNo,
+                        colorExt: vrd.color, seating: (Number(vrd.seating) || 0) + 1,
+                        priceA1: Number(vrd.priceA1) || 0, priceTax: Number(vrd.taxPaid) || 0,
+                        previousOwners: vrd.prevOwners?.toString() || '0',
+                        engineSize: Number(vrd.cylinderCapacity) || 0,
+                        fuelType: (Number(vrd.cylinderCapacity) === 0) ? 'Electric' : 'Petrol',
+                        updatedAt: serverTimestamp()
+                    };
+
+                    if (existingCar) {
+                        const carRef = doc(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', existingCar.id);
+                        batch.update(carRef, carData);
+                    } else {
+                        const newCarRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
+                        batch.set(newCarRef, { ...carData, id: newCarRef.id, regMark: vrd.regMark, status: 'In Stock', purchaseType: 'Used', createdAt: serverTimestamp() });
+                    }
+
+                    const dbRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
+                    batch.set(dbRef, {
+                        category: 'Vehicle', docType: '牌薄(VRD)', name: `VRD - ${vrd.regMark}`,
+                        relatedPlateNo: vrd.regMark, idNumber: vrd.ownerId,
+                        description: `車主: ${vrd.ownerName}`, tags: ['VRD匯入'], createdAt: serverTimestamp()
+                    });
+                    count++;
+                }
+
+                await batch.commit();
+                alert(`匯入完成！`);
+            } catch (err) { console.error(err); alert("匯入失敗"); }
+            setIsProcessing(false); e.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    const renderDropdownEditor = () => {
+        // --- 情況 A: 車輛型號 (需關聯廠牌) ---
+        if (selectedSettingKey === 'models') {
+             return (
+                 <div className="space-y-4 h-full flex flex-col">
+                     <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 mb-2 flex-none">
+                         <Info size={16} className="inline mr-1"/> 請先在左欄選擇廠牌，再於右欄編輯其型號。
+                     </div>
+                     <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+                         <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
+                             <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">1. 選擇廠牌</div>
+                             <div className="flex-1 overflow-y-auto p-1">
+                                 {settings.makes.map(m => (
+                                     <button key={m} onClick={() => setActiveMake(m)} className={`w-full text-left p-2 text-sm rounded transition-colors ${activeMake === m ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}>{m}</button>
+                                 ))}
+                             </div>
+                         </div>
+                         <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
+                             <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">2. 編輯 {activeMake} 的型號</div>
+                             <div className="p-2 border-b bg-white flex gap-2">
+                                 <input id="new-model" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增型號...`} />
+                                 <button onClick={() => { const el = document.getElementById('new-model') as HTMLInputElement; handleUpdate(el.value, 'add', activeMake); el.value = ''; }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700"><Plus size={16}/></button>
+                             </div>
+                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                 {(settings.models[activeMake] || []).map(item => (
+                                     <div key={item} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200">
+                                         <span>{item}</span>
+                                         <button onClick={() => handleUpdate(item, 'remove', activeMake)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
+                                     </div>
+                                 ))}
+                             </div>
+                         </div>
+                     </div>
+                 </div>
+             );
+        }
+
+        // --- 情況 B: 文件類型 (需關聯分類) ---
+        if (selectedSettingKey === 'dbDocTypes') {
+            return (
+                <div className="space-y-4 h-full flex flex-col">
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-2 flex-none">
+                        <Info size={16} className="inline mr-1"/> 請選擇資料分類，再編輯該類別下的文件選項。
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
+                        <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
+                            <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">1. 選擇分類</div>
+                            <div className="flex-1 overflow-y-auto p-1">
+                                {DB_CATEGORIES.map(cat => (
+                                    <button key={cat.id} onClick={() => setActiveDocCat(cat.id)} className={`w-full text-left p-2 text-sm rounded transition-colors ${activeDocCat === cat.id ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}>{cat.label.split(' ')[0]}</button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
+                            <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">2. 編輯文件類型</div>
+                            <div className="p-2 border-b bg-white flex gap-2">
+                                <input id="new-doctype" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增文件類型...`} />
+                                <button onClick={() => { const el = document.getElementById('new-doctype') as HTMLInputElement; handleUpdate(el.value, 'add', activeDocCat); el.value = ''; }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700"><Plus size={16}/></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {(settings.dbDocTypes[activeDocCat] || []).map(item => (
+                                    <div key={item} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200">
+                                        <span>{item}</span>
+                                        <button onClick={() => handleUpdate(item, 'remove', activeDocCat)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+       }
+
+        // --- 情況 C: 中港項目設定 (表格編輯器 + 手動儲存) ---
+        if (selectedSettingKey === 'cbItems') {
+             const items = settings.cbItems.map((i: any) => typeof i === 'string' ? { name: i, defaultInst: '', defaultFee: 0, defaultDays: '' } : i);
+             
+             const handleCbItemUpdate = (idx: number, field: string, value: any) => {
+                 const newItems = [...items];
+                 newItems[idx] = { ...newItems[idx], [field]: value };
+                 const newSettings = { ...settings, cbItems: newItems };
+                 setSettings(newSettings); 
+             };
+
+             const addCbItem = () => {
+                 const newItems = [...items, { name: '新項目', defaultInst: '', defaultFee: 0, defaultDays: '' }];
+                 setSettings({ ...settings, cbItems: newItems });
+             };
+             
+             const removeCbItem = (idx: number) => {
+                 if(!confirm('確定刪除？')) return;
+                 const newItems = items.filter((_, i) => i !== idx);
+                 setSettings({ ...settings, cbItems: newItems });
+             };
+
+             const saveCbSettings = async () => {
+                 if(!db || !staffId) return;
+                 try {
+                    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                    await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), settings);
+                    alert('設定已儲存！');
+                 } catch(e) { console.error(e); alert('儲存失敗'); }
+             };
+
+             return (
+                 <div className="h-full flex flex-col">
+                     <div className="flex justify-between items-center mb-4 bg-white p-2 sticky top-0 z-10">
+                         <div className="text-sm text-gray-500 bg-yellow-50 p-2 rounded flex-1 mr-4">
+                             <Info size={14} className="inline mr-1"/> 
+                             編輯完畢後，請務必點擊右側 
+                             <span className="font-bold text-green-700 mx-1">儲存設定</span> 
+                             按鈕。
+                         </div>
+                         <div className="flex gap-2">
+                             <button onClick={addCbItem} className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm flex items-center hover:bg-gray-200 border border-gray-300">
+                                 <Plus size={14} className="mr-1"/> 新增項目
+                             </button>
+                             <button onClick={saveCbSettings} className="bg-green-600 text-white px-4 py-1.5 rounded text-sm flex items-center font-bold shadow-sm hover:bg-green-700 transition-transform active:scale-95">
+                                 <Save size={14} className="mr-1"/> 儲存設定
+                             </button>
+                         </div>
+                     </div>
+                     <div className="flex-1 overflow-y-auto border rounded-lg">
+                         <table className="w-full text-sm text-left">
+                             <thead className="bg-gray-100 sticky top-0 z-0">
+                                 <tr>
+                                     <th className="p-2 w-1/4">項目名稱</th>
+                                     <th className="p-2 w-1/4">預設機構</th>
+                                     <th className="p-2 w-24">預設費用</th>
+                                     <th className="p-2 w-20">天數</th>
+                                     <th className="p-2 w-10"></th>
+                                 </tr>
+                             </thead>
+                             <tbody className="divide-y">
+                                 {items.map((item: any, idx: number) => (
+                                     <tr key={idx} className="hover:bg-gray-50">
+                                         <td className="p-2"><input value={item.name} onChange={e => handleCbItemUpdate(idx, 'name', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
+                                         <td className="p-2"><input value={item.defaultInst} onChange={e => handleCbItemUpdate(idx, 'defaultInst', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如: 運輸署"/></td>
+                                         <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemUpdate(idx, 'defaultFee', Number(e.target.value))} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
+                                         <td className="p-2"><input value={item.defaultDays} onChange={e => handleCbItemUpdate(idx, 'defaultDays', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
+                                         <td className="p-2"><button onClick={() => removeCbItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
+                                     </tr>
+                                 ))}
+                             </tbody>
+                         </table>
+                     </div>
+                 </div>
+             );
+        }
+
+        // --- 情況 D: 一般單層列表 ---
+        const currentList = (settings[selectedSettingKey as keyof SystemSettings] || []) as string[];
+        return (
+            <div className="flex flex-col h-full">
+                <div className="flex gap-2 mb-4 flex-none">
+                    <input id="new-item-input" className="flex-1 border p-2 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder={`輸入新的項目...`} />
+                    <button onClick={() => { const el = document.getElementById('new-item-input') as HTMLInputElement; handleUpdate(el.value, 'add'); el.value = ''; }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-blue-700 flex items-center transition-colors">
+                        <Plus size={18} className="mr-1"/> 新增
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto border rounded-xl bg-slate-50 p-2 space-y-2">
+                    {currentList.map(item => (
+                        <div key={item} className="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm group hover:border-blue-300 transition-colors">
+                            <span className="font-medium text-gray-700">{item}</span>
+                            <button onClick={() => handleUpdate(item, 'remove')} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button>
+                        </div>
+                    ))}
+                    {currentList.length === 0 && <div className="text-center text-gray-400 py-10">列表是空的</div>}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-slate-50">
+            {/* Top Tabs */}
+            <div className="bg-white border-b px-8 pt-6 flex space-x-8 shadow-sm z-10 flex-none">
+                <button onClick={() => setActiveTab('dropdowns')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'dropdowns' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    <Settings className="mr-2" size={18}/> 選單內容管理
+                </button>
+                <button onClick={() => setActiveTab('users')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'users' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    <Users className="mr-2" size={18}/> 系統用戶管理
+                </button>
+                <button onClick={() => setActiveTab('data')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    <Database className="mr-2" size={18}/> 數據備份與還原
+                </button>
+            </div>
+
+            <div className="flex-1 overflow-hidden p-6">
+                {activeTab === 'dropdowns' && (
+                    <div className="flex h-full gap-6">
+                        {/* Col 1: Module */}
+                        <div className="w-56 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                            <div className="p-3 bg-gray-50 border-b font-bold text-gray-500 text-xs">Step 1: 選擇模組</div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {settingModules.map(mod => (
+                                    <button key={mod.id} onClick={() => { setSelectedModule(mod.id); setSelectedSettingKey(mod.options[0].key); }} className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-all ${selectedModule === mod.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                        <mod.icon size={18} className={`mr-3 ${selectedModule === mod.id ? 'text-blue-600' : 'text-gray-400'}`}/> {mod.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        {/* Col 2: Field */}
+                        <div className="w-56 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                             <div className="p-3 bg-gray-50 border-b font-bold text-gray-500 text-xs">Step 2: 選擇欄位</div>
+                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                 {settingModules.find(m => m.id === selectedModule)?.options.map(opt => (
+                                     <button key={opt.key} onClick={() => setSelectedSettingKey(opt.key)} className={`w-full text-left p-3 rounded-lg text-sm transition-all ${selectedSettingKey === opt.key ? 'bg-yellow-50 text-yellow-700 font-bold border border-yellow-200 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>{opt.label}</button>
+                                 ))}
+                             </div>
+                        </div>
+                        {/* Col 3: Editor */}
+                        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                             <div className="p-3 border-b flex justify-between items-center bg-gray-50"><h3 className="font-bold text-gray-800 flex items-center"><Edit size={16} className="mr-2 text-blue-500"/> 編輯: <span className="ml-2 text-blue-600">{settingModules.find(m => m.id === selectedModule)?.options.find(o => o.key === selectedSettingKey)?.label}</span></h3></div>
+                             <div className="flex-1 overflow-y-auto p-6">{renderDropdownEditor()}</div>
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'users' && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                        <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-gray-800">用戶權限管理 (預覽)</h2><button className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center"><Plus size={16} className="mr-2"/> 新增用戶</button></div>
+                        <table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-600 border-b"><tr><th className="p-4">ID</th><th className="p-4">姓名</th><th className="p-4">角色</th><th className="p-4">權限</th><th className="p-4 text-right">狀態</th></tr></thead>
+                        <tbody className="divide-y">{systemUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{u.id}</td><td className="p-4">{u.name}</td><td className="p-4">一般員工</td><td className="p-4">{u.modules.join(', ')}</td><td className="p-4 text-right"><span className="text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs">啟用</span></td></tr>))}</tbody></table>
+                    </div>
+                )}
+                
+                {activeTab === 'data' && (
+                    <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
+                        <div className="text-center">
+                            <h2 className="text-2xl font-bold text-slate-800">系統數據管理</h2>
+                            <p className="text-gray-500 mt-2">您可以備份 (匯出) 所有系統資料，或從備份檔還原 (匯入) 資料。</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-8">
+                            {/* 匯出區塊 */}
+                            <div className="border border-blue-100 bg-blue-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                                    <DownloadCloud size={32}/>
+                                </div>
+                                <h3 className="font-bold text-lg text-blue-900">匯出備份 (Export)</h3>
+                                <p className="text-xs text-blue-700/70 mt-2 mb-6">下載包含系統設定、車輛庫存及資料庫中心的完整 JSON 備份檔。</p>
+                                <button 
+                                    onClick={handleExportData}
+                                    disabled={isProcessing}
+                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-sm transition-colors disabled:opacity-50"
+                                >
+                                    {isProcessing ? '處理中...' : '下載備份檔案'}
+                                </button>
+                            </div>
+
+                            {/* 匯入區塊 */}
+                            <div className="border border-yellow-100 bg-yellow-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                                <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4">
+                                    <Upload size={32}/>
+                                </div>
+                                <h3 className="font-bold text-lg text-yellow-900">匯入還原 (Import)</h3>
+                                <p className="text-xs text-yellow-700/70 mt-2 mb-6">上傳 JSON 備份檔。注意：這將覆蓋系統設定並新增資料。</p>
+                                <label className={`w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer text-center block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    {isProcessing ? '匯入中...' : '選擇檔案匯入'}
+                                    <input type="file" accept=".json" className="hidden" onChange={handleImportData} disabled={isProcessing}/>
+                                </label>
+                            </div>
+
+                            {/* 舊系統 CSV 遷移區塊 */}
+                            <div className="col-span-2 border border-green-100 bg-green-50 rounded-xl p-6 flex flex-row items-center hover:shadow-md transition-shadow mt-4">
+                                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mr-6 flex-shrink-0">
+                                    <File size={32}/>
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <h3 className="font-bold text-lg text-green-900">舊系統 CSV 遷移 (Legacy Import)</h3>
+                                    <p className="text-xs text-green-700/70 mt-1">
+                                        專用功能：上傳 <span className="font-mono bg-green-200 px-1 rounded">車輛資料庫.csv</span>。
+                                        <br/>系統將自動識別：車牌、客戶資料、以及所有中港證件到期日。
+                                    </p>
+                                </div>
+                                <div className="ml-4">
+                                    <label className={`px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        {isProcessing ? '分析中...' : '選擇 CSV 檔案'}
+                                        <input type="file" accept=".csv" className="hidden" onChange={handleLegacyCsvImport} disabled={isProcessing}/>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* VRD 牌薄 JSON 匯入區塊 */}
+                            <div className="col-span-2 border border-purple-100 bg-purple-50 rounded-xl p-6 flex flex-row items-center hover:shadow-md transition-shadow mt-4">
+                                <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mr-6 flex-shrink-0">
+                                    <FileText size={32}/>
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <h3 className="font-bold text-lg text-purple-900">牌薄數據匯入 (VRD JSON Import)</h3>
+                                    <p className="text-xs text-purple-700/70 mt-1">
+                                        專用功能：上傳由 AI 識別的 <span className="font-mono bg-purple-200 px-1 rounded">vrd_data.json</span>。
+                                        <br/>系統將自動：配對車牌更新資料、自動在資料庫中心建立 VRD 文件檔。
+                                    </p>
+                                </div>
+                                <div className="ml-4">
+                                    <label className={`px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                        {isProcessing ? '處理中...' : '匯入 VRD JSON'}
+                                        <input type="file" accept=".json" className="hidden" onChange={handleVrdJsonImport} disabled={isProcessing}/>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
@@ -2559,679 +3413,7 @@ const deleteVehicle = async (id: string) => {
   
 
 
-// 3. Settings Manager (系統設置 - 升級版 + 數據管理)
-  const SettingsManager = () => {
-    const [activeTab, setActiveTab] = useState<'dropdowns' | 'users' | 'data'>('dropdowns');
-    const [selectedModule, setSelectedModule] = useState<string>('inventory');
-    const [selectedSettingKey, setSelectedSettingKey] = useState<string>('makes');
-    
-    // 用於二級選單的狀態
-    const [activeMake, setActiveMake] = useState<string>(settings.makes[0] || '');
-    const [activeDocCat, setActiveDocCat] = useState<string>('Person');
-    const [isProcessing, setIsProcessing] = useState(false);
 
-    // 模擬用戶資料
-    const [systemUsers, setSystemUsers] = useState<{id: string, name: string, modules: string[]}[]>([
-        { id: 'BOSS', name: '管理員', modules: ['全部權限'] },
-        { id: 'SALES', name: '銷售人員', modules: ['車輛管理', '開單系統'] }
-    ]);
-
-    // 定義設置結構
-    const settingModules = [
-        { 
-            id: 'inventory', label: '車輛庫存管理', icon: Car,
-            options: [
-                { key: 'makes', label: '車輛廠牌 (Makes)' },
-                { key: 'models', label: '車輛型號 (Models)' },
-                { key: 'colors', label: '顏色列表 (Colors)' }
-            ]
-        },
-        { 
-            id: 'cross_border', label: '中港業務', icon: Globe,
-            options: [
-                { key: 'cbItems', label: '辦理項目 (Service Items)' },
-                { key: 'cbInstitutions', label: '辦理機構 (Institutions)' }
-            ]
-        },
-        { 
-            id: 'database', label: '資料庫中心', icon: Database,
-            options: [
-                { key: 'dbRoles', label: '人員角色 (Roles)' },
-                { key: 'dbDocTypes', label: '文件類型 (Doc Types)' }
-            ]
-        },
-        { 
-            id: 'finance', label: '財務與費用', icon: DollarSign,
-            options: [
-                { key: 'expenseTypes', label: '費用類別 (Expense Types)' },
-                { key: 'expenseCompanies', label: '供應商/負責公司' }
-            ]
-        }
-    ];
-
-    const handleUpdate = (newItem: string, action: 'add' | 'remove', parentKey?: string) => {
-        if (!newItem && action === 'add') return;
-        updateSettings(selectedSettingKey as keyof SystemSettings, newItem, action, parentKey);
-    };
-
-
-    // --- 專用工具：解析舊系統 CSV 並轉換為新系統格式 (含新欄位) ---
-const parseLegacyCSV = (csvText: string): Partial<Vehicle>[] => {
-    // 1. 拆分行與標題
-    const lines = csvText.split(/\r\n|\n/).filter(l => l.trim() !== '');
-    if (lines.length < 2) return []; // 只有標題或為空
-
-    const headers = lines[0].split(',').map(h => h.trim());
-    
-    // 輔助：日期格式化 (支援 2026/3/25 或 2026-03-25 -> 2026-03-25)
-    const fmtDate = (val: string) => {
-        if (!val || val === '-' || val.trim() === '') return '';
-        try {
-            // 處理 Excel 可能出現的日期格式
-            let dateStr = val.replace(/\//g, '-').trim();
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) return '';
-            return date.toISOString().split('T')[0];
-        } catch (e) { return ''; }
-    };
-
-    const result: Partial<Vehicle>[] = [];
-
-    for (let i = 1; i < lines.length; i++) {
-        // 處理 CSV 的逗號分隔 (簡單版，假設內容無逗號)
-        const row = lines[i].split(',').map(c => c.trim());
-        
-        // 輔助函數：根據標題名稱取值
-        const getData = (headerName: string) => {
-            const index = headers.indexOf(headerName);
-            return (index > -1 && row[index]) ? row[index] : '';
-        };
-
-        const regMark = getData('香港車牌');
-        if (!regMark) continue; // 沒有車牌則跳過
-
-        // 讀取中港相關欄位
-        const mainlandPlate = getData('內地車牌');
-        const quotaNo = getData('指標號');
-        const hkCo = getData('香港商號');
-        const cnCo = getData('內承單位');
-        
-        // 判斷是否啟用中港模組：只要有任一關鍵資料就啟用
-        const hasCBData = mainlandPlate || quotaNo || hkCo || cnCo || getData('批文卡到期');
-
-        // 3. 轉換為新系統結構
-        const vehicle: any = {
-            id: `IMP-${Date.now()}-${i}`, // 暫時 ID
-            regMark: regMark,
-            
-            // 預設值 (因為 CSV 沒有這些資料)
-            year: new Date().getFullYear().toString(),
-            make: 'TOYOTA', 
-            model: 'Alphard', 
-            purchaseType: 'Used',
-            status: 'Sold', // 假設匯入的舊車都是已售/管理中
-            transmission: 'Automatic', // 預設自動波
-            colorExt: 'Black', // 預設顏色
-            
-            // 客戶資料
-            customerName: getData('負責司機'), // 這裡對應 CSV 的負責司機作為主要聯絡人
-            customerPhone: getData('聯絡電話'),
-            remarks: getData('備註'),
-            
-            // 牌費與保險
-            licenseExpiry: fmtDate(getData('牌照費')),
-            
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            
-            // ★ 重點：中港車管家資料對應 (包含新欄位) ★
-            crossBorder: {
-                isEnabled: !!hasCBData,
-                mainlandPlate: mainlandPlate,
-                quotaNumber: quotaNo, // 對應「指標號」
-                
-                // 新增公司欄位
-                hkCompany: hkCo,     // 對應「香港商號」
-                mainlandCompany: cnCo, // 對應「內承單位」
-                
-                insuranceAgent: getData('保險代理'),
-                
-                // 司機資料
-                driver1: getData('司機1') || getData('負責司機'),
-                driver2: getData('司機2'),
-                driver3: getData('司機3'),
-                
-                // 口岸 (轉為陣列)
-                ports: getData('通行口岸') ? [getData('通行口岸')] : [],
-
-                // 十大日期欄位對應
-                dateReservedPlate: fmtDate(getData('留牌紙到期')),
-                dateBr: fmtDate(getData('BR到期')),
-                dateLicenseFee: fmtDate(getData('牌照費')), // 與車輛牌費共用
-                dateHkInsurance: fmtDate(getData('香港保險到期')),
-                dateMainlandJqx: fmtDate(getData('內地交強險到期')),
-                dateMainlandSyx: fmtDate(getData('內地商業險到期')),
-                dateClosedRoad: fmtDate(getData('禁區紙到期')),
-                dateApproval: fmtDate(getData('批文卡到期')),
-                dateMainlandLicense: fmtDate(getData('行駛証')),
-                dateHkInspection: fmtDate(getData('香港驗車日期')),
-                
-                tasks: [] // 初始化空任務列表
-            },
-            
-            expenses: [],
-            payments: []
-        };
-        result.push(vehicle);
-    }
-    return result;
-};
-
-// ★★★ 處理舊 CSV 匯入 (包含新欄位與資料連動) ★★★
-    const handleLegacyCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !db || !staffId) return;
-
-        if (!confirm("確定匯入舊系統 CSV？\n\n系統將會：\n1. 建立車輛庫存\n2. 自動填入指標號、香港/內地公司資料\n3. 同步建立客戶與司機的資料庫檔案")) {
-            e.target.value = '';
-            return;
-        }
-
-        setIsProcessing(true);
-        const reader = new FileReader();
-        
-        reader.onload = async (event) => {
-            try {
-                const csvText = event.target?.result as string;
-                const vehicles = parseLegacyCSV(csvText);
-                
-                if (vehicles.length === 0) {
-                    alert("無法解析 CSV 或沒有有效資料。請檢查檔案格式。");
-                    setIsProcessing(false);
-                    return;
-                }
-
-                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-                const batch = writeBatch(db!);
-                let count = 0;
-                const BATCH_LIMIT = 450; // Firestore 批次限制
-
-                // 寫入 Firestore
-                for (const v of vehicles) {
-                    if (count >= BATCH_LIMIT) break; 
-                    
-                    // 1. 寫入車輛庫存
-                    const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
-                    const { id, ...vData } = v; // 移除暫時 ID
-                    
-                    batch.set(newDocRef, {
-                        ...vData,
-                        id: newDocRef.id,
-                        importedAt: serverTimestamp()
-                    });
-                    
-                    // 2. 自動同步：建立「客戶」檔案 (根據負責司機)
-                    if (vData.customerName) {
-                        const clientRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
-                        batch.set(clientRef, {
-                            category: 'Person',
-                            name: vData.customerName,
-                            phone: vData.customerPhone || '',
-                            roles: ['客戶'],
-                            tags: ['CSV匯入', '車主'],
-                            description: `匯入自車輛: ${vData.regMark}`,
-                            createdAt: serverTimestamp()
-                        });
-                        count++;
-                    }
-
-                    // 3. 自動同步：建立「司機」檔案 (根據司機1, 2, 3)
-                    const drivers = [
-                        vData.crossBorder?.driver1, 
-                        vData.crossBorder?.driver2, 
-                        vData.crossBorder?.driver3
-                    ].filter(d => d && d !== vData.customerName); // 避免重複建立同一個人
-
-                    for (const driverName of drivers) {
-                        if (driverName) {
-                            const driverRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
-                            batch.set(driverRef, {
-                                category: 'Person',
-                                name: driverName,
-                                roles: ['司機'],
-                                tags: ['CSV匯入', '中港司機'],
-                                relatedPlateNo: vData.regMark, // 關聯車牌
-                                createdAt: serverTimestamp()
-                            });
-                            count++;
-                        }
-                    }
-
-                    count++;
-                }
-
-                await batch.commit();
-                alert(`匯入成功！共處理了約 ${count} 筆資料 (包含車輛與關聯人員)。\n請至「車輛庫存」與「資料庫中心」查看。`);
-                
-            } catch (err) {
-                console.error("CSV Import failed:", err);
-                alert("匯入失敗，請檢查檔案格式或網路連線。");
-            }
-            setIsProcessing(false);
-            e.target.value = ''; // 重置 input
-        };
-        // 使用 readAsText 讀取 CSV
-        reader.readAsText(file); 
-    };
-
-    // ★★★ 數據匯出 (Export) ★★★
-    const handleExportData = async () => {
-        if (!db || !staffId) return;
-        setIsProcessing(true);
-        try {
-            const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-            
-            // 1. 獲取資料庫中心資料 (因為它不在 inventory state 中)
-            const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-            const dbSnapshot = await getDocs(dbRef);
-            const databaseData = dbSnapshot.docs.map(d => d.data());
-
-            // 2. 打包所有資料
-            const backupData = {
-                version: "2.0",
-                timestamp: new Date().toISOString(),
-                exportedBy: staffId,
-                settings: settings,
-                inventory: inventory, // 包含車輛、費用、收款、中港資料
-                database: databaseData // 資料庫中心資料
-            };
-
-            // 3. 下載檔案
-            const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `GL_DMS_Backup_${new Date().toISOString().slice(0,10)}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            alert("數據匯出成功！");
-        } catch (e) {
-            console.error(e);
-            alert("匯出失敗，請檢查網絡或權限。");
-        }
-        setIsProcessing(false);
-    };
-
-    // ★★★ 數據匯入 (Import) ★★★
-    const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !db || !staffId) return;
-        
-        if (!confirm("警告：匯入數據將會寫入系統。\n\n- 系統設定：將被覆蓋\n- 車輛與資料庫：將以「新增」方式加入 (避免覆蓋現有資料)\n\n確定要繼續嗎？")) {
-            e.target.value = ''; // Reset input
-            return;
-        }
-
-        setIsProcessing(true);
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const data = JSON.parse(event.target?.result as string);
-                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-                const batch = writeBatch(db!);
-                let operationCount = 0;
-                const BATCH_LIMIT = 450; // Firestore batch limit safety
-
-                // 1. 還原設定 (Overwrite)
-                if (data.settings) {
-                    const settingsRef = doc(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
-                    batch.set(settingsRef, data.settings);
-                    setSettings(data.settings); // Update local state immediately
-                    operationCount++;
-                }
-
-                // 2. 還原車輛庫存 (Append)
-                if (Array.isArray(data.inventory)) {
-                    data.inventory.forEach((car: any) => {
-                        if (operationCount < BATCH_LIMIT) {
-                            const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'));
-                            // 移除舊 ID，賦予新 ID，並加入匯入標記
-                            const { id, ...carData } = car;
-                            batch.set(newDocRef, { 
-                                ...carData, 
-                                id: newDocRef.id, 
-                                importedAt: serverTimestamp(),
-                                regMark: `${car.regMark} (匯入)` // 避免車牌重複混淆
-                            });
-                            operationCount++;
-                        }
-                    });
-                }
-
-                // 3. 還原資料庫中心 (Append)
-                if (Array.isArray(data.database)) {
-                    data.database.forEach((entry: any) => {
-                        if (operationCount < BATCH_LIMIT) {
-                            const newDocRef = doc(collection(db!, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database'));
-                            const { id, ...entryData } = entry;
-                            batch.set(newDocRef, { 
-                                ...entryData, 
-                                id: newDocRef.id, 
-                                importedAt: serverTimestamp(),
-                                name: `${entry.name} (匯入)`
-                            });
-                            operationCount++;
-                        }
-                    });
-                }
-
-                await batch.commit();
-                alert(`匯入完成！\n共處理了約 ${operationCount} 筆資料。\n(超過 450 筆的資料需分批處理)`);
-                
-            } catch (err) {
-                console.error("Import failed:", err);
-                alert("匯入失敗：檔案格式錯誤或網絡問題。");
-            }
-            setIsProcessing(false);
-            e.target.value = ''; // Reset input
-        };
-        reader.readAsText(file);
-    };
-
-    const renderDropdownEditor = () => {
-        // --- 情況 A: 車輛型號 (需關聯廠牌) ---
-        if (selectedSettingKey === 'models') {
-             return (
-                 <div className="space-y-4 h-full flex flex-col">
-                     <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 mb-2 flex-none">
-                         <Info size={16} className="inline mr-1"/> 請先在左欄選擇廠牌，再於右欄編輯其型號。
-                     </div>
-                     <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-                         <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
-                             <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">1. 選擇廠牌</div>
-                             <div className="flex-1 overflow-y-auto p-1">
-                                 {settings.makes.map(m => (
-                                     <button key={m} onClick={() => setActiveMake(m)} className={`w-full text-left p-2 text-sm rounded transition-colors ${activeMake === m ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}>{m}</button>
-                                 ))}
-                             </div>
-                         </div>
-                         <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
-                             <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">2. 編輯 {activeMake} 的型號</div>
-                             <div className="p-2 border-b bg-white flex gap-2">
-                                 <input id="new-model" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增型號...`} />
-                                 <button onClick={() => { const el = document.getElementById('new-model') as HTMLInputElement; handleUpdate(el.value, 'add', activeMake); el.value = ''; }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700"><Plus size={16}/></button>
-                             </div>
-                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                 {(settings.models[activeMake] || []).map(item => (
-                                     <div key={item} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200">
-                                         <span>{item}</span>
-                                         <button onClick={() => handleUpdate(item, 'remove', activeMake)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
-                                     </div>
-                                 ))}
-                             </div>
-                         </div>
-                     </div>
-                 </div>
-             );
-        }
-
-        // ★★★ 修復：中港項目設定 (解決輸入跳動問題：改為手動儲存) ★★★
-        if (selectedSettingKey === 'cbItems') {
-             // 確保 items 是物件陣列
-             const items = settings.cbItems.map((i: any) => typeof i === 'string' ? { name: i, defaultInst: '', defaultFee: 0, defaultDays: '' } : i);
-             
-             // 1. 只更新本地狀態 (不寫入資料庫，解決跳動問題)
-             const handleCbItemUpdate = (idx: number, field: string, value: any) => {
-                 const newItems = [...items];
-                 newItems[idx] = { ...newItems[idx], [field]: value };
-                 const newSettings = { ...settings, cbItems: newItems };
-                 setSettings(newSettings); // 只更新畫面，不存檔
-             };
-
-             const addCbItem = () => {
-                 const newItems = [...items, { name: '新項目', defaultInst: '', defaultFee: 0, defaultDays: '' }];
-                 setSettings({ ...settings, cbItems: newItems });
-             };
-             
-             const removeCbItem = (idx: number) => {
-                 if(!confirm('確定刪除？')) return;
-                 const newItems = items.filter((_, i) => i !== idx);
-                 setSettings({ ...settings, cbItems: newItems });
-             };
-
-             // 2. 新增：手動儲存函數
-             const saveCbSettings = async () => {
-                 if(!db || !staffId) return;
-                 try {
-                    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-                    await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), settings);
-                    alert('設定已儲存！');
-                 } catch(e) {
-                     console.error(e);
-                     alert('儲存失敗');
-                 }
-             };
-
-             return (
-                 <div className="h-full flex flex-col">
-                     <div className="flex justify-between items-center mb-4 bg-white p-2 sticky top-0 z-10">
-                         <div className="text-sm text-gray-500 bg-yellow-50 p-2 rounded flex-1 mr-4">
-                             <Info size={14} className="inline mr-1"/> 
-                             編輯完畢後，請務必點擊右側 
-                             <span className="font-bold text-green-700 mx-1">儲存設定</span> 
-                             按鈕。
-                         </div>
-                         <div className="flex gap-2">
-                             <button onClick={addCbItem} className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm flex items-center hover:bg-gray-200 border border-gray-300">
-                                 <Plus size={14} className="mr-1"/> 新增項目
-                             </button>
-                             {/* ★★★ 新增：儲存按鈕 ★★★ */}
-                             <button onClick={saveCbSettings} className="bg-green-600 text-white px-4 py-1.5 rounded text-sm flex items-center font-bold shadow-sm hover:bg-green-700 transition-transform active:scale-95">
-                                 <Save size={14} className="mr-1"/> 儲存設定
-                             </button>
-                         </div>
-                     </div>
-                     <div className="flex-1 overflow-y-auto border rounded-lg">
-                         <table className="w-full text-sm text-left">
-                             <thead className="bg-gray-100 sticky top-0 z-0">
-                                 <tr>
-                                     <th className="p-2 w-1/4">項目名稱</th>
-                                     <th className="p-2 w-1/4">預設機構</th>
-                                     <th className="p-2 w-24">預設費用</th>
-                                     <th className="p-2 w-20">天數</th>
-                                     <th className="p-2 w-10"></th>
-                                 </tr>
-                             </thead>
-                             <tbody className="divide-y">
-                                 {items.map((item: any, idx: number) => (
-                                     <tr key={idx} className="hover:bg-gray-50">
-                                         <td className="p-2"><input value={item.name} onChange={e => handleCbItemUpdate(idx, 'name', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
-                                         <td className="p-2"><input value={item.defaultInst} onChange={e => handleCbItemUpdate(idx, 'defaultInst', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如: 運輸署"/></td>
-                                         <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemUpdate(idx, 'defaultFee', Number(e.target.value))} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
-                                         <td className="p-2"><input value={item.defaultDays} onChange={e => handleCbItemUpdate(idx, 'defaultDays', e.target.value)} className="w-full border p-1 rounded focus:ring-2 focus:ring-blue-500 outline-none"/></td>
-                                         <td className="p-2"><button onClick={() => removeCbItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
-                                     </tr>
-                                 ))}
-                             </tbody>
-                         </table>
-                     </div>
-                 </div>
-             );
-        }
-
-
-        // --- 情況 B: 文件類型 (需關聯分類) ---
-        if (selectedSettingKey === 'dbDocTypes') {
-            return (
-                <div className="space-y-4 h-full flex flex-col">
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-2 flex-none">
-                        <Info size={16} className="inline mr-1"/> 請選擇資料分類 (如: 人員、公司)，再編輯該類別下的文件選項。
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 flex-1 min-h-0">
-                        {/* 左：分類選擇 */}
-                        <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
-                            <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">1. 選擇分類</div>
-                            <div className="flex-1 overflow-y-auto p-1">
-                                {DB_CATEGORIES.map(cat => (
-                                    <button key={cat.id} onClick={() => setActiveDocCat(cat.id)} className={`w-full text-left p-2 text-sm rounded transition-colors ${activeDocCat === cat.id ? 'bg-blue-100 text-blue-700 font-bold' : 'hover:bg-gray-50'}`}>{cat.label.split(' ')[0]}</button>
-                                ))}
-                            </div>
-                        </div>
-                        {/* 右：類型編輯 */}
-                        <div className="border rounded-lg overflow-hidden flex flex-col bg-white">
-                            <div className="bg-gray-100 p-2 font-bold text-xs text-gray-500 border-b">2. 編輯文件類型</div>
-                            <div className="p-2 border-b bg-white flex gap-2">
-                                <input id="new-doctype" className="flex-1 border p-1.5 rounded text-sm outline-none focus:ring-1 focus:ring-blue-500" placeholder={`新增文件類型...`} />
-                                <button onClick={() => { const el = document.getElementById('new-doctype') as HTMLInputElement; handleUpdate(el.value, 'add', activeDocCat); el.value = ''; }} className="bg-blue-600 text-white px-3 rounded hover:bg-blue-700"><Plus size={16}/></button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                {(settings.dbDocTypes[activeDocCat] || []).map(item => (
-                                    <div key={item} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm group hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200">
-                                        <span>{item}</span>
-                                        <button onClick={() => handleUpdate(item, 'remove', activeDocCat)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"><X size={14}/></button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-       }
-
-        // --- 情況 C: 一般單層列表 ---
-        const currentList = (settings[selectedSettingKey as keyof SystemSettings] || []) as string[];
-        return (
-            <div className="flex flex-col h-full">
-                <div className="flex gap-2 mb-4 flex-none">
-                    <input id="new-item-input" className="flex-1 border p-2 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder={`輸入新的項目...`} />
-                    <button onClick={() => { const el = document.getElementById('new-item-input') as HTMLInputElement; handleUpdate(el.value, 'add'); el.value = ''; }} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-blue-700 flex items-center transition-colors">
-                        <Plus size={18} className="mr-1"/> 新增
-                    </button>
-                </div>
-                <div className="flex-1 overflow-y-auto border rounded-xl bg-slate-50 p-2 space-y-2">
-                    {currentList.map(item => (
-                        <div key={item} className="flex justify-between items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm group hover:border-blue-300 transition-colors">
-                            <span className="font-medium text-gray-700">{item}</span>
-                            <button onClick={() => handleUpdate(item, 'remove')} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button>
-                        </div>
-                    ))}
-                    {currentList.length === 0 && <div className="text-center text-gray-400 py-10">列表是空的</div>}
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="flex flex-col h-full bg-slate-50">
-            {/* Top Tabs */}
-            <div className="bg-white border-b px-8 pt-6 flex space-x-8 shadow-sm z-10 flex-none">
-                <button onClick={() => setActiveTab('dropdowns')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'dropdowns' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    <Settings className="mr-2" size={18}/> 選單內容管理
-                </button>
-                <button onClick={() => setActiveTab('users')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'users' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    <Users className="mr-2" size={18}/> 系統用戶管理
-                </button>
-                {/* ★★★ 新增：數據匯入/匯出 Tab ★★★ */}
-                <button onClick={() => setActiveTab('data')} className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center ${activeTab === 'data' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                    <Database className="mr-2" size={18}/> 數據備份與還原
-                </button>
-            </div>
-
-            <div className="flex-1 overflow-hidden p-6">
-                {activeTab === 'dropdowns' && (
-                    <div className="flex h-full gap-6">
-                        {/* Col 1: Module */}
-                        <div className="w-56 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                            <div className="p-3 bg-gray-50 border-b font-bold text-gray-500 text-xs">Step 1: 選擇模組</div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                {settingModules.map(mod => (
-                                    <button key={mod.id} onClick={() => { setSelectedModule(mod.id); setSelectedSettingKey(mod.options[0].key); }} className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-all ${selectedModule === mod.id ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                        <mod.icon size={18} className={`mr-3 ${selectedModule === mod.id ? 'text-blue-600' : 'text-gray-400'}`}/> {mod.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        {/* Col 2: Field */}
-                        <div className="w-56 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                             <div className="p-3 bg-gray-50 border-b font-bold text-gray-500 text-xs">Step 2: 選擇欄位</div>
-                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                 {settingModules.find(m => m.id === selectedModule)?.options.map(opt => (
-                                     <button key={opt.key} onClick={() => setSelectedSettingKey(opt.key)} className={`w-full text-left p-3 rounded-lg text-sm transition-all ${selectedSettingKey === opt.key ? 'bg-yellow-50 text-yellow-700 font-bold border border-yellow-200 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>{opt.label}</button>
-                                 ))}
-                             </div>
-                        </div>
-                        {/* Col 3: Editor */}
-                        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                             <div className="p-3 border-b flex justify-between items-center bg-gray-50"><h3 className="font-bold text-gray-800 flex items-center"><Edit size={16} className="mr-2 text-blue-500"/> 編輯: <span className="ml-2 text-blue-600">{settingModules.find(m => m.id === selectedModule)?.options.find(o => o.key === selectedSettingKey)?.label}</span></h3></div>
-                             <div className="flex-1 overflow-y-auto p-6">{renderDropdownEditor()}</div>
-                        </div>
-                    </div>
-                )}
-                {activeTab === 'users' && (
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                        <div className="flex justify-between items-center mb-6"><h2 className="text-xl font-bold text-gray-800">用戶權限管理 (預覽)</h2><button className="bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center"><Plus size={16} className="mr-2"/> 新增用戶</button></div>
-                        <table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-600 border-b"><tr><th className="p-4">ID</th><th className="p-4">姓名</th><th className="p-4">角色</th><th className="p-4">權限</th><th className="p-4 text-right">狀態</th></tr></thead>
-                        <tbody className="divide-y">{systemUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50"><td className="p-4 font-bold">{u.id}</td><td className="p-4">{u.name}</td><td className="p-4">一般員工</td><td className="p-4">{u.modules.join(', ')}</td><td className="p-4 text-right"><span className="text-green-600 bg-green-50 px-2 py-1 rounded-full text-xs">啟用</span></td></tr>))}</tbody></table>
-                    </div>
-                )}
-                
-                {/* ★★★ 新增：數據管理 Tab UI ★★★ */}
-                {activeTab === 'data' && (
-                    <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
-                        <div className="text-center">
-                            <h2 className="text-2xl font-bold text-slate-800">系統數據管理</h2>
-                            <p className="text-gray-500 mt-2">您可以備份 (匯出) 所有系統資料，或從備份檔還原 (匯入) 資料。</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-8">
-                            
-                            {/* 舊系統 CSV 遷移區塊 */}
-                            <div className="col-span-2 border border-green-100 bg-green-50 rounded-xl p-6 flex flex-row items-center hover:shadow-md transition-shadow mt-4">
-                                {/* ... 圖示與標題 ... */}
-                                    <div className="ml-4">
-                                         <label className={`px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            {isProcessing ? '資料分析中...' : '選擇 CSV 檔案匯入'}
-                                            <input type="file" accept=".csv" className="hidden" onChange={handleLegacyCsvImport} disabled={isProcessing}/>
-                                        </label>
-                                    </div>
-                            </div>
-                            
-                            {/* 匯出區塊 */}
-                            <div className="border border-blue-100 bg-blue-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
-                                    <DownloadCloud size={32}/>
-                                </div>
-                                <h3 className="font-bold text-lg text-blue-900">匯出備份 (Export)</h3>
-                                <p className="text-xs text-blue-700/70 mt-2 mb-6">下載包含系統設定、車輛庫存及資料庫中心的完整 JSON 備份檔。</p>
-                                <button 
-                                    onClick={handleExportData}
-                                    disabled={isProcessing}
-                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-sm transition-colors disabled:opacity-50"
-                                >
-                                    {isProcessing ? '處理中...' : '下載備份檔案'}
-                                </button>
-                            </div>
-
-                            {/* 匯入區塊 */}
-                            <div className="border border-yellow-100 bg-yellow-50 rounded-xl p-6 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                                <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center mb-4">
-                                    <Upload size={32}/>
-                                </div>
-                                <h3 className="font-bold text-lg text-yellow-900">匯入還原 (Import)</h3>
-                                <p className="text-xs text-yellow-700/70 mt-2 mb-6">上傳 JSON 備份檔。注意：這將覆蓋系統設定並新增資料。</p>
-                                <label className={`w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold shadow-sm transition-colors cursor-pointer text-center block ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    {isProcessing ? '匯入中...' : '選擇檔案匯入'}
-                                    <input type="file" accept=".json" className="hidden" onChange={handleImportData} disabled={isProcessing}/>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-  };
 
   const CompanyStamp = () => (<div className="w-[22mm] h-[22mm] rounded-full flex flex-col items-center justify-center transform -rotate-12 opacity-90 pointer-events-none select-none mix-blend-multiply" style={{ color: '#2b3d90', border: '2px solid #2b3d90', boxShadow: 'inset 0 0 0 1px rgba(43, 61, 144, 0.2), 0 0 2px rgba(43, 61, 144, 0.4)', backgroundColor: 'rgba(43, 61, 144, 0.02)', mixBlendMode: 'multiply' }}><div className="w-[90%] h-[90%] rounded-full flex flex-col items-center justify-center p-[1px]" style={{ border: '1px solid #2b3d90' }}><div className="absolute w-full h-full"><svg viewBox="0 0 100 100" className="w-full h-full absolute top-0 left-0"><defs><path id="textCircle" d="M 12, 50 A 38, 38 0 1, 1 88, 50" /></defs><text fontSize="11" fontWeight="bold" fill="#2b3d90" letterSpacing="1"><textPath href="#textCircle" startOffset="50%" textAnchor="middle">GOLD LAND AUTO</textPath></text></svg></div><div className="flex flex-col items-center justify-center mt-2 z-10"><span className="text-[6px] font-bold leading-none tracking-widest" style={{ textShadow: '0 0 0.5px #2b3d90' }}>金田</span><span className="text-[6px] font-bold leading-none tracking-widest mt-[1px]" style={{ textShadow: '0 0 0.5px #2b3d90' }}>汽車</span></div><div className="absolute bottom-1 text-[8px] font-bold text-[#2b3d90]">*</div></div></div>);
   const SignedStamp = () => (<div className="relative w-[50mm] h-[30mm] flex items-center justify-center"><svg viewBox="0 0 200 100" className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{ overflow: 'visible' }}><defs><filter id="ink-spread"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise" /><feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" /></filter></defs><path d="M20,60 C40,40 60,80 90,50 C110,30 130,70 160,40 C170,30 180,60 190,50" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.85 }} /><path d="M30,70 C60,60 120,60 180,55" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" style={{ filter: 'url(#ink-spread)', opacity: 0.9 }} /><path d="M50,40 Q40,80 60,70 T80,60" fill="none" stroke="black" strokeWidth="2.5" style={{ filter: 'url(#ink-spread)', opacity: 0.8 }} /></svg><div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-2 w-[22mm] h-[22mm] flex items-center justify-center z-10 pointer-events-none select-none"><CompanyStamp /></div></div>);
@@ -4319,7 +4501,19 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
           )}
 
           {/* Settings Tab */}
-          {activeTab === 'settings' && <div className="flex-1 overflow-y-auto"><SettingsManager /></div>}
+          {activeTab === 'settings' && (
+              <div className="flex-1 overflow-y-auto">
+                  <SettingsManager 
+                      settings={settings}
+                      setSettings={setSettings}
+                      db={db}
+                      staffId={staffId}
+                      appId={appId}
+                      inventory={inventory}
+                      updateSettings={updateSettings}
+                  />
+              </div>
+          )}
 
         {activeTab === 'business' && (
              <BusinessProcessModule 
