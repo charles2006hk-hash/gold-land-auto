@@ -12,14 +12,15 @@
     "firebase": "^11.1.0",
     "lucide-react": "^0.469.0",
     "next": "latest",
+    "pdfjs-dist": "^5.4.530",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.20",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
     "eslint": "^9",
     "eslint-config-next": "latest",
     "postcss": "^8",
