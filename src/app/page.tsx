@@ -799,7 +799,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         }
     }, []);
 
-    // ★★★ 修改：支援圖片與 PDF 轉圖片上傳 ★★★
+    // ★★★ 修改：支援圖片與 PDF 轉圖片上傳 (修復 TypeScript 類型錯誤) ★★★
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
@@ -820,7 +820,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
                   for (let i = 1; i <= numPages; i++) {
                       const page = await pdf.getPage(i);
-                      // 設定縮放比例 (2.0 為高清晰度，若要檔案小一點可改 1.5)
+                      // 設定縮放比例 (2.0 為高清晰度)
                       const viewport = page.getViewport({ scale: 2.0 }); 
                       
                       const canvas = document.createElement('canvas');
@@ -829,7 +829,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                       canvas.width = viewport.width;
 
                       if (context) {
-                          await page.render({ canvasContext: context, viewport: viewport }).promise;
+                          // ★★★ 修正點：加入 'as any' 繞過類型檢查 ★★★
+                          await page.render({ canvasContext: context, viewport: viewport } as any).promise;
                           
                           // 壓縮為 JPG (品質 0.8)
                           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
