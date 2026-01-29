@@ -13,7 +13,6 @@ import {
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File // Added Upload, Image as ImageIcon, File
 } from 'lucide-react';
 
-import * as pdfjsLib from 'pdfjs-dist';
 
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
@@ -792,14 +791,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         return () => unsub();
     }, [staffId, db, appId]);
 
-    // 設定 PDF Worker (使用 CDN 避免打包問題)
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-        }
-    }, []);
 
     // ★★★ 修改：支援圖片與 PDF 轉圖片上傳 (修復 TypeScript 類型錯誤) ★★★
+    // ★★★ 修改：動態引入 PDF 套件 (解決 Build Error) ★★★
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
@@ -810,17 +804,22 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
               if (file.size > 10 * 1024 * 1024) { alert("PDF 檔案過大 (限制 10MB)"); return; }
               
               try {
+                  // ★★★ 關鍵：動態載入 pdfjs-dist，避開 Server Side 報錯 ★★★
+                  const pdfjsLib = await import('pdfjs-dist');
+                  
+                  // 設定 Worker (動態載入後再設定)
+                  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
                   const arrayBuffer = await file.arrayBuffer();
                   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                   const newAttachments: DatabaseAttachment[] = [];
                   
-                  // 限制最大處理頁數 (避免瀏覽器當機)
                   const MAX_PAGES = 5; 
                   const numPages = Math.min(pdf.numPages, MAX_PAGES);
 
                   for (let i = 1; i <= numPages; i++) {
                       const page = await pdf.getPage(i);
-                      // 設定縮放比例 (2.0 為高清晰度)
+                      // 清晰度設定
                       const viewport = page.getViewport({ scale: 2.0 }); 
                       
                       const canvas = document.createElement('canvas');
@@ -829,10 +828,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                       canvas.width = viewport.width;
 
                       if (context) {
-                          // ★★★ 修正點：加入 'as any' 繞過類型檢查 ★★★
+                          // 使用 as any 繞過 TypeScript 檢查
                           await page.render({ canvasContext: context, viewport: viewport } as any).promise;
                           
-                          // 壓縮為 JPG (品質 0.8)
                           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                           newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: dataUrl });
                       }
@@ -847,12 +845,12 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
               } catch (err) {
                   console.error(err);
-                  alert("PDF 解析失敗，請確認檔案未損毀。");
+                  alert("PDF 解析失敗。請確認網路連線正常 (需下載 PDF Worker)。");
               }
               return;
           }
 
-          // --- B. 處理一般圖片 (保留原有邏輯) ---
+          // --- B. 處理一般圖片 (保持不變) ---
           if (file.size > 5 * 1024 * 1024) { alert(`檔案 ${file.name} 超過 5MB 限制`); return; }
           const reader = new FileReader();
           reader.readAsDataURL(file);
