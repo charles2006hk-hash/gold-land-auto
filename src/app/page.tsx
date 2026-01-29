@@ -742,32 +742,48 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
     const [showDupeModal, setShowDupeModal] = useState(false);
 
-    // ... (useEffect 讀取資料部分保持不變，請保留原有的 useEffect) ...
     useEffect(() => {
         if (!db || !staffId) return;
         const currentDb = db; 
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+        
+        // 依照建立時間排序
         const q = query(colRef, orderBy('createdAt', 'desc'));
+        
         const unsub = onSnapshot(q, (snapshot) => {
             const list: DatabaseEntry[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // ... (保留原本的資料轉換邏輯) ...
                 let attachments = data.attachments || [];
+                // 兼容舊資料的 images 欄位
                 if (!attachments.length && data.images && Array.isArray(data.images)) {
                     attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
                 }
                 list.push({ 
-                    id: doc.id, category: data.category || 'Person', name: data.name || data.title || '',
-                    phone: data.phone || '', address: data.address || '', idNumber: data.idNumber || '',
-                    plateNoHK: data.plateNoHK || '', plateNoCN: data.plateNoCN || '', quotaNo: data.quotaNo || '',
-                    receiptNo: data.receiptNo || '', docType: data.docType || '', description: data.description || '',
-                    tags: data.tags || [], roles: data.roles || [], attachments: attachments,
-                    createdAt: data.createdAt, updatedAt: data.updatedAt,
-                    reminderEnabled: data.reminderEnabled || false, expiryDate: data.expiryDate || '',
-                    renewalCount: data.renewalCount || 0, renewalDuration: data.renewalDuration || 1, renewalUnit: data.renewalUnit || 'year',
-                    relatedPlateNo: data.relatedPlateNo || ''
+                    id: doc.id, 
+                    category: data.category || 'Person', 
+                    name: data.name || data.title || '',
+                    phone: data.phone || '', 
+                    address: data.address || '', 
+                    idNumber: data.idNumber || '',
+                    plateNoHK: data.plateNoHK || '', 
+                    plateNoCN: data.plateNoCN || '', 
+                    quotaNo: data.quotaNo || '',
+                    receiptNo: data.receiptNo || '', 
+                    docType: data.docType || '', 
+                    description: data.description || '',
+                    tags: data.tags || [], 
+                    roles: data.roles || [], 
+                    attachments: attachments,
+                    createdAt: data.createdAt, 
+                    updatedAt: data.updatedAt,
+                    reminderEnabled: data.reminderEnabled || false, 
+                    expiryDate: data.expiryDate || '',
+                    renewalCount: data.renewalCount || 0, 
+                    renewalDuration: data.renewalDuration || 1, 
+                    renewalUnit: data.renewalUnit || 'year',
+                    relatedPlateNo: data.relatedPlateNo || '' // 確保讀取關聯車牌
                 } as DatabaseEntry);
             });
             setEntries(list);
@@ -2156,7 +2172,37 @@ const deleteVehicle = async (id: string) => {
       const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
       
       // 統計數據 (保留原邏輯)
-      const calculateStats = () => { /* ... 原有邏輯 ... */ return { total: cbVehicles.length, expired: 0, soon: 0 }; }; 
+      const calculateStats = () => {
+          let expired = 0, soon = 0;
+          
+          // 使用過濾後的 cbVehicles 進行統計
+          cbVehicles.forEach(v => {
+              const dates = [
+                  v.crossBorder?.dateHkInsurance, v.crossBorder?.dateReservedPlate, v.crossBorder?.dateBr,
+                  v.crossBorder?.dateLicenseFee, v.crossBorder?.dateMainlandJqx, v.crossBorder?.dateMainlandSyx,
+                  v.crossBorder?.dateClosedRoad, v.crossBorder?.dateApproval, v.crossBorder?.dateMainlandLicense,
+                  v.crossBorder?.dateHkInspection
+              ];
+              
+              let hasE = false, hasS = false;
+              
+              dates.forEach(d => {
+                  if(d) {
+                      const days = getDaysRemaining(d);
+                      if (days !== null) {
+                          if (days < 0) hasE = true;
+                          else if (days <= 30) hasS = true;
+                      }
+                  }
+              });
+              
+              if (hasE) expired++; 
+              else if (hasS) soon++;
+          });
+          
+          return { total: cbVehicles.length, expired, soon };
+      };
+      
       const stats = calculateStats();
       const totalFees = activeVehicle?.crossBorder?.tasks?.reduce((sum, task) => sum + (task.fee || 0), 0) || 0;
       
@@ -2246,7 +2292,8 @@ const deleteVehicle = async (id: string) => {
                   </div>
                   <div className="flex gap-2">
                       {renderCard("總車輛", stats.total, "border-blue-500")}
-                      {/* ... (其他卡片) ... */}
+                      {renderCard("已過期", stats.expired, "border-red-500")}
+                      {renderCard("即將到期", stats.soon, "border-yellow-500")}
                   </div>
               </div>
 
