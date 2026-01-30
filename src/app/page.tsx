@@ -753,9 +753,78 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     const [searchTerm, setSearchTerm] = useState('');
     const [tagInput, setTagInput] = useState('');
     
+
+
     // 重複資料處理狀態
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
     const [showDupeModal, setShowDupeModal] = useState(false);
+
+    // ★★★ 1. 新增：AI 識別狀態 (控制轉圈圈) ★★★
+    const [isScanning, setIsScanning] = useState(false);
+
+    // ★★★ 2. 新增：AI 識別函數 (呼叫後端 API) ★★★
+    const analyzeImageWithAI = async (base64Image: string, docType: string) => {
+        setIsScanning(true); // 開啟讀取動畫
+        try {
+            // 呼叫我們先前建立的 Next.js API Route
+            const response = await fetch('/api/ocr', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    image: base64Image, 
+                    docType: docType 
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || '識別請求失敗');
+            }
+
+            const data = result.data;
+
+            // 自動填入表單
+            if (data) {
+                setEditingEntry(prev => {
+                    if (!prev) return null;
+                    return {
+                        ...prev,
+                        // 通用欄位
+                        name: data.name || prev.name,
+                        idNumber: data.idNumber || prev.idNumber,
+                        phone: data.phone || prev.phone,
+                        address: data.address || prev.address,
+                        expiryDate: data.expiryDate || prev.expiryDate,
+                        quotaNo: data.quotaNo || prev.quotaNo,
+                        
+                        // VRD 牌薄專屬欄位 (如果識別到的話)
+                        plateNoHK: data.plateNoHK || prev.plateNoHK,
+                        make: data.make || prev.make,
+                        model: data.model || prev.model,
+                        chassisNo: data.chassisNo || prev.chassisNo,
+                        engineNo: data.engineNo || prev.engineNo,
+                        manufactureYear: data.manufactureYear || prev.manufactureYear,
+                        firstRegCondition: data.firstRegCondition || prev.firstRegCondition,
+                        
+                        // 數值轉換 (確保是數字)
+                        engineSize: data.engineSize ? Number(data.engineSize) : prev.engineSize,
+                        priceA1: data.priceA1 ? Number(data.priceA1) : prev.priceA1,
+                        priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
+
+                        // 備註 (保留原有備註並附加)
+                        description: prev.description + (data.description ? `\n[AI]: ${data.description}` : '')
+                    };
+                });
+                alert("AI 識別成功！資料已自動填入。");
+            }
+
+        } catch (error: any) {
+            console.error("AI Scan Error:", error);
+            alert(`識別失敗: ${error.message}\n(請確認 .env.local 設定與 API Key)`);
+        }
+        setIsScanning(false); // 關閉讀取動畫
+    };
 
     // ★★★ 修復：資料讀取監聽 (這段回來了，資料就會出現) ★★★
     useEffect(() => {
