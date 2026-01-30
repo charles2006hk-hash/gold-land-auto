@@ -2845,6 +2845,104 @@ const deleteVehicle = async (id: string) => {
   const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
 
   // --- Sub-Components ---
+
+// --- 資料庫選取器組件 (補回) ---
+const DatabaseSelector = ({ 
+    isOpen, 
+    onClose, 
+    type, 
+    entries, 
+    onSelect 
+}: { 
+    isOpen: boolean; 
+    onClose: () => void; 
+    type: 'customer' | 'vehicle_vrd'; 
+    entries: DatabaseEntry[];
+    onSelect: (entry: DatabaseEntry) => void;
+}) => {
+    const [search, setSearch] = useState('');
+    if (!isOpen) return null;
+
+    // 根據類型篩選資料
+    const filtered = entries.filter(e => {
+        const isMatchSearch = (
+            (e.name || '').toLowerCase().includes(search.toLowerCase()) ||
+            (e.phone || '').includes(search) ||
+            (e.plateNoHK || '').toLowerCase().includes(search.toLowerCase()) ||
+            (e.idNumber || '').toLowerCase().includes(search.toLowerCase())
+        );
+
+        if (type === 'customer') {
+            // 選客戶：顯示 Person 或 Company
+            return (e.category === 'Person' || e.category === 'Company') && isMatchSearch;
+        } else {
+            // 選 VRD：顯示 Vehicle
+            return e.category === 'Vehicle' && isMatchSearch;
+        }
+    });
+
+    return (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
+                    <h3 className="font-bold text-slate-800">
+                        {type === 'customer' ? '從資料庫選擇客戶' : '從資料庫選擇車輛 VRD'}
+                    </h3>
+                    <button onClick={onClose}><X size={20} className="text-slate-500 hover:text-black"/></button>
+                </div>
+                
+                <div className="p-4 border-b bg-white">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                        <input 
+                            className="w-full pl-9 p-2 border rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500"
+                            placeholder={type === 'customer' ? "搜尋姓名、電話、身份證..." : "搜尋車牌、底盤號..."}
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50">
+                    {filtered.map(entry => (
+                        <div 
+                            key={entry.id} 
+                            onClick={() => { onSelect(entry); onClose(); }}
+                            className="bg-white p-3 rounded-lg border hover:border-blue-500 hover:shadow-md cursor-pointer transition-all group"
+                        >
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="font-bold text-slate-800 flex items-center">
+                                        {entry.name || '(未命名)'}
+                                        {entry.plateNoHK && <span className="ml-2 bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded border border-yellow-200">{entry.plateNoHK}</span>}
+                                    </div>
+                                    <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                                        {type === 'customer' ? (
+                                            <>
+                                                <div>電話: {entry.phone || '-'}</div>
+                                                <div>ID: {entry.idNumber || '-'}</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div>廠型: {entry.make} {entry.model}</div>
+                                                <div>底盤: {entry.chassisNo || '-'}</div>
+                                                <div>A1: {entry.priceA1 ? formatCurrency(entry.priceA1) : '-'}</div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500"/>
+                            </div>
+                        </div>
+                    ))}
+                    {filtered.length === 0 && <div className="text-center text-slate-400 py-8 text-sm">找不到相關資料</div>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
   // 1. Vehicle Form Modal (Add/Edit) - 最終完整修復版
   const VehicleFormModal = () => {
     // 如果沒有選中車輛且不是新增模式，則不顯示
