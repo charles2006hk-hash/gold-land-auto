@@ -9,25 +9,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    // 2. 讀取我們在第二步設定的密鑰
+    // 2. 讀取 Vercel 設定的環境變數
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: 'Server API Key not configured' }, { status: 500 });
     }
 
-    // 3. 處理圖片格式 (移除 base64 前綴)
+    // 3. 處理圖片格式
     const base64Data = image.includes('base64,') ? image.split(',')[1] : image;
 
-    // 4. 設定給 AI 的指令 (Prompt)
+    // 4. 設定 Prompt
     const prompt = `
       你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
       
       請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
       如果找不到該欄位，請回傳空字串 ""。
       
-      目標欄位說明 (請盡量識別)：
+      目標欄位說明：
       - name: 姓名 或 公司名稱 (如果是牌薄，請抓取 Registered Owner)
-      - idNumber: 身份證號 / 商業登記號 (BR) / 車牌號
+      - idNumber: 身份證號 / 商業登記號 / 車牌號
       - phone: 電話號碼
       - address: 地址
       - expiryDate: 到期日 (格式 YYYY-MM-DD)
@@ -40,12 +40,13 @@ export async function POST(req: Request) {
       - make: 廠名 (VRD常見)
       - model: 型號 (VRD常見)
       - manufactureYear: 出廠年份
-      - engineSize: 汽缸容量/容積
-      - firstRegCondition: 首次登記狀況 (例如 BRAND NEW)
+      - firstRegCondition: 首次登記狀況
+      - engineSize: 汽缸容量
       - description: 其他重要備註摘要
     `;
 
-    // 5. 呼叫 Google Gemini API (使用 latest 版本以確保可用性)
+    // ★★★ 5. 修正這裡：改用 gemini-1.5-flash-latest ★★★
+    // 這樣可以確保使用最新且存在的版本
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
@@ -63,14 +64,15 @@ export async function POST(req: Request) {
 
     const data = await response.json();
 
-    // 6. 處理 AI 回傳的結果
+    // 6. 錯誤處理與解析
     if (data.error) {
+        console.error("Google API Error:", data.error);
         throw new Error(data.error.message);
     }
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("AI 沒有回傳任何文字結果");
     
-    // 清理 JSON 字串 (防止 AI 回傳包含 markdown 符號)
     const cleanJson = text.replace(/```json|```/g, '').trim();
     const parsedData = JSON.parse(cleanJson);
 
