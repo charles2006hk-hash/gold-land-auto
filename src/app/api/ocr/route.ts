@@ -2,52 +2,47 @@ import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
   try {
-    // 1. 接收前端傳來的圖片
     const { image, docType } = await req.json();
 
     if (!image) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    // 2. 讀取 Vercel 設定的環境變數
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'Server API Key not configured' }, { status: 500 });
+        console.error("API Key is MISSING");
+        return NextResponse.json({ error: 'Server API Key not configured' }, { status: 500 });
     }
 
-    // 3. 處理圖片格式
     const base64Data = image.includes('base64,') ? image.split(',')[1] : image;
 
-    // 4. 設定 Prompt
     const prompt = `
       你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
-      
       請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
       如果找不到該欄位，請回傳空字串 ""。
       
-      目標欄位說明：
+      目標欄位：
       - name: 姓名 或 公司名稱 (如果是牌薄，請抓取 Registered Owner)
       - idNumber: 身份證號 / 商業登記號 / 車牌號
       - phone: 電話號碼
       - address: 地址
       - expiryDate: 到期日 (格式 YYYY-MM-DD)
-      - quotaNo: 指標號 (如果是中港文件)
-      - plateNoHK: 香港車牌 (VRD常見)
-      - chassisNo: 底盤號碼 (VRD常見)
-      - engineNo: 引擎號碼 (VRD常見)
-      - priceA1: 首次登記稅值 (VRD常見，純數字)
-      - priceTax: 已繳付登記稅 (VRD常見，純數字)
-      - make: 廠名 (VRD常見)
-      - model: 型號 (VRD常見)
+      - quotaNo: 指標號
+      - plateNoHK: 香港車牌
+      - chassisNo: 底盤號碼
+      - engineNo: 引擎號碼
+      - priceA1: 首次登記稅值 (純數字)
+      - priceTax: 已繳付登記稅 (純數字)
+      - make: 廠名
+      - model: 型號
       - manufactureYear: 出廠年份
       - firstRegCondition: 首次登記狀況
       - engineSize: 汽缸容量
       - description: 其他重要備註摘要
     `;
 
-    // ★★★ 5. 修正這裡：改用 gemini-1.5-flash-latest ★★★
-    // 這樣可以確保使用最新且存在的版本
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    // ★★★ 修正：使用您列表中存在的 gemini-2.5-flash ★★★
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -64,10 +59,9 @@ export async function POST(req: Request) {
 
     const data = await response.json();
 
-    // 6. 錯誤處理與解析
     if (data.error) {
-        console.error("Google API Error:", data.error);
-        throw new Error(data.error.message);
+        console.error("Google API Error:", JSON.stringify(data.error, null, 2));
+        throw new Error(`Google API Error: ${data.error.message}`);
     }
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -79,7 +73,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, data: parsedData });
 
   } catch (error: any) {
-    console.error('OCR Error:', error);
+    console.error('OCR Route Error:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
