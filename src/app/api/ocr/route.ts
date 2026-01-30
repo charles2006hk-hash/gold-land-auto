@@ -16,6 +16,7 @@ export async function POST(req: Request) {
 
     const base64Data = image.includes('base64,') ? image.split(',')[1] : image;
 
+    // 4. 設定 Prompt (已加入 prevOwners)
     const prompt = `
       你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
       請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
@@ -23,9 +24,9 @@ export async function POST(req: Request) {
       
       目標欄位：
       - name: 標題名稱 (如果是牌薄 VRD，請抓取 Registered Owner 車主名稱)
-      - registeredOwnerName: 登記車主名稱 (同上，專門用於填寫車主欄位)
+      - registeredOwnerName: 登記車主名稱 (同上)
       - idNumber: 身份證號 / 商業登記號 / 車牌號
-      - registeredOwnerId: 登記車主身份證號 (專門用於填寫車主ID欄位)
+      - registeredOwnerId: 登記車主身份證號
       - phone: 電話號碼
       - address: 地址
       - expiryDate: 到期日 (格式 YYYY-MM-DD)
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
       - plateNoHK: 香港車牌
       - chassisNo: 底盤號碼
       - engineNo: 引擎號碼
+      - prevOwners: 前任車主數目 (純數字，例如 0, 1, 5)
       - priceA1: 首次登記稅值 (純數字)
       - priceTax: 已繳付登記稅 (純數字)
       - make: 廠名
@@ -40,7 +42,7 @@ export async function POST(req: Request) {
       - manufactureYear: 出廠年份
       - vehicleColor: 車身顏色 (例如: BLACK, WHITE)
       - firstRegCondition: 首次登記狀況
-      - engineSize: 汽缸容量
+      - engineSize: 汽缸容量 (純數字)
       - description: 其他重要備註摘要
     `;
 
