@@ -996,23 +996,66 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
-        const finalEntry = { ...editingEntry, tags: Array.from(autoTags), roles: editingEntry.roles || [], attachments: editingEntry.attachments || [] };
+        // ★★★ 修正開始：強制將 undefined 轉換為空字串，防止 Firebase 報錯 ★★★
+        const finalEntry = { 
+            ...editingEntry, 
+            // 1. 確保關鍵文字欄位不是 undefined
+            phone: editingEntry.phone || '',
+            address: editingEntry.address || '',
+            idNumber: editingEntry.idNumber || '',
+            plateNoHK: editingEntry.plateNoHK || '',
+            plateNoCN: editingEntry.plateNoCN || '',
+            quotaNo: editingEntry.quotaNo || '',
+            docType: editingEntry.docType || '',
+            description: editingEntry.description || '',
+            
+            // 2. 確保 VRD 相關欄位不是 undefined
+            make: editingEntry.make || '',
+            model: editingEntry.model || '',
+            chassisNo: editingEntry.chassisNo || '',
+            engineNo: editingEntry.engineNo || '',
+            manufactureYear: editingEntry.manufactureYear || '',
+            vehicleColor: editingEntry.vehicleColor || '',
+            firstRegCondition: editingEntry.firstRegCondition || '',
+            registeredOwnerName: editingEntry.registeredOwnerName || '',
+            registeredOwnerId: editingEntry.registeredOwnerId || '',
+            
+            // 3. 確保陣列與其他物件正常
+            tags: Array.from(autoTags), 
+            roles: editingEntry.roles || [], 
+            attachments: editingEntry.attachments || [] 
+        };
+        // ★★★ 修正結束 ★★★
+
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         
         try {
             if (editingEntry.id) {
+                // 更新模式
+                // 這裡我們需要過濾掉 undefined 的欄位 (雖然上面已經處理了大部分，但為了保險起見)
                 const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
-                await updateDoc(docRef, { ...finalEntry, updatedAt: serverTimestamp() });
+                
+                // 將 finalEntry 轉換為純物件，移除任何可能的 undefined
+                const cleanData = JSON.parse(JSON.stringify(finalEntry));
+                
+                await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
                 alert('資料已更新 (已保留在當前頁面)');
-                // 注意：這裡移除了 setIsDbEditing(false)，所以不會跳回列表
             } else {
+                // 新增模式
                 const { id, ...dataToSave } = finalEntry;
                 const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-                const newRef = await addDoc(colRef, { ...dataToSave, createdAt: serverTimestamp() });
+                
+                // 同樣確保沒有 undefined
+                const cleanData = JSON.parse(JSON.stringify(dataToSave));
+
+                const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
                 setEditingEntry({ ...finalEntry, id: newRef.id }); // 更新 ID，進入編輯模式
                 alert('新資料已建立');
             }
-        } catch (err) { console.error(err); alert('儲存失敗'); }
+        } catch (err) { 
+            console.error("Save Error Detail:", err); 
+            alert('儲存失敗，請檢查 Console 錯誤訊息'); 
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -1273,8 +1316,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} /></label>)}</div>
                                     {/* ★★★ 圖片列表與 AI 按鈕區 ★★★ */}
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>)}</div>
                                     
                                     <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
                                         {editingEntry.attachments?.map((file, idx) => (
