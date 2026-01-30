@@ -104,6 +104,20 @@ type DatabaseEntry = {
     // 四大核心分類
     category: 'Person' | 'Company' | 'Vehicle' | 'CrossBorder'; 
     relatedPlateNo?: string;
+    // ★★★ 新增：VRD 車輛詳細資料 (用於資料庫中心儲存牌薄數據) ★★★
+    make?: string;              // 廠名
+    model?: string;             // 型號
+    manufactureYear?: string;   // 出廠年份
+    vehicleColor?: string;      // 顏色
+    chassisNo?: string;         // 底盤號
+    engineNo?: string;          // 引擎號
+    engineSize?: number;        // 汽缸容量
+    firstRegCondition?: string; // 首次登記時車輛狀況 (例如: BRAND NEW / USED)
+    priceA1?: number;           // 首次登記稅值 (A1)
+    priceTax?: number;          // 已繳付登記稅
+    prevOwners?: number;        // 前任車主數目
+    registeredOwnerName?: string; // 登記車主名
+    registeredOwnerId?: string;   // 登記車主身分證
     
     // 1. 人員資料
     roles?: string[]; // 角色: 客戶/員工/司機/代辦 (可多選)
@@ -1079,9 +1093,76 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                         </>
                                     )}
+                                    {/* ▼▼▼ 開始置換區域：Vehicle 類別專用欄位 ▼▼▼ */}
                                     {editingEntry.category === 'Vehicle' && (
-                                        <div className="grid grid-cols-2 gap-3"><div><label className="block text-xs font-bold text-slate-500 mb-1">香港車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoHK || ''} onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value})} className="w-full p-2 border rounded bg-yellow-50 font-mono"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label><input disabled={!isDbEditing} value={editingEntry.plateNoCN || ''} onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} className="w-full p-2 border rounded bg-blue-50 font-mono"/></div></div>
+                                        <>
+                                            {/* 1. 基本車牌資料 (保留原有的) */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">香港車牌 (Reg Mark)</label>
+                                                    <input 
+                                                        disabled={!isDbEditing} 
+                                                        value={editingEntry.plateNoHK || ''} 
+                                                        onChange={e => setEditingEntry({...editingEntry, plateNoHK: e.target.value, relatedPlateNo: e.target.value})} 
+                                                        className="w-full p-2 border rounded bg-yellow-50 font-mono font-bold"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">國內車牌</label>
+                                                    <input 
+                                                        disabled={!isDbEditing} 
+                                                        value={editingEntry.plateNoCN || ''} 
+                                                        onChange={e => setEditingEntry({...editingEntry, plateNoCN: e.target.value})} 
+                                                        className="w-full p-2 border rounded bg-blue-50 font-mono"
+                                                    />
+                                                </div>
+                                            </div>
+                                            
+                                            {/* 2. 新增：VRD 完整資料輸入區 (擴充的) */}
+                                            {/* 這些欄位是 optional 的，如果是存保險單或維修單，這裡留空即可 */}
+                                            <div className="p-4 bg-gray-50 rounded border border-gray-200 mt-4 space-y-3">
+                                                <div className="flex justify-between items-center border-b pb-2 mb-2">
+                                                    <label className="block text-xs font-bold text-gray-700">
+                                                        <FileText size={14} className="inline mr-1"/> VRD 牌薄詳細資料
+                                                    </label>
+                                                    <span className="text-[10px] text-gray-400">用於車輛庫存自動連動</span>
+                                                </div>
+
+                                                {/* 第一行：廠牌、型號、年份、顏色 */}
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    <div><label className="text-[10px] text-gray-500">廠名 (Make)</label><input disabled={!isDbEditing} value={editingEntry.make || ''} onChange={e => setEditingEntry({...editingEntry, make: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">型號 (Model)</label><input disabled={!isDbEditing} value={editingEntry.model || ''} onChange={e => setEditingEntry({...editingEntry, model: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">年份 (Year)</label><input disabled={!isDbEditing} value={editingEntry.manufactureYear || ''} onChange={e => setEditingEntry({...editingEntry, manufactureYear: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">顏色 (Color)</label><input disabled={!isDbEditing} value={editingEntry.vehicleColor || ''} onChange={e => setEditingEntry({...editingEntry, vehicleColor: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                </div>
+
+                                                {/* 第二行：底盤、引擎、容量、狀況 */}
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">底盤號 (Chassis)</label><input disabled={!isDbEditing} value={editingEntry.chassisNo || ''} onChange={e => setEditingEntry({...editingEntry, chassisNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">引擎號 (Engine)</label><input disabled={!isDbEditing} value={editingEntry.engineNo || ''} onChange={e => setEditingEntry({...editingEntry, engineNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">容量 (cc/KW)</label><input type="number" disabled={!isDbEditing} value={editingEntry.engineSize || ''} onChange={e => setEditingEntry({...editingEntry, engineSize: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">狀況 (Condition)</label><input disabled={!isDbEditing} value={editingEntry.firstRegCondition || ''} onChange={e => setEditingEntry({...editingEntry, firstRegCondition: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="BRAND NEW"/></div>
+                                                </div>
+
+                                                {/* 第三行：稅金 A1、已繳稅、首數 */}
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <div><label className="text-[10px] text-gray-500">首次登記稅值 (A1)</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceA1 || ''} onChange={e => setEditingEntry({...editingEntry, priceA1: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs font-bold text-blue-600"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">已繳付登記稅 (Tax)</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceTax || ''} onChange={e => setEditingEntry({...editingEntry, priceTax: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">前任車主數 (Owners)</label><input type="number" disabled={!isDbEditing} value={editingEntry.prevOwners || ''} onChange={e => setEditingEntry({...editingEntry, prevOwners: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                </div>
+
+                                                {/* 第四行：登記車主資料 */}
+                                                <div className="bg-white p-2 rounded border border-slate-100">
+                                                    <label className="text-[10px] font-bold text-slate-400 mb-1 block">VRD 登記車主 (Registered Owner)</label>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div className="col-span-2"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerName || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerName: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="車主全名"/></div>
+                                                        <div className="col-span-1"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerId || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerId: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="身份證號碼"/></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
                                     )}
+                                    {/* ▲▲▲ 結束置換區域 ▲▲▲ */}
                                     {editingEntry.category === 'CrossBorder' && (
                                         <div className="grid grid-cols-2 gap-3">
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
@@ -2791,6 +2872,70 @@ const deleteVehicle = async (id: string) => {
     //const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
+// 在 VehicleFormModal 組件內
+    const handleDbSelect = (entry: DatabaseEntry) => {
+        if (selectorType === 'customer') {
+            // ... (保留客戶匯入邏輯)
+            const updateField = (name: string, value: string) => {
+                const el = document.querySelector(`input[name="${name}"]`) as HTMLInputElement;
+                if (el) el.value = value;
+            };
+            updateField('customerName', entry.name);
+            updateField('customerPhone', entry.phone || '');
+            updateField('customerID', entry.idNumber || '');
+            updateField('customerAddress', entry.address || '');
+            alert(`已載入客戶：${entry.name}`);
+        } 
+        else if (selectorType === 'vehicle_vrd') {
+            // ★★★ 更新：VRD 全欄位連動 ★★★
+            const updateField = (name: string, value: string) => {
+                const el = document.querySelector(`input[name="${name}"]`) as HTMLInputElement;
+                if (el) el.value = value;
+            };
+            
+            // 1. 基本資料
+            if (entry.plateNoHK) updateField('regMark', entry.plateNoHK);
+            if (entry.make) setSelectedMake(entry.make); // 更新 React State
+            if (entry.model) {
+                const el = document.querySelector(`input[name="model"]`) as HTMLInputElement;
+                if (el) el.value = entry.model;
+            }
+            if (entry.manufactureYear) updateField('year', entry.manufactureYear);
+            if (entry.vehicleColor) updateField('colorExt', entry.vehicleColor); // 外觀顏色
+            
+            // 2. 規格資料
+            if (entry.chassisNo) updateField('chassisNo', entry.chassisNo);
+            if (entry.engineNo) updateField('engineNo', entry.engineNo);
+            if (entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString())); // 更新 React State
+            
+            // 3. 價格與稅金
+            if (entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
+            if (entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
+            
+            // 4. 車主與首數
+            if (entry.prevOwners !== undefined) updateField('previousOwners', entry.prevOwners.toString());
+            
+            // 如果 VRD 有紀錄車主，且表單尚未填寫客戶，則自動填入
+            const currentCustName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
+            if (entry.registeredOwnerName && !currentCustName) {
+                updateField('customerName', entry.registeredOwnerName);
+                if (entry.registeredOwnerId) updateField('customerID', entry.registeredOwnerId);
+            }
+
+            // 5. 狀態 (Condition)
+            // 嘗試自動判斷：如果 VRD 寫 BRAND NEW，則選 New，否則選 Used
+            if (entry.firstRegCondition) {
+                const cond = entry.firstRegCondition.toUpperCase();
+                const el = document.querySelector(`select[name="purchaseType"]`) as HTMLSelectElement;
+                if (el) {
+                    if (cond.includes('NEW')) el.value = 'New';
+                    else el.value = 'Used';
+                }
+            }
+            
+            alert(`已成功載入 VRD 資料！\n車牌: ${entry.plateNoHK || 'N/A'}\n型號: ${entry.make} ${entry.model}`);
+        }
+    };
 
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
