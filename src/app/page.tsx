@@ -763,10 +763,10 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     const [isScanning, setIsScanning] = useState(false);
 
     // ★★★ 2. 新增：AI 識別函數 (呼叫後端 API) ★★★
+    // ★★★ AI 識別函數 (已更新：顏色清洗 + 車主自動填寫) ★★★
     const analyzeImageWithAI = async (base64Image: string, docType: string) => {
-        setIsScanning(true); // 開啟讀取動畫
+        setIsScanning(true);
         try {
-            // 呼叫我們先前建立的 Next.js API Route
             const response = await fetch('/api/ocr', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -784,13 +784,26 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
             const data = result.data;
 
-            // 自動填入表單
+            // --- 輔助邏輯：顏色清洗 ---
+            // 將 "BLACK-VAR", "WHITE/SILVER" 簡化為 "BLACK", "WHITE"
+            const cleanColor = (rawColor: string) => {
+                if (!rawColor) return '';
+                // 使用正則表達式，以空格、橫線、斜線或括號切分，取第一個詞
+                const parts = rawColor.split(/[\s\-\/\(\)]+/); 
+                return parts[0] ? parts[0].toUpperCase() : '';
+            };
+
             if (data) {
                 setEditingEntry(prev => {
                     if (!prev) return null;
+                    
+                    // 決定車主名稱：優先用專屬欄位，沒有則用通用 name
+                    const finalOwnerName = data.registeredOwnerName || data.name || prev.registeredOwnerName;
+                    const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
+
                     return {
                         ...prev,
-                        // 通用欄位
+                        // 1. 通用欄位
                         name: data.name || prev.name,
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
@@ -798,7 +811,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         expiryDate: data.expiryDate || prev.expiryDate,
                         quotaNo: data.quotaNo || prev.quotaNo,
                         
-                        // VRD 牌薄專屬欄位 (如果識別到的話)
+                        // 2. VRD 牌薄專屬欄位
                         plateNoHK: data.plateNoHK || prev.plateNoHK,
                         make: data.make || prev.make,
                         model: data.model || prev.model,
@@ -807,23 +820,29 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         manufactureYear: data.manufactureYear || prev.manufactureYear,
                         firstRegCondition: data.firstRegCondition || prev.firstRegCondition,
                         
-                        // 數值轉換 (確保是數字)
+                        // ★★★ 新增：顏色 (經過清洗) ★★★
+                        vehicleColor: cleanColor(data.vehicleColor) || prev.vehicleColor,
+
+                        // ★★★ 新增：登記車主自動填寫 ★★★
+                        registeredOwnerName: finalOwnerName,
+                        registeredOwnerId: finalOwnerId,
+                        
+                        // 數值轉換
                         engineSize: data.engineSize ? Number(data.engineSize) : prev.engineSize,
                         priceA1: data.priceA1 ? Number(data.priceA1) : prev.priceA1,
                         priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
 
-                        // 備註 (保留原有備註並附加)
                         description: prev.description + (data.description ? `\n[AI]: ${data.description}` : '')
                     };
                 });
-                alert("AI 識別成功！資料已自動填入。");
+                alert("AI 識別成功！顏色與車主資料已自動填入。");
             }
 
         } catch (error: any) {
             console.error("AI Scan Error:", error);
-            alert(`識別失敗: ${error.message}\n(請確認 .env.local 設定與 API Key)`);
+            alert(`識別失敗: ${error.message}\n(請確認 API Key 與後端設定)`);
         }
-        setIsScanning(false); // 關閉讀取動畫
+        setIsScanning(false);
     };
 
     // ★★★ 修復：資料讀取監聽 (這段回來了，資料就會出現) ★★★
