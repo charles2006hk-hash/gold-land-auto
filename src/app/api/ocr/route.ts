@@ -22,8 +22,10 @@ export async function POST(req: Request) {
       如果找不到該欄位，請回傳空字串 ""。
       
       目標欄位：
-      - name: 姓名 或 公司名稱 (如果是牌薄，請抓取 Registered Owner)
+      - name: 標題名稱 (如果是牌薄 VRD，請抓取 Registered Owner 車主名稱)
+      - registeredOwnerName: 登記車主名稱 (同上，專門用於填寫車主欄位)
       - idNumber: 身份證號 / 商業登記號 / 車牌號
+      - registeredOwnerId: 登記車主身份證號 (專門用於填寫車主ID欄位)
       - phone: 電話號碼
       - address: 地址
       - expiryDate: 到期日 (格式 YYYY-MM-DD)
@@ -36,6 +38,7 @@ export async function POST(req: Request) {
       - make: 廠名
       - model: 型號
       - manufactureYear: 出廠年份
+      - vehicleColor: 車身顏色 (例如: BLACK, WHITE)
       - firstRegCondition: 首次登記狀況
       - engineSize: 汽缸容量
       - description: 其他重要備註摘要
