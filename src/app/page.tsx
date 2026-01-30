@@ -2871,6 +2871,8 @@ const deleteVehicle = async (id: string) => {
     
     //const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
+    const [selectorOpen, setSelectorOpen] = useState(false);
+    const [selectorType, setSelectorType] = useState<'customer' | 'vehicle_vrd'>('customer');
 
 // 在 VehicleFormModal 組件內
     const handleDbSelect = (entry: DatabaseEntry) => {
