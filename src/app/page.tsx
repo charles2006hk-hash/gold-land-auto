@@ -1116,9 +1116,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         } catch (e) { console.error(e); alert("處理失敗"); }
     };
 
-    return (
+   return (
         <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden relative">
-            {/* 左側列表 */}
+            {/* 左側列表區塊 (保持不變) */}
             <div className="w-1/3 border-r border-slate-100 flex flex-col bg-slate-50">
                 <div className="p-4 border-b border-slate-200">
                     <div className="flex items-center justify-between mb-4">
@@ -1158,7 +1158,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 </div>
             </div>
 
-            {/* 右側編輯區 */}
+            {/* 右側編輯區 (修正結構) */}
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
                 {editingEntry ? (
                     <form onSubmit={handleSave} className="flex flex-col h-full">
@@ -1189,6 +1189,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 </div>
                             )}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* 第一欄：文字輸入區 */}
                                 <div className="space-y-4">
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label><input disabled={!isDbEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded text-lg font-bold" placeholder="姓名 / 公司名" required /></div>
                                     {editingEntry.category === 'Person' && (
@@ -1205,10 +1206,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">公司地址</label><input disabled={!isDbEditing} value={editingEntry.address || ''} onChange={e => setEditingEntry({...editingEntry, address: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                         </>
                                     )}
-                                    {/* ▼▼▼ 開始置換區域：Vehicle 類別專用欄位 ▼▼▼ */}
+                                    {/* VRD 車輛專用欄位 */}
                                     {editingEntry.category === 'Vehicle' && (
                                         <>
-                                            {/* 1. 基本車牌資料 (保留原有的) */}
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div>
                                                     <label className="block text-xs font-bold text-slate-500 mb-1">香港車牌 (Reg Mark)</label>
@@ -1230,8 +1230,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                 </div>
                                             </div>
                                             
-                                            {/* 2. 新增：VRD 完整資料輸入區 (擴充的) */}
-                                            {/* 這些欄位是 optional 的，如果是存保險單或維修單，這裡留空即可 */}
+                                            {/* VRD 詳細資料區 */}
                                             <div className="p-4 bg-gray-50 rounded border border-gray-200 mt-4 space-y-3">
                                                 <div className="flex justify-between items-center border-b pb-2 mb-2">
                                                     <label className="block text-xs font-bold text-gray-700">
@@ -1239,33 +1238,25 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                     </label>
                                                     <span className="text-[10px] text-gray-400">用於車輛庫存自動連動</span>
                                                 </div>
-
-                                                {/* 第一行：廠牌、型號、年份、顏色 */}
                                                 <div className="grid grid-cols-4 gap-2">
-                                                    <div><label className="text-[10px] text-gray-500">廠名 (Make)</label><input disabled={!isDbEditing} value={editingEntry.make || ''} onChange={e => setEditingEntry({...editingEntry, make: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
-                                                    <div><label className="text-[10px] text-gray-500">型號 (Model)</label><input disabled={!isDbEditing} value={editingEntry.model || ''} onChange={e => setEditingEntry({...editingEntry, model: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
-                                                    <div><label className="text-[10px] text-gray-500">年份 (Year)</label><input disabled={!isDbEditing} value={editingEntry.manufactureYear || ''} onChange={e => setEditingEntry({...editingEntry, manufactureYear: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
-                                                    <div><label className="text-[10px] text-gray-500">顏色 (Color)</label><input disabled={!isDbEditing} value={editingEntry.vehicleColor || ''} onChange={e => setEditingEntry({...editingEntry, vehicleColor: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">廠名</label><input disabled={!isDbEditing} value={editingEntry.make || ''} onChange={e => setEditingEntry({...editingEntry, make: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">型號</label><input disabled={!isDbEditing} value={editingEntry.model || ''} onChange={e => setEditingEntry({...editingEntry, model: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">年份</label><input disabled={!isDbEditing} value={editingEntry.manufactureYear || ''} onChange={e => setEditingEntry({...editingEntry, manufactureYear: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">顏色</label><input disabled={!isDbEditing} value={editingEntry.vehicleColor || ''} onChange={e => setEditingEntry({...editingEntry, vehicleColor: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                 </div>
-
-                                                {/* 第二行：底盤、引擎、容量、狀況 */}
                                                 <div className="grid grid-cols-4 gap-2">
-                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">底盤號 (Chassis)</label><input disabled={!isDbEditing} value={editingEntry.chassisNo || ''} onChange={e => setEditingEntry({...editingEntry, chassisNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
-                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">引擎號 (Engine)</label><input disabled={!isDbEditing} value={editingEntry.engineNo || ''} onChange={e => setEditingEntry({...editingEntry, engineNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
-                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">容量 (cc/KW)</label><input type="number" disabled={!isDbEditing} value={editingEntry.engineSize || ''} onChange={e => setEditingEntry({...editingEntry, engineSize: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
-                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">狀況 (Condition)</label><input disabled={!isDbEditing} value={editingEntry.firstRegCondition || ''} onChange={e => setEditingEntry({...editingEntry, firstRegCondition: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="BRAND NEW"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">底盤號</label><input disabled={!isDbEditing} value={editingEntry.chassisNo || ''} onChange={e => setEditingEntry({...editingEntry, chassisNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">引擎號</label><input disabled={!isDbEditing} value={editingEntry.engineNo || ''} onChange={e => setEditingEntry({...editingEntry, engineNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">容量</label><input type="number" disabled={!isDbEditing} value={editingEntry.engineSize || ''} onChange={e => setEditingEntry({...editingEntry, engineSize: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div className="col-span-1"><label className="text-[10px] text-gray-500">狀況</label><input disabled={!isDbEditing} value={editingEntry.firstRegCondition || ''} onChange={e => setEditingEntry({...editingEntry, firstRegCondition: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="BRAND NEW"/></div>
                                                 </div>
-
-                                                {/* 第三行：稅金 A1、已繳稅、首數 */}
                                                 <div className="grid grid-cols-3 gap-2">
                                                     <div><label className="text-[10px] text-gray-500">首次登記稅值 (A1)</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceA1 || ''} onChange={e => setEditingEntry({...editingEntry, priceA1: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs font-bold text-blue-600"/></div>
-                                                    <div><label className="text-[10px] text-gray-500">已繳付登記稅 (Tax)</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceTax || ''} onChange={e => setEditingEntry({...editingEntry, priceTax: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
-                                                    <div><label className="text-[10px] text-gray-500">前任車主數 (Owners)</label><input type="number" disabled={!isDbEditing} value={editingEntry.prevOwners || ''} onChange={e => setEditingEntry({...editingEntry, prevOwners: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">已繳付登記稅</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceTax || ''} onChange={e => setEditingEntry({...editingEntry, priceTax: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    <div><label className="text-[10px] text-gray-500">前任車主數</label><input type="number" disabled={!isDbEditing} value={editingEntry.prevOwners || ''} onChange={e => setEditingEntry({...editingEntry, prevOwners: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                 </div>
-
-                                                {/* 第四行：登記車主資料 */}
                                                 <div className="bg-white p-2 rounded border border-slate-100">
-                                                    <label className="text-[10px] font-bold text-slate-400 mb-1 block">VRD 登記車主 (Registered Owner)</label>
+                                                    <label className="text-[10px] font-bold text-slate-400 mb-1 block">VRD 登記車主</label>
                                                     <div className="grid grid-cols-3 gap-2">
                                                         <div className="col-span-2"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerName || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerName: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="車主全名"/></div>
                                                         <div className="col-span-1"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerId || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerId: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="身份證號碼"/></div>
@@ -1274,7 +1265,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             </div>
                                         </>
                                     )}
-                                    {/* ▲▲▲ 結束置換區域 ▲▲▲ */}
+                                    
                                     {editingEntry.category === 'CrossBorder' && (
                                         <div className="grid grid-cols-2 gap-3">
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
@@ -1305,40 +1296,44 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                         </div>
                                         {editingEntry.reminderEnabled && (
                                             <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                                                <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-amber-800 mb-1">當前到期日 (Expiry Date)</label><input type="date" disabled={!isDbEditing} value={editingEntry.expiryDate || ''} onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold" /><div className="mt-1"><DateStatusBadge date={editingEntry.expiryDate} label="狀態" /></div></div>
-                                                <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100"><label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則 (Auto Renew Rule)</label><div className="flex gap-2 mb-2"><input type="number" disabled={!isDbEditing} value={editingEntry.renewalDuration} onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} className="w-16 p-1 border rounded text-center text-sm" min="1" /><select disabled={!isDbEditing} value={editingEntry.renewalUnit} onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} className="flex-1 p-1 border rounded text-sm"><option value="year">年 (Years)</option><option value="month">月 (Months)</option></select></div>{isDbEditing && (<button type="button" onClick={handleQuickRenew} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"><RefreshCw size={12} className="mr-1"/> 立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})</button>)}</div>
+                                                <div className="col-span-2 md:col-span-1"><label className="block text-xs font-bold text-amber-800 mb-1">當前到期日</label><input type="date" disabled={!isDbEditing} value={editingEntry.expiryDate || ''} onChange={e => setEditingEntry({...editingEntry, expiryDate: e.target.value})} className="w-full p-2 border border-amber-300 rounded text-sm bg-white focus:ring-2 focus:ring-amber-400 outline-none font-bold" /><div className="mt-1"><DateStatusBadge date={editingEntry.expiryDate} label="狀態" /></div></div>
+                                                <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-amber-100"><label className="block text-xs font-bold text-gray-500 mb-1">自動續期規則</label><div className="flex gap-2 mb-2"><input type="number" disabled={!isDbEditing} value={editingEntry.renewalDuration} onChange={e => setEditingEntry({...editingEntry, renewalDuration: Number(e.target.value)})} className="w-16 p-1 border rounded text-center text-sm" min="1" /><select disabled={!isDbEditing} value={editingEntry.renewalUnit} onChange={e => setEditingEntry({...editingEntry, renewalUnit: e.target.value as any})} className="flex-1 p-1 border rounded text-sm"><option value="year">年</option><option value="month">月</option></select></div>{isDbEditing && (<button type="button" onClick={handleQuickRenew} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm transition-transform active:scale-95"><RefreshCw size={12} className="mr-1"/> 立即續期 (更新日期 +{editingEntry.renewalDuration}{editingEntry.renewalUnit==='year'?'年':'月'})</button>)}</div>
                                             </div>
                                         )}
                                     </div>
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">備註 / 內容</label><textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/></div>
                                     <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
                                 </div>
+
+                                {/* 第二欄：圖片列表與上傳區 (確保只有這一份) */}
                                 <div className="space-y-4">
-                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} /></label>)}</div>
-                                    {/* ★★★ 圖片列表與 AI 按鈕區 ★★★ */}
+                                    <div className="flex justify-between items-center">
+                                        <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
+                                        {isDbEditing && (
+                                            <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors">
+                                                <Upload size={14} className="mr-1"/> 上傳圖片
+                                                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
+                                            </label>
+                                        )}
+                                    </div>
                                     
                                     <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
                                         {editingEntry.attachments?.map((file, idx) => (
                                             <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
                                                 <div className="w-full bg-slate-50 relative p-1">
                                                     <img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />
-                                                    
-                                                    {/* ★★★ 操作按鈕群組 (右上角) ★★★ */}
                                                     <div className="absolute top-2 right-2 flex gap-2">
                                                         {isDbEditing && (
                                                             <>
-                                                                {/* 1. AI 識別按鈕 (黃色閃電) */}
                                                                 <button 
                                                                     type="button" 
                                                                     onClick={() => analyzeImageWithAI(file.data, editingEntry.docType || editingEntry.category)}
                                                                     disabled={isScanning}
                                                                     className="bg-yellow-400 text-yellow-900 p-2 rounded-full opacity-90 hover:opacity-100 hover:bg-yellow-300 shadow-lg transition-all flex items-center justify-center transform active:scale-95"
-                                                                    title="AI 智能識別文字 (自動填表)"
+                                                                    title="AI 智能識別文字"
                                                                 >
                                                                     {isScanning ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18} fill="currentColor"/>}
                                                                 </button>
-
-                                                                {/* 2. 刪除按鈕 (紅色 X) */}
                                                                 <button 
                                                                     type="button" 
                                                                     onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} 
@@ -1350,14 +1345,10 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                             </>
                                                         )}
                                                     </div>
-                                                    
-                                                    {/* 下載按鈕 (左上角) */}
                                                     <button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片">
                                                         <DownloadCloud size={18}/>
                                                     </button>
                                                 </div>
-                                                
-                                                {/* 檔名編輯區 */}
                                                 <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center">
                                                     <File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>
                                                     {isDbEditing ? (
@@ -1368,8 +1359,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                 </div>
                                             </div>
                                         ))}
-                                        
-                                        {/* 無圖片時的提示 */}
                                         {(!editingEntry.attachments || editingEntry.attachments.length === 0) && (
                                             <div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30">
                                                 <ImageIcon size={48} className="mb-3 opacity-30"/>
@@ -1377,7 +1366,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             </div>
                                         )}
                                     </div>
-                                </div>
                                 </div>
                             </div>
                         </div>
@@ -1416,7 +1404,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             )}
         </div>
     );
-};
 
 // ------------------------------------------------------------------
 // ★★★ 1. CrossBorderView (已移至外部，解決輸入跳走問題) ★★★
