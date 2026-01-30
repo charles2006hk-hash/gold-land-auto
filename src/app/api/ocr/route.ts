@@ -16,15 +16,19 @@ export async function POST(req: Request) {
 
     const base64Data = image.includes('base64,') ? image.split(',')[1] : image;
 
-    // 4. 設定 Prompt (已加入 prevOwners)
+    // 4. 設定 Prompt (已優化：強制合併中英文車主名稱)
     const prompt = `
       你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
       請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
       如果找不到該欄位，請回傳空字串 ""。
       
+      特別注意：
+      1. 對於牌薄 (VRD) 的車主名稱，通常會有中文和英文兩行 (例如第一行: 陳大文, 第二行: CHAN TAI MAN)。
+      2. 請務必將這兩行合併為單一字串回傳 (例如: "陳大文 CHAN TAI MAN")。
+      
       目標欄位：
-      - name: 標題名稱 (如果是牌薄 VRD，請抓取 Registered Owner 車主名稱)
-      - registeredOwnerName: 登記車主名稱 (同上)
+      - name: 標題名稱 (如果是牌薄 VRD，請抓取 Registered Owner，務必合併中文與英文姓名)
+      - registeredOwnerName: 登記車主名稱 (同上，請合併顯示，例如 "陳大文 CHAN TAI MAN")
       - idNumber: 身份證號 / 商業登記號 / 車牌號
       - registeredOwnerId: 登記車主身份證號
       - phone: 電話號碼
@@ -34,7 +38,7 @@ export async function POST(req: Request) {
       - plateNoHK: 香港車牌
       - chassisNo: 底盤號碼
       - engineNo: 引擎號碼
-      - prevOwners: 前任車主數目 (純數字，例如 0, 1, 5)
+      - prevOwners: 前任車主數目 (純數字，例如 0, 1)
       - priceA1: 首次登記稅值 (純數字)
       - priceTax: 已繳付登記稅 (純數字)
       - make: 廠名
