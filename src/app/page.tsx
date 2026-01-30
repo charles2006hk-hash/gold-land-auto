@@ -843,7 +843,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         setIsScanning(false);
     };
 
-    // ★★★ 修復：資料讀取監聽 (這段回來了，資料就會出現) ★★★
+    // ★★★ 這段要放在 DatabaseModule 組件裡面 ★★★
+    // 作用：讀取資料庫列表 (包含 VRD 詳細欄位)
     useEffect(() => {
         if (!db || !staffId) return;
         const currentDb = db; 
@@ -857,11 +858,14 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             snapshot.forEach(doc => {
                 const data = doc.data();
                 let attachments = data.attachments || [];
+                // 相容舊版圖片格式
                 if (!attachments.length && data.images && Array.isArray(data.images)) {
                     attachments = data.images.map((img: string, idx: number) => ({ name: `圖片 ${idx+1}`, data: img }));
                 }
+                
                 list.push({ 
                     id: doc.id, 
+                    // 1. 通用資料
                     category: data.category || 'Person', 
                     name: data.name || data.title || '',
                     phone: data.phone || '', 
@@ -870,12 +874,29 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     plateNoHK: data.plateNoHK || '', 
                     plateNoCN: data.plateNoCN || '', 
                     quotaNo: data.quotaNo || '',
-                    receiptNo: data.receiptNo || '', 
                     docType: data.docType || '', 
                     description: data.description || '',
+                    relatedPlateNo: data.relatedPlateNo || '',
                     tags: data.tags || [], 
                     roles: data.roles || [], 
                     attachments: attachments,
+                    
+                    // 2. ★★★ VRD 專屬欄位 (關鍵修正：讀取這些欄位) ★★★
+                    make: data.make || '',
+                    model: data.model || '',
+                    manufactureYear: data.manufactureYear || '',
+                    vehicleColor: data.vehicleColor || '',
+                    chassisNo: data.chassisNo || '',
+                    engineNo: data.engineNo || '',
+                    engineSize: data.engineSize || 0,
+                    firstRegCondition: data.firstRegCondition || '',
+                    priceA1: data.priceA1 || 0,
+                    priceTax: data.priceTax || 0,
+                    prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : 0,
+                    registeredOwnerName: data.registeredOwnerName || '',
+                    registeredOwnerId: data.registeredOwnerId || '',
+
+                    // 3. 系統與提醒
                     createdAt: data.createdAt, 
                     updatedAt: data.updatedAt,
                     reminderEnabled: data.reminderEnabled || false, 
@@ -883,10 +904,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     renewalCount: data.renewalCount || 0, 
                     renewalDuration: data.renewalDuration || 1, 
                     renewalUnit: data.renewalUnit || 'year',
-                    relatedPlateNo: data.relatedPlateNo || ''
                 } as DatabaseEntry);
             });
-            setEntries(list);
+            setEntries(list); // <--- 注意這裡是 setEntries
         });
         return () => unsub();
     }, [staffId, db, appId]);
@@ -1005,7 +1025,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         setEditingEntry({ ...editingEntry, expiryDate: newDateStr, renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // ★★★ 修復：儲存邏輯 (包含所有 VRD 欄位，防止存檔後資料消失) ★★★
+    // ★★★ 修復：儲存邏輯 (存檔後退出編輯模式) ★★★
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         if (!db || !staffId || !editingEntry) return;
@@ -1013,11 +1033,11 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
-        // 定義要儲存的完整物件 (必須包含所有欄位)
+        // 構建完整資料物件
         const finalEntry = { 
             ...editingEntry, 
             
-            // 1. 通用文字欄位 (預設為空字串，防止 undefined 報錯)
+            // 通用文字欄位
             phone: editingEntry.phone || '',
             address: editingEntry.address || '',
             idNumber: editingEntry.idNumber || '',
@@ -1028,7 +1048,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             description: editingEntry.description || '',
             relatedPlateNo: editingEntry.relatedPlateNo || '',
             
-            // 2. VRD 專屬欄位 (★ 關鍵：這裡漏了就會存檔失敗)
+            // VRD 欄位
             make: editingEntry.make || '',
             model: editingEntry.model || '',
             chassisNo: editingEntry.chassisNo || '',
@@ -1039,18 +1059,16 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             registeredOwnerName: editingEntry.registeredOwnerName || '',
             registeredOwnerId: editingEntry.registeredOwnerId || '',
             
-            // 3. 數值欄位 (預設為 0)
+            // 數值欄位
             engineSize: Number(editingEntry.engineSize) || 0,
             priceA1: Number(editingEntry.priceA1) || 0,
             priceTax: Number(editingEntry.priceTax) || 0,
             prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
             
-            // 4. 其他結構
+            // 其他
             tags: Array.from(autoTags), 
             roles: editingEntry.roles || [], 
             attachments: editingEntry.attachments || [],
-            
-            // 5. 提醒功能
             reminderEnabled: editingEntry.reminderEnabled || false,
             expiryDate: editingEntry.expiryDate || '',
             renewalCount: editingEntry.renewalCount || 0,
@@ -1062,24 +1080,29 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         
         try {
             if (editingEntry.id) {
-                // 更新模式
+                // 更新
                 const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
-                // 轉為純 JSON 物件以移除任何殘留的 undefined
                 const cleanData = JSON.parse(JSON.stringify(finalEntry));
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
-                alert('資料已更新 (已保留在當前頁面)');
+                
+                alert('資料已更新');
+                // ★★★ 關鍵修復：更新成功後，將狀態設為「非編輯中」，按鈕就會變回 [編輯] ★★★
+                setIsDbEditing(false); 
             } else {
-                // 新增模式
+                // 新增
                 const { id, ...dataToSave } = finalEntry;
                 const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
                 const cleanData = JSON.parse(JSON.stringify(dataToSave));
                 const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
+                
                 setEditingEntry({ ...finalEntry, id: newRef.id }); 
                 alert('新資料已建立');
+                // 新增後也退出編輯模式
+                setIsDbEditing(false);
             }
         } catch (err) { 
-            console.error("Save Error Detail:", err); 
-            alert('儲存失敗，請檢查 Console 錯誤訊息'); 
+            console.error("Save Error:", err); 
+            alert('儲存失敗'); 
         }
     };
 
