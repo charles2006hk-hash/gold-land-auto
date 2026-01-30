@@ -2845,99 +2845,45 @@ const deleteVehicle = async (id: string) => {
   const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
 
   // --- Sub-Components ---
-
-  // 1. Vehicle Form Modal (Add/Edit)
+  // 1. Vehicle Form Modal (Add/Edit) - 最終完整修復版
   const VehicleFormModal = () => {
+    // 如果沒有選中車輛且不是新增模式，則不顯示
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
+    
     const v = editingVehicle || {} as Partial<Vehicle>;
     const isNew = !v.id; 
-    const [selectedMake, setSelectedMake] = useState(v.make || '');
-    const [isCbExpanded, setIsCbExpanded] = useState(false); // Default collapsed
-    const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
     
+    // --- 狀態定義 (State Definitions) ---
+    const [selectedMake, setSelectedMake] = useState(v.make || '');
+    const [isCbExpanded, setIsCbExpanded] = useState(false); 
+    
+    // 數值輸入狀態
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
     const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
     const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
-    const [fuelType, setFuelType] = useState<'Petrol'|'Diesel'|'Electric'>(v.fuelType || 'Petrol');
     const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
+    
+    // 選項狀態
+    const [fuelType, setFuelType] = useState<'Petrol'|'Diesel'|'Electric'>(v.fuelType || 'Petrol');
+    
+    // ★★★ 修正：確保波箱 (Transmission) 狀態存在 ★★★
+    const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
+    
     const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
 
+    // ★★★ 資料庫選取器狀態 ★★★
+    const [selectorOpen, setSelectorOpen] = useState(false);
+    const [selectorType, setSelectorType] = useState<'customer' | 'vehicle_vrd'>('customer');
+
+    // 計算邏輯
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
     const totalRevenue = (v.price || 0) + cbFees;
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
     
-    //const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee || 0) > 0 && !(v.payments || []).some(p => p.relatedTaskId === t.id));
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
-    const [selectorOpen, setSelectorOpen] = useState(false);
-    const [selectorType, setSelectorType] = useState<'customer' | 'vehicle_vrd'>('customer');
-
-// 在 VehicleFormModal 組件內
-    const handleDbSelect = (entry: DatabaseEntry) => {
-        if (selectorType === 'customer') {
-            // ... (保留客戶匯入邏輯)
-            const updateField = (name: string, value: string) => {
-                const el = document.querySelector(`input[name="${name}"]`) as HTMLInputElement;
-                if (el) el.value = value;
-            };
-            updateField('customerName', entry.name);
-            updateField('customerPhone', entry.phone || '');
-            updateField('customerID', entry.idNumber || '');
-            updateField('customerAddress', entry.address || '');
-            alert(`已載入客戶：${entry.name}`);
-        } 
-        else if (selectorType === 'vehicle_vrd') {
-            // ★★★ 更新：VRD 全欄位連動 ★★★
-            const updateField = (name: string, value: string) => {
-                const el = document.querySelector(`input[name="${name}"]`) as HTMLInputElement;
-                if (el) el.value = value;
-            };
-            
-            // 1. 基本資料
-            if (entry.plateNoHK) updateField('regMark', entry.plateNoHK);
-            if (entry.make) setSelectedMake(entry.make); // 更新 React State
-            if (entry.model) {
-                const el = document.querySelector(`input[name="model"]`) as HTMLInputElement;
-                if (el) el.value = entry.model;
-            }
-            if (entry.manufactureYear) updateField('year', entry.manufactureYear);
-            if (entry.vehicleColor) updateField('colorExt', entry.vehicleColor); // 外觀顏色
-            
-            // 2. 規格資料
-            if (entry.chassisNo) updateField('chassisNo', entry.chassisNo);
-            if (entry.engineNo) updateField('engineNo', entry.engineNo);
-            if (entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString())); // 更新 React State
-            
-            // 3. 價格與稅金
-            if (entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
-            if (entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
-            
-            // 4. 車主與首數
-            if (entry.prevOwners !== undefined) updateField('previousOwners', entry.prevOwners.toString());
-            
-            // 如果 VRD 有紀錄車主，且表單尚未填寫客戶，則自動填入
-            const currentCustName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
-            if (entry.registeredOwnerName && !currentCustName) {
-                updateField('customerName', entry.registeredOwnerName);
-                if (entry.registeredOwnerId) updateField('customerID', entry.registeredOwnerId);
-            }
-
-            // 5. 狀態 (Condition)
-            // 嘗試自動判斷：如果 VRD 寫 BRAND NEW，則選 New，否則選 Used
-            if (entry.firstRegCondition) {
-                const cond = entry.firstRegCondition.toUpperCase();
-                const el = document.querySelector(`select[name="purchaseType"]`) as HTMLSelectElement;
-                if (el) {
-                    if (cond.includes('NEW')) el.value = 'New';
-                    else el.value = 'Used';
-                }
-            }
-            
-            alert(`已成功載入 VRD 資料！\n車牌: ${entry.plateNoHK || 'N/A'}\n型號: ${entry.make} ${entry.model}`);
-        }
-    };
 
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
@@ -2951,11 +2897,78 @@ const deleteVehicle = async (id: string) => {
         return formatNumberInput(String(a1 + tax));
     };
 
+    // 費用與收款的新增狀態
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: 'Deposit', amount: '', method: 'Cash', note: '' });
 
+    // ★★★ 資料庫回填邏輯 (handleDbSelect) ★★★
+    const handleDbSelect = (entry: DatabaseEntry) => {
+        const updateField = (name: string, value: string) => {
+            const el = document.querySelector(`input[name="${name}"]`) as HTMLInputElement;
+            if (el) el.value = value;
+            const selectEl = document.querySelector(`select[name="${name}"]`) as HTMLSelectElement;
+            if (selectEl) selectEl.value = value;
+        };
+
+        if (selectorType === 'customer') {
+            updateField('customerName', entry.name);
+            updateField('customerPhone', entry.phone || '');
+            updateField('customerID', entry.idNumber || '');
+            updateField('customerAddress', entry.address || '');
+            alert(`已載入客戶：${entry.name}`);
+        } 
+        else if (selectorType === 'vehicle_vrd') {
+            // 基本資料
+            if (entry.plateNoHK) updateField('regMark', entry.plateNoHK);
+            if (entry.make) setSelectedMake(entry.make);
+            if (entry.model) updateField('model', entry.model);
+            if (entry.manufactureYear) updateField('year', entry.manufactureYear);
+            if (entry.vehicleColor) updateField('colorExt', entry.vehicleColor);
+            
+            // 規格資料
+            if (entry.chassisNo) updateField('chassisNo', entry.chassisNo);
+            if (entry.engineNo) updateField('engineNo', entry.engineNo);
+            if (entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString()));
+            
+            // 價格資料
+            if (entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
+            if (entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
+            
+            // 其他資料
+            if (entry.prevOwners !== undefined) updateField('previousOwners', entry.prevOwners.toString());
+            
+            // 自動填入車主 (若表單為空)
+            const currentCustName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
+            if (entry.registeredOwnerName && !currentCustName) {
+                updateField('customerName', entry.registeredOwnerName);
+                if (entry.registeredOwnerId) updateField('customerID', entry.registeredOwnerId);
+            }
+
+            // 自動判斷新舊狀態
+            if (entry.firstRegCondition) {
+                const cond = entry.firstRegCondition.toUpperCase();
+                const el = document.querySelector(`select[name="purchaseType"]`) as HTMLSelectElement;
+                if (el) {
+                    if (cond.includes('NEW') || cond.includes('新')) el.value = 'New';
+                    else el.value = 'Used';
+                }
+            }
+            alert(`已載入 VRD 資料：${entry.plateNoHK || 'N/A'}`);
+        }
+    };
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        
+        {/* 選取器組件 */}
+        <DatabaseSelector 
+            isOpen={selectorOpen} 
+            onClose={() => setSelectorOpen(false)} 
+            type={selectorType} 
+            entries={dbEntries} 
+            onSelect={handleDbSelect}
+        />
+
         <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
           <div className="p-6 border-b flex justify-between items-center bg-slate-900 text-white rounded-t-lg sticky top-0 z-10">
             <h2 className="text-xl font-bold flex items-center"><Car className="mr-2"/> {isNew ? '車輛入庫 (Stock In)' : '編輯與銷售 (Edit & Sales)'}</h2>
@@ -2963,6 +2976,7 @@ const deleteVehicle = async (id: string) => {
           </div>
           <form onSubmit={saveVehicle} className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
             
+            {/* 1. 銷售狀態 */}
             <div className="md:col-span-3 pb-2 border-b flex justify-between items-end">
                 <h3 className="font-bold text-gray-500">銷售狀態</h3>
                 <div className="flex items-center gap-4 text-sm font-bold">
@@ -2977,44 +2991,28 @@ const deleteVehicle = async (id: string) => {
                 <div><label className="block text-xs font-bold text-green-700">出庫/成交日期 (Stock Out)</label><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="w-full border p-2 rounded border-green-200 bg-white"/></div>
             </div>
 
+            {/* 2. 客戶資料區 (含匯入按鈕) */}
             <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4 relative">
                 <div className="md:col-span-2 flex justify-between items-end border-b pb-2 mb-2">
                     <h4 className="text-sm font-bold text-slate-700">客戶資料 (Customer Info)</h4>
-                    
-                    {/* ★★★ 新增：快速匯入按鈕 ★★★ */}
                     <div className="relative group">
-                        <button type="button" className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex items-center hover:bg-blue-200">
-                            <Database size={12} className="mr-1"/> 從資料庫匯入
+                        <button 
+                            type="button" 
+                            onClick={() => { setSelectorType('customer'); setSelectorOpen(true); }}
+                            className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full flex items-center hover:bg-blue-200 transition-colors"
+                        >
+                            <Database size={12} className="mr-1"/> 從資料庫匯入客戶
                         </button>
-                        {/* 簡單的下拉選單實作 (實際專案可用更好的 UI Library) */}
-                        <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 shadow-xl rounded-lg p-2 z-50 hidden group-hover:block max-h-60 overflow-y-auto">
-                            <div className="text-xs text-gray-400 px-2 py-1">搜尋資料庫...</div>
-                            {/* 這裡需要存取 dbEntries (需要在 GoldLandAutoDMS 層級傳入或在 Modal 內讀取) */}
-                            {/* 為了簡化，這裡假設 dbEntries 已通過 context 或 props 可用，或者在 Modal 內 fetch */}
-                            {/* 臨時解決方案：提示用戶手動輸入或在資料庫 Tab 複製 */}
-                            <div className="text-xs text-slate-500 p-2 text-center">
-                                (功能開發中：請先至資料庫複製資料)
-                            </div>
-                        </div>
                     </div>
                 </div>
 
-                {/* 為了真正的連動，我們需要在 GoldLandAutoDMS 讀取 dbEntries 並傳入 Modal */}
-                {/* 這裡先提供搜尋功能的 UI 概念 */}
-                
-                <div>
-                   <label className="text-xs text-gray-500 flex justify-between">
-                       客戶姓名 (Name)
-                       {/* 這裡可以加一個即時搜尋建議 */}
-                   </label>
-                   <input name="customerName" defaultValue={v.customerName} className="w-full border p-2 rounded" placeholder="輸入姓名自動搜尋..."/>
-                </div>
+                <div><label className="text-xs text-gray-500">客戶姓名 (Name)</label><input name="customerName" defaultValue={v.customerName} className="w-full border p-2 rounded" placeholder="輸入姓名..."/></div>
                 <div><label className="text-xs text-gray-500">電話 (Phone)</label><input name="customerPhone" defaultValue={v.customerPhone} className="w-full border p-2 rounded"/></div>
                 <div><label className="text-xs text-gray-500">身份證 (HKID)</label><input name="customerID" defaultValue={v.customerID} className="w-full border p-2 rounded"/></div>
                 <div><label className="text-xs text-gray-500">地址 (Address)</label><input name="customerAddress" defaultValue={v.customerAddress} className="w-full border p-2 rounded"/></div>
             </div>
             
-            {/* 中港車管家模組 (修正：使用 style display 切換顯示) */}
+            {/* 3. 中港車管家模組 (含新增的公司欄位) */}
             <div className="md:col-span-3 border-t mt-4 pt-4">
                 <div 
                     className="flex items-center justify-between gap-2 mb-4 bg-blue-50 p-2 rounded cursor-pointer hover:bg-blue-100 transition"
@@ -3033,44 +3031,30 @@ const deleteVehicle = async (id: string) => {
                 >
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">內地車牌 (Mainland Plate)</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} placeholder="粵Z..." className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">指標號 (Quota No.)</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full border p-1 rounded text-sm"/></div>
-                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">香港公司 (HK Co.)</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full border p-1 rounded text-sm" placeholder="從資料庫關聯..."/></div>
+                    
+                    {/* 新增的公司欄位 */}
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">香港公司 (HK Co.)</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">內地公司 (CN Co.)</label><input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className="w-full border p-1 rounded text-sm"/></div>
-                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">保險代理 (Agent)</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border p-1 rounded text-sm"/></div>
-                    <div className="md:col-span-1"></div>
 
-                    {/* 司機資訊 */}
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">主司機 (Main Driver)</label><input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 1 (Driver 2)</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border p-1 rounded text-sm"/></div>
                     <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">副司機 2 (Driver 3)</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border p-1 rounded text-sm"/></div>
+                    <div className="md:col-span-1"><label className="text-[10px] text-blue-800 font-bold">保險代理 (Agent)</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border p-1 rounded text-sm"/></div>
                     
-                    {/* 口岸選擇 (多選) */}
                     <div className="md:col-span-4 border-t border-blue-200 mt-2 pt-2">
                       <label className="text-[10px] text-blue-800 font-bold block mb-1">粵港口岸 (HK-GD Ports)</label>
                       <div className="flex flex-wrap gap-3">
                         {PORTS_HK_GD.map(port => (
                             <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
-                                <input 
-                                    type="checkbox" 
-                                    name={`cb_port_${port}`} 
-                                    defaultChecked={v.crossBorder?.ports?.includes(port)} 
-                                    className="mr-1 w-3 h-3"
-                                />
-                                {port}
+                                <input type="checkbox" name={`cb_port_${port}`} defaultChecked={v.crossBorder?.ports?.includes(port)} className="mr-1 w-3 h-3"/>{port}
                             </label>
                         ))}
                       </div>
-                    
                       <label className="text-[10px] text-blue-800 font-bold block mb-1 mt-2">粵澳口岸 (MO-GD Ports)</label>
                       <div className="flex flex-wrap gap-3">
                         {PORTS_MO_GD.map(port => (
                             <label key={port} className="flex items-center text-xs text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
-                                <input 
-                                    type="checkbox" 
-                                    name={`cb_port_${port}`} 
-                                    defaultChecked={v.crossBorder?.ports?.includes(port)} 
-                                    className="mr-1 w-3 h-3"
-                                />
-                                {port}
+                                <input type="checkbox" name={`cb_port_${port}`} defaultChecked={v.crossBorder?.ports?.includes(port)} className="mr-1 w-3 h-3"/>{port}
                             </label>
                         ))}
                       </div>
@@ -3078,7 +3062,7 @@ const deleteVehicle = async (id: string) => {
 
                     <div className="md:col-span-4 border-t border-blue-200 my-2"></div>
 
-                    {/* 10 項提醒日期 */}
+                    {/* 日期欄位 */}
                     <div><label className="text-[10px] text-gray-500">香港保險到期 (HK Ins)</label><input type="date" name="cb_dateHkInsurance" defaultValue={v.crossBorder?.dateHkInsurance} className="w-full border p-1 rounded text-sm"/></div>
                     <div><label className="text-[10px] text-gray-500">留牌紙到期 (Reserved Plate)</label><input type="date" name="cb_dateReservedPlate" defaultValue={v.crossBorder?.dateReservedPlate} className="w-full border p-1 rounded text-sm"/></div>
                     <div><label className="text-[10px] text-gray-500">商業登記到期 (BR)</label><input type="date" name="cb_dateBr" defaultValue={v.crossBorder?.dateBr} className="w-full border p-1 rounded text-sm"/></div>
@@ -3094,7 +3078,20 @@ const deleteVehicle = async (id: string) => {
                 </div>
             </div>
 
-            <div className="md:col-span-3 border-t my-2 pt-2"><h3 className="font-bold text-gray-500 mb-2">車輛資料</h3></div>
+            {/* 4. 車輛資料區 (含 VRD 匯入按鈕) */}
+            <div className="md:col-span-3 border-t my-2 pt-2">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-gray-500">車輛資料</h3>
+                    <button 
+                        type="button" 
+                        onClick={() => { setSelectorType('vehicle_vrd'); setSelectorOpen(true); }}
+                        className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full flex items-center hover:bg-purple-200 transition-colors"
+                    >
+                        <FileText size={12} className="mr-1"/> 從資料庫匯入 VRD 資料
+                    </button>
+                </div>
+            </div>
+
             <div><label className="block text-xs font-bold text-gray-500">收購類型</label><select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full border p-2 rounded bg-gray-50"><option value="Used">二手收購 (Used)</option><option value="New">訂購新車 (New)</option><option value="Consignment">寄賣 (Consignment)</option></select></div>
             <div><label className="block text-xs font-bold text-gray-500">車牌 (Reg. Mark)</label><input name="regMark" defaultValue={v.regMark} placeholder="未出牌可留空" className="w-full border p-2 rounded"/></div>
             <div><label className="block text-xs font-bold text-gray-500">牌費到期日 (一般)</label><input name="licenseExpiry" type="date" defaultValue={v.licenseExpiry} className="w-full border p-2 rounded"/></div>
@@ -3104,8 +3101,10 @@ const deleteVehicle = async (id: string) => {
             <div><label className="block text-xs font-bold text-gray-500">外觀顏色</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full border p-2 rounded"/><datalist id="colors">{settings.colors.map(c => <option key={c} value={c} />)}</datalist></div>
             <div><label className="block text-xs font-bold text-gray-500">內飾顏色</label><input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full border p-2 rounded"/></div>
             
-            <div className="md:col-span-3 bg-slate-50 p-2 rounded border mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-3 bg-slate-50 p-2 rounded border mt-2 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div><label className="block text-xs font-bold text-gray-500">燃料 (Fuel Type)</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full border p-2 rounded"><option value="Petrol">汽油 (Petrol)</option><option value="Diesel">柴油 (Diesel)</option><option value="Electric">電動 (Electric)</option></select></div>
+                
+                {/* ★★★ 修正：確保波箱 UI 存在 ★★★ */}
                 <div>
                     <label className="block text-xs font-bold text-gray-500">波箱 (Transmission)</label>
                     <select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full border p-2 rounded">
@@ -3113,6 +3112,7 @@ const deleteVehicle = async (id: string) => {
                         <option value="Manual">棍波 (Manual)</option>
                     </select>
                 </div>
+                
                 <div><label className="block text-xs font-bold text-gray-500">動力 ({fuelType === 'Electric' ? 'KW' : 'cc'})</label><input name="engineSize" type="text" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full border p-2 rounded font-mono" placeholder="0"/></div>
                 <div><label className="block text-xs font-bold text-gray-500">預計每年牌費</label><div className="w-full border p-2 rounded bg-gray-100 font-bold text-blue-700">{formatCurrency(autoLicenseFee)}</div></div>
             </div>
@@ -3140,7 +3140,7 @@ const deleteVehicle = async (id: string) => {
                <div className="text-right text-xs text-blue-800 mt-1">牌簿價: {calcRegisteredPrice()}</div>
             </div>
 
-            {/* 交易管理 (更新：整合中港待收款) */}
+            {/* 交易與費用表格 */}
             {editingVehicle && (
               <div className="md:col-span-3 mt-6 bg-blue-50 p-4 rounded border border-blue-200">
                 <div className="flex justify-between items-center mb-4">
@@ -3160,18 +3160,15 @@ const deleteVehicle = async (id: string) => {
                 <table className="w-full text-sm bg-white border mb-4">
                   <thead><tr className="bg-blue-100 text-left"><th className="p-2">日期</th><th className="p-2">類型</th><th className="p-2">方式</th><th className="p-2">金額</th><th className="p-2">備注</th><th className="p-2">操作</th></tr></thead>
                   <tbody>
-                    {/* 已收款項 */}
                     {(v.payments || []).map(pay => (
                       <tr key={pay.id} className="border-t">
                         <td className="p-2">{pay.date}</td><td className="p-2">{pay.type}</td><td className="p-2">{pay.method}</td><td className="p-2 font-mono font-bold">{formatCurrency(pay.amount)}</td><td className="p-2 text-gray-500 text-xs">{pay.note}</td>
                         <td className="p-2 flex gap-2">
                              <button type="button" onClick={() => openPrintPreview('receipt', v as Vehicle, pay)} className="text-blue-500 hover:text-blue-700 flex items-center text-xs"><Printer size={12} className="mr-1"/> 收據</button>
-                             {/* 若是中港相關付款，建議不要在此刪除，防止狀態不同步 */}
                              {!pay.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, pay.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>}
                         </td>
                       </tr>
                     ))}
-                    {/* 中港待收款項 (預覽) */}
                     {pendingCbTasks.map(task => (
                         <tr key={`pending-${task.id}`} className="border-t bg-amber-50">
                             <td className="p-2 text-amber-700">{task.date}</td>
@@ -3199,7 +3196,6 @@ const deleteVehicle = async (id: string) => {
               </div>
             )}
 
-            {/* 費用管理 */}
             {isNew ? null : (
               <div className="md:col-span-3 mt-6 bg-gray-50 p-4 rounded border">
                 <h3 className="font-bold flex items-center mb-4"><Wrench size={16} className="mr-2"/> 處理費用記錄</h3>
