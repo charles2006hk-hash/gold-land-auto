@@ -1272,7 +1272,71 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 </div>
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} /></label>)}</div>
-                                    <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">{editingEntry.attachments?.map((file, idx) => (<div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col"><div className="w-full bg-slate-50 relative p-1"><img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />{isDbEditing && (<button type="button" onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 transition-opacity shadow-lg" title="刪除"><X size={18}/></button>)}<button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button></div><div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center"><File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>{isDbEditing ? (<input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />) : (<span className="truncate">{file.name}</span>)}</div></div>))}{(!editingEntry.attachments || editingEntry.attachments.length === 0) && (<div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30"><ImageIcon size={48} className="mb-3 opacity-30"/>暫無附件圖片</div>)}</div>
+                                    {/* ★★★ 圖片列表與 AI 按鈕區 ★★★ */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center"><label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>{isDbEditing && (<label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors"><Upload size={14} className="mr-1"/> 上傳圖片<input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} /></label>)}</div>
+                                    
+                                    <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
+                                        {editingEntry.attachments?.map((file, idx) => (
+                                            <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
+                                                <div className="w-full bg-slate-50 relative p-1">
+                                                    <img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />
+                                                    
+                                                    {/* ★★★ 操作按鈕群組 (右上角) ★★★ */}
+                                                    <div className="absolute top-2 right-2 flex gap-2">
+                                                        {isDbEditing && (
+                                                            <>
+                                                                {/* 1. AI 識別按鈕 (黃色閃電) */}
+                                                                <button 
+                                                                    type="button" 
+                                                                    onClick={() => analyzeImageWithAI(file.data, editingEntry.docType || editingEntry.category)}
+                                                                    disabled={isScanning}
+                                                                    className="bg-yellow-400 text-yellow-900 p-2 rounded-full opacity-90 hover:opacity-100 hover:bg-yellow-300 shadow-lg transition-all flex items-center justify-center transform active:scale-95"
+                                                                    title="AI 智能識別文字 (自動填表)"
+                                                                >
+                                                                    {isScanning ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18} fill="currentColor"/>}
+                                                                </button>
+
+                                                                {/* 2. 刪除按鈕 (紅色 X) */}
+                                                                <button 
+                                                                    type="button" 
+                                                                    onClick={() => setEditingEntry(prev => prev ? { ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) } : null)} 
+                                                                    className="bg-red-500 text-white p-2 rounded-full opacity-90 hover:opacity-100 shadow-lg transition-all transform active:scale-95" 
+                                                                    title="刪除圖片"
+                                                                >
+                                                                    <X size={18}/>
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* 下載按鈕 (左上角) */}
+                                                    <button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片">
+                                                        <DownloadCloud size={18}/>
+                                                    </button>
+                                                </div>
+                                                
+                                                {/* 檔名編輯區 */}
+                                                <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center">
+                                                    <File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>
+                                                    {isDbEditing ? (
+                                                        <input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />
+                                                    ) : (
+                                                        <span className="truncate">{file.name}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                        
+                                        {/* 無圖片時的提示 */}
+                                        {(!editingEntry.attachments || editingEntry.attachments.length === 0) && (
+                                            <div className="border-2 border-dashed border-slate-200 rounded-xl h-60 flex flex-col items-center justify-center text-slate-400 text-sm bg-slate-50/30">
+                                                <ImageIcon size={48} className="mb-3 opacity-30"/>
+                                                暫無附件圖片
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 </div>
                             </div>
                         </div>
