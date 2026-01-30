@@ -793,11 +793,12 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 return parts[0] ? parts[0].toUpperCase() : '';
             };
 
+            // ... 前面的 fetch 邏輯不變 ...
+
             if (data) {
                 setEditingEntry(prev => {
                     if (!prev) return null;
                     
-                    // 決定車主名稱：優先用專屬欄位，沒有則用通用 name
                     const finalOwnerName = data.registeredOwnerName || data.name || prev.registeredOwnerName;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
@@ -819,23 +820,20 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         engineNo: data.engineNo || prev.engineNo,
                         manufactureYear: data.manufactureYear || prev.manufactureYear,
                         firstRegCondition: data.firstRegCondition || prev.firstRegCondition,
-                        
-                        // ★★★ 新增：顏色 (經過清洗) ★★★
                         vehicleColor: cleanColor(data.vehicleColor) || prev.vehicleColor,
-
-                        // ★★★ 新增：登記車主自動填寫 ★★★
                         registeredOwnerName: finalOwnerName,
                         registeredOwnerId: finalOwnerId,
                         
-                        // 數值轉換
+                        // 3. 數值轉換 (★ 加入 prevOwners)
                         engineSize: data.engineSize ? Number(data.engineSize) : prev.engineSize,
                         priceA1: data.priceA1 ? Number(data.priceA1) : prev.priceA1,
                         priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
+                        prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : prev.prevOwners,
 
                         description: prev.description + (data.description ? `\n[AI]: ${data.description}` : '')
                     };
                 });
-                alert("AI 識別成功！顏色與車主資料已自動填入。");
+                alert("AI 識別成功！顏色、車主與首數已自動填入。");
             }
 
         } catch (error: any) {
@@ -1007,7 +1005,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         setEditingEntry({ ...editingEntry, expiryDate: newDateStr, renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // ★★★ 修復：儲存邏輯 (保留在當前頁面，不跳轉) ★★★
+    // ★★★ 修復：儲存邏輯 (包含所有 VRD 欄位，防止存檔後資料消失) ★★★
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         if (!db || !staffId || !editingEntry) return;
@@ -1015,10 +1013,11 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
-        // ★★★ 修正開始：強制將 undefined 轉換為空字串，防止 Firebase 報錯 ★★★
+        // 定義要儲存的完整物件 (必須包含所有欄位)
         const finalEntry = { 
             ...editingEntry, 
-            // 1. 確保關鍵文字欄位不是 undefined
+            
+            // 1. 通用文字欄位 (預設為空字串，防止 undefined 報錯)
             phone: editingEntry.phone || '',
             address: editingEntry.address || '',
             idNumber: editingEntry.idNumber || '',
@@ -1027,8 +1026,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             quotaNo: editingEntry.quotaNo || '',
             docType: editingEntry.docType || '',
             description: editingEntry.description || '',
+            relatedPlateNo: editingEntry.relatedPlateNo || '',
             
-            // 2. 確保 VRD 相關欄位不是 undefined
+            // 2. VRD 專屬欄位 (★ 關鍵：這裡漏了就會存檔失敗)
             make: editingEntry.make || '',
             model: editingEntry.model || '',
             chassisNo: editingEntry.chassisNo || '',
@@ -1039,36 +1039,42 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             registeredOwnerName: editingEntry.registeredOwnerName || '',
             registeredOwnerId: editingEntry.registeredOwnerId || '',
             
-            // 3. 確保陣列與其他物件正常
+            // 3. 數值欄位 (預設為 0)
+            engineSize: Number(editingEntry.engineSize) || 0,
+            priceA1: Number(editingEntry.priceA1) || 0,
+            priceTax: Number(editingEntry.priceTax) || 0,
+            prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
+            
+            // 4. 其他結構
             tags: Array.from(autoTags), 
             roles: editingEntry.roles || [], 
-            attachments: editingEntry.attachments || [] 
+            attachments: editingEntry.attachments || [],
+            
+            // 5. 提醒功能
+            reminderEnabled: editingEntry.reminderEnabled || false,
+            expiryDate: editingEntry.expiryDate || '',
+            renewalCount: editingEntry.renewalCount || 0,
+            renewalDuration: editingEntry.renewalDuration || 1,
+            renewalUnit: editingEntry.renewalUnit || 'year'
         };
-        // ★★★ 修正結束 ★★★
 
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         
         try {
             if (editingEntry.id) {
                 // 更新模式
-                // 這裡我們需要過濾掉 undefined 的欄位 (雖然上面已經處理了大部分，但為了保險起見)
                 const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
-                
-                // 將 finalEntry 轉換為純物件，移除任何可能的 undefined
+                // 轉為純 JSON 物件以移除任何殘留的 undefined
                 const cleanData = JSON.parse(JSON.stringify(finalEntry));
-                
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
                 alert('資料已更新 (已保留在當前頁面)');
             } else {
                 // 新增模式
                 const { id, ...dataToSave } = finalEntry;
                 const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-                
-                // 同樣確保沒有 undefined
                 const cleanData = JSON.parse(JSON.stringify(dataToSave));
-
                 const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
-                setEditingEntry({ ...finalEntry, id: newRef.id }); // 更新 ID，進入編輯模式
+                setEditingEntry({ ...finalEntry, id: newRef.id }); 
                 alert('新資料已建立');
             }
         } catch (err) { 
