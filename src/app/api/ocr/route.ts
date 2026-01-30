@@ -45,8 +45,8 @@ export async function POST(req: Request) {
       - description: 其他重要備註摘要
     `;
 
-    // 5. 呼叫 Google Gemini API
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // 5. 呼叫 Google Gemini API (使用 latest 版本以確保可用性)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
       method: 'POST',
