@@ -3255,21 +3255,38 @@ const DatabaseSelector = ({
         if(el) el.value = val;
     };
 
-    // 自動搜尋 VRD (根據車牌)
+    // ★★★ 自動搜尋 VRD (強效版 v2：去除空格、不分大小寫、全方位搜尋) ★★★
     const autoFetchVRD = () => {
-        const regInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value.trim().toUpperCase();
-        if (!regInput) { alert("請先輸入車牌號碼"); return; }
-
-        // 搜尋邏輯：包含 Tag 搜尋
-        const entry = dbEntries.find(d => 
-            d.category === 'Vehicle' && (
-                (d.plateNoHK || '').toUpperCase() === regInput || 
-                (d.relatedPlateNo || '').toUpperCase() === regInput ||
-                d.tags?.some(tag => tag.toUpperCase() === regInput) || // ★ 搜尋標籤
-                d.name.toUpperCase().includes(regInput) // ★ 搜尋標題
-            )
-        );
+        // 1. 獲取輸入的車牌，並轉為大寫、去除所有空格
+        const rawInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value;
+        if (!rawInput) { alert("請先輸入車牌號碼"); return; }
         
+        const cleanReg = rawInput.trim().toUpperCase().replace(/\s+/g, ''); // e.g. "AB 1234" -> "AB1234"
+
+        // 2. 在資料庫中搜尋 (四重匹配)
+        const entry = dbEntries.find(d => {
+            // 只搜尋 Vehicle 類別
+            if (d.category !== 'Vehicle') return false;
+
+            // A. 比對車牌欄位 (去除空格後比對)
+            const dbPlate = (d.plateNoHK || '').toUpperCase().replace(/\s+/g, '');
+            if (dbPlate === cleanReg) return true;
+
+            // B. 比對關聯車牌欄位
+            const dbRelated = (d.relatedPlateNo || '').toUpperCase().replace(/\s+/g, '');
+            if (dbRelated === cleanReg) return true;
+
+            // C. 比對標籤 (Tags)
+            if (d.tags?.some(tag => tag.toUpperCase().replace(/\s+/g, '') === cleanReg)) return true;
+
+            // D. 比對標題 (Name) - 只要標題包含車牌字串即可
+            const dbName = (d.name || '').toUpperCase().replace(/\s+/g, '');
+            if (dbName.includes(cleanReg)) return true;
+
+            return false;
+        });
+        
+        // 3. 填入資料
         if (entry) {
             if(entry.make) setSelectedMake(entry.make);
             if(entry.model) setFieldValue('model', entry.model);
@@ -3282,14 +3299,17 @@ const DatabaseSelector = ({
             if(entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
             if(entry.prevOwners !== undefined) setFieldValue('previousOwners', entry.prevOwners.toString());
             
+            // 自動填入車主 (若原本欄位為空)
             const currName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
             if (entry.registeredOwnerName && !currName) {
                 setFieldValue('customerName', entry.registeredOwnerName);
                 if (entry.registeredOwnerId) setFieldValue('customerID', entry.registeredOwnerId);
             }
-            alert(`已成功匯入 [${regInput}] 的 VRD 資料！\n(來源: ${entry.name})`);
+            
+            alert(`✅ 成功匯入 VRD 資料！\n來源文件: ${entry.name}\n(車牌: ${cleanReg})`);
         } else {
-            alert(`在資料庫中找不到車牌 [${regInput}] 的 VRD 資料。\n請確認資料庫中心是否有該文件，且車牌已記錄在標籤或欄位中。`);
+            // 4. 失敗提示
+            alert(`⚠️ 找不到車牌 [${rawInput}] 的資料。\n\n請確認：\n1. 資料庫中心是否有該車輛的 VRD 文件？\n2. 該文件的類別是否為 "Vehicle"？\n3. 文件標題或標籤是否包含此車牌？`);
         }
     };
 
