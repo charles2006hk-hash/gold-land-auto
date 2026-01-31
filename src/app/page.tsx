@@ -3153,8 +3153,9 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (最終修復版：含圖片壓縮 + 完整功能保留)
+  // 1. Vehicle Form Modal (完整獨立版：含 VRD 卡片、收購類型、費用聯動、圖片壓縮)
   const VehicleFormModal = () => {
+    // 只有在編輯模式或點擊新增時才顯示
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
     const v = editingVehicle || {} as Partial<Vehicle>;
@@ -3164,10 +3165,9 @@ const DatabaseSelector = ({
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
     
-    // 數值輸入狀態
+    // 數值輸入狀態 (防止輸入時跳動)
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
-    const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
     const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
     const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
@@ -3179,36 +3179,40 @@ const DatabaseSelector = ({
 
     // 照片狀態
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
-    const [isCompressing, setIsCompressing] = useState(false); // 壓縮指示器
+    const [isCompressing, setIsCompressing] = useState(false); // 壓縮 Loading 狀態
 
-    // 資料庫選取器
+    // 資料庫選取器狀態
     const [selectorOpen, setSelectorOpen] = useState(false);
     const [selectorType, setSelectorType] = useState<'customer' | 'vehicle_vrd'>('customer');
 
-    // 計算邏輯
+    // ★★★ 計算邏輯：自動將中港費用加入總應收 ★★★
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-    const totalRevenue = (v.price || 0) + cbFees;
+    const totalRevenue = (v.price || 0) + cbFees; // 車價 + 中港代辦費
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
+    
+    // 找出「未付款」的中港項目 (用於顯示黃色待收條)
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
-    // 新增費用/收款狀態
+    // 新增費用/收款的暫存狀態
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
-    const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: 'Deposit', amount: '', method: 'Cash', note: '' });
+    const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
 
+    // 自動計算牌費
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
         const fee = calculateLicenseFee(fuelType, size);
         setAutoLicenseFee(fee);
     }, [fuelType, engineSizeStr]);
     
+    // 計算牌薄價
     const calcRegisteredPrice = () => {
         const a1 = Number(priceA1Str.replace(/,/g, '')) || 0;
         const tax = Number(priceTaxStr.replace(/,/g, '')) || 0;
         return formatNumberInput(String(a1 + tax));
     };
 
-    // ★★★ 圖片壓縮函數 (目標: ~130KB) ★★★
+    // --- 圖片壓縮函數 (目標: ~130KB) ---
     const compressImage = (file: File): Promise<string> => {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -3221,7 +3225,7 @@ const DatabaseSelector = ({
                     let width = img.width;
                     let height = img.height;
                     
-                    // 1. 縮放尺寸 (限制最大寬度 1280px，通常能有效減少體積)
+                    // 1. 縮放尺寸 (限制最大寬度 1280px)
                     const MAX_WIDTH = 1280;
                     if (width > MAX_WIDTH) {
                         height *= MAX_WIDTH / width;
@@ -3233,7 +3237,7 @@ const DatabaseSelector = ({
                     const ctx = canvas.getContext('2d');
                     ctx?.drawImage(img, 0, 0, width, height);
 
-                    // 2. 壓縮品質 (0.6 約為 60% 品質，通常 JPEG 都在 100-150KB 左右)
+                    // 2. 壓縮品質 (0.6 約為 60% 品質)
                     const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
                     resolve(dataUrl);
                 };
@@ -3245,7 +3249,7 @@ const DatabaseSelector = ({
         const files = e.target.files;
         if (!files || files.length === 0) return;
         
-        setIsCompressing(true); // 顯示處理中
+        setIsCompressing(true);
         const newPhotos: string[] = [];
 
         for (let i = 0; i < files.length; i++) {
@@ -3259,8 +3263,8 @@ const DatabaseSelector = ({
         }
 
         setCarPhotos(prev => [...prev, ...newPhotos]);
-        setIsCompressing(false); // 隱藏處理中
-        e.target.value = ''; // Reset input
+        setIsCompressing(false);
+        e.target.value = '';
     };
 
     // --- 資料庫回填邏輯 ---
@@ -3309,7 +3313,7 @@ const DatabaseSelector = ({
         }
     };
 
-    // --- 儲存邏輯 (包含照片) ---
+    // --- 儲存邏輯 (包含照片注入) ---
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         if(editingVehicle) {
             editingVehicle.photos = carPhotos;
@@ -3319,6 +3323,7 @@ const DatabaseSelector = ({
 
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-hidden">
+        {/* 資料庫選取器 Popup */}
         <DatabaseSelector isOpen={selectorOpen} onClose={() => setSelectorOpen(false)} type={selectorType} entries={dbEntries} onSelect={handleDbSelect} />
 
         <div className="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-slate-600">
@@ -3337,6 +3342,7 @@ const DatabaseSelector = ({
             </div>
           </div>
 
+          {/* Body Form */}
           <form onSubmit={handleSaveWrapper} className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
             
             {/* === 左側欄：VRD 模擬與照片區 (佔 35%) === */}
@@ -3381,7 +3387,6 @@ const DatabaseSelector = ({
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
                         </div>
 
-                        {/* ★★★ 補充：燃料與波箱 (放入左側模擬卡片) ★★★ */}
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
                             <div>
                                 <label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label>
@@ -3436,7 +3441,7 @@ const DatabaseSelector = ({
             </div>
 
             {/* === 右側欄：銷售與管理 (佔 65%) === */}
-            <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+            <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
                 
                 {/* Top Bar: Status & Dates */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -3472,14 +3477,14 @@ const DatabaseSelector = ({
                     </div>
                 </div>
 
-                {/* 2. 財務與價格 (Financials) - ★★★ 修正：補回收購類型 ★★★ */}
+                {/* 2. 財務與價格 (Financials) - ★★★ 補回：收購類型 ★★★ */}
                 <div className="mb-6">
                     <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center"><DollarSign size={16} className="mr-2 text-green-600"/> 價格設定 (Pricing)</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4"> {/* 改為 5 欄以容納 Purchase Type */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div className="bg-yellow-50 p-2 rounded border border-yellow-200"><label className="block text-[10px] text-yellow-800 font-bold mb-1">售價 (Price)</label><input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-lg font-bold text-slate-900 outline-none" placeholder="$0"/></div>
                         <div className="bg-gray-50 p-2 rounded border border-gray-200"><label className="block text-[10px] text-gray-500 font-bold mb-1">成本 (Cost)</label><input name="costPrice" value={costStr} onChange={e => setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono text-slate-600 outline-none" placeholder="$0"/></div>
                         
-                        {/* ★★★ 補回：收購類型 ★★★ */}
+                        {/* ★★★ 收購類型 (Type) ★★★ */}
                         <div className="bg-white p-2 rounded border border-slate-200">
                             <label className="block text-[10px] text-blue-400 font-bold mb-1">收購類型 (Type)</label>
                             <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full bg-transparent text-sm font-bold text-blue-800 outline-none">
@@ -3534,9 +3539,9 @@ const DatabaseSelector = ({
                         )}
                     </div>
 
-                    {/* Payments & Expenses */}
+                    {/* ★★★ 4. 收款與費用 (Payments & Expenses) - 絕對保留 ★★★ */}
                     <div className="grid grid-cols-1 gap-4">
-                        {/* 收款區 (含新增費用功能) */}
+                        {/* 收款區 */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between">
                                 收款記錄 (Payments) <span className="text-green-600">已收: {formatCurrency(totalReceived)}</span>
@@ -3551,16 +3556,28 @@ const DatabaseSelector = ({
                                         </div>
                                     </div>
                                 ))}
-                                {pendingCbTasks.length > 0 && <div className="text-xs text-amber-600 p-1 bg-amber-50 rounded border border-amber-100 text-center">還有 {pendingCbTasks.length} 筆中港待收款項</div>}
+                                
+                                {/* ★★★ 自動列出「中港業務待收款」(可點擊) ★★★ */}
+                                {pendingCbTasks.map(task => (
+                                    <div 
+                                        key={task.id} 
+                                        className="flex justify-between text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors"
+                                        onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `Payment for: ${task.item}`, relatedTaskId: task.id }); }}
+                                        title="點擊自動填入下方收款欄"
+                                    >
+                                        <span className="flex items-center"><Info size={10} className="mr-1"/> {task.item} <span className="ml-1 px-1 bg-amber-200 text-[9px] rounded font-bold">待收</span></span>
+                                        <span className="font-mono font-bold group-hover:underline">{formatCurrency(task.fee)}</span>
+                                    </div>
+                                ))}
                             </div>
                             <div className="flex gap-1">
                                 <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 text-xs p-1.5 border rounded outline-none"/>
-                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="flex-1 text-xs p-1.5 border rounded outline-none"><option>Deposit</option><option>Balance</option></select>
-                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
+                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="flex-1 text-xs p-1.5 border rounded outline-none"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select>
+                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
                             </div>
                         </div>
 
-                        {/* 費用區 (Expenses - 保留) */}
+                        {/* 費用區 */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2">車輛費用 (Expenses)</h4>
                             <div className="space-y-1 mb-2">
