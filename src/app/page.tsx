@@ -3153,7 +3153,7 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (終極完整版：含 VRD 卡片、收購類型、樣式統一的收款與費用)
+  // 1. Vehicle Form Modal (v4.0: 修復按鈕反應 + 移除彈窗改為自動聯動 + 保留所有功能)
   const VehicleFormModal = () => {
     // 只有在編輯模式或點擊新增時才顯示
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
@@ -3165,7 +3165,10 @@ const DatabaseSelector = ({
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
     
-    // 數值輸入狀態 (防止輸入時跳動)
+    // ★★★ 1. 修復狀態按鈕：使用 State 獨立控制，反應更靈敏 ★★★
+    const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold'>(v.status || 'In Stock');
+
+    // 數值輸入狀態
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
     const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
@@ -3182,18 +3185,12 @@ const DatabaseSelector = ({
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [isCompressing, setIsCompressing] = useState(false);
 
-    // 資料庫選取器狀態
-    const [selectorOpen, setSelectorOpen] = useState(false);
-    const [selectorType, setSelectorType] = useState<'customer' | 'vehicle_vrd'>('customer');
-
-    // ★★★ 計算邏輯：自動將中港費用加入總應收 ★★★
+    // 計算邏輯
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-    const totalRevenue = (v.price || 0) + cbFees; // 車價 + 中港代辦費
+    const totalRevenue = (v.price || 0) + cbFees;
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-    const totalExpenses = (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0); // 費用總計
+    const totalExpenses = (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
-    
-    // 找出「未付款」的中港項目 (用於顯示黃色待收條)
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
     // 新增費用/收款的暫存狀態
@@ -3250,53 +3247,64 @@ const DatabaseSelector = ({
         setIsCompressing(false); e.target.value = '';
     };
 
-    // --- 資料庫回填邏輯 ---
-    const handleDbSelect = (entry: DatabaseEntry) => {
-        const updateField = (name: string, value: string) => {
-            const el = document.querySelector(`input[name="${name}"]`) as HTMLInputElement;
-            if (el) el.value = value;
-            const selectEl = document.querySelector(`select[name="${name}"]`) as HTMLSelectElement;
-            if (selectEl) selectEl.value = value;
-        };
+    // ★★★ 2. 自動填入邏輯 (取代彈出視窗) ★★★
+    
+    // 輔助：更新表單欄位值
+    const setFieldValue = (name: string, val: string) => {
+        const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement;
+        if(el) el.value = val;
+    };
 
-        if (selectorType === 'customer') {
-            updateField('customerName', entry.name);
-            updateField('customerPhone', entry.phone || '');
-            updateField('customerID', entry.idNumber || '');
-            updateField('customerAddress', entry.address || '');
-            alert(`已載入客戶：${entry.name}`);
-        } 
-        else if (selectorType === 'vehicle_vrd') {
-            if (entry.plateNoHK) updateField('regMark', entry.plateNoHK);
-            if (entry.make) setSelectedMake(entry.make);
-            if (entry.model) updateField('model', entry.model);
-            if (entry.manufactureYear) updateField('year', entry.manufactureYear);
-            if (entry.vehicleColor) updateField('colorExt', entry.vehicleColor);
-            if (entry.chassisNo) updateField('chassisNo', entry.chassisNo);
-            if (entry.engineNo) updateField('engineNo', entry.engineNo);
-            if (entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString()));
-            if (entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
-            if (entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
-            if (entry.prevOwners !== undefined) updateField('previousOwners', entry.prevOwners.toString());
+    // 自動搜尋 VRD (根據車牌)
+    const autoFetchVRD = () => {
+        const regInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value.trim().toUpperCase();
+        if (!regInput) { alert("請先輸入車牌號碼"); return; }
+
+        // 在 dbEntries 中尋找匹配的 Vehicle 資料
+        const entry = dbEntries.find(d => d.category === 'Vehicle' && (d.plateNoHK === regInput || d.relatedPlateNo === regInput));
+        
+        if (entry) {
+            if(entry.make) setSelectedMake(entry.make);
+            if(entry.model) setFieldValue('model', entry.model);
+            if(entry.manufactureYear) setFieldValue('year', entry.manufactureYear);
+            if(entry.vehicleColor) setFieldValue('colorExt', entry.vehicleColor);
+            if(entry.chassisNo) setFieldValue('chassisNo', entry.chassisNo);
+            if(entry.engineNo) setFieldValue('engineNo', entry.engineNo);
+            if(entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString()));
+            if(entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
+            if(entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
+            if(entry.prevOwners !== undefined) setFieldValue('previousOwners', entry.prevOwners.toString());
             
-            const currentCustName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
-            if (entry.registeredOwnerName && !currentCustName) {
-                updateField('customerName', entry.registeredOwnerName);
-                if (entry.registeredOwnerId) updateField('customerID', entry.registeredOwnerId);
+            // 如果目前客戶欄位是空的，且 VRD 有登記車主，就填入
+            const currName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
+            if (entry.registeredOwnerName && !currName) {
+                setFieldValue('customerName', entry.registeredOwnerName);
+                if (entry.registeredOwnerId) setFieldValue('customerID', entry.registeredOwnerId);
             }
-            if (entry.firstRegCondition) {
-                const cond = entry.firstRegCondition.toUpperCase();
-                const el = document.querySelector(`select[name="purchaseType"]`) as HTMLSelectElement;
-                if (el) {
-                    if (cond.includes('NEW') || cond.includes('新')) el.value = 'New';
-                    else el.value = 'Used';
-                }
-            }
-            alert(`已載入 VRD 資料：${entry.plateNoHK || 'N/A'}`);
+            alert(`已成功匯入 [${regInput}] 的 VRD 資料！`);
+        } else {
+            alert(`在資料庫中找不到車牌 [${regInput}] 的 VRD 資料。`);
         }
     };
 
-    // --- 儲存邏輯 (包含照片注入) ---
+    // 自動搜尋客戶 (根據姓名)
+    const autoFetchCustomer = () => {
+        const nameInput = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value.trim();
+        if (!nameInput) { alert("請先輸入客戶姓名"); return; }
+
+        // 在 dbEntries 中尋找匹配的 Person 資料
+        const entry = dbEntries.find(d => (d.category === 'Person' || d.category === 'Company') && d.name === nameInput);
+
+        if (entry) {
+            setFieldValue('customerPhone', entry.phone || '');
+            setFieldValue('customerID', entry.idNumber || '');
+            setFieldValue('customerAddress', entry.address || '');
+            alert(`已匯入客戶 [${nameInput}] 的資料。`);
+        } else {
+            alert(`在資料庫中找不到 [${nameInput}] 的客戶資料。`);
+        }
+    };
+
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         if(editingVehicle) {
             editingVehicle.photos = carPhotos;
@@ -3306,9 +3314,7 @@ const DatabaseSelector = ({
 
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-hidden">
-        {/* 資料庫選取器 Popup */}
-        <DatabaseSelector isOpen={selectorOpen} onClose={() => setSelectorOpen(false)} type={selectorType} entries={dbEntries} onSelect={handleDbSelect} />
-
+        
         <div className="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-slate-600">
           
           {/* Header */}
@@ -3337,12 +3343,18 @@ const DatabaseSelector = ({
                     <div className="p-4 space-y-3">
                         <div className="flex justify-between items-start">
                             <h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD Data)</h3>
-                            <button type="button" onClick={() => { setSelectorType('vehicle_vrd'); setSelectorOpen(true); }} className="text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 border border-red-200 flex items-center transition-colors shadow-sm"><Link size={10} className="mr-1"/> 連結資料庫</button>
+                            {/* 移除連結按鈕，改為直接操作 */}
                         </div>
                         
-                        <div className="space-y-1">
+                        <div className="space-y-1 relative">
                             <label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label>
-                            <input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-yellow-50 border-b-2 border-yellow-200 p-1 text-2xl font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-yellow-400 uppercase placeholder:text-gray-300"/>
+                            <div className="flex">
+                                <input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-yellow-50 border-b-2 border-yellow-200 p-1 text-2xl font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-yellow-400 uppercase placeholder:text-gray-300"/>
+                                {/* ★★★ VRD 自動搜尋按鈕 ★★★ */}
+                                <button type="button" onClick={autoFetchVRD} className="absolute right-0 bottom-1 bg-red-100 text-red-600 p-1.5 rounded-full hover:bg-red-200 transition-colors shadow-sm" title="依車牌搜尋資料庫並自動填入">
+                                    <RefreshCw size={14}/>
+                                </button>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -3426,18 +3438,25 @@ const DatabaseSelector = ({
             {/* === 右側欄：銷售與管理 (佔 65%) === */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
                 
-                {/* Top Bar: Status & Dates */}
+                {/* Top Bar: Status & Dates (已修復：使用 button 來控制狀態，更穩定) */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+                        {/* Hidden input for FormData */}
+                        <input type="hidden" name="status" value={currentStatus} />
+                        
                         {['In Stock', 'Reserved', 'Sold'].map(status => (
-                            <label key={status} className={`px-4 py-1.5 rounded-md text-xs font-bold cursor-pointer transition-all ${
-                                (document.querySelector(`input[name="status"][value="${status}"]`) as HTMLInputElement)?.checked 
-                                ? 'bg-slate-800 text-white shadow' 
-                                : 'text-slate-500 hover:bg-slate-100'
-                            }`}>
-                                <input type="radio" name="status" value={status} defaultChecked={v.status === status || (!v.status && status === 'In Stock')} className="hidden"/>
+                            <button
+                                key={status}
+                                type="button"
+                                onClick={() => setCurrentStatus(status as any)}
+                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all border ${
+                                    currentStatus === status 
+                                    ? 'bg-slate-800 text-white border-slate-800 shadow' 
+                                    : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'
+                                }`}
+                            >
                                 {status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : '已售')}
-                            </label>
+                            </button>
                         ))}
                     </div>
                     <div className="flex gap-3 text-xs">
@@ -3450,10 +3469,14 @@ const DatabaseSelector = ({
                 <div className="mb-6 relative">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>
-                        <button type="button" onClick={() => { setSelectorType('customer'); setSelectorOpen(true); }} className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 border border-blue-100 flex items-center transition-colors"><Database size={10} className="mr-1"/> 連結客戶庫</button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                        <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">NAME</span><input name="customerName" defaultValue={v.customerName} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none"/></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 relative group-focus-within:ring-2 ring-blue-100 transition-all">
+                        <div className="relative">
+                            <span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">NAME</span>
+                            <input name="customerName" defaultValue={v.customerName} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-gray-200" placeholder="輸入姓名..."/>
+                            {/* ★★★ 客戶自動搜尋按鈕 ★★★ */}
+                            <button type="button" onClick={autoFetchCustomer} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-colors" title="依姓名搜尋資料庫"><Search size={14}/></button>
+                        </div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">PHONE</span><input name="customerPhone" defaultValue={v.customerPhone} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">ID / BR</span><input name="customerID" defaultValue={v.customerID} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">ADDRESS</span><input name="customerAddress" defaultValue={v.customerAddress} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm focus:ring-2 focus:ring-blue-100 outline-none"/></div>
@@ -3521,7 +3544,7 @@ const DatabaseSelector = ({
                         )}
                     </div>
 
-                    {/* ★★★ 4. 收款與費用 (統一列表樣式) ★★★ */}
+                    {/* ★★★ 4. 收款與費用 (Payments & Expenses) - 樣式統一 + 中港聯動 ★★★ */}
                     <div className="grid grid-cols-1 gap-4">
                         {/* 收款區 (Payments) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
