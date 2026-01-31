@@ -3165,9 +3165,8 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v6.0: 修復儲存按鈕 + 車廠自動匹配 + 強效搜尋)
+  // 1. Vehicle Form Modal (v7.0: 修復儲存崩潰 + 補回里數/備註欄位)
   const VehicleFormModal = () => {
-    // 只有在編輯模式或點擊新增時才顯示
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
     const v = editingVehicle || {} as Partial<Vehicle>;
@@ -3183,7 +3182,7 @@ const DatabaseSelector = ({
     // 數值輸入狀態
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
-    const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
+    const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || ''))); // ★ 里數狀態
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
     const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
     const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
@@ -3265,7 +3264,7 @@ const DatabaseSelector = ({
         if(el) el.value = val;
     };
 
-    // ★★★ 自動搜尋 VRD (v3.0 最終穩定版：含車廠模糊匹配) ★★★
+    // 自動搜尋 VRD
     const autoFetchVRD = () => {
         const regInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value;
         if (!regInput) { alert("請先輸入車牌號碼"); return; }
@@ -3288,18 +3287,11 @@ const DatabaseSelector = ({
         });
         
         if (entry) {
-            // ★ 車廠模糊匹配邏輯 (解決大小寫不一致導致無法選取的問題)
             if(entry.make) {
                 const dbMake = entry.make.trim().toLowerCase();
-                // 在 settings.makes 中尋找忽略大小寫的匹配項
                 const matchedMake = settings.makes.find(m => m.trim().toLowerCase() === dbMake);
-                if (matchedMake) {
-                    setSelectedMake(matchedMake); // 優先使用系統列表中的標準名稱
-                } else {
-                    setSelectedMake(entry.make); // 如果列表沒有，就用資料庫原本的
-                }
+                setSelectedMake(matchedMake || entry.make);
             }
-
             if(entry.model) setFieldValue('model', entry.model);
             if(entry.manufactureYear) setFieldValue('year', entry.manufactureYear);
             if(entry.vehicleColor) setFieldValue('colorExt', entry.vehicleColor);
@@ -3337,26 +3329,29 @@ const DatabaseSelector = ({
         }
     };
 
-    // ★★★ 修復：儲存邏輯 (解決點擊無反應) ★★★
+    // ★★★ 儲存邏輯 (修復：注入缺失欄位以防崩潰) ★★★
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault(); // ★ 關鍵：阻止表單預設行為 (避免無反應或刷新)
-        console.log("正在儲存車輛資料..."); // Debug
+        e.preventDefault();
+        
+        // 防呆：如果 DOM 中缺少 mileage 欄位，手動注入到 FormData
+        // 雖然下面已經補回了 input，但為了雙重保險，這裡做個檢查
+        const formData = new FormData(e.currentTarget);
+        if(!formData.has('mileage')) {
+            const hiddenMileage = document.createElement('input');
+            hiddenMileage.type = 'hidden';
+            hiddenMileage.name = 'mileage';
+            hiddenMileage.value = mileageStr.replace(/,/g, '');
+            e.currentTarget.appendChild(hiddenMileage);
+        }
 
         try {
             if(editingVehicle) {
                 editingVehicle.photos = carPhotos;
             }
-            // 對於新車，saveVehicle 會讀取表單資料，照片部分可能需要特別處理
-            // 但目前的 saveVehicle 邏輯是讀取 editingVehicle?.photos
-            // 如果是新車 (editingVehicle 為 null)，照片可能會遺失
-            // 為了解決這個問題，我們可以將照片以 JSON 形式塞入 hidden input，讓 saveVehicle 讀取 (如果改寫了 saveVehicle)
-            // 或者更簡單：我們直接呼叫 saveVehicle，它會執行。
-            
             await saveVehicle(e);
-            
         } catch (err) {
             console.error("儲存失敗:", err);
-            alert("儲存失敗，請檢查 Console 訊息。");
+            alert(`儲存失敗: ${err}`);
         }
     };
 
@@ -3397,10 +3392,15 @@ const DatabaseSelector = ({
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}</datalist></div>
                         </div>
+                        
+                        {/* ★★★ 修復：補回 Mileage 欄位，避免 saveVehicle 報錯 ★★★ */}
                         <div className="grid grid-cols-3 gap-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
-                            <div className="col-span-2"><label className="text-[9px] text-slate-400 font-bold uppercase">Color</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm"/><datalist id="colors">{settings.colors.map(c => <option key={c} value={c} />)}</datalist></div>
+                            {/* 新增：里數輸入框 */}
+                            <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
+                            <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Color</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm"/><datalist id="colors">{settings.colors.map(c => <option key={c} value={c} />)}</datalist></div>
                         </div>
+
                         <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
                         <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
                         <div className="grid grid-cols-3 gap-2 pt-2">
@@ -3425,7 +3425,6 @@ const DatabaseSelector = ({
             {/* === 右側欄：銷售與管理 === */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
                 
-                {/* 狀態按鈕 */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
                         <input type="hidden" name="status" value={currentStatus} />
@@ -3472,6 +3471,9 @@ const DatabaseSelector = ({
                 </div>
 
                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 sticky bottom-0 bg-white z-10">
+                    <div className="flex-1 mr-4">
+                        <textarea name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2 border rounded h-16 resize-none outline-none focus:ring-1 ring-blue-200"></textarea>
+                    </div>
                     {v.id && (<div className="flex mr-auto gap-2"><button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印合約"><FileText size={18}/></button><button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印發票"><Printer size={18}/></button></div>)}
                     <button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="px-5 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
                     <button type="submit" className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center"><Save size={16} className="mr-2"/> 儲存變更</button>
