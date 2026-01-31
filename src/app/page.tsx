@@ -3256,65 +3256,43 @@ const DatabaseSelector = ({
     };
 
     // ★★★ 自動搜尋 VRD (除錯增強版：會在 Console 顯示詳細比對過程) ★★★
+    // ★★★ 自動搜尋 VRD (深度診斷版：會列出所有掃描過的車牌) ★★★
     const autoFetchVRD = () => {
-        // 1. 處理輸入值
         const rawInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value;
         if (!rawInput) { alert("請先輸入車牌號碼"); return; }
         
-        // 標準化：轉大寫、去空格
         const targetPlate = rawInput.trim().toUpperCase().replace(/[\s\-\_]+/g, ''); 
         
-        console.log(`[VRD Search] 開始搜尋車牌: "${targetPlate}" (原始輸入: "${rawInput}")`);
-        console.log(`[VRD Search] 目前資料庫共有 ${dbEntries.length} 筆資料`);
+        console.log(`%c[VRD Search] 目標: "${targetPlate}"`, "color: blue; font-weight: bold; font-size: 14px;");
+        console.log(`[VRD Search] 資料庫總筆數: ${dbEntries.length}`);
 
-        // 2. 搜尋並記錄過程
-        const entry = dbEntries.find(d => {
-            // 只看 Vehicle 類別
+        const entry = dbEntries.find((d, index) => {
+            // 1. 只看 Vehicle
             if (d.category !== 'Vehicle') return false;
 
-            // 準備資料庫中的候選值 (全部標準化)
+            // 2. 準備比對資料
             const dbPlate = (d.plateNoHK || '').toUpperCase().replace(/[\s\-\_]+/g, '');
             const dbRelated = (d.relatedPlateNo || '').toUpperCase().replace(/[\s\-\_]+/g, '');
             const dbName = (d.name || '').toUpperCase().replace(/[\s\-\_]+/g, '');
-            
-            // 處理標籤：將所有標籤合併成一個長字串來搜，防止陣列結構問題
             const dbTagsString = (d.tags || []).join(',').toUpperCase().replace(/[\s\-\_]+/g, '');
 
-            // 比對記錄 (只顯示部分，避免 Console 太多)
-            // console.log(`  - 檢查 ID: ${d.id}, Name: ${d.name}, Tags: ${dbTagsString}`);
+            // ★★★ 印出每一筆 Vehicle 的資料 (幫助您除錯) ★★★
+            console.log(`>> 掃描第 ${index + 1} 筆 [${d.name}]:`);
+            console.log(`   - 欄位車牌: "${dbPlate}"`);
+            console.log(`   - 關聯車牌: "${dbRelated}"`);
+            console.log(`   - 標籤內容: "${dbTagsString}"`);
 
-            // A. 比對車牌欄位
-            if (dbPlate === targetPlate) {
-                console.log(`    >>> 匹配成功！(原因: plateNoHK 吻合)`);
-                return true;
-            }
-
-            // B. 比對關聯車牌
-            if (dbRelated === targetPlate) {
-                console.log(`    >>> 匹配成功！(原因: relatedPlateNo 吻合)`);
-                return true;
-            }
-
-            // C. 比對標籤 (超級寬鬆模式：只要標籤字串裡包含車牌)
-            if (dbTagsString.includes(targetPlate)) {
-                console.log(`    >>> 匹配成功！(原因: Tags 包含車牌)`);
-                return true;
-            }
-
-            // D. 比對標題
-            if (dbName.includes(targetPlate)) {
-                console.log(`    >>> 匹配成功！(原因: Name 包含車牌)`);
-                return true;
-            }
+            // 比對邏輯
+            if (dbPlate === targetPlate) { console.log(`   ✅ 匹配成功 (欄位)`); return true; }
+            if (dbRelated === targetPlate) { console.log(`   ✅ 匹配成功 (關聯)`); return true; }
+            if (dbTagsString.includes(targetPlate)) { console.log(`   ✅ 匹配成功 (標籤)`); return true; }
+            if (dbName.includes(targetPlate)) { console.log(`   ✅ 匹配成功 (標題)`); return true; }
 
             return false;
         });
         
-        // 3. 結果處理
         if (entry) {
-            console.log(`[VRD Search] 最終匹配資料:`, entry);
-            
-            // 填入資料 (保持原有邏輯)
+            // ... (填入資料邏輯保持不變) ...
             if(entry.make) setSelectedMake(entry.make);
             if(entry.model) setFieldValue('model', entry.model);
             if(entry.manufactureYear) setFieldValue('year', entry.manufactureYear);
@@ -3331,11 +3309,10 @@ const DatabaseSelector = ({
                 setFieldValue('customerName', entry.registeredOwnerName);
                 if (entry.registeredOwnerId) setFieldValue('customerID', entry.registeredOwnerId);
             }
-            
-            alert(`✅ 成功匯入 VRD 資料！\n來源: ${entry.name}`);
+            alert(`✅ 成功匯入 VRD 資料！`);
         } else {
-            console.warn(`[VRD Search] 搜尋失敗。目標: ${targetPlate}`);
-            alert(`⚠️ 找不到車牌 [${rawInput}] 的資料。\n\n建議您：\n1. 按 F12 打開 Console 查看詳細比對過程。\n2. 確認資料庫中的標籤是否正確 (例如是否多了符號)。`);
+            console.warn(`[VRD Search] 搜尋結束，未找到匹配項目。`);
+            alert(`⚠️ 找不到 [${rawInput}]。\n請按 F12 查看 Console，確認資料庫裡的車牌長什麼樣子。`);
         }
     };
 
