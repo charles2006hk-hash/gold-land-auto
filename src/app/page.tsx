@@ -2486,15 +2486,27 @@ useEffect(() => {
             const list: DatabaseEntry[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // 我們只需要計算提醒，所以只讀取必要欄位即可，不需要讀圖片
+                // ★★★ 修正重點：使用 ...data 完整讀取所有欄位，確保搜尋功能可用 ★★★
                 list.push({ 
                     id: doc.id, 
+                    ...data, // 這行最重要！把資料庫裡有的 tags, plateNoHK 全部複製過來
+                    
+                    // 以下是防呆預設值 (避免資料庫缺欄位導致報錯)
                     category: data.category || 'Person',
                     name: data.name || '',
                     reminderEnabled: data.reminderEnabled || false,
                     expiryDate: data.expiryDate || '',
-                    // 其他欄位對於統計來說不重要，可以省略或給預設值
-                    attachments: [], tags: [], description: '', createdAt: null 
+                    tags: data.tags || [], // ★ 確保讀取標籤
+                    plateNoHK: data.plateNoHK || '', // ★ 確保讀取車牌
+                    relatedPlateNo: data.relatedPlateNo || '',
+                    
+                    // 其他 VRD 常用欄位確保
+                    make: data.make || '',
+                    model: data.model || '',
+                    chassisNo: data.chassisNo || '',
+                    engineNo: data.engineNo || '',
+                    attachments: data.attachments || [],
+                    roles: data.roles || []
                 } as DatabaseEntry);
             });
             setDbEntries(list);
