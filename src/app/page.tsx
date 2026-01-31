@@ -3338,33 +3338,6 @@ const DatabaseSelector = ({
             alert(`⚠️ 找不到車牌 [${rawInput}] 的資料。\n\n建議您：\n1. 按 F12 打開 Console 查看詳細比對過程。\n2. 確認資料庫中的標籤是否正確 (例如是否多了符號)。`);
         }
     };
-        
-        // 3. 填入資料
-        if (entry) {
-            if(entry.make) setSelectedMake(entry.make);
-            if(entry.model) setFieldValue('model', entry.model);
-            if(entry.manufactureYear) setFieldValue('year', entry.manufactureYear);
-            if(entry.vehicleColor) setFieldValue('colorExt', entry.vehicleColor);
-            if(entry.chassisNo) setFieldValue('chassisNo', entry.chassisNo);
-            if(entry.engineNo) setFieldValue('engineNo', entry.engineNo);
-            if(entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString()));
-            if(entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
-            if(entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
-            if(entry.prevOwners !== undefined) setFieldValue('previousOwners', entry.prevOwners.toString());
-            
-            // 自動填入車主 (若原本欄位為空)
-            const currName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
-            if (entry.registeredOwnerName && !currName) {
-                setFieldValue('customerName', entry.registeredOwnerName);
-                if (entry.registeredOwnerId) setFieldValue('customerID', entry.registeredOwnerId);
-            }
-            
-            alert(`✅ 成功匯入 VRD 資料！\n來源文件: ${entry.name}\n(車牌: ${cleanReg})`);
-        } else {
-            // 4. 失敗提示
-            alert(`⚠️ 找不到車牌 [${rawInput}] 的資料。\n\n請確認：\n1. 資料庫中心是否有該車輛的 VRD 文件？\n2. 該文件的類別是否為 "Vehicle"？\n3. 文件標題或標籤是否包含此車牌？`);
-        }
-    };
 
     // 自動搜尋客戶 (根據姓名)
     const autoFetchCustomer = () => {
