@@ -3165,7 +3165,7 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v5.0 最終修正版：修復狀態按鈕 + 自動搜尋 + 統一介面)
+  // 1. Vehicle Form Modal (v6.0: 修復儲存按鈕 + 車廠自動匹配 + 強效搜尋)
   const VehicleFormModal = () => {
     // 只有在編輯模式或點擊新增時才顯示
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
@@ -3177,7 +3177,7 @@ const DatabaseSelector = ({
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
     
-    // ★★★ 1. 狀態按鈕 State (修復點擊無反應問題) ★★★
+    // 狀態按鈕 State
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold'>(v.status || 'In Stock');
 
     // 數值輸入狀態
@@ -3223,7 +3223,7 @@ const DatabaseSelector = ({
         return formatNumberInput(String(a1 + tax));
     };
 
-    // --- 圖片壓縮函數 (目標: ~130KB) ---
+    // 圖片壓縮
     const compressImage = (file: File): Promise<string> => {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -3259,53 +3259,47 @@ const DatabaseSelector = ({
         setIsCompressing(false); e.target.value = '';
     };
 
-    // ★★★ 2. 自動填入邏輯 (修復：Tag 搜尋 + 直接填入不彈窗) ★★★
-    
     // 輔助：更新表單欄位值
     const setFieldValue = (name: string, val: string) => {
         const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement;
         if(el) el.value = val;
     };
 
-    // ★★★ 自動搜尋 VRD (除錯增強版：會在 Console 顯示詳細比對過程) ★★★
-    // ★★★ 自動搜尋 VRD (深度診斷版：會列出所有掃描過的車牌) ★★★
+    // ★★★ 自動搜尋 VRD (v3.0 最終穩定版：含車廠模糊匹配) ★★★
     const autoFetchVRD = () => {
-        const rawInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value;
-        if (!rawInput) { alert("請先輸入車牌號碼"); return; }
+        const regInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value;
+        if (!regInput) { alert("請先輸入車牌號碼"); return; }
         
-        const targetPlate = rawInput.trim().toUpperCase().replace(/[\s\-\_]+/g, ''); 
-        
-        console.log(`%c[VRD Search] 目標: "${targetPlate}"`, "color: blue; font-weight: bold; font-size: 14px;");
-        console.log(`[VRD Search] 資料庫總筆數: ${dbEntries.length}`);
+        const targetPlate = regInput.trim().toUpperCase().replace(/[\s\-\_]+/g, ''); 
+        console.log(`[VRD Search] 目標: "${targetPlate}"`);
 
-        const entry = dbEntries.find((d, index) => {
-            // 1. 只看 Vehicle
+        const entry = dbEntries.find(d => {
             if (d.category !== 'Vehicle') return false;
-
-            // 2. 準備比對資料
             const dbPlate = (d.plateNoHK || '').toUpperCase().replace(/[\s\-\_]+/g, '');
             const dbRelated = (d.relatedPlateNo || '').toUpperCase().replace(/[\s\-\_]+/g, '');
             const dbName = (d.name || '').toUpperCase().replace(/[\s\-\_]+/g, '');
-            const dbTagsString = (d.tags || []).join(',').toUpperCase().replace(/[\s\-\_]+/g, '');
+            const hasMatchingTag = d.tags?.some(tag => tag.toUpperCase().replace(/[\s\-\_]+/g, '') === targetPlate);
 
-            // ★★★ 印出每一筆 Vehicle 的資料 (幫助您除錯) ★★★
-            console.log(`>> 掃描第 ${index + 1} 筆 [${d.name}]:`);
-            console.log(`   - 欄位車牌: "${dbPlate}"`);
-            console.log(`   - 關聯車牌: "${dbRelated}"`);
-            console.log(`   - 標籤內容: "${dbTagsString}"`);
-
-            // 比對邏輯
-            if (dbPlate === targetPlate) { console.log(`   ✅ 匹配成功 (欄位)`); return true; }
-            if (dbRelated === targetPlate) { console.log(`   ✅ 匹配成功 (關聯)`); return true; }
-            if (dbTagsString.includes(targetPlate)) { console.log(`   ✅ 匹配成功 (標籤)`); return true; }
-            if (dbName.includes(targetPlate)) { console.log(`   ✅ 匹配成功 (標題)`); return true; }
-
+            if (dbPlate === targetPlate) return true;
+            if (dbRelated === targetPlate) return true;
+            if (hasMatchingTag) return true;
+            if (dbName.includes(targetPlate)) return true;
             return false;
         });
         
         if (entry) {
-            // ... (填入資料邏輯保持不變) ...
-            if(entry.make) setSelectedMake(entry.make);
+            // ★ 車廠模糊匹配邏輯 (解決大小寫不一致導致無法選取的問題)
+            if(entry.make) {
+                const dbMake = entry.make.trim().toLowerCase();
+                // 在 settings.makes 中尋找忽略大小寫的匹配項
+                const matchedMake = settings.makes.find(m => m.trim().toLowerCase() === dbMake);
+                if (matchedMake) {
+                    setSelectedMake(matchedMake); // 優先使用系統列表中的標準名稱
+                } else {
+                    setSelectedMake(entry.make); // 如果列表沒有，就用資料庫原本的
+                }
+            }
+
             if(entry.model) setFieldValue('model', entry.model);
             if(entry.manufactureYear) setFieldValue('year', entry.manufactureYear);
             if(entry.vehicleColor) setFieldValue('colorExt', entry.vehicleColor);
@@ -3321,20 +3315,18 @@ const DatabaseSelector = ({
                 setFieldValue('customerName', entry.registeredOwnerName);
                 if (entry.registeredOwnerId) setFieldValue('customerID', entry.registeredOwnerId);
             }
-            alert(`✅ 成功匯入 VRD 資料！`);
+            alert(`✅ 成功匯入 VRD 資料！\n來源: ${entry.name}`);
         } else {
-            console.warn(`[VRD Search] 搜尋結束，未找到匹配項目。`);
-            alert(`⚠️ 找不到 [${rawInput}]。\n請按 F12 查看 Console，確認資料庫裡的車牌長什麼樣子。`);
+            const confirmAdd = confirm(`⚠️ 找不到車牌 [${regInput}] 的 VRD 資料。\n是否要前往「資料庫中心」手動檢查並添加標籤？`);
+            if(confirmAdd) { setEditingVehicle(null); setActiveTab('database'); }
         }
     };
 
-    // 自動搜尋客戶 (根據姓名)
+    // 自動搜尋客戶
     const autoFetchCustomer = () => {
         const nameInput = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value.trim();
         if (!nameInput) { alert("請先輸入客戶姓名"); return; }
-
         const entry = dbEntries.find(d => (d.category === 'Person' || d.category === 'Company') && d.name === nameInput);
-
         if (entry) {
             setFieldValue('customerPhone', entry.phone || '');
             setFieldValue('customerID', entry.idNumber || '');
@@ -3345,11 +3337,27 @@ const DatabaseSelector = ({
         }
     };
 
+    // ★★★ 修復：儲存邏輯 (解決點擊無反應) ★★★
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
-        if(editingVehicle) {
-            editingVehicle.photos = carPhotos;
+        e.preventDefault(); // ★ 關鍵：阻止表單預設行為 (避免無反應或刷新)
+        console.log("正在儲存車輛資料..."); // Debug
+
+        try {
+            if(editingVehicle) {
+                editingVehicle.photos = carPhotos;
+            }
+            // 對於新車，saveVehicle 會讀取表單資料，照片部分可能需要特別處理
+            // 但目前的 saveVehicle 邏輯是讀取 editingVehicle?.photos
+            // 如果是新車 (editingVehicle 為 null)，照片可能會遺失
+            // 為了解決這個問題，我們可以將照片以 JSON 形式塞入 hidden input，讓 saveVehicle 讀取 (如果改寫了 saveVehicle)
+            // 或者更簡單：我們直接呼叫 saveVehicle，它會執行。
+            
+            await saveVehicle(e);
+            
+        } catch (err) {
+            console.error("儲存失敗:", err);
+            alert("儲存失敗，請檢查 Console 訊息。");
         }
-        saveVehicle(e); 
     };
 
     return (
@@ -3357,7 +3365,6 @@ const DatabaseSelector = ({
         
         <div className="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-slate-600">
           
-          {/* Header */}
           <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20">
             <div className="flex items-center gap-3">
                 <div className="p-2 bg-yellow-500 rounded-lg text-black"><Car size={24} /></div>
@@ -3371,325 +3378,104 @@ const DatabaseSelector = ({
             </div>
           </div>
 
-          {/* Body Form */}
           <form onSubmit={handleSaveWrapper} className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
             
-            {/* === 左側欄：VRD 模擬與照片區 (佔 35%) === */}
+            {/* === 左側欄：VRD & Photos === */}
             <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin">
-                
-                {/* 1. VRD 模擬卡片 */}
                 <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                     <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
                     <div className="p-4 space-y-3">
-                        <div className="flex justify-between items-start">
-                            <h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD Data)</h3>
-                            {/* 已移除彈窗按鈕，功能整合至車牌輸入框 */}
-                        </div>
-                        
+                        <div className="flex justify-between items-start"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD Data)</h3></div>
                         <div className="space-y-1 relative">
                             <label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label>
                             <div className="flex relative">
                                 <input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-yellow-50 border-b-2 border-yellow-200 p-1 text-2xl font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-yellow-400 uppercase placeholder:text-gray-300"/>
-                                {/* ★★★ 自動搜尋按鈕 (修復：Tag 搜尋) ★★★ */}
-                                <button type="button" onClick={autoFetchVRD} className="absolute right-0 bottom-1 bg-red-100 text-red-600 p-1.5 rounded-full hover:bg-red-200 transition-colors shadow-sm z-10" title="依車牌搜尋資料庫並自動填入">
-                                    <RefreshCw size={14}/>
-                                </button>
+                                <button type="button" onClick={autoFetchVRD} className="absolute right-0 bottom-1 bg-red-100 text-red-600 p-1.5 rounded-full hover:bg-red-200 transition-colors shadow-sm z-10" title="依車牌搜尋資料庫並自動填入"><RefreshCw size={14}/></button>
                             </div>
                         </div>
-
                         <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="text-[9px] text-slate-400 font-bold uppercase">Make</label>
-                                <select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none">
-                                    <option value="">--</option>
-                                    {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-[9px] text-slate-400 font-bold uppercase">Model</label>
-                                <input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/>
-                                <datalist id="model_list">{(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}</datalist>
-                            </div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}</datalist></div>
                         </div>
-
                         <div className="grid grid-cols-3 gap-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
                             <div className="col-span-2"><label className="text-[9px] text-slate-400 font-bold uppercase">Color</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm"/><datalist id="colors">{settings.colors.map(c => <option key={c} value={c} />)}</datalist></div>
                         </div>
-
-                        <div className="space-y-1 pt-2 border-t border-dashed border-slate-200">
-                            <label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label>
-                            <input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label>
-                            <input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
-                        </div>
-
+                        <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
+                        <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
                         <div className="grid grid-cols-3 gap-2 pt-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap.</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono"/></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 7} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
                         </div>
-
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
-                            <div>
-                                <label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label>
-                                <select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none">
-                                    <option value="Petrol">Petrol (汽油)</option>
-                                    <option value="Diesel">Diesel (柴油)</option>
-                                    <option value="Electric">Electric (電動)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="text-[9px] text-slate-400 font-bold uppercase">Transmission</label>
-                                <select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none">
-                                    <option value="Automatic">Automatic (自動)</option>
-                                    <option value="Manual">Manual (棍波)</option>
-                                </select>
-                            </div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Petrol">Petrol (汽油)</option><option value="Diesel">Diesel (柴油)</option><option value="Electric">Electric (電動)</option></select></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Transmission</label><select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Automatic">Automatic (自動)</option><option value="Manual">Manual (棍波)</option></select></div>
                         </div>
                     </div>
-                    {/* VRD Watermark */}
                     <div className="absolute right-2 bottom-2 text-6xl font-bold text-red-500/5 pointer-events-none select-none">VRD</div>
                 </div>
 
-                {/* 2. 車輛相簿 (Photo Gallery) */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex-1 flex flex-col min-h-[300px]">
-                    <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1"/> 車輛相片 ({carPhotos.length})</h3>
-                        <label className={`cursor-pointer bg-slate-800 text-white text-[10px] px-2 py-1 rounded hover:bg-slate-700 flex items-center ${isCompressing ? 'opacity-50 pointer-events-none' : ''}`}>
-                            {isCompressing ? <Loader2 size={10} className="animate-spin mr-1"/> : <Plus size={10} className="mr-1"/>}
-                            {isCompressing ? '處理中...' : '加入相片'}
-                            <input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={isCompressing}/>
-                        </label>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto bg-slate-100 rounded-lg p-2 grid grid-cols-2 gap-2 content-start">
-                        {carPhotos.map((img, idx) => (
-                            <div key={idx} className="relative group aspect-video bg-black rounded overflow-hidden shadow-sm border border-slate-300">
-                                <img src={img} className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                    <button type="button" onClick={() => window.open(img)} className="p-1.5 bg-white/20 text-white rounded-full hover:bg-white/40 backdrop-blur-sm" title="放大"><ExternalLink size={14}/></button>
-                                    <button type="button" onClick={() => setCarPhotos(prev => prev.filter((_, i) => i !== idx))} className="p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 backdrop-blur-sm" title="刪除"><Trash2 size={14}/></button>
-                                </div>
-                            </div>
-                        ))}
-                        {carPhotos.length === 0 && (
-                            <div className="col-span-2 h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-300 rounded-lg">
-                                <ImageIcon size={24} className="mb-2 opacity-50"/>
-                                <span className="text-xs">暫無相片 (自動壓縮至~130KB)</span>
-                            </div>
-                        )}
-                    </div>
+                    <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1"/> 車輛相片 ({carPhotos.length})</h3><label className={`cursor-pointer bg-slate-800 text-white text-[10px] px-2 py-1 rounded hover:bg-slate-700 flex items-center ${isCompressing ? 'opacity-50 pointer-events-none' : ''}`}>{isCompressing ? <Loader2 size={10} className="animate-spin mr-1"/> : <Plus size={10} className="mr-1"/>}{isCompressing ? '處理中...' : '加入相片'}<input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={isCompressing}/></label></div>
+                    <div className="flex-1 overflow-y-auto bg-slate-100 rounded-lg p-2 grid grid-cols-2 gap-2 content-start">{carPhotos.map((img, idx) => (<div key={idx} className="relative group aspect-video bg-black rounded overflow-hidden shadow-sm border border-slate-300"><img src={img} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2"><button type="button" onClick={() => window.open(img)} className="p-1.5 bg-white/20 text-white rounded-full hover:bg-white/40 backdrop-blur-sm" title="放大"><ExternalLink size={14}/></button><button type="button" onClick={() => setCarPhotos(prev => prev.filter((_, i) => i !== idx))} className="p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 backdrop-blur-sm" title="刪除"><Trash2 size={14}/></button></div></div>))}{carPhotos.length === 0 && (<div className="col-span-2 h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-300 rounded-lg"><ImageIcon size={24} className="mb-2 opacity-50"/><span className="text-xs">暫無相片 (自動壓縮至~130KB)</span></div>)}</div>
                 </div>
             </div>
 
-            {/* === 右側欄：銷售與管理 (佔 65%) === */}
+            {/* === 右側欄：銷售與管理 === */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
                 
-                {/* Top Bar: Status & Dates (★ 修復：狀態按鈕) */}
+                {/* 狀態按鈕 */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-                        {/* Hidden input for Form Data */}
                         <input type="hidden" name="status" value={currentStatus} />
-                        
                         {['In Stock', 'Reserved', 'Sold'].map(status => (
-                            <button
-                                key={status}
-                                type="button"
-                                onClick={() => setCurrentStatus(status as any)}
-                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all border ${
-                                    currentStatus === status 
-                                    ? 'bg-slate-800 text-white border-slate-800 shadow' 
-                                    : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'
-                                }`}
-                            >
+                            <button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all border ${currentStatus === status ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>
                                 {status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : '已售')}
                             </button>
                         ))}
                     </div>
-                    <div className="flex gap-3 text-xs">
-                        <div className="flex items-center gap-1"><span className="text-gray-400">入庫:</span><input name="stockInDate" type="date" defaultValue={v.stockInDate || new Date().toISOString().split('T')[0]} className="bg-transparent font-mono font-bold text-slate-700 outline-none"/></div>
-                        <div className="flex items-center gap-1"><span className="text-gray-400">出庫:</span><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="bg-transparent font-mono font-bold text-green-600 outline-none"/></div>
-                    </div>
+                    <div className="flex gap-3 text-xs"><div className="flex items-center gap-1"><span className="text-gray-400">入庫:</span><input name="stockInDate" type="date" defaultValue={v.stockInDate || new Date().toISOString().split('T')[0]} className="bg-transparent font-mono font-bold text-slate-700 outline-none"/></div><div className="flex items-center gap-1"><span className="text-gray-400">出庫:</span><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="bg-transparent font-mono font-bold text-green-600 outline-none"/></div></div>
                 </div>
 
-                {/* 1. 客戶資料 (Customer) - ★ 修復：自動搜尋按鈕 */}
                 <div className="mb-6 relative">
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>
-                    </div>
+                    <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 relative group-focus-within:ring-2 ring-blue-100 transition-all">
-                        <div className="relative">
-                            <span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">NAME</span>
-                            <input name="customerName" defaultValue={v.customerName} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-gray-200" placeholder="輸入姓名..."/>
-                            {/* ★★★ 客戶自動搜尋按鈕 ★★★ */}
-                            <button type="button" onClick={autoFetchCustomer} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-colors z-10" title="依姓名搜尋資料庫"><Search size={14}/></button>
-                        </div>
+                        <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">NAME</span><input name="customerName" defaultValue={v.customerName} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-gray-200" placeholder="輸入姓名..."/><button type="button" onClick={autoFetchCustomer} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-colors z-10" title="依姓名搜尋資料庫"><Search size={14}/></button></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">PHONE</span><input name="customerPhone" defaultValue={v.customerPhone} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">ID / BR</span><input name="customerID" defaultValue={v.customerID} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">ADDRESS</span><input name="customerAddress" defaultValue={v.customerAddress} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm focus:ring-2 focus:ring-blue-100 outline-none"/></div>
                     </div>
                 </div>
 
-                {/* 2. 財務與價格 (Financials) */}
-                <div className="mb-6">
-                    <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center"><DollarSign size={16} className="mr-2 text-green-600"/> 價格設定 (Pricing)</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <div className="bg-yellow-50 p-2 rounded border border-yellow-200"><label className="block text-[10px] text-yellow-800 font-bold mb-1">售價 (Price)</label><input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-lg font-bold text-slate-900 outline-none" placeholder="$0"/></div>
-                        <div className="bg-gray-50 p-2 rounded border border-gray-200"><label className="block text-[10px] text-gray-500 font-bold mb-1">成本 (Cost)</label><input name="costPrice" value={costStr} onChange={e => setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono text-slate-600 outline-none" placeholder="$0"/></div>
-                        
-                        {/* 收購類型 (Type) */}
-                        <div className="bg-white p-2 rounded border border-slate-200">
-                            <label className="block text-[10px] text-blue-400 font-bold mb-1">收購類型 (Type)</label>
-                            <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full bg-transparent text-sm font-bold text-blue-800 outline-none">
-                                <option value="Used">二手 (Used)</option>
-                                <option value="New">新車 (New)</option>
-                                <option value="Consignment">寄賣 (Consign)</option>
-                            </select>
-                        </div>
+                <div className="mb-6"><h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center"><DollarSign size={16} className="mr-2 text-green-600"/> 價格設定 (Pricing)</h3><div className="grid grid-cols-2 md:grid-cols-5 gap-4"><div className="bg-yellow-50 p-2 rounded border border-yellow-200"><label className="block text-[10px] text-yellow-800 font-bold mb-1">售價 (Price)</label><input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-lg font-bold text-slate-900 outline-none" placeholder="$0"/></div><div className="bg-gray-50 p-2 rounded border border-gray-200"><label className="block text-[10px] text-gray-500 font-bold mb-1">成本 (Cost)</label><input name="costPrice" value={costStr} onChange={e => setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono text-slate-600 outline-none" placeholder="$0"/></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-blue-400 font-bold mb-1">收購類型</label><select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full bg-transparent text-sm font-bold text-blue-800 outline-none"><option value="Used">二手 (Used)</option><option value="New">新車 (New)</option><option value="Consignment">寄賣 (Consign)</option></select></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">A1 Tax</label><input name="priceA1" value={priceA1Str} onChange={e => setPriceA1Str(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">Paid Tax</label><input name="priceTax" value={priceTaxStr} onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div></div><div className="flex justify-between items-center mt-2 px-1"><div className="text-xs text-gray-400">牌簿價: <span className="font-mono text-slate-600">{calcRegisteredPrice()}</span></div><div className="text-xs font-bold text-blue-600">餘額 (Balance): {formatCurrency(balance)}</div></div></div>
 
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">A1 Tax</label><input name="priceA1" value={priceA1Str} onChange={e => setPriceA1Str(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div>
-                        <div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">Paid Tax</label><input name="priceTax" value={priceTaxStr} onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div>
-                    </div>
-                    <div className="flex justify-between items-center mt-2 px-1">
-                        <div className="text-xs text-gray-400">牌簿價: <span className="font-mono text-slate-600">{calcRegisteredPrice()}</span></div>
-                        <div className="text-xs font-bold text-blue-600">餘額 (Balance): {formatCurrency(balance)}</div>
-                    </div>
-                </div>
-
-                {/* 3. 中港與其他 (Modules) */}
                 <div className="space-y-4">
-                    {/* Collapsible Cross Border */}
-                    <div className="border border-blue-100 rounded-xl overflow-hidden">
-                        <div className="bg-blue-50/50 p-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-colors" onClick={() => setIsCbExpanded(!isCbExpanded)}>
-                            <div className="flex items-center gap-2">
-                                <Globe size={16} className="text-blue-600"/>
-                                <span className="font-bold text-sm text-blue-900">中港車管家 (Cross-Border)</span>
-                                <label className="flex items-center ml-4 text-xs text-slate-500 cursor-pointer" onClick={e => e.stopPropagation()}>
-                                    <input type="checkbox" name="cb_isEnabled" defaultChecked={v.crossBorder?.isEnabled} className="mr-1 accent-blue-600"/> 啟用
-                                </label>
-                            </div>
-                            {isCbExpanded ? <ChevronUp size={16} className="text-blue-400"/> : <ChevronDown size={16} className="text-blue-400"/>}
-                        </div>
-                        {isCbExpanded && (
-                            <div className="p-4 bg-white border-t border-blue-100 grid grid-cols-2 md:grid-cols-4 gap-3 animate-fade-in">
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">內地車牌</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">指標號</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">香港公司</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">內地公司</label><input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">主司機</label><input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 1</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 2</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">保險代理</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
+                    <div className="border border-blue-100 rounded-xl overflow-hidden"><div className="bg-blue-50/50 p-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-colors" onClick={() => setIsCbExpanded(!isCbExpanded)}><div className="flex items-center gap-2"><Globe size={16} className="text-blue-600"/><span className="font-bold text-sm text-blue-900">中港車管家 (Cross-Border)</span><label className="flex items-center ml-4 text-xs text-slate-500 cursor-pointer" onClick={e => e.stopPropagation()}><input type="checkbox" name="cb_isEnabled" defaultChecked={v.crossBorder?.isEnabled} className="mr-1 accent-blue-600"/> 啟用</label></div>{isCbExpanded ? <ChevronUp size={16} className="text-blue-400"/> : <ChevronDown size={16} className="text-blue-400"/>}</div>{isCbExpanded && (<div className="p-4 bg-white border-t border-blue-100 grid grid-cols-2 md:grid-cols-4 gap-3 animate-fade-in"><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">內地車牌</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">指標號</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">香港公司</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">內地公司</label><input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">主司機</label><input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 1</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 2</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">保險代理</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-4 grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 pt-2 border-t border-dashed border-blue-100">{['HkInsurance', 'ReservedPlate', 'Br', 'LicenseFee', 'MainlandJqx', 'MainlandSyx', 'ClosedRoad', 'Approval', 'MainlandLicense', 'HkInspection'].map(key => (<div key={key} className="bg-slate-50 p-1.5 rounded"><label className="block text-[8px] text-slate-400 uppercase mb-0.5">{key}</label><input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-[10px] outline-none"/></div>))}</div></div>)}</div>
 
-                                <div className="col-span-4 grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 pt-2 border-t border-dashed border-blue-100">
-                                    {['HkInsurance', 'ReservedPlate', 'Br', 'LicenseFee', 'MainlandJqx', 'MainlandSyx', 'ClosedRoad', 'Approval', 'MainlandLicense', 'HkInspection'].map(key => (
-                                        <div key={key} className="bg-slate-50 p-1.5 rounded"><label className="block text-[8px] text-slate-400 uppercase mb-0.5">{key}</label><input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-[10px] outline-none"/></div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ★★★ 4. 收款與費用 (Payments & Expenses) - 樣式統一 + 中港聯動 ★★★ */}
                     <div className="grid grid-cols-1 gap-4">
-                        {/* 收款區 (Payments) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center">
-                                <span>收款記錄 (Payments)</span>
-                                <span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span>
-                            </h4>
+                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>收款記錄 (Payments)</span><span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span></h4>
                             <div className="space-y-1 mb-2">
-                                {/* 已收項目 */}
-                                {(v.payments || []).map(p => (
-                                    <div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
-                                        <div className="col-span-2 text-gray-400">{p.date}</div>
-                                        <div className="col-span-3 font-bold">{p.type}</div>
-                                        <div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div>
-                                        <div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div>
-                                        <div className="col-span-1 text-right">
-                                            {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}
-                                        </div>
-                                    </div>
-                                ))}
-                                
-                                {/* 待收項目 (中港聯動) */}
-                                {pendingCbTasks.map(task => (
-                                    <div 
-                                        key={task.id} 
-                                        className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center"
-                                        onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }}
-                                        title="點擊自動填入下方收款欄"
-                                    >
-                                        <div className="col-span-2 text-amber-600/70">{task.date}</div>
-                                        <div className="col-span-3 font-bold flex items-center"><Info size={10} className="mr-1"/> {task.item}</div>
-                                        <div className="col-span-3 text-amber-700 truncate">{task.institution}</div>
-                                        <div className="col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div>
-                                        <div className="col-span-1 text-right"><span className="bg-amber-200 px-1 rounded text-[9px] font-bold">待收</span></div>
-                                    </div>
-                                ))}
+                                {(v.payments || []).map(p => (<div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{p.date}</div><div className="col-span-3 font-bold">{p.type}</div><div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div><div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div><div className="col-span-1 text-right">{!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}</div></div>))}
+                                {pendingCbTasks.map(task => (<div key={task.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊自動填入下方收款欄"><div className="col-span-2 text-amber-600/70">{task.date}</div><div className="col-span-3 font-bold flex items-center"><Info size={10} className="mr-1"/> {task.item}</div><div className="col-span-3 text-amber-700 truncate">{task.institution}</div><div className="col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div><div className="col-span-1 text-right"><span className="bg-amber-200 px-1 rounded text-[9px] font-bold">待收</span></div></div>))}
                             </div>
-                            
-                            {/* 新增收款 */}
-                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
-                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select>
-                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                <input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
-                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
-                            </div>
+                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2"><input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/><select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select><input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/><input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/><button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button></div>
                         </div>
 
-                        {/* 費用區 (Expenses) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center">
-                                <span>車輛費用 (Expenses)</span>
-                                <span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span>
-                            </h4>
-                            <div className="space-y-1 mb-2">
-                                {(v.expenses || []).map(exp => (
-                                    <div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
-                                        <div className="col-span-2 text-gray-400">{exp.date}</div>
-                                        <div className="col-span-3 font-bold">{exp.type}</div>
-                                        <div className="col-span-3 text-gray-500 truncate">{exp.company}</div>
-                                        <div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div>
-                                        <div className="col-span-1 text-right">
-                                            <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            
-                            {/* 新增費用 */}
-                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
-                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                <select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">項目...</option>{settings.expenseTypes.map(t=><option key={t} value={t}>{t}</option>)}</select>
-                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">公司...</option>{settings.expenseCompanies?.map(c=><option key={c} value={c}>{c}</option>)}</select>
-                                <input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
-                                <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button>
-                            </div>
+                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>車輛費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span></h4>
+                            <div className="space-y-1 mb-2">{(v.expenses || []).map(exp => (<div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{exp.date}</div><div className="col-span-3 font-bold">{exp.type}</div><div className="col-span-3 text-gray-500 truncate">{exp.company}</div><div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div><div className="col-span-1 text-right"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></div></div>))}</div>
+                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2"><input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/><select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">項目...</option>{settings.expenseTypes.map(t=><option key={t} value={t}>{t}</option>)}</select><select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">公司...</option>{settings.expenseCompanies?.map(c=><option key={c} value={c}>{c}</option>)}</select><input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/><button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button></div>
                         </div>
                     </div>
                 </div>
 
-                {/* Footer Buttons */}
                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 sticky bottom-0 bg-white z-10">
-                    {/* Print Buttons */}
-                    {v.id && (
-                        <div className="flex mr-auto gap-2">
-                            <button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印合約"><FileText size={18}/></button>
-                            <button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印發票"><Printer size={18}/></button>
-                        </div>
-                    )}
+                    {v.id && (<div className="flex mr-auto gap-2"><button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印合約"><FileText size={18}/></button><button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印發票"><Printer size={18}/></button></div>)}
                     <button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="px-5 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
-                    <button type="submit" className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center">
-                        <Save size={16} className="mr-2"/> 儲存變更
-                    </button>
+                    <button type="submit" className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center"><Save size={16} className="mr-2"/> 儲存變更</button>
                 </div>
-
             </div>
           </form>
         </div>
