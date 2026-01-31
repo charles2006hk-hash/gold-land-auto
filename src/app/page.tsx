@@ -3255,36 +3255,89 @@ const DatabaseSelector = ({
         if(el) el.value = val;
     };
 
-    // ★★★ 自動搜尋 VRD (強效版 v2：去除空格、不分大小寫、全方位搜尋) ★★★
+    // ★★★ 自動搜尋 VRD (除錯增強版：會在 Console 顯示詳細比對過程) ★★★
     const autoFetchVRD = () => {
-        // 1. 獲取輸入的車牌，並轉為大寫、去除所有空格
+        // 1. 處理輸入值
         const rawInput = (document.querySelector('input[name="regMark"]') as HTMLInputElement)?.value;
         if (!rawInput) { alert("請先輸入車牌號碼"); return; }
         
-        const cleanReg = rawInput.trim().toUpperCase().replace(/\s+/g, ''); // e.g. "AB 1234" -> "AB1234"
+        // 標準化：轉大寫、去空格
+        const targetPlate = rawInput.trim().toUpperCase().replace(/[\s\-\_]+/g, ''); 
+        
+        console.log(`[VRD Search] 開始搜尋車牌: "${targetPlate}" (原始輸入: "${rawInput}")`);
+        console.log(`[VRD Search] 目前資料庫共有 ${dbEntries.length} 筆資料`);
 
-        // 2. 在資料庫中搜尋 (四重匹配)
+        // 2. 搜尋並記錄過程
         const entry = dbEntries.find(d => {
-            // 只搜尋 Vehicle 類別
+            // 只看 Vehicle 類別
             if (d.category !== 'Vehicle') return false;
 
-            // A. 比對車牌欄位 (去除空格後比對)
-            const dbPlate = (d.plateNoHK || '').toUpperCase().replace(/\s+/g, '');
-            if (dbPlate === cleanReg) return true;
+            // 準備資料庫中的候選值 (全部標準化)
+            const dbPlate = (d.plateNoHK || '').toUpperCase().replace(/[\s\-\_]+/g, '');
+            const dbRelated = (d.relatedPlateNo || '').toUpperCase().replace(/[\s\-\_]+/g, '');
+            const dbName = (d.name || '').toUpperCase().replace(/[\s\-\_]+/g, '');
+            
+            // 處理標籤：將所有標籤合併成一個長字串來搜，防止陣列結構問題
+            const dbTagsString = (d.tags || []).join(',').toUpperCase().replace(/[\s\-\_]+/g, '');
 
-            // B. 比對關聯車牌欄位
-            const dbRelated = (d.relatedPlateNo || '').toUpperCase().replace(/\s+/g, '');
-            if (dbRelated === cleanReg) return true;
+            // 比對記錄 (只顯示部分，避免 Console 太多)
+            // console.log(`  - 檢查 ID: ${d.id}, Name: ${d.name}, Tags: ${dbTagsString}`);
 
-            // C. 比對標籤 (Tags)
-            if (d.tags?.some(tag => tag.toUpperCase().replace(/\s+/g, '') === cleanReg)) return true;
+            // A. 比對車牌欄位
+            if (dbPlate === targetPlate) {
+                console.log(`    >>> 匹配成功！(原因: plateNoHK 吻合)`);
+                return true;
+            }
 
-            // D. 比對標題 (Name) - 只要標題包含車牌字串即可
-            const dbName = (d.name || '').toUpperCase().replace(/\s+/g, '');
-            if (dbName.includes(cleanReg)) return true;
+            // B. 比對關聯車牌
+            if (dbRelated === targetPlate) {
+                console.log(`    >>> 匹配成功！(原因: relatedPlateNo 吻合)`);
+                return true;
+            }
+
+            // C. 比對標籤 (超級寬鬆模式：只要標籤字串裡包含車牌)
+            if (dbTagsString.includes(targetPlate)) {
+                console.log(`    >>> 匹配成功！(原因: Tags 包含車牌)`);
+                return true;
+            }
+
+            // D. 比對標題
+            if (dbName.includes(targetPlate)) {
+                console.log(`    >>> 匹配成功！(原因: Name 包含車牌)`);
+                return true;
+            }
 
             return false;
         });
+        
+        // 3. 結果處理
+        if (entry) {
+            console.log(`[VRD Search] 最終匹配資料:`, entry);
+            
+            // 填入資料 (保持原有邏輯)
+            if(entry.make) setSelectedMake(entry.make);
+            if(entry.model) setFieldValue('model', entry.model);
+            if(entry.manufactureYear) setFieldValue('year', entry.manufactureYear);
+            if(entry.vehicleColor) setFieldValue('colorExt', entry.vehicleColor);
+            if(entry.chassisNo) setFieldValue('chassisNo', entry.chassisNo);
+            if(entry.engineNo) setFieldValue('engineNo', entry.engineNo);
+            if(entry.engineSize) setEngineSizeStr(formatNumberInput(entry.engineSize.toString()));
+            if(entry.priceA1) setPriceA1Str(formatNumberInput(entry.priceA1.toString()));
+            if(entry.priceTax) setPriceTaxStr(formatNumberInput(entry.priceTax.toString()));
+            if(entry.prevOwners !== undefined) setFieldValue('previousOwners', entry.prevOwners.toString());
+            
+            const currName = (document.querySelector('input[name="customerName"]') as HTMLInputElement)?.value;
+            if (entry.registeredOwnerName && !currName) {
+                setFieldValue('customerName', entry.registeredOwnerName);
+                if (entry.registeredOwnerId) setFieldValue('customerID', entry.registeredOwnerId);
+            }
+            
+            alert(`✅ 成功匯入 VRD 資料！\n來源: ${entry.name}`);
+        } else {
+            console.warn(`[VRD Search] 搜尋失敗。目標: ${targetPlate}`);
+            alert(`⚠️ 找不到車牌 [${rawInput}] 的資料。\n\n建議您：\n1. 按 F12 打開 Console 查看詳細比對過程。\n2. 確認資料庫中的標籤是否正確 (例如是否多了符號)。`);
+        }
+    };
         
         // 3. 填入資料
         if (entry) {
