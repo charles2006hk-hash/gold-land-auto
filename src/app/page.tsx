@@ -3153,7 +3153,7 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (完整獨立版：含 VRD 卡片、收購類型、費用聯動、圖片壓縮)
+  // 1. Vehicle Form Modal (終極完整版：含 VRD 卡片、收購類型、樣式統一的收款與費用)
   const VehicleFormModal = () => {
     // 只有在編輯模式或點擊新增時才顯示
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
@@ -3168,6 +3168,7 @@ const DatabaseSelector = ({
     // 數值輸入狀態 (防止輸入時跳動)
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
+    const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
     const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
     const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
@@ -3179,7 +3180,7 @@ const DatabaseSelector = ({
 
     // 照片狀態
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
-    const [isCompressing, setIsCompressing] = useState(false); // 壓縮 Loading 狀態
+    const [isCompressing, setIsCompressing] = useState(false);
 
     // 資料庫選取器狀態
     const [selectorOpen, setSelectorOpen] = useState(false);
@@ -3189,6 +3190,7 @@ const DatabaseSelector = ({
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
     const totalRevenue = (v.price || 0) + cbFees; // 車價 + 中港代辦費
     const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalExpenses = (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0); // 費用總計
     const balance = totalRevenue - totalReceived; 
     
     // 找出「未付款」的中港項目 (用於顯示黃色待收條)
@@ -3224,20 +3226,11 @@ const DatabaseSelector = ({
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
-                    
-                    // 1. 縮放尺寸 (限制最大寬度 1280px)
                     const MAX_WIDTH = 1280;
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
+                    if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                    canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx?.drawImage(img, 0, 0, width, height);
-
-                    // 2. 壓縮品質 (0.6 約為 60% 品質)
                     const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
                     resolve(dataUrl);
                 };
@@ -3248,23 +3241,13 @@ const DatabaseSelector = ({
     const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
-        
         setIsCompressing(true);
         const newPhotos: string[] = [];
-
         for (let i = 0; i < files.length; i++) {
-            try {
-                const compressedData = await compressImage(files[i]);
-                newPhotos.push(compressedData);
-            } catch (err) {
-                console.error("Image compression failed", err);
-                alert(`圖片 ${files[i].name} 處理失敗`);
-            }
+            try { const compressedData = await compressImage(files[i]); newPhotos.push(compressedData); } catch (err) { console.error(err); }
         }
-
         setCarPhotos(prev => [...prev, ...newPhotos]);
-        setIsCompressing(false);
-        e.target.value = '';
+        setIsCompressing(false); e.target.value = '';
     };
 
     // --- 資料庫回填邏輯 ---
@@ -3477,14 +3460,14 @@ const DatabaseSelector = ({
                     </div>
                 </div>
 
-                {/* 2. 財務與價格 (Financials) - ★★★ 補回：收購類型 ★★★ */}
+                {/* 2. 財務與價格 (Financials) */}
                 <div className="mb-6">
                     <h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center"><DollarSign size={16} className="mr-2 text-green-600"/> 價格設定 (Pricing)</h3>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                         <div className="bg-yellow-50 p-2 rounded border border-yellow-200"><label className="block text-[10px] text-yellow-800 font-bold mb-1">售價 (Price)</label><input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-lg font-bold text-slate-900 outline-none" placeholder="$0"/></div>
                         <div className="bg-gray-50 p-2 rounded border border-gray-200"><label className="block text-[10px] text-gray-500 font-bold mb-1">成本 (Cost)</label><input name="costPrice" value={costStr} onChange={e => setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono text-slate-600 outline-none" placeholder="$0"/></div>
                         
-                        {/* ★★★ 收購類型 (Type) ★★★ */}
+                        {/* 收購類型 (Type) */}
                         <div className="bg-white p-2 rounded border border-slate-200">
                             <label className="block text-[10px] text-blue-400 font-bold mb-1">收購類型 (Type)</label>
                             <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full bg-transparent text-sm font-bold text-blue-800 outline-none">
@@ -3529,7 +3512,6 @@ const DatabaseSelector = ({
                                 <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 2</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
                                 <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">保險代理</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
 
-                                {/* Dates Grid */}
                                 <div className="col-span-4 grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 pt-2 border-t border-dashed border-blue-100">
                                     {['HkInsurance', 'ReservedPlate', 'Br', 'LicenseFee', 'MainlandJqx', 'MainlandSyx', 'ClosedRoad', 'Approval', 'MainlandLicense', 'HkInspection'].map(key => (
                                         <div key={key} className="bg-slate-50 p-1.5 rounded"><label className="block text-[8px] text-slate-400 uppercase mb-0.5">{key}</label><input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-[10px] outline-none"/></div>
@@ -3539,61 +3521,81 @@ const DatabaseSelector = ({
                         )}
                     </div>
 
-                    {/* ★★★ 4. 收款與費用 (Payments & Expenses) - 絕對保留 ★★★ */}
+                    {/* ★★★ 4. 收款與費用 (統一列表樣式) ★★★ */}
                     <div className="grid grid-cols-1 gap-4">
-                        {/* 收款區 */}
+                        {/* 收款區 (Payments) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between">
-                                收款記錄 (Payments) <span className="text-green-600">已收: {formatCurrency(totalReceived)}</span>
+                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center">
+                                <span>收款記錄 (Payments)</span>
+                                <span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span>
                             </h4>
                             <div className="space-y-1 mb-2">
+                                {/* 已收項目 */}
                                 {(v.payments || []).map(p => (
-                                    <div key={p.id} className="flex justify-between text-xs p-1.5 bg-white border rounded shadow-sm">
-                                        <span>{p.date} <span className="font-bold ml-1">{p.type}</span></span>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-mono">{formatCurrency(p.amount)}</span>
+                                    <div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
+                                        <div className="col-span-2 text-gray-400">{p.date}</div>
+                                        <div className="col-span-3 font-bold">{p.type}</div>
+                                        <div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div>
+                                        <div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div>
+                                        <div className="col-span-1 text-right">
                                             {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}
                                         </div>
                                     </div>
                                 ))}
                                 
-                                {/* ★★★ 自動列出「中港業務待收款」(可點擊) ★★★ */}
+                                {/* 待收項目 (中港聯動) */}
                                 {pendingCbTasks.map(task => (
                                     <div 
                                         key={task.id} 
-                                        className="flex justify-between text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors"
-                                        onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `Payment for: ${task.item}`, relatedTaskId: task.id }); }}
+                                        className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center"
+                                        onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }}
                                         title="點擊自動填入下方收款欄"
                                     >
-                                        <span className="flex items-center"><Info size={10} className="mr-1"/> {task.item} <span className="ml-1 px-1 bg-amber-200 text-[9px] rounded font-bold">待收</span></span>
-                                        <span className="font-mono font-bold group-hover:underline">{formatCurrency(task.fee)}</span>
+                                        <div className="col-span-2 text-amber-600/70">{task.date}</div>
+                                        <div className="col-span-3 font-bold flex items-center"><Info size={10} className="mr-1"/> {task.item}</div>
+                                        <div className="col-span-3 text-amber-700 truncate">{task.institution}</div>
+                                        <div className="col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div>
+                                        <div className="col-span-1 text-right"><span className="bg-amber-200 px-1 rounded text-[9px] font-bold">待收</span></div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="flex gap-1">
-                                <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 text-xs p-1.5 border rounded outline-none"/>
-                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="flex-1 text-xs p-1.5 border rounded outline-none"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select>
-                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
+                            
+                            {/* 新增收款 */}
+                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
+                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
+                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select>
+                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/>
+                                <input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
+                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
                             </div>
                         </div>
 
-                        {/* 費用區 */}
+                        {/* 費用區 (Expenses) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                            <h4 className="font-bold text-xs text-gray-500 mb-2">車輛費用 (Expenses)</h4>
+                            <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center">
+                                <span>車輛費用 (Expenses)</span>
+                                <span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span>
+                            </h4>
                             <div className="space-y-1 mb-2">
                                 {(v.expenses || []).map(exp => (
-                                    <div key={exp.id} className="flex justify-between text-xs p-1.5 bg-white border rounded shadow-sm">
-                                        <span>{exp.type} <span className="text-gray-400">({exp.company})</span></span>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-mono">{formatCurrency(exp.amount)}</span>
+                                    <div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
+                                        <div className="col-span-2 text-gray-400">{exp.date}</div>
+                                        <div className="col-span-3 font-bold">{exp.type}</div>
+                                        <div className="col-span-3 text-gray-500 truncate">{exp.company}</div>
+                                        <div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div>
+                                        <div className="col-span-1 text-right">
                                             <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                            <div className="flex gap-1">
-                                <select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none"><option value="">項目...</option>{settings.expenseTypes.map(t=><option key={t} value={t}>{t}</option>)}</select>
-                                <input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-16 text-xs p-1.5 border rounded outline-none"/>
+                            
+                            {/* 新增費用 */}
+                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
+                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
+                                <select value={newExpense.type} onChange={e => setNewExpense({...newExpense, type: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">項目...</option>{settings.expenseTypes.map(t=><option key={t} value={t}>{t}</option>)}</select>
+                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">公司...</option>{settings.expenseCompanies?.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                                <input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
                                 <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button>
                             </div>
                         </div>
