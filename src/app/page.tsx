@@ -332,6 +332,19 @@ type SystemSettings = {
   dbCategories: string[];
   dbRoles: string[]; 
   dbDocTypes: Record<string, string[]>;
+  // ★★★ 新增：提醒設定結構 ★★★
+  reminders?: {
+      isEnabled: boolean;          // 總開關
+      daysBefore: number;          // 預設提前幾天提醒 (例如 30天)
+      time: string;                // 每日提醒時間 (例如 09:00)
+      categories: {                // 要開啟提醒的類別
+          license: boolean;        // 牌費/驗車
+          insurance: boolean;      // 保險
+          crossBorder: boolean;    // 中港證件
+          installments: boolean;   // 供車/分期
+      };
+  };
+
 };
 
 type Customer = {
@@ -389,6 +402,19 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Company': ['商業登記(BR)', '註冊證書(CI)', 'NAR1', '週年申報表', '營業執照', '工商年報', '其他'],
     'Vehicle': ['牌薄(VRD)', '香港保險', '澳門保險', '國內交強保', '國內商業險', '國內關稅險', '其他'],
     'CrossBorder': ['批文卡', '新辦回執', '換車回執', '司機更換回執', '中檢資料', '其他']
+  }
+
+  // ★★★ 新增：提醒預設值 ★★★
+  reminders: {
+      isEnabled: true,
+      daysBefore: 30,
+      time: '10:00',
+      categories: {
+          license: true,
+          insurance: true,
+          crossBorder: true,
+          installments: false
+      }
   }
 };
 
@@ -1901,7 +1927,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v6.1: 預設公司/機構改為下拉選單連動) ★★★
+// ★★★ 5. Settings Manager (v7.0: 加入系統提醒設定 Reminders) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -1923,25 +1949,30 @@ const SettingsManager = ({
     
     const [activeTab, setActiveTab] = useState('general');
     
-    // --- 狀態：車輛模型管理 ---
+    // --- 狀態管理 ---
     const [selectedMakeForModel, setSelectedMakeForModel] = useState('');
     const [newModelName, setNewModelName] = useState('');
-
-    // --- 狀態：系統用戶 ---
     const [newUserEmail, setNewUserEmail] = useState('');
     const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[] }[]>([]);
     
-    // --- 狀態：財務費用設定 ---
+    // 財務與中港 (新增/編輯)
     const [expenseForm, setExpenseForm] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
     const [editingExpenseIndex, setEditingExpenseIndex] = useState<number | null>(null);
     const [compInput, setCompInput] = useState('');
     const [editingCompIndex, setEditingCompIndex] = useState<number | null>(null);
     
-    // --- 狀態：中港業務設定 ---
     const [cbForm, setCbForm] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
     const [editingCbIndex, setEditingCbIndex] = useState<number | null>(null);
     const [instInput, setInstInput] = useState('');
     const [editingInstIndex, setEditingInstIndex] = useState<number | null>(null);
+
+    // ★★★ 提醒設定狀態 ★★★
+    const [reminders, setReminders] = useState(settings.reminders || {
+        isEnabled: true,
+        daysBefore: 30,
+        time: '10:00',
+        categories: { license: true, insurance: true, crossBorder: true, installments: false }
+    });
 
     // --- 1. 系統用戶邏輯 ---
     useEffect(() => {
@@ -2000,13 +2031,11 @@ const SettingsManager = ({
         if (!val) return;
         updateSettings(key, [...(settings[key] as string[] || []), val]);
     };
-
     const removeItem = (key: keyof SystemSettings, index: number) => {
         const newArr = [...(settings[key] as any[] || [])];
         newArr.splice(index, 1);
         updateSettings(key, newArr);
     };
-
     const addModel = () => {
         if (!selectedMakeForModel || !newModelName) return;
         const currentModels = settings.models[selectedMakeForModel] || [];
@@ -2014,7 +2043,6 @@ const SettingsManager = ({
         updateSettings('models', updatedModels);
         setNewModelName('');
     };
-
     const removeModel = (modelName: string) => {
         if (!selectedMakeForModel) return;
         const currentModels = settings.models[selectedMakeForModel] || [];
@@ -2022,94 +2050,51 @@ const SettingsManager = ({
         updateSettings('models', updatedModels);
     };
 
-    // --- 3. 財務費用邏輯 ---
+    // --- 3. 財務與中港邏輯 ---
+    // (省略重複代碼，邏輯與 v6.1 相同，為節省空間只保留關鍵)
     const handleExpenseSubmit = () => {
         if (!expenseForm.name) return;
         const newItem = { ...expenseForm, defaultAmount: Number(expenseForm.defaultAmount) || 0 };
         const newList = [...settings.expenseTypes];
-        if (editingExpenseIndex !== null) newList[editingExpenseIndex] = newItem;
-        else newList.push(newItem);
-        updateSettings('expenseTypes', newList);
-        setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
-        setEditingExpenseIndex(null);
+        if (editingExpenseIndex !== null) newList[editingExpenseIndex] = newItem; else newList.push(newItem);
+        updateSettings('expenseTypes', newList); setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' }); setEditingExpenseIndex(null);
     };
-    const editExpense = (index: number) => {
-        const item = settings.expenseTypes[index];
-        if (typeof item === 'string') setExpenseForm({ name: item, defaultCompany: '', defaultAmount: '', defaultDays: '0' });
-        else setExpenseForm({ name: item.name, defaultCompany: item.defaultCompany, defaultAmount: item.defaultAmount.toString(), defaultDays: item.defaultDays });
-        setEditingExpenseIndex(index);
+    const editExpense = (i: number) => { const item = settings.expenseTypes[i]; if (typeof item === 'string') setExpenseForm({ name: item, defaultCompany: '', defaultAmount: '', defaultDays: '0' }); else setExpenseForm({ name: item.name, defaultCompany: item.defaultCompany, defaultAmount: item.defaultAmount.toString(), defaultDays: item.defaultDays }); setEditingExpenseIndex(i); };
+    
+    const handleCompanySubmit = () => { if (!compInput) return; const newList = [...settings.expenseCompanies]; if (editingCompIndex !== null) newList[editingCompIndex] = compInput; else newList.push(compInput); updateSettings('expenseCompanies', newList); setCompInput(''); setEditingCompIndex(null); };
+    const editCompany = (i: number) => { setCompInput(settings.expenseCompanies[i]); setEditingCompIndex(i); };
+
+    const handleCbSubmit = () => { if (!cbForm.name) return; const newItem = { ...cbForm, defaultFee: Number(cbForm.defaultFee) || 0 }; const newList = [...settings.cbItems]; if (editingCbIndex !== null) newList[editingCbIndex] = newItem; else newList.push(newItem); updateSettings('cbItems', newList); setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' }); setEditingCbIndex(null); };
+    const editCbItem = (i: number) => { const item = settings.cbItems[i]; if (typeof item === 'string') setCbForm({ name: item, defaultInst: '', defaultFee: '', defaultDays: '0' }); else setCbForm({ name: item.name, defaultInst: item.defaultInst, defaultFee: item.defaultFee.toString(), defaultDays: item.defaultDays }); setEditingCbIndex(i); };
+
+    const handleInstSubmit = () => { if (!instInput) return; const newList = [...settings.cbInstitutions]; if (editingInstIndex !== null) newList[editingInstIndex] = instInput; else newList.push(instInput); updateSettings('cbInstitutions', newList); setInstInput(''); setEditingInstIndex(null); };
+    const editInst = (i: number) => { setInstInput(settings.cbInstitutions[i]); setEditingInstIndex(i); };
+
+    // --- 4. 提醒設定邏輯 (Reminders) ---
+    const handleSaveReminders = () => {
+        updateSettings('reminders', reminders);
+        alert('提醒設定已儲存！');
     };
 
-    const handleCompanySubmit = () => {
-        if (!compInput) return;
-        const newList = [...settings.expenseCompanies];
-        if (editingCompIndex !== null) newList[editingCompIndex] = compInput;
-        else newList.push(compInput);
-        updateSettings('expenseCompanies', newList);
-        setCompInput('');
-        setEditingCompIndex(null);
-    };
-    const editCompany = (index: number) => {
-        setCompInput(settings.expenseCompanies[index]);
-        setEditingCompIndex(index);
-    };
-
-    // --- 4. 中港業務邏輯 ---
-    const handleCbSubmit = () => {
-        if (!cbForm.name) return;
-        const newItem = { ...cbForm, defaultFee: Number(cbForm.defaultFee) || 0 };
-        const newList = [...settings.cbItems];
-        if (editingCbIndex !== null) newList[editingCbIndex] = newItem;
-        else newList.push(newItem);
-        updateSettings('cbItems', newList);
-        setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
-        setEditingCbIndex(null);
-    };
-    const editCbItem = (index: number) => {
-        const item = settings.cbItems[index];
-        if (typeof item === 'string') setCbForm({ name: item, defaultInst: '', defaultFee: '', defaultDays: '0' });
-        else setCbForm({ name: item.name, defaultInst: item.defaultInst, defaultFee: item.defaultFee.toString(), defaultDays: item.defaultDays });
-        setEditingCbIndex(index);
-    };
-
-    const handleInstSubmit = () => {
-        if (!instInput) return;
-        const newList = [...settings.cbInstitutions];
-        if (editingInstIndex !== null) newList[editingInstIndex] = instInput;
-        else newList.push(instInput);
-        updateSettings('cbInstitutions', newList);
-        setInstInput('');
-        setEditingInstIndex(null);
-    };
-    const editInst = (index: number) => {
-        setInstInput(settings.cbInstitutions[index]);
-        setEditingInstIndex(index);
+    // 請求瀏覽器通知權限 (iOS PWA 關鍵)
+    const requestNotificationPermission = async () => {
+        if (!("Notification" in window)) {
+            alert("此瀏覽器不支援通知功能");
+            return;
+        }
+        
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+            alert("通知權限已開通！\n(請確保您的 iPhone 已將此網頁「加入主畫面」)");
+            // 這裡未來可以加入訂閱 FCM 的邏輯
+        } else {
+            alert("通知權限被拒絕。請至手機設定中開啟。");
+        }
     };
 
     // --- 備份還原 ---
-    const handleExport = () => {
-        const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), settings }, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url; link.download = `GL_Settings_${new Date().toISOString().slice(0,10)}.json`;
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    };
-    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            try {
-                const data = JSON.parse(ev.target?.result as string);
-                if (data.settings) {
-                    setSettings((prev: any) => ({ ...prev, ...data.settings }));
-                    Object.keys(data.settings).forEach(k => updateSettings(k as keyof SystemSettings, data.settings[k]));
-                    alert('設定已還原');
-                }
-            } catch (err) { alert('匯入失敗'); }
-        };
-        reader.readAsText(file);
-    };
+    const handleExport = () => { const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), settings }, null, 2); const blob = new Blob([dataStr], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `GL_Settings_${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(link); link.click(); document.body.removeChild(link); };
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async (ev) => { try { const data = JSON.parse(ev.target?.result as string); if (data.settings) { setSettings((prev: any) => ({ ...prev, ...data.settings })); Object.keys(data.settings).forEach(k => updateSettings(k as keyof SystemSettings, data.settings[k])); alert('設定已還原'); } } catch (err) { alert('匯入失敗'); } }; reader.readAsText(file); };
 
     return (
         <div className="flex h-full gap-6">
@@ -2118,6 +2103,7 @@ const SettingsManager = ({
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
                 {[
                     { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
+                    { id: 'reminders', icon: <Bell size={16}/>, label: '系統提醒' }, // ★ 新增
                     { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' },
                     { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
                     { id: 'crossborder', icon: <Globe size={16}/>, label: '中港業務' },
@@ -2134,6 +2120,7 @@ const SettingsManager = ({
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab} Settings</h2>
 
+                {/* --- 1. General --- */}
                 {activeTab === 'general' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -2144,11 +2131,69 @@ const SettingsManager = ({
                     </div>
                 )}
 
+                {/* --- 2. Reminders (★ 新功能 ★) --- */}
+                {activeTab === 'reminders' && (
+                    <div className="space-y-6">
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Bell size={18} className="mr-2 text-amber-500"/> 到期提醒設定 (Reminders)</h3>
+                            
+                            <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 mb-6">
+                                <div className="flex justify-between items-center mb-3">
+                                    <h4 className="font-bold text-amber-900 text-sm">啟用狀態與權限</h4>
+                                    <button onClick={requestNotificationPermission} className="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-amber-700 shadow-sm">
+                                        請求 iPhone 通知權限
+                                    </button>
+                                </div>
+                                <p className="text-xs text-amber-700 mb-2">請確保您已將此網頁「加入主畫面」(Add to Home Screen) 以獲得最佳體驗。</p>
+                                <label className="flex items-center cursor-pointer">
+                                    <input type="checkbox" checked={reminders.isEnabled} onChange={e => setReminders({...reminders, isEnabled: e.target.checked})} className="w-5 h-5 accent-amber-600 mr-2"/>
+                                    <span className="font-bold text-sm text-slate-700">開啟系統提醒總開關</span>
+                                </label>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6 mb-6">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">提前通知天數 (Days Before)</label>
+                                    <input type="number" value={reminders.daysBefore} onChange={e => setReminders({...reminders, daysBefore: Number(e.target.value)})} className="w-full p-2 border rounded text-sm font-mono"/>
+                                    <p className="text-[10px] text-slate-400 mt-1">系統將在到期日前 X 天發出提示。</p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">每日檢查時間 (Daily Check)</label>
+                                    <input type="time" value={reminders.time} onChange={e => setReminders({...reminders, time: e.target.value})} className="w-full p-2 border rounded text-sm font-mono"/>
+                                </div>
+                            </div>
+
+                            <h4 className="font-bold text-slate-600 text-xs uppercase border-b pb-2 mb-3">監控項目 (Categories)</h4>
+                            <div className="space-y-3">
+                                <label className="flex items-center cursor-pointer p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100">
+                                    <input type="checkbox" checked={reminders.categories.license} onChange={e => setReminders({...reminders, categories: {...reminders.categories, license: e.target.checked}})} className="mr-3 w-4 h-4 accent-blue-600"/>
+                                    <div><span className="block text-sm font-bold text-slate-700">牌費與驗車 (License & Inspection)</span><span className="text-xs text-slate-400">監控車輛牌費到期日、驗車日期。</span></div>
+                                </label>
+                                <label className="flex items-center cursor-pointer p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100">
+                                    <input type="checkbox" checked={reminders.categories.insurance} onChange={e => setReminders({...reminders, categories: {...reminders.categories, insurance: e.target.checked}})} className="mr-3 w-4 h-4 accent-blue-600"/>
+                                    <div><span className="block text-sm font-bold text-slate-700">保險 (Insurance)</span><span className="text-xs text-slate-400">監控車輛保險單到期日。</span></div>
+                                </label>
+                                <label className="flex items-center cursor-pointer p-2 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100">
+                                    <input type="checkbox" checked={reminders.categories.crossBorder} onChange={e => setReminders({...reminders, categories: {...reminders.categories, crossBorder: e.target.checked}})} className="mr-3 w-4 h-4 accent-blue-600"/>
+                                    <div><span className="block text-sm font-bold text-slate-700">中港證件 (Cross-Border Docs)</span><span className="text-xs text-slate-400">監控批文、禁區紙、內地保險等所有證件。</span></div>
+                                </label>
+                            </div>
+
+                            <div className="mt-6 flex justify-end">
+                                <button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-amber-600 active:scale-95 transition-transform">
+                                    儲存提醒設定
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- 3. Vehicle --- */}
                 {activeTab === 'vehicle' && (
                     <div className="space-y-6">
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">1. 車廠管理 (Makes)</h3>
-                            <div className="flex gap-2 mt-2"><input id="newMake" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make (e.g. Ferrari)"/><button onClick={() => { const el = document.getElementById('newMake') as HTMLInputElement; addItem('makes', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div>
+                            <div className="flex gap-2 mt-2"><input id="newMake" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make"/><button onClick={() => { const el = document.getElementById('newMake') as HTMLInputElement; addItem('makes', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div>
                             <div className="flex flex-wrap gap-2 mt-3">{settings.makes.map((m, i) => <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('makes', i)}/></span>)}</div>
                          </div>
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -2159,169 +2204,68 @@ const SettingsManager = ({
                                     <option value="">-- 請選擇 --</option>
                                     {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
-                                {selectedMakeForModel && (
-                                    <div className="flex gap-2 animate-fade-in">
-                                        <input value={newModelName} onChange={e => setNewModelName(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMakeForModel} 新型號...`} />
-                                        <button onClick={addModel} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button>
-                                    </div>
-                                )}
+                                {selectedMakeForModel && (<div className="flex gap-2 animate-fade-in"><input value={newModelName} onChange={e => setNewModelName(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMakeForModel} 新型號...`} /><button onClick={addModel} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button></div>)}
                             </div>
-                            {selectedMakeForModel && (
-                                <div className="flex flex-wrap gap-2">
-                                    {(settings.models[selectedMakeForModel] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : 
-                                    (settings.models[selectedMakeForModel] || []).map((m, i) => (
-                                        <span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">
-                                            {m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeModel(m)}/>
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
+                            {selectedMakeForModel && (<div className="flex flex-wrap gap-2">{(settings.models[selectedMakeForModel] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : (settings.models[selectedMakeForModel] || []).map((m, i) => (<span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeModel(m)}/></span>))}</div>)}
                          </div>
                     </div>
                 )}
 
+                {/* --- 4. Expenses --- */}
                 {activeTab === 'expenses' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DollarSign size={18} className="mr-2"/> 費用類別與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingExpenseIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 維修費"/></div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司 (選單)</label>
-                                    {/* ★★★ 修正：改為下拉選單 ★★★ */}
-                                    <select value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded bg-white">
-                                        <option value="">-- 選擇預設公司 --</option>
-                                        {settings.expenseCompanies.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司 (選單)</label><select value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded bg-white"><option value="">-- 選擇 --</option>{settings.expenseCompanies.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">金額 / 天數</label><div className="flex gap-1"><input type="number" value={expenseForm.defaultAmount} onChange={e => setExpenseForm({...expenseForm, defaultAmount: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={expenseForm.defaultDays} onChange={e => setExpenseForm({...expenseForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
-                                <div className="flex gap-1">
-                                    <button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>
-                                    {editingExpenseIndex !== null && <button onClick={() => { setEditingExpenseIndex(null); setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}
-                                </div>
+                                <div className="flex gap-1"><button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>{editingExpenseIndex !== null && <button onClick={() => { setEditingExpenseIndex(null); setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}</div>
                             </div>
-                            <div className="space-y-2">
-                                {settings.expenseTypes.map((item, i) => {
-                                    const isObj = typeof item !== 'string';
-                                    const name = isObj ? item.name : item;
-                                    const company = isObj ? item.defaultCompany : '-';
-                                    const amount = isObj ? item.defaultAmount : '-';
-                                    return (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                            <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">預設: {company}</span><span className="bg-white px-2 py-1 rounded border">${amount}</span></div></div>
-                                            <div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <div className="space-y-2">{settings.expenseTypes.map((item, i) => { const isObj = typeof item !== 'string'; const name = isObj ? item.name : item; const company = isObj ? item.defaultCompany : '-'; const amount = isObj ? item.defaultAmount : '-'; return (<div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200"><div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">預設: {company}</span><span className="bg-white px-2 py-1 rounded border">${amount}</span></div></div><div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div></div>); })}</div>
                         </div>
-
-                        {/* 公司/機構設定 (支援編輯) */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房 (Dropdown Options)</h3>
-                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
-                                <input value={compInput} onChange={e => setCompInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingCompIndex !== null ? "Edit Company Name..." : "Add New Company..."} />
-                                <button onClick={handleCompanySubmit} className={`text-white px-3 rounded text-xs ${editingCompIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingCompIndex !== null ? 'Update' : 'Add'}</button>
-                                {editingCompIndex !== null && <button onClick={() => { setEditingCompIndex(null); setCompInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.expenseCompanies.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
-                                        {c} 
-                                        <button onClick={() => editCompany(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
-                                        <button onClick={() => removeItem('expenseCompanies', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
-                                    </span>
-                                ))}
-                            </div>
+                            <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房</h3>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}><input value={compInput} onChange={e => setCompInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Company Name..." /><button onClick={handleCompanySubmit} className={`text-white px-3 rounded text-xs ${editingCompIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingCompIndex !== null ? 'Update' : 'Add'}</button>{editingCompIndex !== null && <button onClick={() => { setEditingCompIndex(null); setCompInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}</div>
+                            <div className="flex flex-wrap gap-2 mt-3">{settings.expenseCompanies.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">{c} <button onClick={() => editCompany(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button><button onClick={() => removeItem('expenseCompanies', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button></span>))}</div>
                         </div>
                     </div>
                 )}
 
+                {/* --- 5. CrossBorder --- */}
                 {activeTab === 'crossborder' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Globe size={18} className="mr-2"/> 代辦項目與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingCbIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">項目名稱</label><input value={cbForm.name} onChange={e => setCbForm({...cbForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="項目名"/></div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構 (選單)</label>
-                                    {/* ★★★ 修正：改為下拉選單 ★★★ */}
-                                    <select value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded bg-white">
-                                        <option value="">-- 選擇預設機構 --</option>
-                                        {settings.cbInstitutions.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構 (選單)</label><select value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded bg-white"><option value="">-- 選擇 --</option>{settings.cbInstitutions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">收費 / 天數</label><div className="flex gap-1"><input type="number" value={cbForm.defaultFee} onChange={e => setCbForm({...cbForm, defaultFee: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={cbForm.defaultDays} onChange={e => setCbForm({...cbForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
-                                <div className="flex gap-1">
-                                    <button onClick={handleCbSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingCbIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingCbIndex !== null ? '更新' : '新增'}</button>
-                                    {editingCbIndex !== null && <button onClick={() => { setEditingCbIndex(null); setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}
-                                </div>
+                                <div className="flex gap-1"><button onClick={handleCbSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingCbIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingCbIndex !== null ? '更新' : '新增'}</button>{editingCbIndex !== null && <button onClick={() => { setEditingCbIndex(null); setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}</div>
                             </div>
-                            <div className="space-y-2">
-                                {(settings.cbItems || []).map((item, i) => {
-                                    const isObj = typeof item !== 'string';
-                                    const name = isObj ? item.name : item;
-                                    const inst = isObj ? item.defaultInst : '-';
-                                    const fee = isObj ? item.defaultFee : '-';
-                                    return (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                             <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">{inst}</span><span className="bg-white px-2 py-1 rounded border">${fee}</span></div></div>
-                                            <div className="flex gap-2"><button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <div className="space-y-2">{settings.cbItems.map((item, i) => { const isObj = typeof item !== 'string'; const name = isObj ? item.name : item; const inst = isObj ? item.defaultInst : '-'; const fee = isObj ? item.defaultFee : '-'; return (<div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200"><div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">{inst}</span><span className="bg-white px-2 py-1 rounded border">${fee}</span></div></div><div className="flex gap-2"><button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div></div>); })}</div>
                         </div>
-
-                        {/* 辦理機構 (支援編輯) */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">常用辦理機構 (Handling Institutions)</h3>
-                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingInstIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
-                                <input value={instInput} onChange={e => setInstInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingInstIndex !== null ? "Edit Institution..." : "Add Institution..."} />
-                                <button onClick={handleInstSubmit} className={`text-white px-3 rounded text-xs ${editingInstIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingInstIndex !== null ? 'Update' : 'Add'}</button>
-                                {editingInstIndex !== null && <button onClick={() => { setEditingInstIndex(null); setInstInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.cbInstitutions.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
-                                        {c} 
-                                        <button onClick={() => editInst(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
-                                        <button onClick={() => removeItem('cbInstitutions', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
-                                    </span>
-                                ))}
-                            </div>
+                            <h3 className="font-bold text-slate-700 mb-4">常用辦理機構</h3>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingInstIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}><input value={instInput} onChange={e => setInstInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Institution..." /><button onClick={handleInstSubmit} className={`text-white px-3 rounded text-xs ${editingInstIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingInstIndex !== null ? 'Update' : 'Add'}</button>{editingInstIndex !== null && <button onClick={() => { setEditingInstIndex(null); setInstInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}</div>
+                            <div className="flex flex-wrap gap-2 mt-3">{settings.cbInstitutions.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">{c} <button onClick={() => editInst(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button><button onClick={() => removeItem('cbInstitutions', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button></span>))}</div>
                         </div>
                     </div>
                 )}
 
+                {/* --- 6. Users --- */}
                 {activeTab === 'users' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限 (System Access)</h3>
-                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6 text-xs text-blue-700">
-                                <strong>說明：</strong> 此處設定 Email 與權限。新用戶需在登入頁點擊 "Sign in with Google" 或使用該 Email 註冊。<br/>
-                                (系統會比對登入者的 Email 是否在下方清單中)
-                            </div>
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限</h3>
+                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6 text-xs text-blue-700"><strong>說明：</strong> 設定 Email 與權限。新用戶需在登入頁使用 Google 登入或相同 Email 註冊。</div>
                             <div className="flex gap-2 mb-6"><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="flex-1 border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="輸入用戶 Email..."/><button onClick={handleAddUser} className="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700 shadow-sm">新增授權</button></div>
-                            <div className="space-y-3">
-                                {systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (
-                                    <div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <div className="flex items-center gap-3"><div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div><span className="text-sm font-bold text-slate-700">{u.email}</span></div>
-                                            <button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white">移除</button>
-                                        </div>
-                                        <div className="flex gap-4 pl-9 text-xs">
-                                            {[{ k: 'inventory', label: '車庫 (Inventory)' }, { k: 'business', label: '業務 (Business)' }, { k: 'database', label: '資料庫 (DB)' }, { k: 'settings', label: '設定 (Settings)' }].map(mod => (
-                                                <label key={mod.k} className="flex items-center cursor-pointer select-none"><input type="checkbox" checked={u.modules?.includes(mod.k)} onChange={() => toggleUserPermission(u.email, mod.k)} className="mr-1.5 accent-blue-600"/><span className={u.modules?.includes(mod.k) ? 'text-slate-700 font-bold' : 'text-slate-400'}>{mod.label}</span></label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            <div className="space-y-3">{systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (<div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100"><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-3"><div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div><span className="text-sm font-bold text-slate-700">{u.email}</span></div><button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white">移除</button></div><div className="flex gap-4 pl-9 text-xs">{[{ k: 'inventory', label: '車庫' }, { k: 'business', label: '業務' }, { k: 'database', label: '資料庫' }, { k: 'settings', label: '設定' }].map(mod => (<label key={mod.k} className="flex items-center cursor-pointer select-none"><input type="checkbox" checked={u.modules?.includes(mod.k)} onChange={() => toggleUserPermission(u.email, mod.k)} className="mr-1.5 accent-blue-600"/><span className={u.modules?.includes(mod.k) ? 'text-slate-700 font-bold' : 'text-slate-400'}>{mod.label}</span></label>))}</div></div>))}</div>
                         </div>
                     </div>
                 )}
 
+                {/* --- 7. Backup --- */}
                 {activeTab === 'backup' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
