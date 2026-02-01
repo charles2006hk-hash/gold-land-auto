@@ -1469,7 +1469,7 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// 6. Cross Border Module (v3.2: 最終修正版 - 補齊 CrossBorderTask 缺失欄位)
+// 6. Cross Border Module (v3.3: 修復編譯錯誤 - days 欄位類型修正)
   const CrossBorderView = ({ 
       inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment 
   }: {
@@ -1710,7 +1710,7 @@ type CrossBorderViewProps = {
                                               if (!item) return;
                                               const date = new Date().toISOString().split('T')[0];
                                               
-                                              // ★★★ 修正：補齊 CrossBorderTask 所需的所有屬性 ★★★
+                                              // ★★★ 修正：補齊所有必填欄位，並將 days 設為字串 '0' ★★★
                                               const newTask: CrossBorderTask = { 
                                                   id: Date.now().toString(), 
                                                   date, 
@@ -1718,7 +1718,7 @@ type CrossBorderViewProps = {
                                                   fee: Number(fee), 
                                                   institution: '公司',
                                                   handler: '', 
-                                                  days: 0, 
+                                                  days: '0',  // 修正：必須是字串
                                                   currency: 'HKD', 
                                                   note: '', 
                                                   isPaid: false 
@@ -1785,7 +1785,6 @@ type CrossBorderViewProps = {
           </div>
       );
   };
-
 // ------------------------------------------------------------------
 // ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
 // ------------------------------------------------------------------
