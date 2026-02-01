@@ -1469,7 +1469,7 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// 6. Cross Border Module (v3.1: 修復編譯錯誤 - 移除多餘的 status 欄位)
+// 6. Cross Border Module (v3.2: 最終修正版 - 補齊 CrossBorderTask 缺失欄位)
   const CrossBorderView = ({ 
       inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment 
   }: {
@@ -1709,8 +1709,21 @@ type CrossBorderViewProps = {
                                               const item = prompt('輸入服務項目 (例如: 代辦驗車):', '代辦服務');
                                               if (!item) return;
                                               const date = new Date().toISOString().split('T')[0];
-                                              // ★★★ 修正：移除 status 欄位，避免類型錯誤 ★★★
-                                              const newTask: CrossBorderTask = { id: Date.now().toString(), date, item, fee: Number(fee), institution: '公司' };
+                                              
+                                              // ★★★ 修正：補齊 CrossBorderTask 所需的所有屬性 ★★★
+                                              const newTask: CrossBorderTask = { 
+                                                  id: Date.now().toString(), 
+                                                  date, 
+                                                  item, 
+                                                  fee: Number(fee), 
+                                                  institution: '公司',
+                                                  handler: '', 
+                                                  days: 0, 
+                                                  currency: 'HKD', 
+                                                  note: '', 
+                                                  isPaid: false 
+                                              };
+                                              
                                               addCbTask(activeCar.id!, newTask);
                                           }}
                                           className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm flex items-center transition-all hover:scale-105 active:scale-95"
@@ -1772,7 +1785,6 @@ type CrossBorderViewProps = {
           </div>
       );
   };
-
 
 // ------------------------------------------------------------------
 // ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
