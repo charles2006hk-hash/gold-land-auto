@@ -1901,7 +1901,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v6.0: 增加公司/機構的編輯功能) ★★★
+// ★★★ 5. Settings Manager (v6.1: 預設公司/機構改為下拉選單連動) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -1932,18 +1932,14 @@ const SettingsManager = ({
     const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[] }[]>([]);
     
     // --- 狀態：財務費用設定 ---
-    // 1. 費用類別 (複雜物件)
     const [expenseForm, setExpenseForm] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
     const [editingExpenseIndex, setEditingExpenseIndex] = useState<number | null>(null);
-    // 2. 收款公司 (純文字列表) ★★★ 新增編輯狀態 ★★★
     const [compInput, setCompInput] = useState('');
     const [editingCompIndex, setEditingCompIndex] = useState<number | null>(null);
     
     // --- 狀態：中港業務設定 ---
-    // 1. 代辦項目 (複雜物件)
     const [cbForm, setCbForm] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
     const [editingCbIndex, setEditingCbIndex] = useState<number | null>(null);
-    // 2. 辦理機構 (純文字列表) ★★★ 新增編輯狀態 ★★★
     const [instInput, setInstInput] = useState('');
     const [editingInstIndex, setEditingInstIndex] = useState<number | null>(null);
 
@@ -2026,8 +2022,7 @@ const SettingsManager = ({
         updateSettings('models', updatedModels);
     };
 
-    // --- 3. 財務費用邏輯 (含公司編輯) ---
-    // 費用項目
+    // --- 3. 財務費用邏輯 ---
     const handleExpenseSubmit = () => {
         if (!expenseForm.name) return;
         const newItem = { ...expenseForm, defaultAmount: Number(expenseForm.defaultAmount) || 0 };
@@ -2045,12 +2040,11 @@ const SettingsManager = ({
         setEditingExpenseIndex(index);
     };
 
-    // ★★★ 公司/機構 (新增+編輯) ★★★
     const handleCompanySubmit = () => {
         if (!compInput) return;
         const newList = [...settings.expenseCompanies];
-        if (editingCompIndex !== null) newList[editingCompIndex] = compInput; // 更新
-        else newList.push(compInput); // 新增
+        if (editingCompIndex !== null) newList[editingCompIndex] = compInput;
+        else newList.push(compInput);
         updateSettings('expenseCompanies', newList);
         setCompInput('');
         setEditingCompIndex(null);
@@ -2060,8 +2054,7 @@ const SettingsManager = ({
         setEditingCompIndex(index);
     };
 
-    // --- 4. 中港業務邏輯 (含機構編輯) ---
-    // 代辦項目
+    // --- 4. 中港業務邏輯 ---
     const handleCbSubmit = () => {
         if (!cbForm.name) return;
         const newItem = { ...cbForm, defaultFee: Number(cbForm.defaultFee) || 0 };
@@ -2079,12 +2072,11 @@ const SettingsManager = ({
         setEditingCbIndex(index);
     };
 
-    // ★★★ 辦理機構 (新增+編輯) ★★★
     const handleInstSubmit = () => {
         if (!instInput) return;
         const newList = [...settings.cbInstitutions];
-        if (editingInstIndex !== null) newList[editingInstIndex] = instInput; // 更新
-        else newList.push(instInput); // 新增
+        if (editingInstIndex !== null) newList[editingInstIndex] = instInput;
+        else newList.push(instInput);
         updateSettings('cbInstitutions', newList);
         setInstInput('');
         setEditingInstIndex(null);
@@ -2194,7 +2186,14 @@ const SettingsManager = ({
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DollarSign size={18} className="mr-2"/> 費用類別與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingExpenseIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 維修費"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司</label><input value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 金田維修"/></div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司 (選單)</label>
+                                    {/* ★★★ 修正：改為下拉選單 ★★★ */}
+                                    <select value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded bg-white">
+                                        <option value="">-- 選擇預設公司 --</option>
+                                        {settings.expenseCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">金額 / 天數</label><div className="flex gap-1"><input type="number" value={expenseForm.defaultAmount} onChange={e => setExpenseForm({...expenseForm, defaultAmount: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={expenseForm.defaultDays} onChange={e => setExpenseForm({...expenseForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
                                 <div className="flex gap-1">
                                     <button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>
@@ -2209,7 +2208,7 @@ const SettingsManager = ({
                                     const amount = isObj ? item.defaultAmount : '-';
                                     return (
                                         <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                            <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">公司: {company}</span><span className="bg-white px-2 py-1 rounded border">${amount}</span></div></div>
+                                            <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">預設: {company}</span><span className="bg-white px-2 py-1 rounded border">${amount}</span></div></div>
                                             <div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
                                         </div>
                                     );
@@ -2217,7 +2216,7 @@ const SettingsManager = ({
                             </div>
                         </div>
 
-                        {/* ★★★ 公司/機構設定 (支援編輯) ★★★ */}
+                        {/* 公司/機構設定 (支援編輯) */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房 (Dropdown Options)</h3>
                             <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
@@ -2244,7 +2243,14 @@ const SettingsManager = ({
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Globe size={18} className="mr-2"/> 代辦項目與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingCbIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">項目名稱</label><input value={cbForm.name} onChange={e => setCbForm({...cbForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="項目名"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構</label><input value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="機構名"/></div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構 (選單)</label>
+                                    {/* ★★★ 修正：改為下拉選單 ★★★ */}
+                                    <select value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded bg-white">
+                                        <option value="">-- 選擇預設機構 --</option>
+                                        {settings.cbInstitutions.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">收費 / 天數</label><div className="flex gap-1"><input type="number" value={cbForm.defaultFee} onChange={e => setCbForm({...cbForm, defaultFee: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={cbForm.defaultDays} onChange={e => setCbForm({...cbForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
                                 <div className="flex gap-1">
                                     <button onClick={handleCbSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingCbIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingCbIndex !== null ? '更新' : '新增'}</button>
@@ -2267,7 +2273,7 @@ const SettingsManager = ({
                             </div>
                         </div>
 
-                        {/* ★★★ 辦理機構 (支援編輯) ★★★ */}
+                        {/* 辦理機構 (支援編輯) */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">常用辦理機構 (Handling Institutions)</h3>
                             <div className={`flex gap-2 mt-2 p-2 rounded border ${editingInstIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
