@@ -3976,221 +3976,311 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
     );
 };
 
-  // 4. Create Document Module (開單系統) - 最終修復版 (Layout Fixed)
-  const CreateDocModule = () => {
-      const [selectedCarId, setSelectedCarId] = useState<string>('');
-      const [docType, setDocType] = useState<DocType>('sales_contract');
-      const [selectedItems, setSelectedItems] = useState<string[]>([]); // 儲存選中的項目 ID
-      
-      const vehicle = inventory.find(v => v.id === selectedCarId);
-      
-      // 整合所有可選項目 (一般收款 + 中港待收款)
-      const allBillableItems = vehicle ? [
-          // 1. 一般收款紀錄 (已收)
-          ...(vehicle.payments || []).map(p => ({ 
-              id: p.id, 
-              date: p.date, 
-              amount: p.amount, 
-              type: 'payment', // 標記類型
-              category: p.type, // 顯示類別 (Deposit, Balance...)
-              desc: `[已收] ${p.type} (${p.method}) ${p.note ? '- ' + p.note : ''}`,
-              raw: p // 保留原始物件
-          })),
-          // 2. 中港業務待收款 (未付)
-          ...(vehicle.crossBorder?.tasks || []).filter(t => (t.fee || 0) !== 0 && !(vehicle.payments || []).some(p => p.relatedTaskId === t.id)).map(t => ({
-              id: t.id,
-              date: t.date,
-              amount: t.fee,
-              type: 'task', // 標記類型
-              category: 'Service Fee',
-              desc: `[待收] ${t.item} (${t.institution})`,
-              raw: t // 保留原始物件
-          }))
-      ] : [];
+  // ------------------------------------------------------------------
+// ★★★ 7. Create Document Module (v2.0: 左側選車/紀錄 + 右側編輯預覽) ★★★
+// ------------------------------------------------------------------
+const CreateDocModule = () => {
+    // --- 狀態管理 ---
+    const [selectedDocType, setSelectedDocType] = useState<'sales_contract' | 'invoice' | 'provisional'>('sales_contract');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
+    
+    // 表單數據 (預設空白)
+    const [formData, setFormData] = useState({
+        // 賣方/公司資料
+        companyName: COMPANY_INFO.name_ch,
+        companyAddress: COMPANY_INFO.address_ch,
+        companyPhone: COMPANY_INFO.phone,
+        // 買方資料
+        purchaserName: '',
+        purchaserId: '',
+        purchaserAddress: '',
+        purchaserPhone: '',
+        // 車輛資料
+        regMark: '',
+        make: '',
+        model: '',
+        chassisNo: '',
+        engineNo: '',
+        year: '',
+        color: '',
+        // 交易資料
+        price: '',
+        deposit: '',
+        balance: '',
+        deliveryDate: '',
+        remarks: ''
+    });
 
-      // 全選/取消全選
-      const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-          if (e.target.checked) {
-              setSelectedItems(allBillableItems.map(i => i.id));
-          } else {
-              setSelectedItems([]);
-          }
-      };
+    // --- 輔助邏輯 ---
+    // 根據搜尋過濾車輛
+    const filteredInventory = inventory.filter(v => 
+        (v.regMark || '').includes(searchTerm.toUpperCase()) || 
+        (v.make || '').toUpperCase().includes(searchTerm.toUpperCase()) ||
+        (v.model || '').toUpperCase().includes(searchTerm.toUpperCase())
+    );
 
-      // 單選
-      const handleSelectItem = (id: string) => {
-          if (selectedItems.includes(id)) {
-              setSelectedItems(selectedItems.filter(i => i !== id));
-          } else {
-              setSelectedItems([...selectedItems, id]);
-          }
-      };
+    // 選擇車輛時自動填入
+    const handleSelectCar = (car: Vehicle) => {
+        setSelectedCarId(car.id);
+        setFormData(prev => ({
+            ...prev,
+            regMark: car.regMark || '',
+            make: car.make || '',
+            model: car.model || '',
+            chassisNo: car.chassisNo || '',
+            engineNo: car.engineNo || '',
+            year: car.year || '',
+            color: car.colorExt || '',
+            price: car.price ? car.price.toString() : '',
+            // 如果車輛有綁定客戶，也可順便帶入 (視需求)
+            purchaserName: car.customerName || '',
+            purchaserPhone: car.customerPhone || '',
+            purchaserId: car.customerID || '',
+            purchaserAddress: car.customerAddress || ''
+        }));
+    };
 
-      const handlePrintDoc = () => {
-          if(!vehicle) return;
-          
-          // 找出選中的項目原始物件
-          // 使用 as any[] 規避 TypeScript 檢查，因為 openPrintPreview 已經更新
-          const itemsToPrint: any[] = allBillableItems
-              .filter(i => selectedItems.includes(i.id))
-              .map(i => i.raw); 
-          
-          openPrintPreview(docType, vehicle, itemsToPrint);
-      };
+    // 選擇空白單據
+    const handleSelectBlank = () => {
+        setSelectedCarId('BLANK');
+        setFormData({
+            companyName: COMPANY_INFO.name_ch,
+            companyAddress: COMPANY_INFO.address_ch,
+            companyPhone: COMPANY_INFO.phone,
+            purchaserName: '', purchaserId: '', purchaserAddress: '', purchaserPhone: '',
+            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '',
+            price: '', deposit: '', balance: '', deliveryDate: '', remarks: ''
+        });
+    };
 
-      return (
-          // ★★★ 修改 Layout: flex flex-col h-full overflow-hidden 確保按鈕不會被推出去 ★★★
-          <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="flex-none p-6 border-b border-slate-100 flex items-center">
-                  <div className="p-2 bg-blue-50 rounded-lg mr-3">
-                      <FileText className="text-blue-600" size={24} />
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-800">開立單據中心</h2>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {/* Step 1: Select Vehicle */}
-                  <div className="space-y-3">
-                      <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">1. 選擇車輛 (Select Vehicle)</label>
-                      <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                          <select 
-                              className="w-full pl-10 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none font-medium text-slate-700"
-                              value={selectedCarId}
-                              onChange={(e) => { setSelectedCarId(e.target.value); setSelectedItems([]); }}
-                          >
-                              <option value="">-- 請選擇車輛 --</option>
-                              {getSortedInventory().map(v => (
-                                  <option key={v.id} value={v.id}>
-                                      {v.regMark ? `[${v.regMark}]` : '[未出牌]'} {v.make} {v.model} ({v.year})
-                                  </option>
-                              ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                      </div>
-                  </div>
+    // 處理輸入變更
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
-                  {vehicle && (
-                      <>
-                          {/* Step 2: Select Doc Type */}
-                          <div className="space-y-3">
-                              <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">2. 單據類型 (Document Type)</label>
-                              <div className="grid grid-cols-3 gap-4">
-                                  {[
-                                      {id: 'sales_contract', label: '買賣合約', icon: FileText},
-                                      {id: 'invoice', label: '發票 (Invoice)', icon: Receipt},
-                                      {id: 'receipt', label: '收據 (Receipt)', icon: CheckSquare}
-                                  ].map(type => {
-                                      const Icon = type.icon;
-                                      return (
-                                          <button
-                                              key={type.id}
-                                              onClick={() => setDocType(type.id as any)}
-                                              className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
-                                                  docType === type.id 
-                                                  ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' 
-                                                  : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50'
-                                              }`}
-                                          >
-                                              <Icon size={24} className="mb-2" />
-                                              <span className="font-bold">{type.label}</span>
-                                          </button>
-                                      )
-                                  })}
-                              </div>
-                          </div>
+    // 列印功能 (呼叫主程式的 openPrintPreview，這裡模擬傳遞假 Vehicle 物件)
+    const handlePrint = () => {
+        const dummyVehicle: any = {
+            regMark: formData.regMark,
+            make: formData.make,
+            model: formData.model,
+            year: formData.year,
+            chassisNo: formData.chassisNo,
+            engineNo: formData.engineNo,
+            colorExt: formData.color,
+            price: Number(formData.price),
+            deposit: Number(formData.deposit),
+            customerName: formData.purchaserName,
+            customerID: formData.purchaserId,
+            customerPhone: formData.purchaserPhone,
+            customerAddress: formData.purchaserAddress,
+            soldDate: formData.deliveryDate,
+            remarks: formData.remarks
+        };
+        // 呼叫全域列印函數 (注意：這裡假設 openPrintPreview 可用，若在模組內需透過 props 傳入，或直接複製列印邏輯)
+        openPrintPreview(selectedDocType as any, dummyVehicle);
+    };
 
-                          {/* Step 3: Select Fees (Only for Invoice/Receipt) */}
-                          {docType !== 'sales_contract' && (
-                              <div className="space-y-3">
-                                  <label className="block text-sm font-bold text-slate-700 uppercase tracking-wide">
-                                      3. 選擇包含款項 (Select Items) <span className="text-slate-400 font-normal ml-2 text-xs">已選 {selectedItems.length} 項</span>
-                                  </label>
-                                  
-                                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                                      <table className="w-full text-sm">
-                                          <thead className="bg-slate-50 border-b border-slate-200">
-                                              <tr>
-                                                  <th className="p-3 w-12 text-center">
-                                                      <input 
-                                                          type="checkbox" 
-                                                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                                                          onChange={handleSelectAll}
-                                                          checked={allBillableItems.length > 0 && selectedItems.length === allBillableItems.length}
-                                                      />
-                                                  </th>
-                                                  <th className="p-3 text-left font-bold text-slate-600">日期</th>
-                                                  <th className="p-3 text-left font-bold text-slate-600">類別</th>
-                                                  <th className="p-3 text-left font-bold text-slate-600">項目說明</th>
-                                                  <th className="p-3 text-right font-bold text-slate-600">金額</th>
-                                              </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-slate-100">
-                                              {allBillableItems.map((item) => (
-                                                  <tr 
-                                                      key={item.id} 
-                                                      className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${selectedItems.includes(item.id) ? 'bg-blue-50/30' : ''}`}
-                                                      onClick={() => handleSelectItem(item.id)}
-                                                  >
-                                                      <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
-                                                          <input 
-                                                              type="checkbox" 
-                                                              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                                                              checked={selectedItems.includes(item.id)}
-                                                              onChange={() => handleSelectItem(item.id)}
-                                                          />
-                                                      </td>
-                                                      <td className="p-3 text-slate-500">{item.date}</td>
-                                                      <td className="p-3">
-                                                          <span className={`px-2 py-1 rounded text-xs font-bold ${
-                                                              item.type === 'payment' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                                                          }`}>
-                                                              {item.category}
-                                                          </span>
-                                                      </td>
-                                                      <td className="p-3 font-medium text-slate-700">{item.desc}</td>
-                                                      <td className={`p-3 text-right font-mono font-bold ${item.amount < 0 ? 'text-red-500' : 'text-slate-700'}`}>
-                                                          {formatCurrency(item.amount)}
-                                                      </td>
-                                                  </tr>
-                                              ))}
-                                              {allBillableItems.length === 0 && (
-                                                  <tr>
-                                                      <td colSpan={5} className="p-8 text-center text-slate-400">
-                                                          此車輛暫無任何相關款項紀錄
-                                                      </td>
-                                                  </tr>
-                                              )}
-                                          </tbody>
-                                      </table>
-                                  </div>
-                              </div>
-                          )}
-                      </>
-                  )}
-              </div>
+    return (
+        <div className="flex h-full gap-4 relative">
+            {/* --- 左側：選擇區 (車輛列表 & 歷史紀錄) --- */}
+            <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                {/* Search Header */}
+                <div className="p-3 border-b border-slate-100 bg-slate-50">
+                    <div className="relative mb-2">
+                        <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/>
+                        <input 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            placeholder="搜尋庫存車輛..." 
+                            className="w-full pl-8 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-300 transition-all"
+                        />
+                    </div>
+                    <button 
+                        onClick={handleSelectBlank}
+                        className={`w-full py-2 text-xs font-bold rounded-lg border flex items-center justify-center gap-2 transition-all ${selectedCarId === 'BLANK' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                    >
+                        <FileText size={14}/> 開立空白單據 (Empty Form)
+                    </button>
+                </div>
 
-              {/* Action Button - Fixed at bottom */}
-              {vehicle && (
-                  <div className="flex-none p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
-                      <button 
-                          onClick={handlePrintDoc}
-                          disabled={docType !== 'sales_contract' && selectedItems.length === 0}
-                          className={`
-                              px-8 py-3 rounded-lg font-bold flex items-center shadow-lg transition-all transform active:scale-95
-                              ${(docType !== 'sales_contract' && selectedItems.length === 0) 
-                                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
-                                  : 'bg-gradient-to-r from-slate-900 to-slate-800 text-white hover:from-slate-800 hover:to-slate-700'}
-                          `}
-                      >
-                          <Printer className="mr-2" size={20} />
-                          產生並預覽 PDF
-                      </button>
-                  </div>
-              )}
-          </div>
-      );
-  };
+                {/* Inventory List */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    <div className="text-[10px] font-bold text-slate-400 px-2 uppercase mb-1">庫存車輛 (Select from Inventory)</div>
+                    {filteredInventory.map(car => (
+                        <div 
+                            key={car.id} 
+                            onClick={() => handleSelectCar(car)} 
+                            className={`p-3 rounded-lg cursor-pointer border transition-all ${selectedCarId === car.id ? 'bg-blue-50 border-blue-300 shadow-inner' : 'bg-white border-slate-100 hover:border-blue-100'}`}
+                        >
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-sm text-slate-800">{car.regMark}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${car.status === 'Sold' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>{car.status}</span>
+                            </div>
+                            <div className="text-xs text-slate-500">{car.make} {car.model}</div>
+                            <div className="text-[10px] text-slate-400 mt-1">{car.year} | {formatCurrency(car.price)}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* --- 右側：編輯與預覽區 --- */}
+            <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                {/* 1. 工具列 (單據類型) */}
+                <div className="p-3 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <div className="flex gap-2">
+                        {[
+                            { id: 'sales_contract', label: '買賣合約 (Sales Contract)' },
+                            { id: 'invoice', label: '發票 (Invoice)' },
+                            { id: 'provisional', label: '臨時收據 (Receipt)' }
+                        ].map(type => (
+                            <button 
+                                key={type.id} 
+                                onClick={() => setSelectedDocType(type.id as any)}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${selectedDocType === type.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}`}
+                            >
+                                {type.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm">
+                            <Printer size={14}/> 預覽與列印 (Print)
+                        </button>
+                    </div>
+                </div>
+
+                {/* 2. 主內容區 (左右分割：左填寫，右預覽) */}
+                <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+                    
+                    {/* 左半部：表單填寫 */}
+                    <div className="w-full md:w-1/2 p-6 overflow-y-auto border-r border-slate-100 bg-white">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Edit size={16} className="mr-2 text-blue-500"/> 編輯內容</h3>
+                        
+                        <div className="space-y-4">
+                            {/* A. 買方資料 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Purchaser Info (買方)</h4>
+                                <div className="space-y-3">
+                                    <div><label className="text-[10px] font-bold text-slate-500">姓名 / 公司名稱</label><input name="purchaserName" value={formData.purchaserName} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none focus:border-blue-500"/></div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-[10px] font-bold text-slate-500">電話</label><input name="purchaserPhone" value={formData.purchaserPhone} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none focus:border-blue-500"/></div>
+                                        <div><label className="text-[10px] font-bold text-slate-500">身份證 / BR</label><input name="purchaserId" value={formData.purchaserId} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none focus:border-blue-500"/></div>
+                                    </div>
+                                    <div><label className="text-[10px] font-bold text-slate-500">地址</label><input name="purchaserAddress" value={formData.purchaserAddress} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none focus:border-blue-500"/></div>
+                                </div>
+                            </div>
+
+                            {/* B. 車輛資料 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Vehicle Details (車輛)</h4>
+                                <div className="grid grid-cols-2 gap-4 mb-3">
+                                    <div><label className="text-[10px] font-bold text-slate-500">車牌 (Reg No)</label><input name="regMark" value={formData.regMark} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm font-bold font-mono outline-none"/></div>
+                                    <div><label className="text-[10px] font-bold text-slate-500">年份 (Year)</label><input name="year" value={formData.year} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none"/></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 mb-3">
+                                    <div><label className="text-[10px] font-bold text-slate-500">廠牌 (Make)</label><input name="make" value={formData.make} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none"/></div>
+                                    <div><label className="text-[10px] font-bold text-slate-500">型號 (Model)</label><input name="model" value={formData.model} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none"/></div>
+                                </div>
+                                <div className="space-y-3">
+                                    <div><label className="text-[10px] font-bold text-slate-500">底盤號 (Chassis No)</label><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-xs font-mono outline-none"/></div>
+                                    <div><label className="text-[10px] font-bold text-slate-500">引擎號 (Engine No)</label><input name="engineNo" value={formData.engineNo} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-xs font-mono outline-none"/></div>
+                                </div>
+                            </div>
+
+                            {/* C. 交易金額 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Payment (金額)</h4>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div><label className="text-[10px] font-bold text-slate-500">成交價 ($)</label><input type="number" name="price" value={formData.price} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm font-mono font-bold outline-none"/></div>
+                                    <div><label className="text-[10px] font-bold text-slate-500">訂金 ($)</label><input type="number" name="deposit" value={formData.deposit} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm font-mono outline-none text-blue-600"/></div>
+                                    <div><label className="text-[10px] font-bold text-slate-500">餘額 ($)</label><input type="number" value={Number(formData.price) - Number(formData.deposit)} disabled className="w-full border-b border-slate-300 bg-transparent py-1 text-sm font-mono outline-none text-red-500"/></div>
+                                </div>
+                                <div className="mt-3">
+                                    <label className="text-[10px] font-bold text-slate-500">交車日期</label>
+                                    <input type="date" name="deliveryDate" value={formData.deliveryDate} onChange={handleChange} className="w-full border-b border-slate-300 bg-transparent py-1 text-sm outline-none"/>
+                                </div>
+                                <div className="mt-3">
+                                    <label className="text-[10px] font-bold text-slate-500">備註 (Remarks)</label>
+                                    <textarea name="remarks" value={formData.remarks} onChange={handleChange} className="w-full border rounded bg-white p-2 text-xs h-20 outline-none resize-none"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 右半部：即時預覽 (模擬 A4 紙張效果) */}
+                    <div className="w-full md:w-1/2 bg-gray-100 p-6 overflow-y-auto flex justify-center">
+                        <div className="bg-white shadow-xl w-full max-w-[210mm] min-h-[297mm] p-8 text-xs relative origin-top scale-90 md:scale-100 transition-transform">
+                            {/* 公司抬頭 */}
+                            <div className="text-center border-b-2 border-black pb-4 mb-6">
+                                <h1 className="text-2xl font-serif font-bold tracking-widest">{formData.companyName}</h1>
+                                <p className="text-[10px] mt-1">{formData.companyAddress}</p>
+                                <p className="text-[10px]">Tel: {formData.companyPhone}</p>
+                            </div>
+
+                            {/* 單據標題 */}
+                            <div className="text-center mb-8">
+                                <h2 className="text-xl font-bold underline uppercase tracking-widest">
+                                    {selectedDocType === 'sales_contract' ? 'Vehicle Sales Contract' : 
+                                     selectedDocType === 'invoice' ? 'INVOICE' : 'Provisional Receipt'}
+                                </h2>
+                                <h3 className="text-sm font-bold mt-1">
+                                    {selectedDocType === 'sales_contract' ? '汽車買賣合約' : 
+                                     selectedDocType === 'invoice' ? '發票' : '臨時收據'}
+                                </h3>
+                            </div>
+
+                            {/* 內容預覽 (簡化版，實際列印會更完整) */}
+                            <div className="space-y-6 font-serif">
+                                <div className="flex justify-between">
+                                    <div><span className="font-bold">Date:</span> {new Date().toLocaleDateString()}</div>
+                                    <div><span className="font-bold">No:</span> {Date.now().toString().slice(-6)}</div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-x-8 gap-y-4 border p-4">
+                                    <div className="col-span-2 border-b pb-2 font-bold bg-gray-50 px-2">Purchaser Details</div>
+                                    <div><span className="font-bold">Name:</span> {formData.purchaserName}</div>
+                                    <div><span className="font-bold">Tel:</span> {formData.purchaserPhone}</div>
+                                    <div className="col-span-2"><span className="font-bold">Address:</span> {formData.purchaserAddress}</div>
+
+                                    <div className="col-span-2 border-b pb-2 font-bold bg-gray-50 px-2 mt-2">Vehicle Details</div>
+                                    <div><span className="font-bold">Reg No:</span> {formData.regMark}</div>
+                                    <div><span className="font-bold">Year:</span> {formData.year}</div>
+                                    <div><span className="font-bold">Make:</span> {formData.make}</div>
+                                    <div><span className="font-bold">Model:</span> {formData.model}</div>
+                                    <div className="col-span-2"><span className="font-bold">Chassis:</span> {formData.chassisNo}</div>
+                                </div>
+
+                                <div className="border p-4">
+                                    <div className="flex justify-between mb-2"><span>Vehicle Price (車價):</span> <span className="font-bold">${formData.price}</span></div>
+                                    <div className="flex justify-between mb-2"><span>Deposit (訂金):</span> <span className="font-bold">${formData.deposit}</span></div>
+                                    <div className="border-t pt-2 mt-2 flex justify-between text-lg"><span>Balance (餘額):</span> <span className="font-bold">${Number(formData.price) - Number(formData.deposit)}</span></div>
+                                </div>
+
+                                <div className="mt-12 grid grid-cols-2 gap-12 text-center">
+                                    <div className="border-t border-black pt-2">
+                                        <p className="font-bold">For and on behalf of</p>
+                                        <p>{formData.companyName}</p>
+                                    </div>
+                                    <div className="border-t border-black pt-2">
+                                        <p className="font-bold">Purchaser Signature</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* 浮水印效果 */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
+                                <span className="text-9xl font-bold -rotate-45">PREVIEW</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 
