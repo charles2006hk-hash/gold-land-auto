@@ -1901,7 +1901,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v5.0: 模型管理 + 項目編輯 + 用戶權限控制) ★★★
+// ★★★ 5. Settings Manager (v6.0: 增加公司/機構的編輯功能) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -1927,31 +1927,36 @@ const SettingsManager = ({
     const [selectedMakeForModel, setSelectedMakeForModel] = useState('');
     const [newModelName, setNewModelName] = useState('');
 
-    // --- 狀態：系統用戶與權限 ---
+    // --- 狀態：系統用戶 ---
     const [newUserEmail, setNewUserEmail] = useState('');
-    // 用戶結構改為物件陣列: { email: string, modules: string[] }
     const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[] }[]>([]);
     
-    // --- 狀態：詳細設定 (新增/編輯共用) ---
-    // Expense
+    // --- 狀態：財務費用設定 ---
+    // 1. 費用類別 (複雜物件)
     const [expenseForm, setExpenseForm] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
     const [editingExpenseIndex, setEditingExpenseIndex] = useState<number | null>(null);
+    // 2. 收款公司 (純文字列表) ★★★ 新增編輯狀態 ★★★
+    const [compInput, setCompInput] = useState('');
+    const [editingCompIndex, setEditingCompIndex] = useState<number | null>(null);
     
-    // CrossBorder
+    // --- 狀態：中港業務設定 ---
+    // 1. 代辦項目 (複雜物件)
     const [cbForm, setCbForm] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
     const [editingCbIndex, setEditingCbIndex] = useState<number | null>(null);
+    // 2. 辦理機構 (純文字列表) ★★★ 新增編輯狀態 ★★★
+    const [instInput, setInstInput] = useState('');
+    const [editingInstIndex, setEditingInstIndex] = useState<number | null>(null);
 
-    // --- 1. 系統用戶邏輯 (Firebase 讀取) ---
+    // --- 1. 系統用戶邏輯 ---
     useEffect(() => {
         if (!db || !appId) return;
         const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
         const unsub = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                // 相容舊版: 如果是 string[] 則轉為物件，如果是物件陣列則直接使用
                 const rawList = data.list || [];
                 const formattedList = rawList.map((u: any) => {
-                    if (typeof u === 'string') return { email: u, modules: ['inventory', 'business', 'database', 'settings'] }; // 舊數據預設全開
+                    if (typeof u === 'string') return { email: u, modules: ['inventory', 'business', 'database', 'settings'] };
                     return u;
                 });
                 setSystemUsers(formattedList);
@@ -1960,7 +1965,6 @@ const SettingsManager = ({
         return () => unsub();
     }, [db, appId]);
 
-    // 更新用戶資料庫
     const updateUsersDb = async (newList: any[]) => {
         if (!db) return;
         try {
@@ -1971,7 +1975,7 @@ const SettingsManager = ({
 
     const handleAddUser = () => {
         if (!newUserEmail) return;
-        const newList = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }]; // 預設不給 setting 權限
+        const newList = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }];
         setSystemUsers(newList);
         updateUsersDb(newList);
         setNewUserEmail('');
@@ -2007,7 +2011,6 @@ const SettingsManager = ({
         updateSettings(key, newArr);
     };
 
-    // 新增/刪除型號
     const addModel = () => {
         if (!selectedMakeForModel || !newModelName) return;
         const currentModels = settings.models[selectedMakeForModel] || [];
@@ -2023,69 +2026,75 @@ const SettingsManager = ({
         updateSettings('models', updatedModels);
     };
 
-    // --- 3. 費用 (Expense) 編輯邏輯 ---
+    // --- 3. 財務費用邏輯 (含公司編輯) ---
+    // 費用項目
     const handleExpenseSubmit = () => {
         if (!expenseForm.name) return;
         const newItem = { ...expenseForm, defaultAmount: Number(expenseForm.defaultAmount) || 0 };
         const newList = [...settings.expenseTypes];
-        
-        if (editingExpenseIndex !== null) {
-            newList[editingExpenseIndex] = newItem; // 更新
-        } else {
-            newList.push(newItem); // 新增
-        }
+        if (editingExpenseIndex !== null) newList[editingExpenseIndex] = newItem;
+        else newList.push(newItem);
         updateSettings('expenseTypes', newList);
         setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
         setEditingExpenseIndex(null);
     };
-
     const editExpense = (index: number) => {
         const item = settings.expenseTypes[index];
-        if (typeof item === 'string') {
-            setExpenseForm({ name: item, defaultCompany: '', defaultAmount: '', defaultDays: '0' });
-        } else {
-            setExpenseForm({ 
-                name: item.name, 
-                defaultCompany: item.defaultCompany, 
-                defaultAmount: item.defaultAmount.toString(), 
-                defaultDays: item.defaultDays 
-            });
-        }
+        if (typeof item === 'string') setExpenseForm({ name: item, defaultCompany: '', defaultAmount: '', defaultDays: '0' });
+        else setExpenseForm({ name: item.name, defaultCompany: item.defaultCompany, defaultAmount: item.defaultAmount.toString(), defaultDays: item.defaultDays });
         setEditingExpenseIndex(index);
     };
 
-    // --- 4. 中港 (CrossBorder) 編輯邏輯 ---
+    // ★★★ 公司/機構 (新增+編輯) ★★★
+    const handleCompanySubmit = () => {
+        if (!compInput) return;
+        const newList = [...settings.expenseCompanies];
+        if (editingCompIndex !== null) newList[editingCompIndex] = compInput; // 更新
+        else newList.push(compInput); // 新增
+        updateSettings('expenseCompanies', newList);
+        setCompInput('');
+        setEditingCompIndex(null);
+    };
+    const editCompany = (index: number) => {
+        setCompInput(settings.expenseCompanies[index]);
+        setEditingCompIndex(index);
+    };
+
+    // --- 4. 中港業務邏輯 (含機構編輯) ---
+    // 代辦項目
     const handleCbSubmit = () => {
         if (!cbForm.name) return;
         const newItem = { ...cbForm, defaultFee: Number(cbForm.defaultFee) || 0 };
         const newList = [...settings.cbItems];
-
-        if (editingCbIndex !== null) {
-            newList[editingCbIndex] = newItem; // 更新
-        } else {
-            newList.push(newItem); // 新增
-        }
+        if (editingCbIndex !== null) newList[editingCbIndex] = newItem;
+        else newList.push(newItem);
         updateSettings('cbItems', newList);
         setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
         setEditingCbIndex(null);
     };
-
     const editCbItem = (index: number) => {
         const item = settings.cbItems[index];
-        if (typeof item === 'string') {
-            setCbForm({ name: item, defaultInst: '', defaultFee: '', defaultDays: '0' });
-        } else {
-            setCbForm({
-                name: item.name,
-                defaultInst: item.defaultInst,
-                defaultFee: item.defaultFee.toString(),
-                defaultDays: item.defaultDays
-            });
-        }
+        if (typeof item === 'string') setCbForm({ name: item, defaultInst: '', defaultFee: '', defaultDays: '0' });
+        else setCbForm({ name: item.name, defaultInst: item.defaultInst, defaultFee: item.defaultFee.toString(), defaultDays: item.defaultDays });
         setEditingCbIndex(index);
     };
 
-    // --- 備份還原 (保持不變) ---
+    // ★★★ 辦理機構 (新增+編輯) ★★★
+    const handleInstSubmit = () => {
+        if (!instInput) return;
+        const newList = [...settings.cbInstitutions];
+        if (editingInstIndex !== null) newList[editingInstIndex] = instInput; // 更新
+        else newList.push(instInput); // 新增
+        updateSettings('cbInstitutions', newList);
+        setInstInput('');
+        setEditingInstIndex(null);
+    };
+    const editInst = (index: number) => {
+        setInstInput(settings.cbInstitutions[index]);
+        setEditingInstIndex(index);
+    };
+
+    // --- 備份還原 ---
     const handleExport = () => {
         const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), settings }, null, 2);
         const blob = new Blob([dataStr], { type: "application/json" });
@@ -2150,8 +2159,6 @@ const SettingsManager = ({
                             <div className="flex gap-2 mt-2"><input id="newMake" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make (e.g. Ferrari)"/><button onClick={() => { const el = document.getElementById('newMake') as HTMLInputElement; addItem('makes', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div>
                             <div className="flex flex-wrap gap-2 mt-3">{settings.makes.map((m, i) => <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('makes', i)}/></span>)}</div>
                          </div>
-
-                         {/* ★★★ 新增：型號管理 ★★★ */}
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">2. 型號管理 (Models)</h3>
                             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
@@ -2160,7 +2167,6 @@ const SettingsManager = ({
                                     <option value="">-- 請選擇 --</option>
                                     {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
                                 </select>
-                                
                                 {selectedMakeForModel && (
                                     <div className="flex gap-2 animate-fade-in">
                                         <input value={newModelName} onChange={e => setNewModelName(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMakeForModel} 新型號...`} />
@@ -2168,7 +2174,6 @@ const SettingsManager = ({
                                     </div>
                                 )}
                             </div>
-                            
                             {selectedMakeForModel && (
                                 <div className="flex flex-wrap gap-2">
                                     {(settings.models[selectedMakeForModel] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : 
@@ -2188,8 +2193,8 @@ const SettingsManager = ({
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DollarSign size={18} className="mr-2"/> 費用類別與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingExpenseIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="項目名"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司</label><input value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="公司名"/></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 維修費"/></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司</label><input value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 金田維修"/></div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">金額 / 天數</label><div className="flex gap-1"><input type="number" value={expenseForm.defaultAmount} onChange={e => setExpenseForm({...expenseForm, defaultAmount: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={expenseForm.defaultDays} onChange={e => setExpenseForm({...expenseForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
                                 <div className="flex gap-1">
                                     <button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>
@@ -2204,21 +2209,30 @@ const SettingsManager = ({
                                     const amount = isObj ? item.defaultAmount : '-';
                                     return (
                                         <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                            <div className="flex items-center gap-4">
-                                                <span className="font-bold text-sm w-32 truncate">{name}</span>
-                                                <div className="flex gap-2 text-xs text-slate-500">
-                                                    <span className="bg-white px-2 py-1 rounded border">公司: {company}</span>
-                                                    <span className="bg-white px-2 py-1 rounded border">${amount}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {/* ★★★ 編輯按鈕 ★★★ */}
-                                                <button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button>
-                                                <button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button>
-                                            </div>
+                                            <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">公司: {company}</span><span className="bg-white px-2 py-1 rounded border">${amount}</span></div></div>
+                                            <div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
                                         </div>
                                     );
                                 })}
+                            </div>
+                        </div>
+
+                        {/* ★★★ 公司/機構設定 (支援編輯) ★★★ */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房 (Dropdown Options)</h3>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
+                                <input value={compInput} onChange={e => setCompInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingCompIndex !== null ? "Edit Company Name..." : "Add New Company..."} />
+                                <button onClick={handleCompanySubmit} className={`text-white px-3 rounded text-xs ${editingCompIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingCompIndex !== null ? 'Update' : 'Add'}</button>
+                                {editingCompIndex !== null && <button onClick={() => { setEditingCompIndex(null); setCompInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {settings.expenseCompanies.map((c, i) => (
+                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
+                                        {c} 
+                                        <button onClick={() => editCompany(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
+                                        <button onClick={() => removeItem('expenseCompanies', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
+                                    </span>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -2245,21 +2259,30 @@ const SettingsManager = ({
                                     const fee = isObj ? item.defaultFee : '-';
                                     return (
                                         <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                             <div className="flex items-center gap-4">
-                                                <span className="font-bold text-sm w-32 truncate">{name}</span>
-                                                <div className="flex gap-2 text-xs text-slate-500">
-                                                    <span className="bg-white px-2 py-1 rounded border">{inst}</span>
-                                                    <span className="bg-white px-2 py-1 rounded border">${fee}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {/* ★★★ 編輯按鈕 ★★★ */}
-                                                <button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button>
-                                                <button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button>
-                                            </div>
+                                             <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">{inst}</span><span className="bg-white px-2 py-1 rounded border">${fee}</span></div></div>
+                                            <div className="flex gap-2"><button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
                                         </div>
                                     );
                                 })}
+                            </div>
+                        </div>
+
+                        {/* ★★★ 辦理機構 (支援編輯) ★★★ */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4">常用辦理機構 (Handling Institutions)</h3>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingInstIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
+                                <input value={instInput} onChange={e => setInstInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingInstIndex !== null ? "Edit Institution..." : "Add Institution..."} />
+                                <button onClick={handleInstSubmit} className={`text-white px-3 rounded text-xs ${editingInstIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingInstIndex !== null ? 'Update' : 'Add'}</button>
+                                {editingInstIndex !== null && <button onClick={() => { setEditingInstIndex(null); setInstInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {settings.cbInstitutions.map((c, i) => (
+                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
+                                        {c} 
+                                        <button onClick={() => editInst(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
+                                        <button onClick={() => removeItem('cbInstitutions', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
+                                    </span>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -2270,42 +2293,20 @@ const SettingsManager = ({
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限 (System Access)</h3>
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6 text-xs text-blue-700">
-                                <strong>說明：</strong> 此處設定哪些 Email 可以登入系統，以及他們可以看見哪些分頁。<br/>
-                                (用戶必須先透過 Google 登入或 Email 註冊 Firebase Auth 帳號)
+                                <strong>說明：</strong> 此處設定 Email 與權限。新用戶需在登入頁點擊 "Sign in with Google" 或使用該 Email 註冊。<br/>
+                                (系統會比對登入者的 Email 是否在下方清單中)
                             </div>
-                            
-                            <div className="flex gap-2 mb-6">
-                                <input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="flex-1 border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="輸入用戶 Email..."/>
-                                <button onClick={handleAddUser} className="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700 shadow-sm">新增授權</button>
-                            </div>
-                            
+                            <div className="flex gap-2 mb-6"><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="flex-1 border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="輸入用戶 Email..."/><button onClick={handleAddUser} className="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700 shadow-sm">新增授權</button></div>
                             <div className="space-y-3">
                                 {systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (
                                     <div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100">
                                         <div className="flex justify-between items-center mb-2">
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div>
-                                                <span className="text-sm font-bold text-slate-700">{u.email}</span>
-                                            </div>
+                                            <div className="flex items-center gap-3"><div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div><span className="text-sm font-bold text-slate-700">{u.email}</span></div>
                                             <button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white">移除</button>
                                         </div>
-                                        {/* ★★★ 權限開關 ★★★ */}
                                         <div className="flex gap-4 pl-9 text-xs">
-                                            {[
-                                                { k: 'inventory', label: '車庫 (Inventory)' },
-                                                { k: 'business', label: '業務 (Business)' },
-                                                { k: 'database', label: '資料庫 (DB)' },
-                                                { k: 'settings', label: '設定 (Settings)' }
-                                            ].map(mod => (
-                                                <label key={mod.k} className="flex items-center cursor-pointer select-none">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={u.modules?.includes(mod.k)} 
-                                                        onChange={() => toggleUserPermission(u.email, mod.k)}
-                                                        className="mr-1.5 accent-blue-600"
-                                                    />
-                                                    <span className={u.modules?.includes(mod.k) ? 'text-slate-700 font-bold' : 'text-slate-400'}>{mod.label}</span>
-                                                </label>
+                                            {[{ k: 'inventory', label: '車庫 (Inventory)' }, { k: 'business', label: '業務 (Business)' }, { k: 'database', label: '資料庫 (DB)' }, { k: 'settings', label: '設定 (Settings)' }].map(mod => (
+                                                <label key={mod.k} className="flex items-center cursor-pointer select-none"><input type="checkbox" checked={u.modules?.includes(mod.k)} onChange={() => toggleUserPermission(u.email, mod.k)} className="mr-1.5 accent-blue-600"/><span className={u.modules?.includes(mod.k) ? 'text-slate-700 font-bold' : 'text-slate-400'}>{mod.label}</span></label>
                                             ))}
                                         </div>
                                     </div>
@@ -2320,14 +2321,8 @@ const SettingsManager = ({
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 flex flex-col justify-between">
-                                    <div><h4 className="font-bold text-blue-800 mb-2">匯出備份 (Export)</h4><p className="text-xs text-blue-600/70 mb-4">下載完整設定檔 (.json)。</p></div>
-                                    <button onClick={handleExport} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700">下載</button>
-                                </div>
-                                <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between">
-                                    <div><h4 className="font-bold text-amber-800 mb-2">匯入還原 (Import)</h4><p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p></div>
-                                    <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">選擇檔案<input type="file" accept=".json" className="hidden" onChange={handleImport} /></label>
-                                </div>
+                                <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 flex flex-col justify-between"><div><h4 className="font-bold text-blue-800 mb-2">匯出備份 (Export)</h4><p className="text-xs text-blue-600/70 mb-4">下載完整設定檔 (.json)。</p></div><button onClick={handleExport} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700">下載</button></div>
+                                <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between"><div><h4 className="font-bold text-amber-800 mb-2">匯入還原 (Import)</h4><p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p></div><label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">選擇檔案<input type="file" accept=".json" className="hidden" onChange={handleImport} /></label></div>
                             </div>
                         </div>
                     </div>
