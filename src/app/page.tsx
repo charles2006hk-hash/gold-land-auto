@@ -1469,233 +1469,310 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-const CrossBorderView = ({ 
-    inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, 
-    addCbTask, updateCbTask, deleteCbTask, addPayment 
-}: CrossBorderViewProps) => {
-    
-    // 搜尋與金額狀態
-    const [cbSearchTerm, setCbSearchTerm] = useState('');
-    const [feeStr, setFeeStr] = useState(''); 
-    
-    // 表單狀態
-    const [newTask, setNewTask] = useState<Partial<CrossBorderTask>>({
-        date: new Date().toISOString().split('T')[0],
-        item: '', institution: '', handler: '', days: '', fee: 0, currency: 'HKD', note: ''
-    });
-    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-    const [paymentModalTask, setPaymentModalTask] = useState<CrossBorderTask | null>(null);
-    const [quickPayMethod, setQuickPayMethod] = useState<'Cash'|'Cheque'|'Transfer'>('Cash');
+// 6. Cross Border Module (v3.0: 詳細項目計數 + 伸縮清單)
+  const CrossBorderView = ({ 
+      inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment 
+  }: {
+      inventory: Vehicle[], settings: SystemSettings, activeCbVehicleId: string | null, setActiveCbVehicleId: (id: string | null) => void,
+      setEditingVehicle: (v: Vehicle) => void, addCbTask: (vid: string, t: CrossBorderTask) => void, updateCbTask: (vid: string, t: CrossBorderTask) => void, deleteCbTask: (vid: string, tid: string) => void, addPayment: (vid: string, p: Payment) => void
+  }) => {
+      
+      const [searchTerm, setSearchTerm] = useState('');
+      const [expandExpired, setExpandExpired] = useState(true); // 控制過期清單展開
+      const [expandSoon, setExpandSoon] = useState(true);       // 控制即將到期清單展開
 
-    // 篩選與排序邏輯
-    const cbVehicles = inventory
-      .filter(v => v.crossBorder?.isEnabled)
-      .filter(v => {
-          if (!cbSearchTerm) return true;
-          const term = cbSearchTerm.toLowerCase();
-          return (
-              v.regMark.toLowerCase().includes(term) ||
-              (v.crossBorder?.mainlandPlate || '').toLowerCase().includes(term) ||
-              (v.crossBorder?.driver1 || '').toLowerCase().includes(term) ||
-              (v.crossBorder?.quotaNumber || '').includes(term)
-          );
-      })
-      .sort((a, b) => {
-          const getMinDays = (v: Vehicle) => {
-              const dates = [
-                  v.crossBorder?.dateHkInsurance, v.crossBorder?.dateReservedPlate, v.crossBorder?.dateBr,
-                  v.crossBorder?.dateLicenseFee, v.crossBorder?.dateMainlandJqx, v.crossBorder?.dateMainlandSyx,
-                  v.crossBorder?.dateClosedRoad, v.crossBorder?.dateApproval, v.crossBorder?.dateMainlandLicense,
-                  v.crossBorder?.dateHkInspection
-              ];
-              let minDays = 9999; 
-              let hasValidDate = false;
-              dates.forEach(d => {
-                  if (d) {
-                      const days = getDaysRemaining(d);
-                      if (days !== null) {
-                          if (days < minDays) minDays = days;
-                          hasValidDate = true;
+      // 定義需要追蹤日期的欄位與顯示名稱
+      const dateFields = {
+          dateHkInsurance: '香港保險',
+          dateReservedPlate: '留牌紙',
+          dateBr: '商業登記(BR)',
+          dateLicenseFee: '香港牌費',
+          dateMainlandJqx: '內地交強險',
+          dateMainlandSyx: '內地商業險',
+          dateClosedRoad: '禁區紙',
+          dateApproval: '批文卡',
+          dateMainlandLicense: '內地行駛證',
+          dateHkInspection: '香港驗車'
+      };
+
+      // --- 1. 資料處理與計數邏輯 ---
+      const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
+      
+      // 收集所有過期與即將到期的「具體項目」
+      const expiredItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
+      const soonItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
+
+      cbVehicles.forEach(v => {
+          Object.entries(dateFields).forEach(([fieldKey, label]) => {
+              const dateStr = (v.crossBorder as any)?.[fieldKey];
+              if (dateStr) {
+                  const days = getDaysRemaining(dateStr);
+                  if (days !== null) {
+                      const itemData = {
+                          vid: v.id!,
+                          plate: v.regMark || '未出牌',
+                          item: label,
+                          date: dateStr,
+                          days: days
+                      };
+
+                      if (days < 0) {
+                          expiredItems.push(itemData);
+                      } else if (days <= 30) {
+                          soonItems.push(itemData);
                       }
                   }
-              });
-              return hasValidDate ? minDays : 9999;
-          };
-          return getMinDays(a) - getMinDays(b);
+              }
+          });
       });
 
-    const activeVehicle = activeCbVehicleId ? inventory.find(v => v.id === activeCbVehicleId) : null;
-    
-    // 統計數據
-    const stats = (() => {
-        let expired = 0, soon = 0;
-        cbVehicles.forEach(v => {
-            const dates = [
-                v.crossBorder?.dateHkInsurance, v.crossBorder?.dateReservedPlate, v.crossBorder?.dateBr,
-                v.crossBorder?.dateLicenseFee, v.crossBorder?.dateMainlandJqx, v.crossBorder?.dateMainlandSyx,
-                v.crossBorder?.dateClosedRoad, v.crossBorder?.dateApproval, v.crossBorder?.dateMainlandLicense,
-                v.crossBorder?.dateHkInspection
-            ];
-            let hasE = false, hasS = false;
-            dates.forEach(d => {
-                if(d) {
-                    const days = getDaysRemaining(d);
-                    if (days !== null) {
-                        if (days < 0) hasE = true;
-                        else if (days <= 30) hasS = true;
-                    }
-                }
-            });
-            if (hasE) expired++; else if (hasS) soon++;
-        });
-        return { total: cbVehicles.length, expired, soon };
-    })();
+      // 排序：日期越早越前面
+      expiredItems.sort((a, b) => a.days - b.days); // 負越多久越前面
+      soonItems.sort((a, b) => a.days - b.days);    // 剩越少天越前面
 
-    const totalFees = activeVehicle?.crossBorder?.tasks?.reduce((sum, task) => sum + (task.fee || 0), 0) || 0;
+      // 根據搜尋過濾顯示的車輛
+      const filteredVehicles = cbVehicles.filter(v => 
+          (v.regMark || '').includes(searchTerm.toUpperCase()) || 
+          (v.crossBorder?.mainlandPlate || '').includes(searchTerm)
+      );
 
-    // 操作函數
-    const handleItemChange = (itemName: string) => {
-        const config = settings.cbItems.find((i: any) => (typeof i === 'string' ? i === itemName : i.name === itemName));
-        let updates: any = { item: itemName };
-        if (config && typeof config !== 'string') {
-            updates.institution = config.defaultInst || '';
-            updates.days = config.defaultDays || '';
-            updates.fee = config.defaultFee || 0;
-            setFeeStr(config.defaultFee ? formatNumberInput(config.defaultFee.toString()) : ''); 
-        }
-        setNewTask(prev => ({ ...prev, ...updates }));
-    };
+      const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    const handleFeeChange = (val: string) => {
-        const formatted = formatNumberInput(val);
-        setFeeStr(formatted);
-        const numVal = Number(formatted.replace(/,/g, ''));
-        setNewTask(prev => ({ ...prev, fee: isNaN(numVal) ? 0 : numVal }));
-    };
+      // 共用清單渲染組件
+      const AlertList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => (
+          <div className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10">
+              <div className="max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20">
+                  {items.map((it, idx) => (
+                      <div 
+                          key={`${it.vid}-${idx}`} 
+                          onClick={() => setActiveCbVehicleId(it.vid)}
+                          className={`flex justify-between items-center p-2 hover:bg-white/10 cursor-pointer border-b border-white/5 last:border-0 group transition-colors`}
+                      >
+                          <div className="flex items-center gap-2">
+                              <span className="font-bold font-mono bg-black/20 px-1.5 rounded">{it.plate}</span>
+                              <span className="text-white/90">{it.item}</span>
+                          </div>
+                          <div className={`text-right font-mono font-bold ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>
+                              {type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}
+                              <span className="ml-2 text-[10px] text-white/40 font-normal">{it.date}</span>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      );
 
-    const handleAddTask = () => {
-        if (!activeCbVehicleId || !newTask.item) return;
-        const task: CrossBorderTask = {
-            id: Date.now().toString(),
-            date: newTask.date || '',
-            item: newTask.item || '',
-            institution: newTask.institution || '',
-            handler: newTask.handler || '',
-            days: newTask.days || '',
-            fee: Number(feeStr.replace(/,/g, '')) || 0,
-            currency: (newTask.currency as any) || 'HKD',
-            note: newTask.note || '',
-            isPaid: false
-        };
-        addCbTask(activeCbVehicleId, task);
-        setNewTask({ ...newTask, fee: 0, note: '', item: '', institution: '', days: '' });
-        setFeeStr('');
-    };
+      return (
+          <div className="flex flex-col h-full gap-4">
+              {/* Top Cards: Stats Summary (可伸縮詳細清單) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
+                  {/* 過期卡片 */}
+                  <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all">
+                      <div className="flex justify-between items-start z-10">
+                          <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                  <div className="p-1.5 bg-red-500/20 rounded-lg"><AlertTriangle size={18} className="text-red-400"/></div>
+                                  <span className="text-sm font-bold text-red-100 opacity-80">已過期項目 (Expired Items)</span>
+                              </div>
+                              <div className="text-3xl font-bold font-mono tracking-tight mt-1">{expiredItems.length} <span className="text-sm font-normal text-red-300/50">項</span></div>
+                          </div>
+                          {expiredItems.length > 0 && (
+                              <button onClick={() => setExpandExpired(!expandExpired)} className="p-1 hover:bg-white/10 rounded transition-colors">
+                                  {expandExpired ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+                              </button>
+                          )}
+                      </div>
+                      {/* 詳細清單 (伸縮區) */}
+                      {expiredItems.length > 0 && expandExpired && <AlertList items={expiredItems} type="expired" />}
+                      <AlertCircle className="absolute -right-6 -bottom-6 text-red-500/10" size={100} />
+                  </div>
 
-    const handleUpdateTask = () => { 
-        if(!activeCbVehicleId || !editingTaskId) return;
-        updateCbTask(activeCbVehicleId, { ...newTask, id: editingTaskId, fee: Number(feeStr.replace(/,/g, '')) } as any); 
-        setEditingTaskId(null); 
-        setNewTask({fee:0, note:''}); 
-        setFeeStr(''); 
-    };
-    
-    const handleEditClick = (task: CrossBorderTask) => { 
-        setEditingTaskId(task.id); 
-        setNewTask({ ...task }); 
-        setFeeStr(formatNumberInput(task.fee.toString())); 
-    };
-    
-    const handleQuickPay = () => {
-        if (!activeCbVehicleId || !paymentModalTask) return;
-        const newPayment: Payment = {
-            id: `CB-${Date.now()}`, date: new Date().toISOString().split('T')[0], type: 'Service Fee',
-            amount: paymentModalTask.fee, method: quickPayMethod, note: `代辦費用: ${paymentModalTask.item}`, relatedTaskId: paymentModalTask.id
-        };
-        addPayment(activeCbVehicleId, newPayment);
-        setPaymentModalTask(null);
-    };
+                  {/* 即將到期卡片 */}
+                  <div className="bg-gradient-to-br from-amber-800 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-amber-800/30 relative overflow-hidden flex flex-col transition-all">
+                      <div className="flex justify-between items-start z-10">
+                          <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                  <div className="p-1.5 bg-amber-500/20 rounded-lg"><Clock size={18} className="text-amber-400"/></div>
+                                  <span className="text-sm font-bold text-amber-100 opacity-80">即將到期 (Expire Soon)</span>
+                              </div>
+                              <div className="text-3xl font-bold font-mono tracking-tight mt-1">{soonItems.length} <span className="text-sm font-normal text-amber-300/50">項</span></div>
+                          </div>
+                          {soonItems.length > 0 && (
+                              <button onClick={() => setExpandSoon(!expandSoon)} className="p-1 hover:bg-white/10 rounded transition-colors">
+                                  {expandSoon ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+                              </button>
+                          )}
+                      </div>
+                      {/* 詳細清單 (伸縮區) */}
+                      {soonItems.length > 0 && expandSoon && <AlertList items={soonItems} type="soon" />}
+                      <Bell className="absolute -right-6 -bottom-6 text-amber-500/10" size={100} />
+                  </div>
+              </div>
 
-    const renderCard = (label: string, value: number, color: string) => ( <div className={`bg-white p-4 rounded-lg shadow-sm border-l-4 ${color}`}><p className="text-xs text-gray-500 uppercase">{label}</p><p className="text-2xl font-bold text-slate-800">{value}</p></div> );
+              {/* Main Content: Sidebar List & Detail View */}
+              <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
+                  {/* Left: Vehicle List */}
+                  <div className="w-1/3 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                      <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2">
+                          <div className="relative flex-1">
+                              <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/>
+                              <input 
+                                  value={searchTerm} 
+                                  onChange={e => setSearchTerm(e.target.value)} 
+                                  placeholder="搜尋車牌/內地牌..." 
+                                  className="w-full pl-8 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-300 transition-all"
+                              />
+                          </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                          {filteredVehicles.map(car => {
+                              // 計算單車的過期狀況
+                              let carExpiredCount = 0;
+                              Object.keys(dateFields).forEach(k => {
+                                  const d = (car.crossBorder as any)?.[k];
+                                  if(d && getDaysRemaining(d)! < 0) carExpiredCount++;
+                              });
 
-    return (
-        <div className="flex flex-col h-full space-y-4">
-            <div className="flex flex-col md:flex-row justify-between items-center flex-none gap-4">
-                <h2 className="text-xl font-bold text-slate-800 flex items-center"><Globe className="mr-2"/> 中港車管家</h2>
-                <div className="relative w-full md:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
-                    <input className="w-full pl-9 p-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500" placeholder="搜尋車牌、司機、指標..." value={cbSearchTerm} onChange={e => setCbSearchTerm(e.target.value)} />
-                </div>
-                <div className="flex gap-2">
-                    {renderCard("總車輛", stats.total, "border-blue-500")}
-                    {renderCard("已過期", stats.expired, "border-red-500")}
-                    {renderCard("即將到期", stats.soon, "border-yellow-500")}
-                </div>
-            </div>
+                              return (
+                                  <div 
+                                      key={car.id} 
+                                      onClick={() => setActiveCbVehicleId(car.id)}
+                                      className={`p-3 rounded-lg cursor-pointer border transition-all hover:shadow-md ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-200 ring-1 ring-blue-200' : 'bg-white border-slate-100 hover:border-blue-100'}`}
+                                  >
+                                      <div className="flex justify-between items-center mb-1">
+                                          <span className="font-bold text-sm text-slate-800">{car.regMark}</span>
+                                          {carExpiredCount > 0 && <span className="bg-red-100 text-red-600 text-[10px] px-1.5 py-0.5 rounded-full font-bold flex items-center"><AlertTriangle size={10} className="mr-1"/> {carExpiredCount}項過期</span>}
+                                      </div>
+                                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                                          <span className="bg-slate-100 px-1.5 rounded">{car.crossBorder?.mainlandPlate || '無內地牌'}</span>
+                                          <span className="truncate max-w-[80px]">{car.model}</span>
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
 
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden flex-none max-h-[40vh] flex flex-col border">
-                <div className="overflow-x-auto flex-1">
-                    <table className="w-full text-left text-sm whitespace-nowrap relative">
-                        <thead className="bg-slate-50 border-b sticky top-0 z-10 shadow-sm">
-                            <tr>
-                                <th className="p-3">香港車牌</th><th className="p-3">內地車牌</th><th className="p-3 bg-yellow-50 text-yellow-800 border-x border-yellow-100">指標號</th><th className="p-3">主司機</th><th className="p-3">香港保險</th><th className="p-3">留牌紙</th><th className="p-3">商業登記</th><th className="p-3">牌照費</th><th className="p-3">內地交強險</th><th className="p-3">內地商業險</th><th className="p-3">禁區紙</th><th className="p-3">批文卡</th><th className="p-3">行駛證</th><th className="p-3">香港驗車</th><th className="p-3">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {cbVehicles.map(v => (
-                                <tr key={v.id} className={`border-b cursor-pointer transition ${activeCbVehicleId === v.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`} onClick={() => setActiveCbVehicleId(v.id)}>
-                                    <td className="p-3 font-bold">{v.regMark}</td><td className="p-3 text-blue-600">{v.crossBorder?.mainlandPlate || '-'}</td><td className="p-3 text-yellow-700 font-mono font-bold bg-yellow-50/50 border-x border-yellow-100">{v.crossBorder?.quotaNumber || '-'}</td><td className="p-3 text-gray-600">{v.crossBorder?.driver1 || '-'}</td>
-                                    <td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInsurance} label="香港保險"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateReservedPlate} label="留牌紙"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateBr} label="商業登記"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateLicenseFee} label="牌照費"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandJqx} label="交強險"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandSyx} label="商業險"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateClosedRoad} label="禁區紙"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateApproval} label="批文卡"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateMainlandLicense} label="行駛證"/></td><td className="p-3"><DateStatusBadge date={v.crossBorder?.dateHkInspection} label="香港驗車"/></td>
-                                    <td className="p-3"><button onClick={(e) => { e.stopPropagation(); setEditingVehicle(v); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><Edit size={14}/></button></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                  {/* Right: Detail View (The "Manager" Interface) */}
+                  <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative">
+                      {activeCar ? (
+                          <>
+                              {/* Header */}
+                              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                  <div>
+                                      <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                          {activeCar.regMark} 
+                                          <span className="text-sm font-normal text-slate-500 bg-white border px-2 py-0.5 rounded-md shadow-sm">{activeCar.crossBorder?.mainlandPlate}</span>
+                                      </h3>
+                                      <p className="text-xs text-slate-400 mt-1 flex gap-3">
+                                          <span>指標: {activeCar.crossBorder?.quotaNumber || '-'}</span>
+                                          <span>司機: {activeCar.crossBorder?.driver1 || '-'}</span>
+                                      </p>
+                                  </div>
+                                  <button onClick={() => setEditingVehicle(activeCar)} className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs rounded-lg shadow-sm transition-colors flex items-center">
+                                      <Edit size={12} className="mr-1.5"/> 編輯資料
+                                  </button>
+                              </div>
 
-            <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col min-h-0 border overflow-hidden">
-                <div className="flex justify-between items-center mb-4 flex-none border-b pb-2">
-                    <h3 className="font-bold flex items-center text-slate-800"><CheckSquare className="mr-2 text-blue-600"/> {activeVehicle ? `${activeVehicle.regMark} - 辦理流程與收費` : '請在上表選擇車輛'}</h3>
-                    {activeVehicle && (<div className="text-xs text-gray-500">共 {(activeVehicle.crossBorder?.tasks || []).length} 項記錄，總費用: <span className={`font-bold ml-1 ${totalFees < 0 ? 'text-red-600' : 'text-blue-600'}`}>{formatCurrency(totalFees)}</span></div>)}
-                </div>
-                
-                {activeVehicle ? (
-                    <div className="flex-1 overflow-y-auto">
-                        <table className="w-full text-sm border-collapse mb-4">
-                            <thead className="bg-gray-50 text-gray-600 sticky top-0 z-10"><tr><th className="p-2 border">日期</th><th className="p-2 border">項目</th><th className="p-2 border">辦理機構</th><th className="p-2 border">辦理人</th><th className="p-2 border">天數</th><th className="p-2 border text-right">費用</th><th className="p-2 border">備注</th><th className="p-2 border text-center">操作</th></tr></thead>
-                            <tbody>
-                                {(activeVehicle.crossBorder?.tasks || []).map(task => {
-                                    const isPaid = !!activeVehicle.payments?.find(p => p.relatedTaskId === task.id);
-                                    return (
-                                    <tr key={task.id} className="border-b hover:bg-gray-50"><td className="p-2 border">{task.date}</td><td className="p-2 border font-medium">{task.item}</td><td className="p-2 border text-gray-500">{task.institution}</td><td className="p-2 border text-gray-500">{task.handler}</td><td className="p-2 border text-center">{task.days}</td>
-                                        <td className="p-2 border text-right font-mono font-bold"><div className="flex items-center justify-end gap-2"><span className={isPaid ? "text-green-600" : (task.fee < 0 ? "text-red-600" : "text-amber-600")}>{task.currency} {task.fee}</span>{!isPaid && (<button onClick={() => setPaymentModalTask(task)} className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200 hover:bg-green-200 flex items-center" title="收款"><DollarSign size={10} className="mr-0.5"/> 收款</button>)}{isPaid && <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded">已收</span>}</div></td>
-                                        <td className="p-2 border text-gray-500 text-xs max-w-xs truncate">{task.note}</td><td className="p-2 border text-center flex items-center justify-center gap-2"><button onClick={() => handleEditClick(task)} className="text-blue-400 hover:text-blue-600"><Edit size={14}/></button><button onClick={() => deleteCbTask(activeVehicle.id, task.id)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td></tr>
-                                    )})}
-                            </tbody>
-                        </table>
-                        <div className="bg-blue-50 p-3 rounded grid grid-cols-8 gap-2 items-end">
-                            <div className="col-span-1"><label className="text-[10px]">日期</label><input type="date" value={newTask.date} onChange={e => setNewTask({...newTask, date: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
-                            <div className="col-span-1"><label className="text-[10px]">項目</label><select value={newTask.item} onChange={e => handleItemChange(e.target.value)} className="w-full border p-1 rounded text-xs"><option value="">請選擇...</option>{settings.cbItems.map((i: any) => { const name = typeof i === 'string' ? i : i.name; return <option key={name} value={name}>{name}</option> })}</select></div>
-                            <div className="col-span-1"><label className="text-[10px]">機構</label><input list="cb_inst_list" value={newTask.institution} onChange={e => setNewTask({...newTask, institution: e.target.value})} className="w-full border p-1 rounded text-xs"/><datalist id="cb_inst_list">{settings.cbInstitutions.map(i => <option key={i} value={i}/>)}</datalist></div>
-                            <div className="col-span-1"><label className="text-[10px]">辦理人</label><input value={newTask.handler} onChange={e => setNewTask({...newTask, handler: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
-                            <div className="col-span-1"><label className="text-[10px]">天數</label><input value={newTask.days} onChange={e => setNewTask({...newTask, days: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
-                            <div className="col-span-1"><label className="text-[10px]">費用 (可負數)</label><div className="flex"><select value={newTask.currency} onChange={e => setNewTask({...newTask, currency: e.target.value as any})} className="border p-1 rounded-l text-xs bg-gray-100"><option>HKD</option><option>RMB</option></select><input type="text" value={feeStr} onChange={e => handleFeeChange(e.target.value)} className="w-full border p-1 rounded-r text-xs text-right font-mono" placeholder="0"/></div></div>
-                            <div className="col-span-1"><label className="text-[10px]">備注</label><input value={newTask.note} onChange={e => setNewTask({...newTask, note: e.target.value})} className="w-full border p-1 rounded text-xs"/></div>
-                            <div className="col-span-1">{editingTaskId ? (<div className="flex gap-1"><button onClick={handleUpdateTask} className="flex-1 bg-green-600 text-white p-1.5 rounded text-xs hover:bg-green-700 flex items-center justify-center font-bold shadow-sm"><RefreshCw size={14}/></button><button onClick={() => {setEditingTaskId(null); setNewTask({fee:0, note:''}); setFeeStr('');}} className="flex-1 bg-gray-400 text-white p-1.5 rounded text-xs hover:bg-gray-500 flex items-center justify-center font-bold shadow-sm"><X size={14}/></button></div>) : (<button onClick={handleAddTask} className="w-full bg-blue-600 text-white p-1.5 rounded text-xs hover:bg-blue-700 flex items-center justify-center font-bold shadow-sm"><Plus size={14} className="mr-1"/> 新增</button>)}</div>
-                        </div>
-                    </div>
-                ) : (<div className="flex-1 flex items-center justify-center text-gray-400 bg-gray-50 rounded border-dashed border-2"><p>請先在上表點選一台車輛</p></div>)}
-            </div>
-            
-            {paymentModalTask && (<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"><div className="bg-white p-6 rounded-lg shadow-xl w-96"><h3 className="text-lg font-bold mb-4 flex items-center"><PaymentIcon className="mr-2"/> 確認收款</h3><div className="space-y-4"><div className="p-3 bg-gray-50 rounded border"><p className="text-sm text-gray-500">項目: <span className="text-gray-900 font-bold">{paymentModalTask.item}</span></p><p className="text-sm text-gray-500">金額: <span className="text-blue-600 font-bold text-lg">{paymentModalTask.currency} {paymentModalTask.fee}</span></p></div><div><label className="block text-sm font-bold mb-1">支付方式</label><div className="flex gap-2">{['Cash', 'Cheque', 'Transfer'].map(m => (<button key={m} onClick={() => setQuickPayMethod(m as any)} className={`flex-1 py-2 rounded text-sm border ${quickPayMethod === m ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>{m}</button>))}</div></div><div className="flex gap-2 pt-2"><button onClick={() => setPaymentModalTask(null)} className="flex-1 py-2 bg-gray-200 rounded text-gray-700 hover:bg-gray-300">取消</button><button onClick={handleQuickPay} className="flex-1 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow">確認收款</button></div></div></div></div>)}
-        </div>
-    );
-};
+                              {/* Dates Grid */}
+                              <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-3 bg-white">
+                                  {Object.entries(dateFields).map(([key, label]) => {
+                                      const dateVal = (activeCar.crossBorder as any)?.[key];
+                                      const days = dateVal ? getDaysRemaining(dateVal) : null;
+                                      let statusColor = "bg-slate-50 border-slate-100 text-slate-400";
+                                      if (days !== null) {
+                                          if (days < 0) statusColor = "bg-red-50 border-red-200 text-red-700 ring-1 ring-red-100";
+                                          else if (days <= 30) statusColor = "bg-amber-50 border-amber-200 text-amber-700 ring-1 ring-amber-100";
+                                          else statusColor = "bg-green-50 border-green-200 text-green-700";
+                                      }
 
-// ------------------------------------------------------------------
-// ★★★ 2. SettingsManager (已移至外部，解決存檔跳轉與輸入跳走問題) ★★★
-// ------------------------------------------------------------------
+                                      return (
+                                          <div key={key} className={`p-2.5 rounded-lg border flex flex-col justify-between h-20 transition-all hover:shadow-sm ${statusColor}`}>
+                                              <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{label}</span>
+                                              <div className="text-right">
+                                                  <div className="text-sm font-bold font-mono">{dateVal || '--'}</div>
+                                                  {days !== null && <div className="text-[10px] font-bold">{days < 0 ? `過期 ${Math.abs(days)}天` : `剩 ${days}天`}</div>}
+                                              </div>
+                                          </div>
+                                      );
+                                  })}
+                              </div>
+
+                              {/* Service Records (Tasks) */}
+                              <div className="flex-1 bg-slate-50 p-4 border-t border-slate-200 overflow-y-auto">
+                                  <div className="flex justify-between items-center mb-3">
+                                      <h4 className="font-bold text-slate-700 text-sm flex items-center"><FileCheck size={16} className="mr-2 text-blue-600"/> 代辦服務記錄</h4>
+                                      <button 
+                                          onClick={() => {
+                                              const fee = prompt('輸入費用金額 ($):', '0');
+                                              if (fee === null) return;
+                                              const item = prompt('輸入服務項目 (例如: 代辦驗車):', '代辦服務');
+                                              if (!item) return;
+                                              const date = new Date().toISOString().split('T')[0];
+                                              const newTask: CrossBorderTask = { id: Date.now().toString(), date, item, fee: Number(fee), status: 'Pending', institution: '公司' };
+                                              addCbTask(activeCar.id!, newTask);
+                                          }}
+                                          className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm flex items-center transition-all hover:scale-105 active:scale-95"
+                                      >
+                                          <Plus size={14} className="mr-1"/> 新增記錄
+                                      </button>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                      {(activeCar.crossBorder?.tasks || []).length === 0 ? (
+                                          <div className="text-center py-8 text-slate-400 text-xs bg-white rounded-lg border border-dashed border-slate-200">暫無服務記錄</div>
+                                      ) : (
+                                          (activeCar.crossBorder?.tasks || []).map(task => {
+                                              const isPaid = (activeCar.payments || []).some(p => p.relatedTaskId === task.id);
+                                              return (
+                                                  <div key={task.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex justify-between items-center hover:border-blue-200 transition-colors group">
+                                                      <div className="flex items-center gap-3">
+                                                          <div className={`p-2 rounded-full ${isPaid ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                              {isPaid ? <Check size={14}/> : <Clock size={14}/>}
+                                                          </div>
+                                                          <div>
+                                                              <div className="font-bold text-sm text-slate-800">{task.item}</div>
+                                                              <div className="text-xs text-slate-400 font-mono">{task.date}</div>
+                                                          </div>
+                                                      </div>
+                                                      <div className="flex items-center gap-4">
+                                                          <div className="text-right">
+                                                              <div className="font-bold text-slate-700 font-mono">{formatCurrency(task.fee)}</div>
+                                                              <div className={`text-[10px] font-bold ${isPaid ? 'text-green-500' : 'text-amber-500'}`}>{isPaid ? '已收款' : '待收款'}</div>
+                                                          </div>
+                                                          
+                                                          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                                              {!isPaid && (
+                                                                  <button 
+                                                                      onClick={() => addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: task.fee, type: 'Service Fee', method: 'Cash', relatedTaskId: task.id, note: `Payment for: ${task.item}` })}
+                                                                      className="p-1.5 text-green-600 hover:bg-green-50 rounded" title="收款"
+                                                                  >
+                                                                      <DollarSign size={14}/>
+                                                                  </button>
+                                                              )}
+                                                              <button onClick={() => deleteCbTask(activeCar.id!, task.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded" title="刪除"><Trash2 size={14}/></button>
+                                                          </div>
+                                                      </div>
+                                                  </div>
+                                              );
+                                          })
+                                      )}
+                                  </div>
+                              </div>
+                          </>
+                      ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
+                              <Globe size={48} className="mb-4 opacity-50"/>
+                              <p className="text-sm">請選擇左側車輛查看詳情</p>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
+
 // ------------------------------------------------------------------
 // ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
 // ------------------------------------------------------------------
