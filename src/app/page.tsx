@@ -1474,7 +1474,7 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// --- 6. Cross Border Module (v5.1: 找回大卡片 + 行內編輯 + 分期收款) ---
+// --- 6. Cross Border Module (v5.2: 自動滾動不耗資源 + 左側補回年份/指標號 + 行內編輯/分期收款) ---
 const CrossBorderView = ({ 
     inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
 }: {
@@ -1484,7 +1484,7 @@ const CrossBorderView = ({
     
     const [searchTerm, setSearchTerm] = useState('');
     
-    // 卡片伸縮狀態 (找回這兩個狀態)
+    // 卡片伸縮狀態
     const [expandExpired, setExpandExpired] = useState(true);
     const [expandSoon, setExpandSoon] = useState(true);
 
@@ -1499,10 +1499,9 @@ const CrossBorderView = ({
     const serviceOptions = (settings.serviceItems && settings.serviceItems.length > 0) ? settings.serviceItems : defaultServiceItems;
     const dateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
 
-    // --- 資料處理：計算過期項目 (找回計算邏輯) ---
+    // --- 資料處理：計算過期項目 ---
     const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
     
-    // 收集所有過期與即將到期的「具體項目」
     const expiredItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
     const soonItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
 
@@ -1527,19 +1526,62 @@ const CrossBorderView = ({
     const filteredVehicles = cbVehicles.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
     const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    // --- 內部組件：下拉警示清單 (找回這個組件) ---
-    const AlertList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => (
-        <div className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10">
-            <div className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20">
-                {items.map((it, idx) => (
-                    <div key={`${it.vid}-${idx}`} onClick={() => setActiveCbVehicleId(it.vid)} className={`flex justify-between items-center p-2 hover:bg-white/10 cursor-pointer border-b border-white/5 last:border-0 group transition-colors`}>
-                        <div className="flex items-center gap-2"><span className="font-bold font-mono bg-black/20 px-1.5 rounded">{it.plate}</span><span className="text-white/90">{it.item}</span></div>
-                        <div className={`text-right font-mono font-bold ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>{type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}<span className="ml-2 text-[10px] text-white/40 font-normal">{it.date}</span></div>
-                    </div>
-                ))}
+    // --- 內部組件：自動滾動警示清單 (Auto Scroll Alert List) ---
+    const AlertList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => {
+        const scrollRef = useRef<HTMLDivElement>(null);
+        
+        // 自動滾動邏輯 (極低資源消耗)
+        useEffect(() => {
+            const el = scrollRef.current;
+            if (!el || items.length <= 3) return; // 項目少時不滾動
+            
+            let scrollAmount = 0;
+            const step = 0.5; // 滾動速度 (像素/幀)
+            let animationId: number;
+            let isPaused = false;
+
+            const scroll = () => {
+                if (!isPaused && el) {
+                    scrollAmount += step;
+                    if (scrollAmount >= el.scrollHeight / 2) {
+                        scrollAmount = 0; // 無縫循環 (需配合內容複製，這裡簡單重置)
+                        el.scrollTop = 0;
+                    } else {
+                        el.scrollTop = scrollAmount;
+                    }
+                }
+                animationId = requestAnimationFrame(scroll);
+            };
+
+            // 只有當滑鼠不在上面時才滾動
+            el.addEventListener('mouseenter', () => isPaused = true);
+            el.addEventListener('mouseleave', () => isPaused = false);
+            
+            animationId = requestAnimationFrame(scroll);
+
+            return () => {
+                cancelAnimationFrame(animationId);
+                el?.removeEventListener('mouseenter', () => isPaused = true);
+                el?.removeEventListener('mouseleave', () => isPaused = false);
+            };
+        }, [items.length]);
+
+        return (
+            <div className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10 relative group">
+                <div ref={scrollRef} className="max-h-32 overflow-y-hidden hover:overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 transition-all">
+                    {/* 為了視覺效果，我們可以在這裡顯示清單。自動滾動會控制 scrollTop */}
+                    {items.map((it, idx) => (
+                        <div key={`${it.vid}-${idx}`} onClick={() => setActiveCbVehicleId(it.vid)} className={`flex justify-between items-center p-2 hover:bg-white/20 cursor-pointer border-b border-white/5 last:border-0 transition-colors`}>
+                            <div className="flex items-center gap-2"><span className="font-bold font-mono bg-black/20 px-1.5 rounded">{it.plate}</span><span className="text-white/90">{it.item}</span></div>
+                            <div className={`text-right font-mono font-bold ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>{type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}<span className="ml-2 text-[10px] text-white/40 font-normal">{it.date}</span></div>
+                        </div>
+                    ))}
+                    {/* 留一點底部空間 */}
+                    <div className="h-4"></div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     // --- 操作邏輯 (行內編輯) ---
     const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
@@ -1565,7 +1607,7 @@ const CrossBorderView = ({
     return (
         <div className="flex flex-col h-full gap-4">
             
-            {/* ★★★ 1. 恢復頂部兩張大卡片 ★★★ */}
+            {/* Top Cards (含自動滾動) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
                 {/* 過期卡片 */}
                 <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all">
@@ -1595,7 +1637,7 @@ const CrossBorderView = ({
             </div>
 
             <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
-                {/* 左側：車輛列表 (搜尋欄放回這裡) */}
+                {/* 左側：車輛列表 (搜尋欄 + 年份 + 指標號) */}
                 <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
                     <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2">
                         <div className="relative flex-1"><Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌 / 內地牌..." className="w-full pl-8 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-300 transition-all"/></div>
@@ -1611,6 +1653,8 @@ const CrossBorderView = ({
 
                             return (
                                 <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-3 rounded-lg cursor-pointer border transition-all ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-inner' : 'bg-white border-slate-100 hover:border-blue-100'}`}>
+                                    
+                                    {/* 第一行：車牌 + 狀態燈 */}
                                     <div className="flex justify-between items-center mb-1">
                                         <span className="font-bold text-sm text-slate-800">{car.regMark}</span>
                                         <div className="flex gap-1">
@@ -1618,8 +1662,22 @@ const CrossBorderView = ({
                                             {unpaidTasks > 0 && <span className="bg-amber-100 text-amber-600 text-[10px] px-1.5 rounded font-bold">$</span>}
                                         </div>
                                     </div>
-                                    <div className="text-xs text-slate-500 font-mono">{car.crossBorder?.mainlandPlate || '無內地牌'}</div>
-                                    <div className="text-[10px] text-slate-400 mt-1 truncate">{car.make} {car.model}</div>
+
+                                    {/* 第二行：內地牌 + 年份 (★ 補上年份) */}
+                                    <div className="flex justify-between items-center text-xs text-slate-500 font-mono mb-1">
+                                        <span className="bg-slate-100 px-1 rounded">{car.crossBorder?.mainlandPlate || '無內地牌'}</span>
+                                        <span className="text-slate-400 text-[10px]">{car.year}</span>
+                                    </div>
+
+                                    {/* 第三行：車型 + 指標號 (★ 補上指標號) */}
+                                    <div className="flex justify-between items-center text-[10px] text-slate-400">
+                                        <span className="truncate max-w-[60%]">{car.make} {car.model}</span>
+                                        {car.crossBorder?.quotaNumber && (
+                                            <span className="truncate max-w-[40%] font-mono text-slate-500 bg-slate-50 px-1 rounded border border-slate-100">
+                                                {car.crossBorder.quotaNumber}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
