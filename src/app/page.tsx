@@ -1901,7 +1901,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v4.0 完整終極版：含所有新舊功能) ★★★
+// ★★★ 5. Settings Manager (v4.1: 修復 TypeScript 編譯錯誤) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -1935,7 +1935,6 @@ const SettingsManager = ({
     // --- 1. 系統用戶邏輯 (Firebase 讀取) ---
     useEffect(() => {
         if (!db || !appId) return;
-        // 監聽用戶名單 (路徑: artifacts/{appId}/system/users)
         const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
         const unsub = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -1995,10 +1994,10 @@ const SettingsManager = ({
             try {
                 const data = JSON.parse(event.target?.result as string);
                 if (data.settings) {
-                    // 這裡執行還原邏輯
-                    setSettings(prev => ({ ...prev, ...data.settings }));
+                    // ★★★ 關鍵修正：加入 (prev: any) 讓 TypeScript 閉嘴 ★★★
+                    setSettings((prev: any) => ({ ...prev, ...data.settings }));
                     
-                    // 嘗試寫入資料庫 (假設 updateSettings 會寫入 DB)
+                    // 嘗試寫入資料庫
                     Object.keys(data.settings).forEach(key => {
                         updateSettings(key as keyof SystemSettings, data.settings[key]);
                     });
@@ -2136,7 +2135,6 @@ const SettingsManager = ({
                             {/* 費用列表 */}
                             <div className="space-y-2">
                                 {settings.expenseTypes.map((item, i) => {
-                                    // 相容性處理：支援舊的字串格式與新的物件格式
                                     const isObj = typeof item !== 'string';
                                     const name = isObj ? item.name : item;
                                     const company = isObj ? item.defaultCompany : '-';
