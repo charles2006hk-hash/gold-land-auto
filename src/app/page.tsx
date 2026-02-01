@@ -4385,7 +4385,7 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
-          {/* Cross Border Tab - 修正版：正確傳遞 Props */}
+          {/* Cross Border Tab - 修正版：解決 'cb' implicit any 類型錯誤 */}
           {activeTab === 'cross_border' && (
             <div className="flex-1 overflow-y-auto">
               <CrossBorderView 
@@ -4394,10 +4394,10 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
                 activeCbVehicleId={activeCbVehicleId}
                 setActiveCbVehicleId={setActiveCbVehicleId}
                 setEditingVehicle={setEditingVehicle}
-                // 定義操作函數
-                addCbTask={(vid, task) => updateSubItem(vid, 'crossBorder', (cb) => ({ ...cb, tasks: [...(cb.tasks || []), task] }))}
-                updateCbTask={(vid, task) => updateSubItem(vid, 'crossBorder', (cb) => ({ ...cb, tasks: (cb.tasks || []).map(t => t.id === task.id ? task : t) }))}
-                deleteCbTask={(vid, taskId) => updateSubItem(vid, 'crossBorder', (cb) => ({ ...cb, tasks: (cb.tasks || []).filter(t => t.id !== taskId) }))}
+                // 定義操作函數 (加入 :any 解決類型報錯)
+                addCbTask={(vid, task) => updateSubItem(vid, 'crossBorder', (cb: any) => ({ ...cb, tasks: [...(cb.tasks || []), task] }))}
+                updateCbTask={(vid, task) => updateSubItem(vid, 'crossBorder', (cb: any) => ({ ...cb, tasks: (cb.tasks || []).map((t: any) => t.id === task.id ? task : t) }))}
+                deleteCbTask={(vid, taskId) => updateSubItem(vid, 'crossBorder', (cb: any) => ({ ...cb, tasks: (cb.tasks || []).filter((t: any) => t.id !== taskId) }))}
                 addPayment={addPayment}
               />
             </div>
