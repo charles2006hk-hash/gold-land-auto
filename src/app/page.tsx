@@ -1474,7 +1474,7 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// --- 6. Cross Border Module (v6.1: 數據源全方位整合 + 修復下拉選單) ---
+// --- 6. Cross Border Module (v6.2: 修復項目連動 -> 自動帶入費用與天數) ---
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
 }: {
@@ -1496,32 +1496,46 @@ const CrossBorderView = ({
     const [expandedPaymentTaskId, setExpandedPaymentTaskId] = useState<string | null>(null);
     const [newPayAmount, setNewPayAmount] = useState('');
 
-    // ★★★ 關鍵修復：全方位匯總服務項目 (資料庫 + 設定 + 預設) ★★★
-    // 1. 從資料庫中心抓取 (Category = 'CrossBorder')
-    // 這裡我們把資料庫裡所有屬於 "CrossBorder" 類別的項目名稱都抓出來
-    const dbServiceNames = (dbEntries || [])
-        .filter(d => d.category === 'CrossBorder')
-        .map(d => d.name);
-
-    // 2. 從設定檔抓取 (cbItems 中的 name)
-    const settingsCbItems = (settings.cbItems || [])
-        .map(i => (typeof i === 'string' ? i : i.name));
-
-    // 3. 系統預設值
+    // --- 1. 準備選單資料 ---
+    // 從資料庫中心抓取
+    const dbServiceNames = (dbEntries || []).filter(d => d.category === 'CrossBorder').map(d => d.name);
+    // 從設定檔抓取
+    const settingsCbItems = (settings.cbItems || []).map(i => (typeof i === 'string' ? i : i.name));
+    // 預設值
     const defaultServiceItems = ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'];
-
-    // 4. 合併並去重 (優先順序：資料庫 > 設定 > 預設)
-    const serviceOptions = Array.from(new Set([
-        ...dbServiceNames, 
-        ...(settings.serviceItems || []),
-        ...settingsCbItems,
-        ...defaultServiceItems
-    ])).filter(Boolean); // 過濾掉空值
-
-    // Debug: 讓您可以在 Console 看到到底抓到了什麼
-    // console.log("Current Service Options:", serviceOptions);
+    // 合併選單
+    const serviceOptions = Array.from(new Set([...dbServiceNames, ...(settings.serviceItems || []), ...settingsCbItems, ...defaultServiceItems])).filter(Boolean);
 
     const dateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
+
+    // --- ★★★ 關鍵函數：根據項目名稱查找預設值 ★★★ ---
+    const findItemDefaults = (itemName: string) => {
+        let fee = '';
+        let days = '7';
+
+        // 1. 先找 Settings (結構最完整)
+        const settingItem = (settings.cbItems || []).find(i => (typeof i === 'string' ? i : i.name) === itemName);
+        if (settingItem && typeof settingItem !== 'string') {
+            fee = settingItem.defaultFee?.toString() || '';
+            days = settingItem.defaultDays || '7';
+        }
+
+        // 2. 如果 Settings 沒找到，找資料庫 (Database Entry)
+        // 假設資料庫中心有輸入 price 或 fee 欄位 (這裡用 any 繞過類型檢查以讀取潛在欄位)
+        if (!fee) {
+            const dbItem = (dbEntries || []).find(d => d.name === itemName && d.category === 'CrossBorder');
+            if (dbItem) {
+                // 嘗試讀取各種可能的價格欄位名稱
+                const dbPrice = (dbItem as any).price || (dbItem as any).fee || (dbItem as any).defaultFee || (dbItem as any).amount;
+                const dbDays = (dbItem as any).days || (dbItem as any).defaultDays;
+                
+                if (dbPrice) fee = dbPrice.toString();
+                if (dbDays) days = dbDays.toString();
+            }
+        }
+
+        return { fee, days };
+    };
 
     // --- 資料處理 ---
     const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
@@ -1548,42 +1562,26 @@ const CrossBorderView = ({
     const filteredVehicles = cbVehicles.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
     const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    // --- 內部組件：3秒跳動滾動列表 (Ticker) ---
+    // --- 內部組件：3秒跳動滾動列表 ---
     const TickerList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => {
         const [currentIndex, setCurrentIndex] = useState(0);
         const [isPaused, setIsPaused] = useState(false);
-
         useEffect(() => {
             if (items.length <= 1) return;
-            const interval = setInterval(() => {
-                if (!isPaused) {
-                    setCurrentIndex((prev) => (prev + 1) % items.length);
-                }
-            }, 3000); // 3秒跳一次
+            const interval = setInterval(() => { if (!isPaused) setCurrentIndex((prev) => (prev + 1) % items.length); }, 3000);
             return () => clearInterval(interval);
         }, [items.length, isPaused]);
-
         const visibleItems = [];
-        for (let i = 0; i < Math.min(items.length, 5); i++) {
-            visibleItems.push(items[(currentIndex + i) % items.length]);
-        }
-
+        for (let i = 0; i < Math.min(items.length, 5); i++) { visibleItems.push(items[(currentIndex + i) % items.length]); }
         return (
-            <div 
-                className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10"
-                onMouseEnter={() => setIsPaused(true)}
-                onMouseLeave={() => setIsPaused(false)}
-            >
+            <div className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
                 <div className="h-28 overflow-hidden relative">
                     {items.length === 0 ? <div className="p-4 text-white/50 text-center">無項目</div> : (
                         <div className="transition-all duration-500 ease-in-out">
                             {visibleItems.map((it, idx) => (
                                 <div key={`${it.vid}-${idx}-${currentIndex}`} onClick={() => setActiveCbVehicleId(it.vid)} className={`flex justify-between items-center p-2 hover:bg-white/20 cursor-pointer border-b border-white/5 last:border-0`}>
                                     <div className="flex items-center gap-2"><span className="font-bold font-mono bg-black/20 px-1.5 rounded">{it.plate}</span><span className="text-white/90">{it.item}</span></div>
-                                    <div className={`text-right font-mono font-bold ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>
-                                        {type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}
-                                        <span className="ml-2 text-[10px] text-white/40 font-normal">{it.date}</span>
-                                    </div>
+                                    <div className={`text-right font-mono font-bold ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>{type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}<span className="ml-2 text-[10px] text-white/40 font-normal">{it.date}</span></div>
                                 </div>
                             ))}
                         </div>
@@ -1594,40 +1592,58 @@ const CrossBorderView = ({
     };
 
     // --- 操作邏輯 ---
+    
+    // 1. 開啟新增視窗 (自動帶入第一個項目的預設值)
     const openAddModal = () => {
         if (!activeCar) { alert("請先選擇車輛"); return; }
+        const initialItem = serviceOptions[0] || '代辦服務';
+        const defaults = findItemDefaults(initialItem);
+        
         setNewTaskForm({
             date: new Date().toISOString().split('T')[0],
-            item: serviceOptions[0] || '代辦服務',
-            fee: '',
-            days: '7',
+            item: initialItem,
+            fee: defaults.fee,
+            days: defaults.days,
             note: ''
         });
         setIsAddModalOpen(true);
     };
 
+    // ★★★ 處理下拉選單變更 (連動更新費用與天數) ★★★
+    const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newItem = e.target.value;
+        const defaults = findItemDefaults(newItem);
+        setNewTaskForm(prev => ({
+            ...prev,
+            item: newItem,
+            fee: defaults.fee,   // 自動填入費用
+            days: defaults.days  // 自動填入天數
+        }));
+    };
+
     const handleAddTask = () => {
         if (!activeCar) return;
         if (!newTaskForm.item) { alert("請選擇服務項目"); return; }
-        
-        const newTask: CrossBorderTask = {
-            id: Date.now().toString(),
-            date: newTaskForm.date,
-            item: newTaskForm.item,
-            fee: Number(newTaskForm.fee) || 0,
-            days: newTaskForm.days,
-            institution: '公司',
-            handler: '',
-            currency: 'HKD',
-            note: newTaskForm.note,
-            isPaid: false
-        };
+        const newTask: CrossBorderTask = { id: Date.now().toString(), date: newTaskForm.date, item: newTaskForm.item, fee: Number(newTaskForm.fee) || 0, days: newTaskForm.days, institution: '公司', handler: '', currency: 'HKD', note: newTaskForm.note, isPaid: false };
         addCbTask(activeCar.id!, newTask);
         setIsAddModalOpen(false);
     };
 
+    // 行內編輯
     const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
     
+    // ★★★ 行內編輯時的選單變更也支援連動 ★★★
+    const handleEditItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newItem = e.target.value;
+        const defaults = findItemDefaults(newItem);
+        setEditForm(prev => ({
+            ...prev,
+            item: newItem,
+            fee: Number(defaults.fee) || 0,
+            days: defaults.days
+        }));
+    };
+
     const saveEdit = () => {
         if (!activeCar || !editingTaskId || !editForm.item) return;
         const updatedTask = { ...editForm, fee: Number(editForm.fee) || 0, id: editingTaskId } as CrossBorderTask;
@@ -1638,15 +1654,7 @@ const CrossBorderView = ({
     const handleAddPartPayment = (task: CrossBorderTask) => {
         const amount = Number(newPayAmount);
         if (!activeCar || amount <= 0) return;
-        addPayment(activeCar.id!, { 
-            id: Date.now().toString(), 
-            date: new Date().toISOString().split('T')[0], 
-            amount: amount, 
-            type: 'Service Fee', 
-            method: 'Cash', 
-            relatedTaskId: task.id, 
-            note: `Payment for: ${task.item}` 
-        });
+        addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: amount, type: 'Service Fee', method: 'Cash', relatedTaskId: task.id, note: `Payment for: ${task.item}` });
         setNewPayAmount('');
     };
 
@@ -1661,8 +1669,9 @@ const CrossBorderView = ({
                         <div className="space-y-3">
                             <div><label className="text-[10px] text-slate-500 font-bold uppercase">Date</label><input type="date" value={newTaskForm.date} onChange={e => setNewTaskForm({...newTaskForm, date: e.target.value})} className="w-full border-b border-slate-300 py-1 text-sm outline-none"/></div>
                             <div>
-                                <label className="text-[10px] text-slate-500 font-bold uppercase">Item (DB / Settings)</label>
-                                <select value={newTaskForm.item} onChange={e => setNewTaskForm({...newTaskForm, item: e.target.value})} className="w-full border-b border-slate-300 py-1 text-sm outline-none bg-white">
+                                <label className="text-[10px] text-slate-500 font-bold uppercase">Item (Auto-fill Fee)</label>
+                                {/* 使用 handleItemChange 取代原本的 onChange */}
+                                <select value={newTaskForm.item} onChange={handleItemChange} className="w-full border-b border-slate-300 py-1 text-sm outline-none bg-white">
                                     {serviceOptions.map((opt, idx) => <option key={`${opt}-${idx}`} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
@@ -1682,7 +1691,6 @@ const CrossBorderView = ({
 
             {/* Top Cards (3 Sec Ticker) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                {/* Expired */}
                 <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all">
                     <div className="flex justify-between items-start z-10">
                         <div>
@@ -1694,8 +1702,6 @@ const CrossBorderView = ({
                     {expiredItems.length > 0 && showExpired && <TickerList items={expiredItems} type="expired" />}
                     <AlertCircle className="absolute -right-6 -bottom-6 text-red-500/10" size={100} />
                 </div>
-
-                {/* Soon */}
                 <div className="bg-gradient-to-br from-amber-800 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-amber-800/30 relative overflow-hidden flex flex-col transition-all">
                     <div className="flex justify-between items-start z-10">
                         <div>
@@ -1805,7 +1811,7 @@ const CrossBorderView = ({
                                                         <td className="p-2"><input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})} className="w-full bg-white border border-blue-300 rounded px-2 py-1 outline-none text-xs"/></td>
                                                         <td className="p-2">
                                                             <div className="flex gap-1">
-                                                                <select value={editForm.item} onChange={e => setEditForm({...editForm, item: e.target.value})} className="flex-1 bg-white border border-blue-300 rounded px-2 py-1 outline-none text-xs">
+                                                                <select value={editForm.item} onChange={handleEditItemChange} className="flex-1 bg-white border border-blue-300 rounded px-2 py-1 outline-none text-xs">
                                                                     {serviceOptions.map((o,i) => <option key={`${o}-${i}`} value={o}>{o}</option>)}
                                                                 </select>
                                                                 <input type="text" value={editForm.days} onChange={e => setEditForm({...editForm, days: e.target.value})} className="w-12 bg-white border border-blue-300 rounded px-1 py-1 text-center text-xs" placeholder="天數"/>
