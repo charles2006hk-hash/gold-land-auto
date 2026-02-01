@@ -423,7 +423,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
           crossBorder: true,
           installments: false
       }
-  }
+  },
   backup: {
       frequency: 'monthly',
       lastBackupDate: '',
