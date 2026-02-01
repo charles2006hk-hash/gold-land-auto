@@ -1469,7 +1469,7 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// 6. Cross Border Module (v3.0: 詳細項目計數 + 伸縮清單)
+// 6. Cross Border Module (v3.1: 修復編譯錯誤 - 移除多餘的 status 欄位)
   const CrossBorderView = ({ 
       inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment 
   }: {
@@ -1527,8 +1527,8 @@ type CrossBorderViewProps = {
       });
 
       // 排序：日期越早越前面
-      expiredItems.sort((a, b) => a.days - b.days); // 負越多久越前面
-      soonItems.sort((a, b) => a.days - b.days);    // 剩越少天越前面
+      expiredItems.sort((a, b) => a.days - b.days);
+      soonItems.sort((a, b) => a.days - b.days);
 
       // 根據搜尋過濾顯示的車輛
       const filteredVehicles = cbVehicles.filter(v => 
@@ -1709,7 +1709,8 @@ type CrossBorderViewProps = {
                                               const item = prompt('輸入服務項目 (例如: 代辦驗車):', '代辦服務');
                                               if (!item) return;
                                               const date = new Date().toISOString().split('T')[0];
-                                              const newTask: CrossBorderTask = { id: Date.now().toString(), date, item, fee: Number(fee), status: 'Pending', institution: '公司' };
+                                              // ★★★ 修正：移除 status 欄位，避免類型錯誤 ★★★
+                                              const newTask: CrossBorderTask = { id: Date.now().toString(), date, item, fee: Number(fee), institution: '公司' };
                                               addCbTask(activeCar.id!, newTask);
                                           }}
                                           className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 shadow-sm flex items-center transition-all hover:scale-105 active:scale-95"
