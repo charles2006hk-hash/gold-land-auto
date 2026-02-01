@@ -2815,37 +2815,24 @@ const deleteVehicle = async (id: string) => {
       }
   };
 
-  // Settings 更新配合二級菜單
-  const updateSettings = async (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => {
-    if (!db || !staffId) return;
-    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-    let newSettings = { ...settings };
+  // 更新系統設定 (v2.0 通用版：直接儲存新值，支援物件與陣列)
+    const updateSettings = async (key: keyof SystemSettings, value: any) => {
+        // 1. 更新本地狀態 (讓畫面即時反應)
+        setSettings(prev => ({ ...prev, [key]: value }));
 
-    // 處理 models (parentKey = Make) 或 dbDocTypes (parentKey = Category)
-    if ((key === 'models' || key === 'dbDocTypes') && parentKey) {
-        // @ts-ignore - 處理動態 key 存取
-        const currentList = newSettings[key][parentKey] || [];
-        let newList = [...currentList];
-        
-        if (action === 'add' && newItem && !newList.includes(newItem)) newList.push(newItem);
-        else if (action === 'remove') newList = newList.filter((item: string) => item !== newItem);
-        
-        // @ts-ignore
-        newSettings[key] = { ...newSettings[key], [parentKey]: newList };
-    } else {
-        // 處理一般單層列表
-        const list = settings[key] as string[];
-        let newList = [...list];
-        if (action === 'add' && newItem && !newList.includes(newItem)) {
-            newList.push(newItem);
-            // 如果新增的是廠牌，同時初始化其型號列表
-            if (key === 'makes' && !newSettings.models[newItem]) newSettings.models = { ...newSettings.models, [newItem]: [] };
-        } else if (action === 'remove') newList = newList.filter(item => item !== newItem);
-        (newSettings[key] as string[]) = newList;
-    }
-    setSettings(newSettings);
-    await setDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings'), newSettings);
-  };
+        // 2. 寫入 Firebase
+        if (db && appId) {
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'system', 'settings');
+                // 使用 merge: true 確保只更新變動的欄位，不會覆蓋其他設定
+                await setDoc(docRef, { [key]: value }, { merge: true }); 
+                console.log(`Settings updated: ${key}`, value);
+            } catch (err) {
+                console.error("Settings update failed:", err);
+                alert("儲存設定失敗，請檢查網路連線");
+            }
+        }
+    };
 
   // --- Sorting & View ---
   const handleSort = (key: keyof Vehicle) => {
