@@ -1474,7 +1474,7 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// --- 6. Cross Border Module (v6.0: 3秒跳動滾動 + 資料庫項目連動 + 模態框新增/行內編輯) ---
+// --- 6. Cross Border Module (v6.1: 數據源全方位整合 + 修復下拉選單) ---
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
 }: {
@@ -1483,26 +1483,43 @@ const CrossBorderView = ({
 }) => {
     
     const [searchTerm, setSearchTerm] = useState('');
-    
-    // 卡片顯示狀態
     const [showExpired, setShowExpired] = useState(true);
     const [showSoon, setShowSoon] = useState(true);
 
     // 編輯與新增狀態
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false); // 控制新增視窗
-    const [newTaskForm, setNewTaskForm] = useState({ date: '', item: '', fee: '', days: '', note: '' }); // 新增表單
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [newTaskForm, setNewTaskForm] = useState({ date: '', item: '', fee: '', days: '', note: '' });
     
-    const [editingTaskId, setEditingTaskId] = useState<string | null>(null); // 行內編輯ID
-    const [editForm, setEditForm] = useState<Partial<CrossBorderTask>>({}); // 行內編輯表單
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<Partial<CrossBorderTask>>({});
     
-    const [expandedPaymentTaskId, setExpandedPaymentTaskId] = useState<string | null>(null); // 展開收款
-    const [newPayAmount, setNewPayAmount] = useState(''); // 分期收款金額
+    const [expandedPaymentTaskId, setExpandedPaymentTaskId] = useState<string | null>(null);
+    const [newPayAmount, setNewPayAmount] = useState('');
 
-    // ★★★ 3. 資料庫連動：讀取資料庫中心的 CrossBorder 項目 + 設定檔預設值 ★★★
-    const dbServiceItems = dbEntries.filter(d => d.category === 'CrossBorder').map(d => d.name);
+    // ★★★ 關鍵修復：全方位匯總服務項目 (資料庫 + 設定 + 預設) ★★★
+    // 1. 從資料庫中心抓取 (Category = 'CrossBorder')
+    // 這裡我們把資料庫裡所有屬於 "CrossBorder" 類別的項目名稱都抓出來
+    const dbServiceNames = (dbEntries || [])
+        .filter(d => d.category === 'CrossBorder')
+        .map(d => d.name);
+
+    // 2. 從設定檔抓取 (cbItems 中的 name)
+    const settingsCbItems = (settings.cbItems || [])
+        .map(i => (typeof i === 'string' ? i : i.name));
+
+    // 3. 系統預設值
     const defaultServiceItems = ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'];
-    // 合併並去重
-    const serviceOptions = Array.from(new Set([...dbServiceItems, ...(settings.serviceItems || defaultServiceItems)]));
+
+    // 4. 合併並去重 (優先順序：資料庫 > 設定 > 預設)
+    const serviceOptions = Array.from(new Set([
+        ...dbServiceNames, 
+        ...(settings.serviceItems || []),
+        ...settingsCbItems,
+        ...defaultServiceItems
+    ])).filter(Boolean); // 過濾掉空值
+
+    // Debug: 讓您可以在 Console 看到到底抓到了什麼
+    // console.log("Current Service Options:", serviceOptions);
 
     const dateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
 
@@ -1546,7 +1563,6 @@ const CrossBorderView = ({
             return () => clearInterval(interval);
         }, [items.length, isPaused]);
 
-        // 計算顯示的項目 (總是顯示當前 + 下2個，形成循環視窗)
         const visibleItems = [];
         for (let i = 0; i < Math.min(items.length, 5); i++) {
             visibleItems.push(items[(currentIndex + i) % items.length]);
@@ -1578,13 +1594,11 @@ const CrossBorderView = ({
     };
 
     // --- 操作邏輯 ---
-    
-    // 1. 開啟新增視窗
     const openAddModal = () => {
         if (!activeCar) { alert("請先選擇車輛"); return; }
         setNewTaskForm({
             date: new Date().toISOString().split('T')[0],
-            item: serviceOptions[0] || '',
+            item: serviceOptions[0] || '代辦服務',
             fee: '',
             days: '7',
             note: ''
@@ -1592,7 +1606,6 @@ const CrossBorderView = ({
         setIsAddModalOpen(true);
     };
 
-    // 2. 提交新增 (Modal)
     const handleAddTask = () => {
         if (!activeCar) return;
         if (!newTaskForm.item) { alert("請選擇服務項目"); return; }
@@ -1613,7 +1626,6 @@ const CrossBorderView = ({
         setIsAddModalOpen(false);
     };
 
-    // 3. 行內編輯相關
     const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
     
     const saveEdit = () => {
@@ -1623,7 +1635,6 @@ const CrossBorderView = ({
         setEditingTaskId(null);
     };
 
-    // 4. 分期收款
     const handleAddPartPayment = (task: CrossBorderTask) => {
         const amount = Number(newPayAmount);
         if (!activeCar || amount <= 0) return;
@@ -1642,7 +1653,7 @@ const CrossBorderView = ({
     return (
         <div className="flex flex-col h-full gap-4 relative">
             
-            {/* ★★★ 新增任務視窗 (Modal) ★★★ */}
+            {/* Modal */}
             {isAddModalOpen && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
                     <div className="bg-white w-80 p-5 rounded-xl shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
@@ -1650,9 +1661,9 @@ const CrossBorderView = ({
                         <div className="space-y-3">
                             <div><label className="text-[10px] text-slate-500 font-bold uppercase">Date</label><input type="date" value={newTaskForm.date} onChange={e => setNewTaskForm({...newTaskForm, date: e.target.value})} className="w-full border-b border-slate-300 py-1 text-sm outline-none"/></div>
                             <div>
-                                <label className="text-[10px] text-slate-500 font-bold uppercase">Item (From DB)</label>
+                                <label className="text-[10px] text-slate-500 font-bold uppercase">Item (DB / Settings)</label>
                                 <select value={newTaskForm.item} onChange={e => setNewTaskForm({...newTaskForm, item: e.target.value})} className="w-full border-b border-slate-300 py-1 text-sm outline-none bg-white">
-                                    {serviceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    {serviceOptions.map((opt, idx) => <option key={`${opt}-${idx}`} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
                             <div className="flex gap-3">
@@ -1669,9 +1680,9 @@ const CrossBorderView = ({
                 </div>
             )}
 
-            {/* Top Cards (3秒跳動) */}
+            {/* Top Cards (3 Sec Ticker) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                {/* 過期卡片 */}
+                {/* Expired */}
                 <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all">
                     <div className="flex justify-between items-start z-10">
                         <div>
@@ -1684,7 +1695,7 @@ const CrossBorderView = ({
                     <AlertCircle className="absolute -right-6 -bottom-6 text-red-500/10" size={100} />
                 </div>
 
-                {/* 即將到期卡片 */}
+                {/* Soon */}
                 <div className="bg-gradient-to-br from-amber-800 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-amber-800/30 relative overflow-hidden flex flex-col transition-all">
                     <div className="flex justify-between items-start z-10">
                         <div>
@@ -1699,7 +1710,7 @@ const CrossBorderView = ({
             </div>
 
             <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
-                {/* 左側列表 */}
+                {/* Left List */}
                 <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
                     <div className="p-3 border-b border-slate-100 bg-slate-50 flex gap-2">
                         <div className="relative flex-1"><Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌..." className="w-full pl-8 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-300 transition-all"/></div>
@@ -1736,7 +1747,7 @@ const CrossBorderView = ({
                     </div>
                 </div>
 
-                {/* 右側詳細 */}
+                {/* Right Detail */}
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     {activeCar ? (
                         <>
@@ -1772,7 +1783,6 @@ const CrossBorderView = ({
                             <div className="flex-1 overflow-y-auto p-4 bg-white">
                                 <div className="flex justify-between items-end mb-2">
                                     <h4 className="font-bold text-slate-700 text-sm flex items-center"><FileCheck size={16} className="mr-2 text-blue-600"/> 服務與收費紀錄</h4>
-                                    {/* 按鈕觸發 Modal */}
                                     <button onClick={openAddModal} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 shadow-sm flex items-center transition-all"><Plus size={14} className="mr-1"/> 新增項目</button>
                                 </div>
 
@@ -1796,7 +1806,7 @@ const CrossBorderView = ({
                                                         <td className="p-2">
                                                             <div className="flex gap-1">
                                                                 <select value={editForm.item} onChange={e => setEditForm({...editForm, item: e.target.value})} className="flex-1 bg-white border border-blue-300 rounded px-2 py-1 outline-none text-xs">
-                                                                    {serviceOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                                                                    {serviceOptions.map((o,i) => <option key={`${o}-${i}`} value={o}>{o}</option>)}
                                                                 </select>
                                                                 <input type="text" value={editForm.days} onChange={e => setEditForm({...editForm, days: e.target.value})} className="w-12 bg-white border border-blue-300 rounded px-1 py-1 text-center text-xs" placeholder="天數"/>
                                                             </div>
