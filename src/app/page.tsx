@@ -1901,7 +1901,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v4.1: 修復 TypeScript 編譯錯誤) ★★★
+// ★★★ 5. Settings Manager (v5.0: 模型管理 + 項目編輯 + 用戶權限控制) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -1921,16 +1921,25 @@ const SettingsManager = ({
     updateSettings: (k: keyof SystemSettings, v: any) => void 
 }) => {
     
-    // --- 狀態管理 ---
     const [activeTab, setActiveTab] = useState('general');
     
-    // 系統用戶管理狀態
+    // --- 狀態：車輛模型管理 ---
+    const [selectedMakeForModel, setSelectedMakeForModel] = useState('');
+    const [newModelName, setNewModelName] = useState('');
+
+    // --- 狀態：系統用戶與權限 ---
     const [newUserEmail, setNewUserEmail] = useState('');
-    const [systemUsers, setSystemUsers] = useState<string[]>([]);
+    // 用戶結構改為物件陣列: { email: string, modules: string[] }
+    const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[] }[]>([]);
     
-    // 詳細設定新增表單狀態
-    const [newExpense, setNewExpense] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
-    const [newCbItem, setNewCbItem] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
+    // --- 狀態：詳細設定 (新增/編輯共用) ---
+    // Expense
+    const [expenseForm, setExpenseForm] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
+    const [editingExpenseIndex, setEditingExpenseIndex] = useState<number | null>(null);
+    
+    // CrossBorder
+    const [cbForm, setCbForm] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
+    const [editingCbIndex, setEditingCbIndex] = useState<number | null>(null);
 
     // --- 1. 系統用戶邏輯 (Firebase 讀取) ---
     useEffect(() => {
@@ -1938,83 +1947,55 @@ const SettingsManager = ({
         const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
         const unsub = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
-                setSystemUsers(docSnap.data().list || []);
+                const data = docSnap.data();
+                // 相容舊版: 如果是 string[] 則轉為物件，如果是物件陣列則直接使用
+                const rawList = data.list || [];
+                const formattedList = rawList.map((u: any) => {
+                    if (typeof u === 'string') return { email: u, modules: ['inventory', 'business', 'database', 'settings'] }; // 舊數據預設全開
+                    return u;
+                });
+                setSystemUsers(formattedList);
             }
         }, (err) => console.error("Fetch users failed:", err));
         return () => unsub();
     }, [db, appId]);
 
-    const handleAddUser = async () => {
-        if (!newUserEmail || !db) return;
+    // 更新用戶資料庫
+    const updateUsersDb = async (newList: any[]) => {
+        if (!db) return;
         try {
             const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
-            const newList = [...systemUsers, newUserEmail];
             await setDoc(userDocRef, { list: newList }, { merge: true });
-            setNewUserEmail('');
-            alert(`已新增用戶: ${newUserEmail}\n(請確保該用戶已在 Firebase Authentication 註冊)`);
-        } catch (e) { 
-            console.error(e); 
-            alert('新增用戶失敗，請檢查權限'); 
-        }
+        } catch (e) { console.error(e); alert('用戶設定儲存失敗'); }
     };
 
-    const handleRemoveUser = async (email: string) => {
-        if (!confirm(`確定要移除用戶 ${email} 的存取權限嗎?`)) return;
-        try {
-            const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
-            const newList = systemUsers.filter(u => u !== email);
-            await setDoc(userDocRef, { list: newList }, { merge: true });
-        } catch (e) { console.error(e); }
+    const handleAddUser = () => {
+        if (!newUserEmail) return;
+        const newList = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }]; // 預設不給 setting 權限
+        setSystemUsers(newList);
+        updateUsersDb(newList);
+        setNewUserEmail('');
     };
 
-    // --- 2. 備份與還原邏輯 ---
-    const handleExport = () => {
-        const backupData = {
-            version: "1.0",
-            timestamp: new Date().toISOString(),
-            settings: settings,
-            // inventory: inventory // 若檔案太大可選擇不匯出庫存
-        };
-        const dataStr = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    const handleRemoveUser = (email: string) => {
+        if (!confirm(`移除用戶 ${email}?`)) return;
+        const newList = systemUsers.filter(u => u.email !== email);
+        setSystemUsers(newList);
+        updateUsersDb(newList);
     };
 
-    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const data = JSON.parse(event.target?.result as string);
-                if (data.settings) {
-                    // ★★★ 關鍵修正：加入 (prev: any) 讓 TypeScript 閉嘴 ★★★
-                    setSettings((prev: any) => ({ ...prev, ...data.settings }));
-                    
-                    // 嘗試寫入資料庫
-                    Object.keys(data.settings).forEach(key => {
-                        updateSettings(key as keyof SystemSettings, data.settings[key]);
-                    });
-                    
-                    alert('設定已成功匯入！請重新整理頁面以確保生效。');
-                } else {
-                    alert('錯誤：備份檔案格式不正確 (找不到 settings 欄位)');
-                }
-            } catch (err) { 
-                console.error(err);
-                alert('匯入失敗：檔案損毀或格式錯誤'); 
-            }
-        };
-        reader.readAsText(file);
+    const toggleUserPermission = (email: string, moduleKey: string) => {
+        const newList = systemUsers.map(u => {
+            if (u.email !== email) return u;
+            const hasModule = u.modules.includes(moduleKey);
+            const newModules = hasModule ? u.modules.filter(m => m !== moduleKey) : [...u.modules, moduleKey];
+            return { ...u, modules: newModules };
+        });
+        setSystemUsers(newList);
+        updateUsersDb(newList);
     };
 
-    // --- 3. 通用陣列操作 (新增/刪除) ---
+    // --- 2. 通用與模型操作 ---
     const addItem = (key: keyof SystemSettings, val: string) => {
         if (!val) return;
         updateSettings(key, [...(settings[key] as string[] || []), val]);
@@ -2026,188 +2007,256 @@ const SettingsManager = ({
         updateSettings(key, newArr);
     };
 
-    // --- 4. 詳細設定專用函數 ---
-    const addDetailedExpense = () => {
-        if (!newExpense.name) return;
-        const newItem = {
-            name: newExpense.name,
-            defaultCompany: newExpense.defaultCompany,
-            defaultAmount: Number(newExpense.defaultAmount) || 0,
-            defaultDays: newExpense.defaultDays
-        };
-        updateSettings('expenseTypes', [...settings.expenseTypes, newItem]);
-        setNewExpense({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
+    // 新增/刪除型號
+    const addModel = () => {
+        if (!selectedMakeForModel || !newModelName) return;
+        const currentModels = settings.models[selectedMakeForModel] || [];
+        const updatedModels = { ...settings.models, [selectedMakeForModel]: [...currentModels, newModelName] };
+        updateSettings('models', updatedModels);
+        setNewModelName('');
     };
 
-    const addCbItem = () => {
-        if (!newCbItem.name) return;
-        const newItem = {
-            name: newCbItem.name,
-            defaultInst: newCbItem.defaultInst,
-            defaultFee: Number(newCbItem.defaultFee) || 0,
-            defaultDays: newCbItem.defaultDays
+    const removeModel = (modelName: string) => {
+        if (!selectedMakeForModel) return;
+        const currentModels = settings.models[selectedMakeForModel] || [];
+        const updatedModels = { ...settings.models, [selectedMakeForModel]: currentModels.filter(m => m !== modelName) };
+        updateSettings('models', updatedModels);
+    };
+
+    // --- 3. 費用 (Expense) 編輯邏輯 ---
+    const handleExpenseSubmit = () => {
+        if (!expenseForm.name) return;
+        const newItem = { ...expenseForm, defaultAmount: Number(expenseForm.defaultAmount) || 0 };
+        const newList = [...settings.expenseTypes];
+        
+        if (editingExpenseIndex !== null) {
+            newList[editingExpenseIndex] = newItem; // 更新
+        } else {
+            newList.push(newItem); // 新增
+        }
+        updateSettings('expenseTypes', newList);
+        setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
+        setEditingExpenseIndex(null);
+    };
+
+    const editExpense = (index: number) => {
+        const item = settings.expenseTypes[index];
+        if (typeof item === 'string') {
+            setExpenseForm({ name: item, defaultCompany: '', defaultAmount: '', defaultDays: '0' });
+        } else {
+            setExpenseForm({ 
+                name: item.name, 
+                defaultCompany: item.defaultCompany, 
+                defaultAmount: item.defaultAmount.toString(), 
+                defaultDays: item.defaultDays 
+            });
+        }
+        setEditingExpenseIndex(index);
+    };
+
+    // --- 4. 中港 (CrossBorder) 編輯邏輯 ---
+    const handleCbSubmit = () => {
+        if (!cbForm.name) return;
+        const newItem = { ...cbForm, defaultFee: Number(cbForm.defaultFee) || 0 };
+        const newList = [...settings.cbItems];
+
+        if (editingCbIndex !== null) {
+            newList[editingCbIndex] = newItem; // 更新
+        } else {
+            newList.push(newItem); // 新增
+        }
+        updateSettings('cbItems', newList);
+        setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
+        setEditingCbIndex(null);
+    };
+
+    const editCbItem = (index: number) => {
+        const item = settings.cbItems[index];
+        if (typeof item === 'string') {
+            setCbForm({ name: item, defaultInst: '', defaultFee: '', defaultDays: '0' });
+        } else {
+            setCbForm({
+                name: item.name,
+                defaultInst: item.defaultInst,
+                defaultFee: item.defaultFee.toString(),
+                defaultDays: item.defaultDays
+            });
+        }
+        setEditingCbIndex(index);
+    };
+
+    // --- 備份還原 (保持不變) ---
+    const handleExport = () => {
+        const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), settings }, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url; link.download = `GL_Settings_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const data = JSON.parse(ev.target?.result as string);
+                if (data.settings) {
+                    setSettings((prev: any) => ({ ...prev, ...data.settings }));
+                    Object.keys(data.settings).forEach(k => updateSettings(k as keyof SystemSettings, data.settings[k]));
+                    alert('設定已還原');
+                }
+            } catch (err) { alert('匯入失敗'); }
         };
-        updateSettings('cbItems', [...settings.cbItems, newItem]);
-        setNewCbItem({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
+        reader.readAsText(file);
     };
 
     return (
         <div className="flex h-full gap-6">
-            {/* 左側選單 (Sidebar) */}
+            {/* Sidebar */}
             <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
-                <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">System Config</h3>
+                <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
                 {[
                     { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
                     { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' },
                     { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
                     { id: 'crossborder', icon: <Globe size={16}/>, label: '中港業務' },
-                    { id: 'users', icon: <Users size={16}/>, label: '系統用戶' },
+                    { id: 'users', icon: <Users size={16}/>, label: '用戶與權限' },
                     { id: 'backup', icon: <DownloadCloud size={16}/>, label: '備份還原' },
                 ].map(tab => (
-                    <button 
-                        key={tab.id} 
-                        onClick={() => setActiveTab(tab.id)} 
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}
-                    >
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
                         {tab.icon} {tab.label}
                     </button>
                 ))}
             </div>
 
-            {/* 右側內容區 (Content) */}
+            {/* Content */}
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab} Settings</h2>
 
-                {/* --- 1. General Settings --- */}
                 {activeTab === 'general' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">顏色選項 (Colors)</h3>
-                            <div className="flex gap-2 mt-2">
-                                <input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金 (Champagne)"/>
-                                <button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs hover:bg-slate-700">Add</button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.colors.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">
-                                        {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/>
-                                    </span>
-                                ))}
-                            </div>
+                            <div className="flex gap-2 mt-2"><input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/><button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div>
+                            <div className="flex flex-wrap gap-2 mt-3">{settings.colors.map((c, i) => <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>)}</div>
                         </div>
                     </div>
                 )}
 
-                {/* --- 2. Vehicle Settings --- */}
                 {activeTab === 'vehicle' && (
                     <div className="space-y-6">
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">車廠管理 (Makes)</h3>
-                            <div className="flex gap-2 mt-2">
-                                <input id="newMake" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make (e.g. Ferrari)"/>
-                                <button onClick={() => { const el = document.getElementById('newMake') as HTMLInputElement; addItem('makes', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs hover:bg-slate-700">Add</button>
+                            <h3 className="font-bold text-slate-700 mb-4">1. 車廠管理 (Makes)</h3>
+                            <div className="flex gap-2 mt-2"><input id="newMake" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make (e.g. Ferrari)"/><button onClick={() => { const el = document.getElementById('newMake') as HTMLInputElement; addItem('makes', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div>
+                            <div className="flex flex-wrap gap-2 mt-3">{settings.makes.map((m, i) => <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('makes', i)}/></span>)}</div>
+                         </div>
+
+                         {/* ★★★ 新增：型號管理 ★★★ */}
+                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4">2. 型號管理 (Models)</h3>
+                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
+                                <label className="text-xs font-bold text-slate-500 block mb-1">選擇廠牌</label>
+                                <select value={selectedMakeForModel} onChange={e => setSelectedMakeForModel(e.target.value)} className="w-full p-2 border rounded text-sm mb-3">
+                                    <option value="">-- 請選擇 --</option>
+                                    {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                                
+                                {selectedMakeForModel && (
+                                    <div className="flex gap-2 animate-fade-in">
+                                        <input value={newModelName} onChange={e => setNewModelName(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMakeForModel} 新型號...`} />
+                                        <button onClick={addModel} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button>
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.makes.map((m, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">
-                                        {m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('makes', i)}/>
-                                    </span>
-                                ))}
-                            </div>
+                            
+                            {selectedMakeForModel && (
+                                <div className="flex flex-wrap gap-2">
+                                    {(settings.models[selectedMakeForModel] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : 
+                                    (settings.models[selectedMakeForModel] || []).map((m, i) => (
+                                        <span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">
+                                            {m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeModel(m)}/>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                          </div>
                     </div>
                 )}
 
-                {/* --- 3. Expenses Settings (Detailed) --- */}
                 {activeTab === 'expenses' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DollarSign size={18} className="mr-2"/> 費用類別與預設值</h3>
-                            
-                            {/* 新增費用表單 */}
-                            <div className="grid grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg mb-4 border border-slate-200 items-end">
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={newExpense.name} onChange={e => setNewExpense({...newExpense, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 維修費"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司</label><input value={newExpense.defaultCompany} onChange={e => setNewExpense({...newExpense, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 金田維修"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設金額 / 天數</label><div className="flex gap-1"><input type="number" value={newExpense.defaultAmount} onChange={e => setNewExpense({...newExpense, defaultAmount: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={newExpense.defaultDays} onChange={e => setNewExpense({...newExpense, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
-                                <div><button onClick={addDetailedExpense} className="w-full bg-blue-600 text-white py-2 rounded text-xs font-bold hover:bg-blue-700">新增類別</button></div>
+                            <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingExpenseIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="項目名"/></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司</label><input value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="公司名"/></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">金額 / 天數</label><div className="flex gap-1"><input type="number" value={expenseForm.defaultAmount} onChange={e => setExpenseForm({...expenseForm, defaultAmount: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={expenseForm.defaultDays} onChange={e => setExpenseForm({...expenseForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
+                                <div className="flex gap-1">
+                                    <button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>
+                                    {editingExpenseIndex !== null && <button onClick={() => { setEditingExpenseIndex(null); setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}
+                                </div>
                             </div>
-
-                            {/* 費用列表 */}
                             <div className="space-y-2">
                                 {settings.expenseTypes.map((item, i) => {
                                     const isObj = typeof item !== 'string';
                                     const name = isObj ? item.name : item;
                                     const company = isObj ? item.defaultCompany : '-';
                                     const amount = isObj ? item.defaultAmount : '-';
-                                    const days = isObj ? item.defaultDays : '0';
-                                    
                                     return (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200 transition-colors">
+                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
                                             <div className="flex items-center gap-4">
-                                                <span className="font-bold text-sm w-32 truncate" title={name}>{name}</span>
-                                                <div className="flex gap-2">
-                                                    <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">公司: {company}</span>
-                                                    <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">${amount}</span>
-                                                    {days !== '0' && <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">{days}天</span>}
+                                                <span className="font-bold text-sm w-32 truncate">{name}</span>
+                                                <div className="flex gap-2 text-xs text-slate-500">
+                                                    <span className="bg-white px-2 py-1 rounded border">公司: {company}</span>
+                                                    <span className="bg-white px-2 py-1 rounded border">${amount}</span>
                                                 </div>
                                             </div>
-                                            <button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                            <div className="flex gap-2">
+                                                {/* ★★★ 編輯按鈕 ★★★ */}
+                                                <button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button>
+                                                <button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
                         </div>
-
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房 (Dropdown Options)</h3>
-                            <div className="flex gap-2 mt-2">
-                                <input id="newComp" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Company..."/>
-                                <button onClick={() => { const el = document.getElementById('newComp') as HTMLInputElement; addItem('expenseCompanies', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs hover:bg-slate-700">Add</button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.expenseCompanies.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">
-                                        {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('expenseCompanies', i)}/>
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
                     </div>
                 )}
 
-                {/* --- 4. CrossBorder Settings (Detailed) --- */}
                 {activeTab === 'crossborder' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Globe size={18} className="mr-2"/> 代辦項目與預設值</h3>
-                            
-                            {/* 新增代辦項目表單 */}
-                            <div className="grid grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg mb-4 border border-slate-200 items-end">
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">項目名稱</label><input value={newCbItem.name} onChange={e => setNewCbItem({...newCbItem, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 批文延期"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構</label><input value={newCbItem.defaultInst} onChange={e => setNewCbItem({...newCbItem, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 公安廳"/></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設收費 / 天數</label><div className="flex gap-1"><input type="number" value={newCbItem.defaultFee} onChange={e => setNewCbItem({...newCbItem, defaultFee: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={newCbItem.defaultDays} onChange={e => setNewCbItem({...newCbItem, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
-                                <div><button onClick={addCbItem} className="w-full bg-blue-600 text-white py-2 rounded text-xs font-bold hover:bg-blue-700">新增項目</button></div>
+                            <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingCbIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">項目名稱</label><input value={cbForm.name} onChange={e => setCbForm({...cbForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="項目名"/></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構</label><input value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="機構名"/></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">收費 / 天數</label><div className="flex gap-1"><input type="number" value={cbForm.defaultFee} onChange={e => setCbForm({...cbForm, defaultFee: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={cbForm.defaultDays} onChange={e => setCbForm({...cbForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
+                                <div className="flex gap-1">
+                                    <button onClick={handleCbSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingCbIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingCbIndex !== null ? '更新' : '新增'}</button>
+                                    {editingCbIndex !== null && <button onClick={() => { setEditingCbIndex(null); setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}
+                                </div>
                             </div>
-
                             <div className="space-y-2">
                                 {(settings.cbItems || []).map((item, i) => {
                                     const isObj = typeof item !== 'string';
                                     const name = isObj ? item.name : item;
                                     const inst = isObj ? item.defaultInst : '-';
                                     const fee = isObj ? item.defaultFee : '-';
-                                    const days = isObj ? item.defaultDays : '0';
-                                    
                                     return (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200 transition-colors">
+                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
                                              <div className="flex items-center gap-4">
-                                                <span className="font-bold text-sm w-32 truncate" title={name}>{name}</span>
-                                                <div className="flex gap-2">
-                                                    <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">{inst}</span>
-                                                    <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">${fee}</span>
-                                                    {days !== '0' && <span className="text-xs text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">{days}天</span>}
+                                                <span className="font-bold text-sm w-32 truncate">{name}</span>
+                                                <div className="flex gap-2 text-xs text-slate-500">
+                                                    <span className="bg-white px-2 py-1 rounded border">{inst}</span>
+                                                    <span className="bg-white px-2 py-1 rounded border">${fee}</span>
                                                 </div>
                                             </div>
-                                            <button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                            <div className="flex gap-2">
+                                                {/* ★★★ 編輯按鈕 ★★★ */}
+                                                <button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button>
+                                                <button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -2216,34 +2265,49 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* --- 5. System Users Management --- */}
                 {activeTab === 'users' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶管理 (Access Control)</h3>
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限 (System Access)</h3>
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6 text-xs text-blue-700">
-                                說明：在此處新增的 Email 將獲得系統存取權限。使用者需先透過 Google 登入或 Email 註冊 Firebase Auth 帳號。
+                                <strong>說明：</strong> 此處設定哪些 Email 可以登入系統，以及他們可以看見哪些分頁。<br/>
+                                (用戶必須先透過 Google 登入或 Email 註冊 Firebase Auth 帳號)
                             </div>
                             
                             <div className="flex gap-2 mb-6">
-                                <input 
-                                    type="email" 
-                                    value={newUserEmail} 
-                                    onChange={e => setNewUserEmail(e.target.value)} 
-                                    className="flex-1 border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" 
-                                    placeholder="輸入用戶 Email..."
-                                />
+                                <input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="flex-1 border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="輸入用戶 Email..."/>
                                 <button onClick={handleAddUser} className="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700 shadow-sm">新增授權</button>
                             </div>
                             
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (
-                                    <div key={u} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100">
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div>
-                                            <span className="text-sm font-bold text-slate-700">{u}</span>
+                                    <div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div>
+                                                <span className="text-sm font-bold text-slate-700">{u.email}</span>
+                                            </div>
+                                            <button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white">移除</button>
                                         </div>
-                                        <button onClick={() => handleRemoveUser(u)} className="text-red-400 hover:text-red-600 px-3 py-1 text-xs bg-white border border-red-100 rounded hover:bg-red-50 transition-colors">移除權限</button>
+                                        {/* ★★★ 權限開關 ★★★ */}
+                                        <div className="flex gap-4 pl-9 text-xs">
+                                            {[
+                                                { k: 'inventory', label: '車庫 (Inventory)' },
+                                                { k: 'business', label: '業務 (Business)' },
+                                                { k: 'database', label: '資料庫 (DB)' },
+                                                { k: 'settings', label: '設定 (Settings)' }
+                                            ].map(mod => (
+                                                <label key={mod.k} className="flex items-center cursor-pointer select-none">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={u.modules?.includes(mod.k)} 
+                                                        onChange={() => toggleUserPermission(u.email, mod.k)}
+                                                        className="mr-1.5 accent-blue-600"
+                                                    />
+                                                    <span className={u.modules?.includes(mod.k) ? 'text-slate-700 font-bold' : 'text-slate-400'}>{mod.label}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -2251,37 +2315,18 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* --- 6. Backup & Restore --- */}
                 {activeTab === 'backup' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Export */}
                                 <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 flex flex-col justify-between">
-                                    <div>
-                                        <h4 className="font-bold text-blue-800 mb-2 flex items-center"><LogOut size={16} className="mr-2"/> 匯出備份 (Export)</h4>
-                                        <p className="text-xs text-blue-600/70 mb-4 leading-relaxed">
-                                            下載完整的「系統設定」檔 (JSON 格式)。<br/>
-                                            建議定期備份，以防設定遺失。
-                                        </p>
-                                    </div>
-                                    <button onClick={handleExport} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-md transition-all active:scale-95">下載備份檔 (.json)</button>
+                                    <div><h4 className="font-bold text-blue-800 mb-2">匯出備份 (Export)</h4><p className="text-xs text-blue-600/70 mb-4">下載完整設定檔 (.json)。</p></div>
+                                    <button onClick={handleExport} className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700">下載</button>
                                 </div>
-
-                                {/* Import */}
                                 <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between">
-                                    <div>
-                                        <h4 className="font-bold text-amber-800 mb-2 flex items-center"><Database size={16} className="mr-2"/> 匯入還原 (Import)</h4>
-                                        <p className="text-xs text-amber-600/70 mb-4 leading-relaxed">
-                                            從備份檔還原系統設定。<br/>
-                                            <span className="font-bold text-red-500">注意：這將覆蓋目前的系統設定！</span>
-                                        </p>
-                                    </div>
-                                    <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer shadow-md transition-all active:scale-95">
-                                        選擇檔案並還原...
-                                        <input type="file" accept=".json" className="hidden" onChange={handleImport} />
-                                    </label>
+                                    <div><h4 className="font-bold text-amber-800 mb-2">匯入還原 (Import)</h4><p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p></div>
+                                    <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">選擇檔案<input type="file" accept=".json" className="hidden" onChange={handleImport} /></label>
                                 </div>
                             </div>
                         </div>
