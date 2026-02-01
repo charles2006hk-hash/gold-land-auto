@@ -324,10 +324,12 @@ type SystemSettings = {
   expenseTypes: string[];
   expenseCompanies: string[]; 
   colors: string[];
+  // ★★★ 新增：中港代辦服務項目列表 (解決 serviceItems 報錯) ★★★
+  serviceItems?: string[];
+  
   cbItems: (string | { name: string; defaultInst: string; defaultFee: number; defaultDays: string })[];
   cbInstitutions: string[];
   dbCategories: string[];
-  // ★★★ 新增：資料庫設置 ★★★
   dbRoles: string[]; 
   dbDocTypes: Record<string, string[]>;
 };
@@ -347,7 +349,7 @@ type DatabaseAttachment = {
 };
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  makes: ['Toyota', 'Honda', 'Mercedes-Benz', 'BMW', 'Tesla', 'Porsche', 'Audi'],
+  makes: ['Toyota', 'Honda', 'Mercedes-Benz', 'BMW', 'Tesla', 'Porsche', 'Audi', 'Lexus', 'Mazda', 'Nissan'],
   models: {
     'Toyota': ['Alphard 2.5', 'Alphard 3.5', 'Vellfire 2.5', 'Vellfire 3.5', 'Noah', 'Sienta', 'Hiace', 'Camry'],
     'Honda': ['Stepwgn 1.5', 'Stepwgn 2.0', 'Freed', 'Jazz', 'Odyssey', 'Civic'],
@@ -360,6 +362,10 @@ const DEFAULT_SETTINGS: SystemSettings = {
   expenseTypes: ['車輛維修', '噴油', '執車(Detailing)', '政府牌費', '驗車費', '保險', '拖車費', '佣金', '中港牌批文費', '內地保險', '其他'],
   expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家', '中檢公司'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)'],
+  
+  // ★★★ 新增：預設的中港代辦服務項目 ★★★
+  serviceItems: ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'],
+
   cbItems: [
       { name: '批文延期', defaultInst: '廣東省公安廳', defaultFee: 500, defaultDays: '10' },
       { name: '禁區紙續期', defaultInst: '香港運輸署', defaultFee: 540, defaultDays: '5' },
@@ -371,7 +377,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸', '港珠澳大橋口岸'],
   dbCategories: ['一般客戶', '中港司機', '公司客戶', '車輛文件', '保險文件', '其他'],
   
-  // ★★★ 新增：資料庫預設值 ★★★
   dbRoles: ['客戶', '員工', '司機', '代辦'],
   dbDocTypes: {
     'Person': ['香港身份證', '回鄉證', '護照', '通行證', '地址證明', '香港電子認證', '香港駕照', '國內駕照', '海外駕照', '其他'],
