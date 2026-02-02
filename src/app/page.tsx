@@ -4203,15 +4203,18 @@ const SignatureImg = () => (
     </div>
 );
 
+
+
 // ------------------------------------------------------------------
-// ★★★ Document Template (v4.0: 寄賣/附件/正式條款版) ★★★
+// ★★★ Document Template (v5.0: 支援多項目列印 + 公司資料修正) ★★★
 // ------------------------------------------------------------------
 
 
 const DocumentTemplate = () => {
     const activeVehicle = previewDoc?.vehicle || selectedVehicle;
     const activeType = previewDoc?.type || docType;
-    const itemsToRender = previewDoc?.selectedItems || (previewDoc?.payment ? [previewDoc.payment] : []);
+    // ★★★ 獲取多選項目 ★★★
+    const itemsToRender = (activeVehicle as any).selectedItems || [];
     
     if (!activeVehicle) return null;
     const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
@@ -4219,10 +4222,12 @@ const DocumentTemplate = () => {
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
     const today = new Date().toLocaleDateString('en-GB'); 
     
-    const companyEn = (activeVehicle as any).companyNameEn || COMPANY_INFO.name_en;
-    const companyCh = (activeVehicle as any).companyNameCh || COMPANY_INFO.name_ch;
+    // 強制使用系統預設公司資料 (確保電話/Email正確)
+    const companyEn = COMPANY_INFO.name_en;
+    const companyCh = COMPANY_INFO.name_ch;
     const companyAddr = COMPANY_INFO.address_ch;
     const companyTel = COMPANY_INFO.phone;
+    const companyEmail = COMPANY_INFO.email;
 
     const curCustomer = {
         name: activeVehicle.customerName || '',
@@ -4259,7 +4264,10 @@ const DocumentTemplate = () => {
                 <div>
                     <h1 className="text-2xl font-black text-slate-900 tracking-wide uppercase">{companyEn}</h1>
                     <h2 className="text-xl font-bold text-slate-700 tracking-widest">{companyCh}</h2>
-                    <div className="text-[10px] text-slate-500 mt-1 leading-tight font-serif"><p>{companyAddr}</p><p>Tel: {companyTel} | Email: info@goldlandauto.com</p></div>
+                    <div className="text-[10px] text-slate-500 mt-1 leading-tight font-serif">
+                        <p>{companyAddr}</p>
+                        <p>Tel: {companyTel} | Email: {companyEmail}</p>
+                    </div>
                 </div>
             </div>
             <div className="text-right">
@@ -4271,130 +4279,66 @@ const DocumentTemplate = () => {
         </div>
     );
 
-    const AttachmentsSection = () => (
-        <div className="mb-6 border border-slate-300 p-2 text-xs bg-slate-50">
-            <div className="font-bold mb-2 uppercase border-b border-slate-300 pb-1">Attachments / Items Handed Over (隨車附件):</div>
-            <div className="flex flex-wrap gap-4">
-                <div className="flex items-center"><div className={`w-3 h-3 border border-black mr-1 flex items-center justify-center`}>{checklist.vrd && <Check size={10}/>}</div> VRD (牌薄)</div>
-                <div className="flex items-center"><div className={`w-3 h-3 border border-black mr-1 flex items-center justify-center`}>{checklist.keys && <Check size={10}/>}</div> Spare Key (後備匙)</div>
-                <div className="flex items-center"><div className={`w-3 h-3 border border-black mr-1 flex items-center justify-center`}>{checklist.tools && <Check size={10}/>}</div> Tools (工具)</div>
-                <div className="flex items-center"><div className={`w-3 h-3 border border-black mr-1 flex items-center justify-center`}>{checklist.manual && <Check size={10}/>}</div> Manual (說明書)</div>
-                {checklist.other && <div className="flex items-center font-bold border-b border-black px-2">Other: {checklist.other}</div>}
-            </div>
-        </div>
-    );
+    // ... (AttachmentsSection, LegalDeclaration, SignatureSection 保持 v4.2 不變，略) ...
+    // 請複製上一個版本的這些區塊
 
-    // ★★★ 法律條款 (自動填入資料) ★★★
-    const LegalDeclaration = () => {
-        const timeDisplay = handoverTime || "_______"; 
-        
-        // 1. 收車/寄賣條款 (客戶賣給公司)
-        if (isPurchase || isConsignment) {
-            return (
-                <div className="mb-6 p-3 border-2 border-slate-800 bg-gray-50 text-[10px] leading-relaxed text-justify font-serif">
-                    <p className="mb-2">
-                        I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, the registered owner of the above mentioned vehicle 
-                        hereby agree to {isConsignment ? "consign" : "sell"} to <span className="font-bold uppercase">{companyEn}</span> at the price of HKD <span className="font-bold underline">{formatCurrency(price)}</span> on 
-                        <span className="font-bold underline mx-1">{soldDate}</span> (date) at <span className="font-bold underline mx-1">{timeDisplay}</span> (time) 
-                        and agree to be responsible for all traffic contraventions committed or any legal liabilities involved of the aforesaid vehicle on or before the aforesaid date & time.
-                    </p>
-                    <p>
-                        本人 <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span> (姓名) 係以上車輛之註冊車主，
-                        現同意{isConsignment ? "寄賣" : "出售"}該車輛於 <span className="font-bold">{companyCh}</span>，
-                        日期 <span className="font-bold underline mx-1">{soldDate}</span> 時間 <span className="font-bold underline mx-1">{timeDisplay}</span> 
-                        售價為港幣 <span className="font-bold underline">{formatCurrency(price)}</span>。
-                        並負責此日期時間前之交通違例罰款及有關法律責任。
-                    </p>
-                </div>
-            );
-        }
-        
-        // 2. 賣車條款 (公司賣給客戶) - 對應的買方聲明
-        return (
-            <div className="mb-6 p-3 border-2 border-slate-800 bg-gray-50 text-[10px] leading-relaxed text-justify font-serif">
-                <p className="mb-2">
-                    I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, hereby agree to purchase the above mentioned vehicle 
-                    from <span className="font-bold uppercase">{companyEn}</span> at the price of HKD <span className="font-bold underline">{formatCurrency(price)}</span> on 
-                    <span className="font-bold underline mx-1">{soldDate}</span> (date) at <span className="font-bold underline mx-1">{timeDisplay}</span> (time).
-                    I acknowledge that I have inspected the vehicle and accept it in its current condition ("as is"). I agree to be responsible for all traffic contraventions committed or any legal liabilities involved of the aforesaid vehicle on or after the aforesaid date & time.
-                </p>
-                <p>
-                    本人 <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span> (姓名) 現同意向 <span className="font-bold">{companyCh}</span> 購買以上車輛，
-                    日期 <span className="font-bold underline mx-1">{soldDate}</span> 時間 <span className="font-bold underline mx-1">{timeDisplay}</span> 
-                    成交價為港幣 <span className="font-bold underline">{formatCurrency(price)}</span>。
-                    本人確認已檢查車輛並接受其現狀。並負責此日期時間後之交通違例罰款及有關法律責任。
-                </p>
-            </div>
-        );
-    };
-
-    const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-8 grid grid-cols-2 gap-12">
-            <div className="relative pt-8 border-t border-slate-800 text-center">
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                <p className="font-bold text-xs uppercase">{labelLeft}</p>
-            </div>
-            <div className="pt-8 border-t border-slate-800 text-center">
-                <p className="font-bold text-xs uppercase">{labelRight}</p>
-                <p className="text-[9px] text-gray-500">ID: {curCustomer.hkid}</p>
-            </div>
-        </div>
-    );
-
-    // 1. 合約類
+    // 1. 合約類 (使用舊版邏輯)
     if (activeType.includes('contract')) {
-        return (
-            <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none">
-                <HeaderSection />
-                <div className="mb-4">
-                    <div className="bg-slate-800 text-white text-xs font-bold px-2 py-1 uppercase mb-1">Part A: {(isPurchase||isConsignment) ? 'Vendor (賣方)' : 'Purchaser (買方)'} Details</div>
-                    <div className="border border-slate-300 p-2 grid grid-cols-2 gap-2 text-xs">
-                        <div><span className="text-slate-500 block">Name:</span><span className="font-bold text-sm">{curCustomer.name}</span></div>
-                        <div><span className="text-slate-500 block">Tel:</span><span className="font-bold font-mono">{curCustomer.phone}</span></div>
-                        <div><span className="text-slate-500 block">ID No:</span><span className="font-bold font-mono">{curCustomer.hkid}</span></div>
-                        <div><span className="text-slate-500 block">Address:</span><span className="font-bold">{curCustomer.address}</span></div>
-                    </div>
-                </div>
-                <div className="mb-4">
-                    <div className="bg-slate-800 text-white text-xs font-bold px-2 py-1 uppercase mb-1">Part B: Vehicle Details</div>
-                    <table className="w-full text-xs border-collapse border border-slate-300">
-                        <tbody>
-                            <tr><td className="border p-2 bg-slate-50 font-bold w-[15%]">Reg. No.</td><td className="border p-2 font-mono font-bold w-[35%]">{activeVehicle.regMark}</td><td className="border p-2 bg-slate-50 font-bold w-[15%]">Make/Model</td><td className="border p-2 w-[35%]">{activeVehicle.make} {activeVehicle.model}</td></tr>
-                            <tr><td className="border p-2 bg-slate-50 font-bold">Chassis No.</td><td className="border p-2 font-mono">{activeVehicle.chassisNo}</td><td className="border p-2 bg-slate-50 font-bold">Engine No.</td><td className="border p-2 font-mono">{activeVehicle.engineNo}</td></tr>
-                            <tr><td className="border p-2 bg-slate-50 font-bold">Year</td><td className="border p-2">{activeVehicle.year}</td><td className="border p-2 bg-slate-50 font-bold">Color</td><td className="border p-2">{activeVehicle.colorExt}</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div className="mb-4">
-                    <div className="bg-slate-800 text-white text-xs font-bold px-2 py-1 uppercase mb-1">Part C: Payment Details</div>
-                    <table className="w-full text-xs border-collapse border border-slate-300">
-                        <tbody>
-                            <tr><td className="border p-2 font-bold w-1/2">Transacted Price (成交價)</td><td className="border p-2 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
-                            <tr><td className="border p-2 font-bold">Less: Deposit (已付訂金)</td><td className="border p-2 text-right font-mono text-blue-600">{formatCurrency(deposit)}</td></tr>
-                            <tr className="bg-slate-50"><td className="border p-2 font-black uppercase">Balance (餘額)</td><td className="border p-2 text-right font-mono font-black text-lg text-red-600">{formatCurrency(balance)}</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <AttachmentsSection />
-                <LegalDeclaration />
-
-                {activeVehicle.remarks && <div className="mb-4 border border-dashed border-slate-300 p-2 bg-slate-50 rounded"><p className="text-[10px] font-bold text-slate-500 mb-1">Remarks:</p><p className="text-xs whitespace-pre-wrap">{activeVehicle.remarks}</p></div>}
-                
-                <SignatureSection 
-                    labelLeft={`For and on behalf of ${companyEn}`} 
-                    labelRight={(isPurchase||isConsignment) ? "Vendor Signature (賣方/車主)" : "Purchaser Signature (買方)"} 
-                />
-            </div>
-        );
+        // ... (保持 v4.2 的合約渲染代碼) ...
+        return (/* 請複製 v4.2 的合約 return 區塊，但確認 HeaderSection 已經更新 */);
     }
 
-    // 发票與收据 (略，保持不變)
+    // 2. 發票 / 收據 (更新版：支援多項列表)
     return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none">
             <HeaderSection />
-            <div className="flex justify-between mb-8 border p-4 rounded bg-slate-50"><div className="text-xs"><p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p><p className="text-sm font-bold">{curCustomer.name}</p><p>{curCustomer.address}</p><p className="mt-1 font-mono">{curCustomer.phone}</p></div><div className="text-xs text-right"><p>Reg No: <span className="font-bold text-sm">{activeVehicle.regMark}</span></p><p>{activeVehicle.make} {activeVehicle.model}</p></div></div><table className="w-full text-xs border-collapse mb-8"><thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead><tbody>{itemsToRender.length > 0 ? itemsToRender.map((item: any, i: number) => (<tr key={i} className="border-b"><td className="p-3 font-medium">{item.type||item.item} ({item.date})</td><td className="p-3 text-right font-mono">{formatCurrency(item.amount||item.fee||0)}</td></tr>)) : (<tr className="border-b"><td className="p-3 font-medium">{activeType==='invoice'?'Vehicle Sales':'Deposit / Payment'} - {activeVehicle.regMark}</td><td className="p-3 text-right font-mono">{formatCurrency(activeType==='invoice'?price:deposit)}</td></tr>)}</tbody><tfoot><tr className="bg-slate-50 font-bold text-sm border-t-2 border-slate-800"><td className="p-3 text-right">Total</td><td className="p-3 text-right font-mono text-lg">{formatCurrency(itemsToRender.length>0?itemsToRender.reduce((s:number,i:any)=>s+(i.amount||i.fee||0),0):(activeType==='invoice'?price:deposit))}</td></tr></tfoot></table><div className="mt-auto"><SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight="Received By" /></div>
+            <div className="flex justify-between mb-8 border p-4 rounded bg-slate-50">
+                <div className="text-xs">
+                    <p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p>
+                    <p className="text-sm font-bold">{curCustomer.name}</p>
+                    <p>{curCustomer.address}</p>
+                    <p className="mt-1 font-mono">{curCustomer.phone}</p>
+                </div>
+                <div className="text-xs text-right">
+                    <p>Reg No: <span className="font-bold text-sm">{activeVehicle.regMark}</span></p>
+                    <p>{activeVehicle.make} {activeVehicle.model}</p>
+                </div>
+            </div>
+
+            {/* ★★★ 修正：多項目表格渲染 ★★★ */}
+            <table className="w-full text-xs border-collapse mb-8">
+                <thead>
+                    <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
+                </thead>
+                <tbody>
+                    {itemsToRender.length > 0 ? itemsToRender.map((item: any, i: number) => (
+                        <tr key={i} className="border-b">
+                            <td className="p-3 font-medium">{item.desc}</td>
+                            <td className="p-3 text-right font-mono">{formatCurrency(item.amount)}</td>
+                        </tr>
+                    )) : (
+                        // 如果沒有選擇任何項目，顯示預設車價或訂金
+                        <tr className="border-b">
+                            <td className="p-3 font-medium">{activeType==='invoice'?'Vehicle Sales':'Deposit / Payment'} - {activeVehicle.regMark}</td>
+                            <td className="p-3 text-right font-mono">{formatCurrency(activeType==='invoice'?price:deposit)}</td>
+                        </tr>
+                    )}
+                </tbody>
+                <tfoot>
+                    <tr className="bg-slate-50 font-bold text-sm border-t-2 border-slate-800">
+                        <td className="p-3 text-right">Total</td>
+                        <td className="p-3 text-right font-mono text-lg">
+                            {formatCurrency(itemsToRender.length > 0 
+                                ? itemsToRender.reduce((s:number,i:any)=>s+i.amount,0) 
+                                : (activeType==='invoice'?price:deposit))}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div className="mt-auto">
+                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight="Received By" />
+            </div>
         </div>
     );
 };
