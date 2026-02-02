@@ -4192,10 +4192,11 @@ const DocumentTemplate = () => {
     const activeType = previewDoc?.type || docType;
     const itemsToRender = previewDoc?.selectedItems || (previewDoc?.payment ? [previewDoc.payment] : []);
     
-    // 獲取 Checklist (從 CreateDocModule 傳入的)
-    const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
-
+    // ★★★ 修正點：先檢查 activeVehicle 是否存在，再讀取 checklist ★★★
     if (!activeVehicle) return null;
+
+    // 現在讀取是安全的
+    const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
 
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
     const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
@@ -4253,7 +4254,7 @@ const DocumentTemplate = () => {
         </div>
     );
 
-    // ★★★ 新增：附件清單區塊 ★★★
+    // ★★★ 附件清單區塊 ★★★
     const AttachmentsSection = () => (
         <div className="mb-6 border border-slate-300 p-2 text-xs bg-slate-50">
             <div className="font-bold mb-2 uppercase border-b border-slate-300 pb-1">Attachments / Items Handed Over (隨車附件):</div>
@@ -4267,7 +4268,7 @@ const DocumentTemplate = () => {
         </div>
     );
 
-    // ★★★ 新增：特定免責聲明 (僅收車/寄賣顯示) ★★★
+    // ★★★ 特定免責聲明 (僅收車/寄賣顯示) ★★★
     const LegalDeclaration = () => {
         const timeDisplay = handoverTime || "_______"; // 空白則顯示底線
         
@@ -4379,7 +4380,7 @@ const DocumentTemplate = () => {
         );
     }
 
-    // 2. 發票 / 收據 (保持不變，但加入 Header 更新)
+    // 2. 發票 / 收據
     return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none">
             <HeaderSection />
