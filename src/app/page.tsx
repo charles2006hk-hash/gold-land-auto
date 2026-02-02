@@ -1519,14 +1519,17 @@ type CrossBorderViewProps = {
     addPayment: (vid: string, payment: Payment) => void;
 };
 
-// --- 6. Cross Border Module (v6.2: 修復項目連動 -> 自動帶入費用與天數) ---
+// ------------------------------------------------------------------
+// ★★★ 6. Cross Border Module (v7.2 完整展開版：提醒標註 + 詳情列印) ★★★
+// ------------------------------------------------------------------
 const CrossBorderView = ({ 
-    inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
+    inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
 }: {
-    inventory: Vehicle[], settings: SystemSettings, dbEntries: DatabaseEntry[], activeCbVehicleId: string | null, setActiveCbVehicleId: (id: string | null) => void,
+    inventory: Vehicle[], settings: SystemSettings, activeCbVehicleId: string | null, setActiveCbVehicleId: (id: string | null) => void,
     setEditingVehicle: (v: Vehicle) => void, addCbTask: (vid: string, t: CrossBorderTask) => void, updateCbTask: (vid: string, t: CrossBorderTask) => void, deleteCbTask: (vid: string, tid: string) => void, addPayment: (vid: string, p: Payment) => void, deletePayment: (vid: string, pid: string) => void
 }) => {
     
+    // --- 狀態管理 ---
     const [searchTerm, setSearchTerm] = useState('');
     const [showExpired, setShowExpired] = useState(true);
     const [showSoon, setShowSoon] = useState(true);
@@ -1534,55 +1537,32 @@ const CrossBorderView = ({
     // 編輯與新增狀態
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [newTaskForm, setNewTaskForm] = useState({ date: '', item: '', fee: '', days: '', note: '' });
-    
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<Partial<CrossBorderTask>>({});
-    
     const [expandedPaymentTaskId, setExpandedPaymentTaskId] = useState<string | null>(null);
     const [newPayAmount, setNewPayAmount] = useState('');
 
-    // --- 1. 準備選單資料 ---
-    // 從資料庫中心抓取
-    const dbServiceNames = (dbEntries || []).filter(d => d.category === 'CrossBorder').map(d => d.name);
-    // 從設定檔抓取
-    const settingsCbItems = (settings.cbItems || []).map(i => (typeof i === 'string' ? i : i.name));
-    // 預設值
-    const defaultServiceItems = ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'];
-    // 合併選單
-    const serviceOptions = Array.from(new Set([...dbServiceNames, ...(settings.serviceItems || []), ...settingsCbItems, ...defaultServiceItems])).filter(Boolean);
+    // ★★★ 新增：詳情報表狀態 (用於顯示彈窗) ★★★
+    const [reportModalData, setReportModalData] = useState<{ title: string, type: 'expired' | 'soon', items: any[] } | null>(null);
 
+    // --- 資料準備 ---
+    const settingsCbItems = (settings.cbItems || []).map(i => (typeof i === 'string' ? i : i.name));
+    const defaultServiceItems = ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'];
+    const serviceOptions = Array.from(new Set([...(settings.serviceItems || []), ...settingsCbItems, ...defaultServiceItems])).filter(Boolean);
     const dateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
 
-    // --- ★★★ 關鍵函數：根據項目名稱查找預設值 ★★★ ---
+    // 輔助函數
     const findItemDefaults = (itemName: string) => {
-        let fee = '';
-        let days = '7';
-
-        // 1. 先找 Settings (結構最完整)
+        let fee = ''; let days = '7';
         const settingItem = (settings.cbItems || []).find(i => (typeof i === 'string' ? i : i.name) === itemName);
-        if (settingItem && typeof settingItem !== 'string') {
-            fee = settingItem.defaultFee?.toString() || '';
-            days = settingItem.defaultDays || '7';
+        if (settingItem && typeof settingItem !== 'string') { 
+            fee = settingItem.defaultFee?.toString() || ''; 
+            days = settingItem.defaultDays || '7'; 
         }
-
-        // 2. 如果 Settings 沒找到，找資料庫 (Database Entry)
-        // 假設資料庫中心有輸入 price 或 fee 欄位 (這裡用 any 繞過類型檢查以讀取潛在欄位)
-        if (!fee) {
-            const dbItem = (dbEntries || []).find(d => d.name === itemName && d.category === 'CrossBorder');
-            if (dbItem) {
-                // 嘗試讀取各種可能的價格欄位名稱
-                const dbPrice = (dbItem as any).price || (dbItem as any).fee || (dbItem as any).defaultFee || (dbItem as any).amount;
-                const dbDays = (dbItem as any).days || (dbItem as any).defaultDays;
-                
-                if (dbPrice) fee = dbPrice.toString();
-                if (dbDays) days = dbDays.toString();
-            }
-        }
-
         return { fee, days };
     };
 
-    // --- 資料處理 ---
+    // --- 資料過濾與計算 ---
     const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
     const expiredItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
     const soonItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
@@ -1594,30 +1574,81 @@ const CrossBorderView = ({
                 const days = getDaysRemaining(dateStr);
                 if (days !== null) {
                     const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days };
-                    if (days < 0) expiredItems.push(itemData);
+                    if (days < 0) expiredItems.push(itemData); 
                     else if (days <= 30) soonItems.push(itemData);
                 }
             }
         });
     });
-
     expiredItems.sort((a, b) => a.days - b.days);
     soonItems.sort((a, b) => a.days - b.days);
 
     const filteredVehicles = cbVehicles.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
     const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
 
+    // --- 列印功能 (開新視窗列印) ---
+    const handlePrint = () => {
+        if (!reportModalData) return;
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>${reportModalData.title}</title>
+                        <style>
+                            body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 40px; color: #333; }
+                            h1 { text-align: center; margin-bottom: 5px; font-size: 24px; }
+                            h2 { text-align: center; color: #666; font-size: 16px; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 1px; }
+                            table { width: 100%; border-collapse: collapse; font-size: 13px; }
+                            th, td { border-bottom: 1px solid #ddd; padding: 12px 8px; text-align: left; }
+                            th { background-color: #f8f9fa; font-weight: bold; color: #555; border-top: 2px solid #333; border-bottom: 2px solid #333; }
+                            .plate { font-family: monospace; font-weight: bold; background: #eee; padding: 2px 6px; border-radius: 4px; }
+                            .danger { color: #d32f2f; font-weight: bold; }
+                            .warning { color: #f57c00; font-weight: bold; }
+                            .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>Gold Land Auto Limited</h1>
+                        <h2>${reportModalData.title}</h2>
+                        <table>
+                            <thead><tr><th>車牌 (Plate)</th><th>項目 (Item)</th><th>到期日 (Date)</th><th style="text-align:right">狀態 (Status)</th></tr></thead>
+                            <tbody>
+                                ${reportModalData.items.map(it => `
+                                    <tr>
+                                        <td><span class="plate">${it.plate}</span></td>
+                                        <td>${it.item}</td>
+                                        <td>${it.date}</td>
+                                        <td style="text-align:right" class="${it.days < 0 ? 'danger' : 'warning'}">
+                                            ${it.days < 0 ? `已過期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
+                                        </td>
+                                    </tr>`).join('')}
+                            </tbody>
+                        </table>
+                        <div class="footer">Printed on ${new Date().toLocaleString()}</div>
+                        <script>
+                            window.onload = function() { window.print(); window.close(); }
+                        </script>
+                    </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+    };
+
     // --- 內部組件：3秒跳動滾動列表 ---
     const TickerList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => {
         const [currentIndex, setCurrentIndex] = useState(0);
         const [isPaused, setIsPaused] = useState(false);
-        useEffect(() => {
-            if (items.length <= 1) return;
-            const interval = setInterval(() => { if (!isPaused) setCurrentIndex((prev) => (prev + 1) % items.length); }, 3000);
-            return () => clearInterval(interval);
+        useEffect(() => { 
+            if (items.length <= 1) return; 
+            const interval = setInterval(() => { if (!isPaused) setCurrentIndex((prev) => (prev + 1) % items.length); }, 3000); 
+            return () => clearInterval(interval); 
         }, [items.length, isPaused]);
-        const visibleItems = [];
+        
+        const visibleItems = []; 
         for (let i = 0; i < Math.min(items.length, 5); i++) { visibleItems.push(items[(currentIndex + i) % items.length]); }
+        
         return (
             <div className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
                 <div className="h-28 overflow-hidden relative">
@@ -1636,77 +1667,103 @@ const CrossBorderView = ({
         );
     };
 
-    // --- 操作邏輯 ---
+    // --- 操作邏輯 (新增、編輯、付款) ---
+    const openAddModal = () => { 
+        if (!activeCar) { alert("請先選擇車輛"); return; } 
+        const initialItem = serviceOptions[0] || '代辦服務'; 
+        const defaults = findItemDefaults(initialItem); 
+        setNewTaskForm({ date: new Date().toISOString().split('T')[0], item: initialItem, fee: defaults.fee, days: defaults.days, note: '' }); 
+        setIsAddModalOpen(true); 
+    };
     
-    // 1. 開啟新增視窗 (自動帶入第一個項目的預設值)
-    const openAddModal = () => {
-        if (!activeCar) { alert("請先選擇車輛"); return; }
-        const initialItem = serviceOptions[0] || '代辦服務';
-        const defaults = findItemDefaults(initialItem);
-        
-        setNewTaskForm({
-            date: new Date().toISOString().split('T')[0],
-            item: initialItem,
-            fee: defaults.fee,
-            days: defaults.days,
-            note: ''
-        });
-        setIsAddModalOpen(true);
+    const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
+        const newItem = e.target.value; 
+        const defaults = findItemDefaults(newItem); 
+        setNewTaskForm(prev => ({ ...prev, item: newItem, fee: defaults.fee, days: defaults.days })); 
     };
-
-    // ★★★ 處理下拉選單變更 (連動更新費用與天數) ★★★
-    const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newItem = e.target.value;
-        const defaults = findItemDefaults(newItem);
-        setNewTaskForm(prev => ({
-            ...prev,
-            item: newItem,
-            fee: defaults.fee,   // 自動填入費用
-            days: defaults.days  // 自動填入天數
-        }));
+    
+    const handleAddTask = () => { 
+        if (!activeCar) return; 
+        if (!newTaskForm.item) { alert("請選擇服務項目"); return; } 
+        const newTask: CrossBorderTask = { id: Date.now().toString(), date: newTaskForm.date, item: newTaskForm.item, fee: Number(newTaskForm.fee) || 0, days: newTaskForm.days, institution: '公司', handler: '', currency: 'HKD', note: newTaskForm.note, isPaid: false }; 
+        addCbTask(activeCar.id!, newTask); 
+        setIsAddModalOpen(false); 
     };
-
-    const handleAddTask = () => {
-        if (!activeCar) return;
-        if (!newTaskForm.item) { alert("請選擇服務項目"); return; }
-        const newTask: CrossBorderTask = { id: Date.now().toString(), date: newTaskForm.date, item: newTaskForm.item, fee: Number(newTaskForm.fee) || 0, days: newTaskForm.days, institution: '公司', handler: '', currency: 'HKD', note: newTaskForm.note, isPaid: false };
-        addCbTask(activeCar.id!, newTask);
-        setIsAddModalOpen(false);
-    };
-
-    // 行內編輯
+    
     const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
     
-    // ★★★ 行內編輯時的選單變更也支援連動 ★★★
-    const handleEditItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newItem = e.target.value;
-        const defaults = findItemDefaults(newItem);
-        setEditForm(prev => ({
-            ...prev,
-            item: newItem,
-            fee: Number(defaults.fee) || 0,
-            days: defaults.days
-        }));
+    const handleEditItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
+        const newItem = e.target.value; 
+        const defaults = findItemDefaults(newItem); 
+        setEditForm(prev => ({ ...prev, item: newItem, fee: Number(defaults.fee) || 0, days: defaults.days })); 
     };
-
-    const saveEdit = () => {
-        if (!activeCar || !editingTaskId || !editForm.item) return;
-        const updatedTask = { ...editForm, fee: Number(editForm.fee) || 0, id: editingTaskId } as CrossBorderTask;
-        updateCbTask(activeCar.id!, updatedTask);
-        setEditingTaskId(null);
+    
+    const saveEdit = () => { 
+        if (!activeCar || !editingTaskId || !editForm.item) return; 
+        const updatedTask = { ...editForm, fee: Number(editForm.fee) || 0, id: editingTaskId } as CrossBorderTask; 
+        updateCbTask(activeCar.id!, updatedTask); 
+        setEditingTaskId(null); 
     };
-
-    const handleAddPartPayment = (task: CrossBorderTask) => {
-        const amount = Number(newPayAmount);
-        if (!activeCar || amount <= 0) return;
-        addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: amount, type: 'Service Fee', method: 'Cash', relatedTaskId: task.id, note: `Payment for: ${task.item}` });
-        setNewPayAmount('');
+    
+    const handleAddPartPayment = (task: CrossBorderTask) => { 
+        const amount = Number(newPayAmount); 
+        if (!activeCar || amount <= 0) return; 
+        addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: amount, type: 'Service Fee', method: 'Cash', relatedTaskId: task.id, note: `Payment for: ${task.item}` }); 
+        setNewPayAmount(''); 
     };
 
     return (
         <div className="flex flex-col h-full gap-4 relative">
             
-            {/* Modal */}
+            {/* ★★★ 提醒詳情與列印 Modal (v7.2 新增) ★★★ */}
+            {reportModalData && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setReportModalData(null)}>
+                    <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90%]" onClick={e => e.stopPropagation()}>
+                        <div className={`p-4 text-white flex justify-between items-center ${reportModalData.type === 'expired' ? 'bg-red-800' : 'bg-amber-700'}`}>
+                            <h3 className="font-bold text-lg flex items-center"><FileText size={20} className="mr-2"/> {reportModalData.title}</h3>
+                            <button onClick={() => setReportModalData(null)} className="p-1 hover:bg-white/20 rounded"><X size={20}/></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                            {/* A4 紙張效果預覽區 */}
+                            <div className="bg-white shadow-md border border-slate-200 p-8 min-h-[500px]">
+                                <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
+                                    <h1 className="text-2xl font-bold mb-1">Gold Land Auto Limited</h1>
+                                    <h2 className="text-lg font-bold text-slate-600 uppercase tracking-widest">{reportModalData.title}</h2>
+                                    <p className="text-xs text-slate-400 mt-2">Print Date: {new Date().toLocaleString()}</p>
+                                </div>
+                                <table className="w-full text-sm border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-100 text-slate-600 border-b border-slate-300">
+                                            <th className="p-2 text-left">車牌 (Plate)</th>
+                                            <th className="p-2 text-left">項目 (Item)</th>
+                                            <th className="p-2 text-left">到期日 (Date)</th>
+                                            <th className="p-2 text-right">狀態 (Status)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {reportModalData.items.map((it, i) => (
+                                            <tr key={i} className="border-b border-slate-100">
+                                                <td className="p-2 font-bold font-mono">{it.plate}</td>
+                                                <td className="p-2">{it.item}</td>
+                                                <td className="p-2 font-mono text-slate-500">{it.date}</td>
+                                                <td className={`p-2 text-right font-bold ${it.days < 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                                                    {it.days < 0 ? `過期 ${Math.abs(it.days)}天` : `剩 ${it.days}天`}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-2">
+                            <button onClick={() => setReportModalData(null)} className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded text-sm font-bold">關閉</button>
+                            <button onClick={handlePrint} className="px-6 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-md flex items-center"><Printer size={16} className="mr-2"/> 列印 (Print)</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: 新增紀錄 (保持不變) */}
             {isAddModalOpen && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
                     <div className="bg-white w-80 p-5 rounded-xl shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
@@ -1714,8 +1771,7 @@ const CrossBorderView = ({
                         <div className="space-y-3">
                             <div><label className="text-[10px] text-slate-500 font-bold uppercase">Date</label><input type="date" value={newTaskForm.date} onChange={e => setNewTaskForm({...newTaskForm, date: e.target.value})} className="w-full border-b border-slate-300 py-1 text-sm outline-none"/></div>
                             <div>
-                                <label className="text-[10px] text-slate-500 font-bold uppercase">Item (Auto-fill Fee)</label>
-                                {/* 使用 handleItemChange 取代原本的 onChange */}
+                                <label className="text-[10px] text-slate-500 font-bold uppercase">Item</label>
                                 <select value={newTaskForm.item} onChange={handleItemChange} className="w-full border-b border-slate-300 py-1 text-sm outline-none bg-white">
                                     {serviceOptions.map((opt, idx) => <option key={`${opt}-${idx}`} value={opt}>{opt}</option>)}
                                 </select>
@@ -1736,30 +1792,42 @@ const CrossBorderView = ({
 
             {/* Top Cards (3 Sec Ticker) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all">
+                {/* 1. 已過期卡片 */}
+                <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all group">
                     <div className="flex justify-between items-start z-10">
                         <div>
                             <div className="flex items-center gap-2 mb-1"><div className="p-1.5 bg-red-500/20 rounded-lg"><AlertTriangle size={18} className="text-red-400"/></div><span className="text-sm font-bold text-red-100 opacity-80">已過期項目</span></div>
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{expiredItems.length} <span className="text-sm font-normal text-red-300/50">項</span></div>
                         </div>
-                        {expiredItems.length > 0 && (<button onClick={() => setShowExpired(!showExpired)} className="p-1 hover:bg-white/10 rounded transition-colors">{showExpired ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
+                        <div className="flex gap-1">
+                            {/* ★★★ 提醒詳情按鈕 ★★★ */}
+                            {expiredItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '已過期項目報表 (Expired Items)', type: 'expired', items: expiredItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
+                            {expiredItems.length > 0 && (<button onClick={() => setShowExpired(!showExpired)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showExpired ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
+                        </div>
                     </div>
                     {expiredItems.length > 0 && showExpired && <TickerList items={expiredItems} type="expired" />}
                     <AlertCircle className="absolute -right-6 -bottom-6 text-red-500/10" size={100} />
                 </div>
-                <div className="bg-gradient-to-br from-amber-800 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-amber-800/30 relative overflow-hidden flex flex-col transition-all">
+                
+                {/* 2. 即將到期卡片 */}
+                <div className="bg-gradient-to-br from-amber-800 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-amber-800/30 relative overflow-hidden flex flex-col transition-all group">
                     <div className="flex justify-between items-start z-10">
                         <div>
                             <div className="flex items-center gap-2 mb-1"><div className="p-1.5 bg-amber-500/20 rounded-lg"><Clock size={18} className="text-amber-400"/></div><span className="text-sm font-bold text-amber-100 opacity-80">即將到期</span></div>
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{soonItems.length} <span className="text-sm font-normal text-amber-300/50">項</span></div>
                         </div>
-                        {soonItems.length > 0 && (<button onClick={() => setShowSoon(!showSoon)} className="p-1 hover:bg-white/10 rounded transition-colors">{showSoon ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
+                        <div className="flex gap-1">
+                             {/* ★★★ 提醒詳情按鈕 ★★★ */}
+                            {soonItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '即將到期報表 (Upcoming Items)', type: 'soon', items: soonItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
+                            {soonItems.length > 0 && (<button onClick={() => setShowSoon(!showSoon)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showSoon ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
+                        </div>
                     </div>
                     {soonItems.length > 0 && showSoon && <TickerList items={soonItems} type="soon" />}
                     <Bell className="absolute -right-6 -bottom-6 text-amber-500/10" size={100} />
                 </div>
             </div>
 
+            {/* Main Content (左右分欄) */}
             <div className="flex flex-1 gap-4 overflow-hidden min-h-0">
                 {/* Left List */}
                 <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
@@ -1802,6 +1870,7 @@ const CrossBorderView = ({
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     {activeCar ? (
                         <>
+                            {/* 車輛標題區 */}
                             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center flex-none">
                                 <div>
                                     <div className="flex items-center gap-3">
@@ -1813,6 +1882,7 @@ const CrossBorderView = ({
                                 <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs rounded-lg shadow-sm font-bold flex items-center transition-all active:scale-95"><Edit size={14} className="mr-2"/> 編輯完整資料</button>
                             </div>
 
+                            {/* 證件到期概覽 (水平捲動) */}
                             <div className="p-4 border-b border-slate-100 overflow-x-auto whitespace-nowrap flex gap-3 bg-slate-50/30 flex-none scrollbar-thin scrollbar-thumb-slate-200 pb-2">
                                 {Object.entries(dateFields).map(([key, label]) => {
                                     const dateVal = (activeCar.crossBorder as any)?.[key];
@@ -1831,6 +1901,7 @@ const CrossBorderView = ({
                                 })}
                             </div>
 
+                            {/* 任務與費用表格 */}
                             <div className="flex-1 overflow-y-auto p-4 bg-white">
                                 <div className="flex justify-between items-end mb-2">
                                     <h4 className="font-bold text-slate-700 text-sm flex items-center"><FileCheck size={16} className="mr-2 text-blue-600"/> 服務與收費紀錄</h4>
