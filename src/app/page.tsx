@@ -99,6 +99,7 @@ const COMPANY_INFO = {
   address_en: "Rm 11, 22/F, Blk B, New Trade Plaza, 6 On Ping St, Shek Mun, Shatin, N.T., HK",
   address_ch: "香港沙田石門安平街6號新貿中心B座22樓11室",
   phone: "+852 3490 6112",
+  email: "marketing@goldlandhk.com",
   logo_url: "/GL_APPLOGO.png" 
 };
 
@@ -1520,12 +1521,11 @@ type CrossBorderViewProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 6. Cross Border Module (v7.3 修復版：解決 dbEntries 類型錯誤) ★★★
+// ★★★ 6. Cross Border Module (v8.1 完整版：修復儲存 + 完整功能) ★★★
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
 }: {
-    // ★★★ 這裡加入了 dbEntries: any[] 以匹配主程式的呼叫 ★★★
     inventory: Vehicle[], settings: SystemSettings, dbEntries: any[], activeCbVehicleId: string | null, setActiveCbVehicleId: (id: string | null) => void,
     setEditingVehicle: (v: Vehicle) => void, addCbTask: (vid: string, t: CrossBorderTask) => void, updateCbTask: (vid: string, t: CrossBorderTask) => void, deleteCbTask: (vid: string, tid: string) => void, addPayment: (vid: string, p: Payment) => void, deletePayment: (vid: string, pid: string) => void
 }) => {
@@ -1587,7 +1587,7 @@ const CrossBorderView = ({
     const filteredVehicles = cbVehicles.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
     const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    // --- 列印功能 ---
+    // --- 1. 列印功能 (完整還原) ---
     const handlePrint = () => {
         if (!reportModalData) return;
         const printWindow = window.open('', '_blank');
@@ -1637,7 +1637,7 @@ const CrossBorderView = ({
         }
     };
 
-    // --- 內部組件：3秒跳動滾動列表 ---
+    // --- 2. 跑馬燈組件 (完整還原) ---
     const TickerList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => {
         const [currentIndex, setCurrentIndex] = useState(0);
         const [isPaused, setIsPaused] = useState(false);
@@ -1668,7 +1668,7 @@ const CrossBorderView = ({
         );
     };
 
-    // --- 操作邏輯 ---
+    // --- 3. 操作邏輯 (修復儲存問題) ---
     const openAddModal = () => { 
         if (!activeCar) { alert("請先選擇車輛"); return; } 
         const initialItem = serviceOptions[0] || '代辦服務'; 
@@ -1676,30 +1676,51 @@ const CrossBorderView = ({
         setNewTaskForm({ date: new Date().toISOString().split('T')[0], item: initialItem, fee: defaults.fee, days: defaults.days, note: '' }); 
         setIsAddModalOpen(true); 
     };
+    
     const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
         const newItem = e.target.value; 
         const defaults = findItemDefaults(newItem); 
         setNewTaskForm(prev => ({ ...prev, item: newItem, fee: defaults.fee, days: defaults.days })); 
     };
+    
+    // ★★★ 修復：確保 activeCar 存在且 ID 唯一 ★★★
     const handleAddTask = () => { 
-        if (!activeCar) return; 
+        if (!activeCar) { alert("錯誤：無法識別當前車輛，請重新選擇。"); return; } 
         if (!newTaskForm.item) { alert("請選擇服務項目"); return; } 
-        const newTask: CrossBorderTask = { id: Date.now().toString(), date: newTaskForm.date, item: newTaskForm.item, fee: Number(newTaskForm.fee) || 0, days: newTaskForm.days, institution: '公司', handler: '', currency: 'HKD', note: newTaskForm.note, isPaid: false }; 
+        
+        const newTask: CrossBorderTask = { 
+            id: Date.now().toString(), // 確保 ID 唯一
+            date: newTaskForm.date, 
+            item: newTaskForm.item, 
+            fee: Number(newTaskForm.fee) || 0, 
+            days: newTaskForm.days, 
+            institution: '公司', 
+            handler: '', 
+            currency: 'HKD', 
+            note: newTaskForm.note, 
+            isPaid: false 
+        }; 
+        
+        // 呼叫父層函數更新資料庫
         addCbTask(activeCar.id!, newTask); 
         setIsAddModalOpen(false); 
     };
+    
     const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
+    
     const handleEditItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
         const newItem = e.target.value; 
         const defaults = findItemDefaults(newItem); 
         setEditForm(prev => ({ ...prev, item: newItem, fee: Number(defaults.fee) || 0, days: defaults.days })); 
     };
+    
     const saveEdit = () => { 
         if (!activeCar || !editingTaskId || !editForm.item) return; 
         const updatedTask = { ...editForm, fee: Number(editForm.fee) || 0, id: editingTaskId } as CrossBorderTask; 
         updateCbTask(activeCar.id!, updatedTask); 
         setEditingTaskId(null); 
     };
+    
     const handleAddPartPayment = (task: CrossBorderTask) => { 
         const amount = Number(newPayAmount); 
         if (!activeCar || amount <= 0) return; 
@@ -1719,6 +1740,7 @@ const CrossBorderView = ({
                             <button onClick={() => setReportModalData(null)} className="p-1 hover:bg-white/20 rounded"><X size={20}/></button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                            {/* A4 紙張效果預覽區 */}
                             <div className="bg-white shadow-md border border-slate-200 p-8 min-h-[500px]">
                                 <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
                                     <h1 className="text-2xl font-bold mb-1">Gold Land Auto Limited</h1>
@@ -1794,7 +1816,7 @@ const CrossBorderView = ({
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{expiredItems.length} <span className="text-sm font-normal text-red-300/50">項</span></div>
                         </div>
                         <div className="flex gap-1">
-                            {/* 提醒詳情按鈕 */}
+                            {/* ★★★ 提醒詳情按鈕 ★★★ */}
                             {expiredItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '已過期項目報表 (Expired Items)', type: 'expired', items: expiredItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
                             {expiredItems.length > 0 && (<button onClick={() => setShowExpired(!showExpired)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showExpired ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
                         </div>
@@ -1811,7 +1833,7 @@ const CrossBorderView = ({
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{soonItems.length} <span className="text-sm font-normal text-amber-300/50">項</span></div>
                         </div>
                         <div className="flex gap-1">
-                            {/* 提醒詳情按鈕 */}
+                             {/* ★★★ 提醒詳情按鈕 ★★★ */}
                             {soonItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '即將到期報表 (Upcoming Items)', type: 'soon', items: soonItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
                             {soonItems.length > 0 && (<button onClick={() => setShowSoon(!showSoon)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showSoon ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
                         </div>
@@ -1991,7 +2013,6 @@ const CrossBorderView = ({
         </div>
     );
 };
-
 // ------------------------------------------------------------------
 // ★★★ 8. Smart Notification Center (首頁右上角：全域提醒與列印) ★★★
 // ------------------------------------------------------------------
@@ -4699,9 +4720,27 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
 };
 
 // ------------------------------------------------------------------
-// ★★★ 7. Create Document Module (v4.2: 條款動態填入 + 即時預覽) ★★★
+// ★★★ 7. Create Document Module (v5.0: 歷史紀錄 + 儲存/編輯/刪除 + 完整預覽) ★★★
 // ------------------------------------------------------------------
-const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[], openPrintPreview: (type: DocType, data: any) => void }) => {
+const CreateDocModule = ({ 
+    inventory, 
+    openPrintPreview, 
+    db, 
+    staffId, 
+    appId 
+}: { 
+    inventory: Vehicle[], 
+    openPrintPreview: (type: DocType, data: any) => void,
+    db: any, 
+    staffId: string, 
+    appId: string 
+}) => {
+    // 模式：'list' (列表) 或 'edit' (編輯中)
+    const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
+    const [docHistory, setDocHistory] = useState<any[]>([]);
+    
+    // 編輯器狀態
+    const [docId, setDocId] = useState<string | null>(null); // 用於判斷是新增還是修改
     const [selectedDocType, setSelectedDocType] = useState<'sales_contract' | 'purchase_contract' | 'consignment_contract' | 'invoice' | 'receipt'>('sales_contract');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
@@ -4718,6 +4757,73 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
 
+    // --- 1. 讀取歷史單據 (Real-time) ---
+    useEffect(() => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        // 建立一個專門存放單據的 collection
+        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents'), orderBy('updatedAt', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            const list: any[] = [];
+            snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+            setDocHistory(list);
+        });
+        return () => unsub();
+    }, [db, staffId]);
+
+    // --- 2. 操作邏輯 ---
+    const startNewDoc = () => {
+        setDocId(null);
+        handleSelectBlank();
+        setViewMode('edit');
+    };
+
+    const editDoc = (doc: any) => {
+        setDocId(doc.id);
+        setSelectedDocType(doc.type);
+        setFormData(doc.formData);
+        setChecklist(doc.checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' });
+        setViewMode('edit');
+    };
+
+    const deleteDocRecord = async (id: string) => {
+        if(!confirm("確定刪除此單據紀錄？")) return;
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents', id));
+    };
+
+    const saveDocRecord = async () => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const docData = {
+            type: selectedDocType,
+            formData,
+            checklist,
+            updatedAt: serverTimestamp(),
+            summary: `${formData.regMark} - ${formData.customerName}`
+        };
+
+        try {
+            if (docId) {
+                // 更新現有
+                await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents', docId), docData);
+            } else {
+                // 新增
+                const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents'), {
+                    ...docData,
+                    createdAt: serverTimestamp()
+                });
+                setDocId(ref.id);
+            }
+            alert("單據已儲存 (Saved)");
+        } catch (e) {
+            console.error(e);
+            alert("儲存失敗");
+        }
+    };
+
+    // --- 3. 輔助函數 ---
     const filteredInventory = inventory.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.make || '').toUpperCase().includes(searchTerm.toUpperCase()));
 
     const handleSelectCar = (car: Vehicle) => {
@@ -4745,6 +4851,9 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
     };
 
     const handlePrint = () => {
+        // 先自動儲存
+        saveDocRecord();
+        
         const dummyVehicle: any = {
             ...formData,
             price: Number(formData.price), deposit: Number(formData.deposit),
@@ -4755,7 +4864,7 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
 
-    // --- 內部組件：即時預覽 (LivePreview v4.2) ---
+    // --- 4. 即時預覽組件 (LivePreview v5.0) ---
     const LivePreview = () => {
         const titleMap: any = {
             'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' },
@@ -4765,6 +4874,7 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
             'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' }
         };
         const t = titleMap[selectedDocType] || titleMap['sales_contract'];
+        const balance = Number(formData.price) - Number(formData.deposit);
         const isTradeIn = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
         const timeDisplay = formData.handoverTime || "_______";
 
@@ -4773,34 +4883,98 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
                 <div className="flex justify-between items-start border-b-2 border-black pb-2 mb-4">
                     <div className="flex gap-2 items-center">
                         <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
-                        <div><h1 className="text-xl font-bold uppercase">{formData.companyNameEn}</h1><h2 className="text-sm font-bold">{formData.companyNameCh}</h2></div>
+                        <div>
+                            <h1 className="text-xl font-bold uppercase">{formData.companyNameEn}</h1>
+                            <h2 className="text-sm font-bold">{formData.companyNameCh}</h2>
+                            <p className="text-[8px] text-gray-500">{COMPANY_INFO.email}</p>
+                        </div>
                     </div>
                     <div className="text-right"><h2 className="text-lg font-bold uppercase">{t.en}</h2><h3 className="text-xs font-bold tracking-widest">{t.ch}</h3></div>
                 </div>
                 <div className="space-y-3 flex-1 overflow-hidden">
-                    <div className="border p-2"><b>CUSTOMER:</b> {formData.customerName}</div>
-                    <div className="border p-2"><b>VEHICLE:</b> {formData.regMark} {formData.make}</div>
-                    <div className="border p-2"><b>ATTACHMENTS:</b> {checklist.vrd?'[x]VRD ':''}{checklist.keys?'[x]Key ':''}{checklist.other}</div>
-                    
-                    {/* ★★★ 即時預覽條款 ★★★ */}
-                    <div className="p-2 bg-gray-50 text-[8px] leading-tight text-justify border border-slate-300 mt-2">
-                        {isTradeIn ? (
-                            <p>I, <b>{formData.customerName||'___'}</b> ... agree to {selectedDocType==='consignment_contract'?'consign':'sell'} to <b>{formData.companyNameEn}</b> on <b>{formData.deliveryDate}</b> at <b>{timeDisplay}</b>...</p>
-                        ) : (
-                            <p>I, <b>{formData.customerName||'___'}</b> ... agree to purchase from <b>{formData.companyNameEn}</b> on <b>{formData.deliveryDate}</b> at <b>{timeDisplay}</b>...</p>
-                        )}
+                    <div className="border p-2"><b>CUSTOMER:</b> {formData.customerName} (ID: {formData.customerId})</div>
+                    <div className="border p-2"><b>VEHICLE:</b> {formData.regMark} {formData.make} {formData.model}</div>
+                    <div className="border p-2">
+                        <b>PRICE:</b> ${formData.price} | <b>DEP:</b> ${formData.deposit} | <b>BAL:</b> <span className="text-red-600">${balance}</span>
+                        <div className="mt-1 border-t border-dashed pt-1">
+                            Date: {formData.deliveryDate} {formData.handoverTime ? `@ ${formData.handoverTime}` : ''}
+                        </div>
                     </div>
+                    
+                    <div className="border p-2 text-[9px]">
+                        <span className="font-bold">ATTACHMENTS: </span>
+                        {checklist.vrd && '[x] VRD '}
+                        {checklist.keys && '[x] Keys '}
+                        {checklist.tools && '[x] Tools '}
+                        {checklist.manual && '[x] Manual '}
+                        {checklist.other && ` ${checklist.other}`}
+                    </div>
+
+                    {isTradeIn ? (
+                        <div className="p-2 bg-gray-50 text-[8px] leading-tight text-justify border border-slate-300 mt-2">
+                            <p>I, <b>{formData.customerName||'___'}</b> ... agree to {selectedDocType==='consignment_contract'?'consign':'sell'} to <b>{formData.companyNameEn}</b> on <b>{formData.deliveryDate}</b> at <b>{timeDisplay}</b>...</p>
+                        </div>
+                    ) : (
+                        <div className="text-[8px] text-gray-400 italic">Standard Sales Terms Apply...</div>
+                    )}
                 </div>
             </div>
         );
     };
 
+    // --- 5. 主畫面 Render ---
+    // A. 歷史列表模式
+    if (viewMode === 'list') {
+        return (
+            <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                    <h2 className="text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2"/> 單據紀錄 (Document History)</h2>
+                    <button onClick={startNewDoc} className="px-4 py-2 bg-blue-600 text-white rounded font-bold text-sm hover:bg-blue-700 flex items-center"><Plus size={16} className="mr-1"/> 開新單據</button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                    {docHistory.length === 0 ? (
+                        <div className="text-center text-slate-400 py-10">暫無單據紀錄，請點擊「開新單據」</div>
+                    ) : (
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="bg-slate-100 text-slate-600 border-b">
+                                <tr>
+                                    <th className="p-3">日期</th>
+                                    <th className="p-3">類型</th>
+                                    <th className="p-3">內容摘要 (車牌 - 客戶)</th>
+                                    <th className="p-3 text-right">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {docHistory.map(doc => (
+                                    <tr key={doc.id} className="hover:bg-slate-50">
+                                        <td className="p-3 font-mono text-slate-500">{doc.updatedAt?.toDate?.().toLocaleDateString() || '-'}</td>
+                                        <td className="p-3 font-bold text-blue-600 capitalize">{doc.type.replace('_contract','')}</td>
+                                        <td className="p-3">{doc.summary}</td>
+                                        <td className="p-3 text-right flex justify-end gap-2">
+                                            <button onClick={() => editDoc(doc)} className="px-3 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 flex items-center"><Edit size={14} className="mr-1"/> 編輯/列印</button>
+                                            <button onClick={() => deleteDocRecord(doc.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded"><Trash2 size={16}/></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // B. 編輯模式 (原本的介面)
     return (
         <div className="flex h-full gap-4 relative overflow-hidden">
+            {/* 左側：選車 */}
             <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-                <div className="p-3 border-b border-slate-100 bg-slate-50">
-                    <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌/型號..." className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none mb-2"/>
-                    <button onClick={handleSelectBlank} className="w-full py-1.5 text-xs font-bold rounded border bg-white text-slate-600 hover:bg-slate-100">開立空白單據</button>
+                <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                    <button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded"><ArrowLeft size={16}/></button>
+                    <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋庫存..." className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none"/>
+                </div>
+                <div className="p-2 border-b bg-slate-50">
+                    <button onClick={handleSelectBlank} className="w-full py-1 text-xs font-bold rounded border bg-white text-slate-600 hover:bg-slate-100">清空 / 空白單</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                     {filteredInventory.map(car => (
@@ -4811,14 +4985,19 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
                     ))}
                 </div>
             </div>
+
+            {/* 中間：編輯 */}
             <div className="w-[40%] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
                 <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
-                    <span className="font-bold text-slate-700 text-sm">編輯內容</span>
-                    <button onClick={handlePrint} className="px-4 py-1.5 bg-slate-800 text-white rounded text-xs font-bold hover:bg-slate-700 flex items-center"><Printer size={12} className="mr-1"/> 列印單據</button>
+                    <span className="font-bold text-slate-700 text-sm">編輯單據 {docId ? '(修改模式)' : '(新增模式)'}</span>
+                    <div className="flex gap-2">
+                        <button onClick={saveDocRecord} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-600 rounded text-xs font-bold hover:bg-slate-50 flex items-center"><Save size={14} className="mr-1"/> 暫存</button>
+                        <button onClick={handlePrint} className="px-4 py-1.5 bg-slate-800 text-white rounded text-xs font-bold hover:bg-slate-700 flex items-center"><Printer size={14} className="mr-1"/> 列印 & 儲存</button>
+                    </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded">
-                        {[{id:'sales_contract',l:'賣車(Sales)'}, {id:'purchase_contract',l:'收車(Buy)'}, {id:'consignment_contract',l:'寄賣(Consign)'}, {id:'invoice',l:'發票'}, {id:'receipt',l:'收據'}].map(t=>(<button key={t.id} onClick={()=>setSelectedDocType(t.id as any)} className={`flex-1 py-1.5 rounded text-[10px] font-bold ${selectedDocType===t.id?'bg-white shadow text-blue-600':'text-gray-500 hover:text-black'}`}>{t.l}</button>))}
+                        {[{id:'sales_contract',l:'賣車'}, {id:'purchase_contract',l:'收車'}, {id:'consignment_contract',l:'寄賣'}, {id:'invoice',l:'發票'}, {id:'receipt',l:'收據'}].map(t=>(<button key={t.id} onClick={()=>setSelectedDocType(t.id as any)} className={`flex-1 py-1.5 rounded text-[10px] font-bold ${selectedDocType===t.id?'bg-white shadow text-blue-600':'text-gray-500 hover:text-black'}`}>{t.l}</button>))}
                     </div>
                     <div className="space-y-3">
                         <div className="p-3 bg-blue-50 rounded border border-blue-100">
@@ -4856,14 +5035,11 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
                             <div className="text-[10px] font-bold text-slate-400 mb-1">備註</div>
                             <textarea name="remarks" value={formData.remarks} onChange={handleChange} className="w-full h-12 text-xs border p-1 rounded resize-none"/>
                         </div>
-                        <div className="p-3 bg-gray-50 rounded border">
-                            <div className="text-[10px] font-bold text-gray-400 mb-1">公司資料 (可修改)</div>
-                            <input name="companyNameEn" value={formData.companyNameEn} onChange={handleChange} className="w-full text-[10px] border-b bg-transparent mb-1"/>
-                            <input name="companyNameCh" value={formData.companyNameCh} onChange={handleChange} className="w-full text-[10px] border-b bg-transparent"/>
-                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* 右側：即時預覽 */}
             <div className="flex-1 bg-gray-200/50 rounded-xl border border-slate-200 flex flex-col overflow-hidden items-center justify-center p-4">
                 <div className="mb-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Live Preview</div>
                 <div className="w-full h-full flex justify-center overflow-hidden">
@@ -5280,11 +5456,14 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
             />
         )}
 
-          {/* Create Doc Tab */}
+          {/* Create Doc Tab - v5.0: 傳入 db 參數以支援歷史紀錄 */}
           {activeTab === 'create_doc' && (
               <CreateDocModule 
                   inventory={inventory} 
                   openPrintPreview={openPrintPreview} 
+                  db={db}
+                  staffId={staffId}
+                  appId={appId}
               />
           )}
           
