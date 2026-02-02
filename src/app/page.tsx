@@ -4194,10 +4194,12 @@ const SignatureImg = () => (
 const DocumentTemplate = () => {
     const activeVehicle = previewDoc?.vehicle || selectedVehicle;
     const activeType = previewDoc?.type || docType;
-    // ★★★ v6.0: 獲取多選項目 ★★★
-    const itemsToRender = (activeVehicle as any).selectedItems || [];
-    
+
+    // ★★★ 修正 1：先檢查 activeVehicle 是否存在，再來讀取資料 ★★★
     if (!activeVehicle) return null;
+
+    // ★★★ 修正 2：移到這裡讀取，確保 activeVehicle 不是 null ★★★
+    const itemsToRender = (activeVehicle as any).selectedItems || [];
     const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
 
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
@@ -4208,7 +4210,7 @@ const DocumentTemplate = () => {
     const companyCh = COMPANY_INFO.name_ch;
     const companyAddr = COMPANY_INFO.address_ch;
     const companyTel = COMPANY_INFO.phone;
-    const companyEmail = COMPANY_INFO.email; // v6.0 新增
+    const companyEmail = COMPANY_INFO.email;
 
     const curCustomer = {
         name: activeVehicle.customerName || '',
@@ -4238,7 +4240,6 @@ const DocumentTemplate = () => {
         docTitleEn = "OFFICIAL RECEIPT"; docTitleCh = "正式收據";
     }
 
-    // 共用 Header
     const HeaderSection = () => (
         <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
             <div className="flex items-center gap-4">
@@ -4261,7 +4262,6 @@ const DocumentTemplate = () => {
         </div>
     );
 
-    // 附件區塊
     const AttachmentsSection = () => (
         <div className="mb-6 border border-slate-300 p-2 text-xs bg-slate-50">
             <div className="font-bold mb-2 uppercase border-b border-slate-300 pb-1">Attachments / Items Handed Over (隨車附件):</div>
@@ -4275,7 +4275,6 @@ const DocumentTemplate = () => {
         </div>
     );
 
-    // 法律聲明
     const LegalDeclaration = () => {
         const timeDisplay = handoverTime || "_______"; 
         
@@ -4331,7 +4330,7 @@ const DocumentTemplate = () => {
         </div>
     );
 
-    // 1. 合約類 (顯示完整條款與附件)
+    // 1. 合約類
     if (activeType.includes('contract')) {
         return (
             <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none">
@@ -4379,7 +4378,7 @@ const DocumentTemplate = () => {
         );
     }
 
-    // 2. 發票 / 收據 (v6.0: 支援多項列表)
+    // 2. 發票 / 收據
     return (
         <div className="max-w-[210mm] mx-auto bg-white p-10 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none">
             <HeaderSection />
@@ -4396,7 +4395,6 @@ const DocumentTemplate = () => {
                 </div>
             </div>
 
-            {/* 多項目表格 */}
             <table className="w-full text-xs border-collapse mb-8">
                 <thead>
                     <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
