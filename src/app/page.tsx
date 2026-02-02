@@ -5149,7 +5149,26 @@ const CreateDocModule = () => {
                                           {car.regMark || <span className="text-gray-400 italic">未出牌</span>}
                                           {car.crossBorder?.isEnabled && <Globe size={12} className="inline ml-1 text-blue-400"/>}
                                       </td>
-                                      <td className="p-3"><span className="font-medium">{car.make} {car.model}</span><span className="text-xs text-gray-400 ml-2">{car.year}</span></td>
+                                      {/* ★★★ 修改開始：車型欄位 (年份+型號+手數+公里+波箱) ★★★ */}
+                                      <td className="p-3">
+                                          <div className="font-bold text-slate-700 text-sm">
+                                              {car.year} {car.make} {car.model}
+                                          </div>
+                                          <div className="text-[10px] text-gray-500 flex items-center gap-1.5 mt-1 font-mono">
+                                              {/* 手數 */}
+                                              {car.previousOwners ? <span className="bg-slate-100 px-1 rounded border border-slate-200">{car.previousOwners}手</span> : <span className="text-gray-300">-</span>}
+                                              
+                                              {/* 公里數 */}
+                                              <span>{car.mileage ? Number(car.mileage).toLocaleString() : 0}km</span>
+                                              <span className="text-gray-300">|</span>
+                                              
+                                              {/* 波箱 (AT/MT) */}
+                                              <span className={`font-bold ${car.transmission === 'Manual' ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                  {car.transmission === 'Manual' ? 'MT' : 'AT'}
+                                              </span>
+                                          </div>
+                                      </td>
+                                      {/* ★★★ 修改結束 ★★★ */}
                                       <td className="p-3 font-mono font-bold text-slate-700">{formatCurrency(car.price)}</td>
                                       <td className="p-3 text-xs"><DateStatusBadge date={car.licenseExpiry} label="牌費"/></td>
                                       <td className="p-3 text-right">
