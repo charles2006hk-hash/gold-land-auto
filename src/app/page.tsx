@@ -2242,7 +2242,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v8.0 完整展開版：含雲端備份、提醒、編輯功能) ★★★
+// ★★★ 5. Settings Manager (v9.0: 新增資料庫下級分類管理功能) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -2274,347 +2274,128 @@ const SettingsManager = ({
     const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[] }[]>([]);
     
     // --- 3. 財務費用狀態 ---
-    // 費用類別 (複雜物件)
     const [expenseForm, setExpenseForm] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
     const [editingExpenseIndex, setEditingExpenseIndex] = useState<number | null>(null);
-    // 收款公司 (純文字)
     const [compInput, setCompInput] = useState('');
     const [editingCompIndex, setEditingCompIndex] = useState<number | null>(null);
     
     // --- 4. 中港業務狀態 ---
-    // 代辦項目 (複雜物件)
     const [cbForm, setCbForm] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
     const [editingCbIndex, setEditingCbIndex] = useState<number | null>(null);
-    // 辦理機構 (純文字)
     const [instInput, setInstInput] = useState('');
     const [editingInstIndex, setEditingInstIndex] = useState<number | null>(null);
 
     // --- 5. 提醒與備份狀態 ---
     const [reminders, setReminders] = useState(settings.reminders || { 
-        isEnabled: true, 
-        daysBefore: 30, 
-        time: '10:00', 
+        isEnabled: true, daysBefore: 30, time: '10:00', 
         categories: { license: true, insurance: true, crossBorder: true, installments: false } 
     });
-    
-    const [backupConfig, setBackupConfig] = useState(settings.backup || { 
-        frequency: 'monthly', 
-        lastBackupDate: '', 
-        autoCloud: true 
-    });
-    
+    const [backupConfig, setBackupConfig] = useState(settings.backup || { frequency: 'monthly', lastBackupDate: '', autoCloud: true });
     const [isBackingUp, setIsBackingUp] = useState(false);
 
-    // ==========================================
-    // 邏輯區塊 1: 雲端自動備份 (Auto-Backup)
-    // ==========================================
+    // ★★★ 6. 新增：資料庫分類狀態 ★★★
+    const [selectedDbCat, setSelectedDbCat] = useState('Person');
+    const [newDocType, setNewDocType] = useState('');
+
+    // --- 邏輯區塊 1: 雲端自動備份 ---
     useEffect(() => {
         const checkAutoBackup = async () => {
-            // 只有當開啟自動備份、且庫存有資料時才檢查
             if (backupConfig.autoCloud && !isBackingUp && inventory.length > 0) {
                 const lastDate = new Date(backupConfig.lastBackupDate || '2000-01-01');
-                const today = new Date();
+                const diffDays = Math.ceil(Math.abs(new Date().getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)); 
                 let shouldBackup = false;
-
-                // 計算距離上次備份的天數
-                const diffTime = Math.abs(today.getTime() - lastDate.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
                 if (backupConfig.frequency === 'daily' && diffDays >= 1) shouldBackup = true;
                 if (backupConfig.frequency === 'weekly' && diffDays >= 7) shouldBackup = true;
                 if (backupConfig.frequency === 'monthly' && diffDays >= 30) shouldBackup = true;
-
-                if (shouldBackup) {
-                    console.log("Triggering Auto Cloud Backup...");
-                    await handleCloudBackup(true); // true = 靜默模式 (不彈出 Alert)
-                }
+                if (shouldBackup) await handleCloudBackup(true);
             }
         };
-        // 延遲 3 秒執行，避免剛載入頁面時造成卡頓
         const timer = setTimeout(checkAutoBackup, 3000);
         return () => clearTimeout(timer);
     }, [backupConfig, inventory]); 
 
-    // 執行雲端備份
     const handleCloudBackup = async (silent = false) => {
-        // storage 是全域變數，需確保已初始化
-        if (!storage || !appId) {
-            if (!silent) alert("無法連接雲端儲存空間 (Firebase Storage Not Initialized)");
-            return;
-        }
+        if (!storage || !appId) { if (!silent) alert("無法連接雲端"); return; }
         setIsBackingUp(true);
         try {
-            const backupData = {
-                version: "2.0",
-                type: "cloud_auto",
-                timestamp: new Date().toISOString(),
-                settings: settings,
-                inventory: inventory
-            };
-            const dataStr = JSON.stringify(backupData);
-            
-            // 檔名格式：backups/backup_YYYY-MM-DD_HHmm.json
+            const dataStr = JSON.stringify({ version: "2.0", type: "cloud_auto", timestamp: new Date().toISOString(), settings, inventory });
             const fileName = `backups/backup_${new Date().toISOString().slice(0,10)}_${new Date().getHours()}${new Date().getMinutes()}.json`;
-            const storageRef = ref(storage, fileName);
-
-            await uploadString(storageRef, dataStr);
-
-            // 更新上次備份時間
+            await uploadString(ref(storage, fileName), dataStr);
             const newConfig = { ...backupConfig, lastBackupDate: new Date().toISOString() };
             setBackupConfig(newConfig);
             updateSettings('backup', newConfig);
-
-            if (!silent) alert(`✅ 雲端備份成功！\n檔案已儲存至: ${fileName}`);
-        } catch (error) {
-            console.error("Cloud Backup Failed:", error);
-            if (!silent) alert("❌ 備份失敗，請檢查網絡或權限");
-        } finally {
-            setIsBackingUp(false);
-        }
+            if (!silent) alert(`✅ 雲端備份成功！\n檔案: ${fileName}`);
+        } catch (error) { console.error(error); if (!silent) alert("❌ 備份失敗"); } 
+        finally { setIsBackingUp(false); }
     };
 
-    // ==========================================
-    // 邏輯區塊 2: 系統用戶 (Users)
-    // ==========================================
+    // --- 邏輯區塊 2: 系統用戶 ---
     useEffect(() => {
         if (!db || !appId) return;
-        const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
-        const unsub = onSnapshot(userDocRef, (docSnap) => {
+        const unsub = onSnapshot(doc(db, 'artifacts', appId, 'system', 'users'), (docSnap) => {
             if (docSnap.exists()) {
-                const data = docSnap.data();
-                const rawList = data.list || [];
-                // 資料正規化：確保舊的 string[] 格式也能轉為物件格式
-                const formattedList = rawList.map((u: any) => {
-                    if (typeof u === 'string') return { email: u, modules: ['inventory', 'business', 'database', 'settings'] };
-                    return u;
-                });
-                setSystemUsers(formattedList);
+                const rawList = docSnap.data().list || [];
+                setSystemUsers(rawList.map((u: any) => (typeof u === 'string' ? { email: u, modules: ['inventory', 'business', 'database', 'settings'] } : u)));
             }
         });
         return () => unsub();
     }, [db, appId]);
 
-    const updateUsersDb = async (newList: any[]) => {
-        if (!db) return;
-        try {
-            const userDocRef = doc(db, 'artifacts', appId, 'system', 'users');
-            await setDoc(userDocRef, { list: newList }, { merge: true });
-        } catch (e) { console.error(e); alert('用戶設定儲存失敗'); }
-    };
+    const updateUsersDb = async (newList: any[]) => { if (db) await setDoc(doc(db, 'artifacts', appId, 'system', 'users'), { list: newList }, { merge: true }); };
+    const handleAddUser = () => { if (!newUserEmail) return; const l = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }]; setSystemUsers(l); updateUsersDb(l); setNewUserEmail(''); };
+    const handleRemoveUser = (email: string) => { if (confirm(`移除用戶 ${email}?`)) { const l = systemUsers.filter(u => u.email !== email); setSystemUsers(l); updateUsersDb(l); } };
+    const toggleUserPermission = (email: string, modKey: string) => { const l = systemUsers.map(u => u.email === email ? { ...u, modules: u.modules.includes(modKey) ? u.modules.filter(m => m !== modKey) : [...u.modules, modKey] } : u); setSystemUsers(l); updateUsersDb(l); };
 
-    const handleAddUser = () => {
-        if (!newUserEmail) return;
-        const newList = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }];
-        setSystemUsers(newList);
-        updateUsersDb(newList);
-        setNewUserEmail('');
-    };
+    // --- 邏輯區塊 3: 通用設定 ---
+    const addItem = (key: keyof SystemSettings, val: string) => { if(val) updateSettings(key, [...(settings[key] as string[] || []), val]); };
+    const removeItem = (key: keyof SystemSettings, idx: number) => { const arr = [...(settings[key] as any[] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
+    const addModel = () => { if (selectedMakeForModel && newModelName) { updateSettings('models', { ...settings.models, [selectedMakeForModel]: [...(settings.models[selectedMakeForModel] || []), newModelName] }); setNewModelName(''); } };
+    const removeModel = (name: string) => { if (selectedMakeForModel) updateSettings('models', { ...settings.models, [selectedMakeForModel]: (settings.models[selectedMakeForModel] || []).filter(m => m !== name) }); };
 
-    const handleRemoveUser = (email: string) => {
-        if (!confirm(`移除用戶 ${email}?`)) return;
-        const newList = systemUsers.filter(u => u.email !== email);
-        setSystemUsers(newList);
-        updateUsersDb(newList);
-    };
+    // --- 邏輯區塊 4: 費用與中港 ---
+    const handleExpenseSubmit = () => { if(!expenseForm.name)return; const item = {...expenseForm, defaultAmount: Number(expenseForm.defaultAmount)||0}; const list=[...settings.expenseTypes]; if(editingExpenseIndex!==null) list[editingExpenseIndex]=item; else list.push(item); updateSettings('expenseTypes', list); setExpenseForm({name:'',defaultCompany:'',defaultAmount:'',defaultDays:'0'}); setEditingExpenseIndex(null); };
+    const editExpense = (i: number) => { const item=settings.expenseTypes[i]; setExpenseForm(typeof item==='string'?{name:item,defaultCompany:'',defaultAmount:'',defaultDays:'0'}: {name:item.name,defaultCompany:item.defaultCompany,defaultAmount:item.defaultAmount.toString(),defaultDays:item.defaultDays}); setEditingExpenseIndex(i); };
+    const handleCompanySubmit = () => { if(!compInput)return; const list=[...settings.expenseCompanies]; if(editingCompIndex!==null) list[editingCompIndex]=compInput; else list.push(compInput); updateSettings('expenseCompanies', list); setCompInput(''); setEditingCompIndex(null); };
+    const handleCbSubmit = () => { if(!cbForm.name)return; const item={...cbForm, defaultFee: Number(cbForm.defaultFee)||0}; const list=[...settings.cbItems]; if(editingCbIndex!==null) list[editingCbIndex]=item; else list.push(item); updateSettings('cbItems', list); setCbForm({name:'',defaultInst:'',defaultFee:'',defaultDays:'0'}); setEditingCbIndex(null); };
+    const editCbItem = (i: number) => { const item=settings.cbItems[i]; setCbForm(typeof item==='string'?{name:item,defaultInst:'',defaultFee:'',defaultDays:'0'}: {name:item.name,defaultInst:item.defaultInst,defaultFee:item.defaultFee.toString(),defaultDays:item.defaultDays}); setEditingCbIndex(i); };
+    const handleInstSubmit = () => { if(!instInput)return; const list=[...settings.cbInstitutions]; if(editingInstIndex!==null) list[editingInstIndex]=instInput; else list.push(instInput); updateSettings('cbInstitutions', list); setInstInput(''); setEditingInstIndex(null); };
 
-    const toggleUserPermission = (email: string, moduleKey: string) => {
-        const newList = systemUsers.map(u => {
-            if (u.email !== email) return u;
-            const hasModule = u.modules.includes(moduleKey);
-            const newModules = hasModule ? u.modules.filter(m => m !== moduleKey) : [...u.modules, moduleKey];
-            return { ...u, modules: newModules };
-        });
-        setSystemUsers(newList);
-        updateUsersDb(newList);
-    };
-
-    // ==========================================
-    // 邏輯區塊 3: 通用設定操作 (General & Models)
-    // ==========================================
-    const addItem = (key: keyof SystemSettings, val: string) => {
-        if (!val) return;
-        updateSettings(key, [...(settings[key] as string[] || []), val]);
-    };
-
-    const removeItem = (key: keyof SystemSettings, index: number) => {
-        const newArr = [...(settings[key] as any[] || [])];
-        newArr.splice(index, 1);
-        updateSettings(key, newArr);
-    };
-
-    const addModel = () => {
-        if (!selectedMakeForModel || !newModelName) return;
-        const currentModels = settings.models[selectedMakeForModel] || [];
-        const updatedModels = { ...settings.models, [selectedMakeForModel]: [...currentModels, newModelName] };
-        updateSettings('models', updatedModels);
-        setNewModelName('');
-    };
-
-    const removeModel = (modelName: string) => {
-        if (!selectedMakeForModel) return;
-        const currentModels = settings.models[selectedMakeForModel] || [];
-        const updatedModels = { ...settings.models, [selectedMakeForModel]: currentModels.filter(m => m !== modelName) };
-        updateSettings('models', updatedModels);
-    };
-
-    // ==========================================
-    // 邏輯區塊 4: 財務與費用 (Expenses)
-    // ==========================================
-    // A. 費用類別操作
-    const handleExpenseSubmit = () => {
-        if (!expenseForm.name) return;
-        const newItem = { ...expenseForm, defaultAmount: Number(expenseForm.defaultAmount) || 0 };
-        const newList = [...settings.expenseTypes];
-        
-        if (editingExpenseIndex !== null) {
-            newList[editingExpenseIndex] = newItem; // 更新
-        } else {
-            newList.push(newItem); // 新增
-        }
-        updateSettings('expenseTypes', newList);
-        setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
-        setEditingExpenseIndex(null);
-    };
-
-    const editExpense = (index: number) => {
-        const item = settings.expenseTypes[index];
-        if (typeof item === 'string') {
-            setExpenseForm({ name: item, defaultCompany: '', defaultAmount: '', defaultDays: '0' });
-        } else {
-            setExpenseForm({ 
-                name: item.name, 
-                defaultCompany: item.defaultCompany, 
-                defaultAmount: item.defaultAmount.toString(), 
-                defaultDays: item.defaultDays 
-            });
-        }
-        setEditingExpenseIndex(index);
-    };
-
-    // B. 收款公司操作
-    const handleCompanySubmit = () => {
-        if (!compInput) return;
-        const newList = [...settings.expenseCompanies];
-        if (editingCompIndex !== null) {
-            newList[editingCompIndex] = compInput;
-        } else {
-            newList.push(compInput);
-        }
-        updateSettings('expenseCompanies', newList);
-        setCompInput('');
-        setEditingCompIndex(null);
-    };
-
-    const editCompany = (index: number) => {
-        setCompInput(settings.expenseCompanies[index]);
-        setEditingCompIndex(index);
-    };
-
-    // ==========================================
-    // 邏輯區塊 5: 中港業務 (Cross Border)
-    // ==========================================
-    // A. 代辦項目操作
-    const handleCbSubmit = () => {
-        if (!cbForm.name) return;
-        const newItem = { ...cbForm, defaultFee: Number(cbForm.defaultFee) || 0 };
-        const newList = [...settings.cbItems];
-        
-        if (editingCbIndex !== null) {
-            newList[editingCbIndex] = newItem;
-        } else {
-            newList.push(newItem);
-        }
-        updateSettings('cbItems', newList);
-        setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
-        setEditingCbIndex(null);
-    };
-
-    const editCbItem = (index: number) => {
-        const item = settings.cbItems[index];
-        if (typeof item === 'string') {
-            setCbForm({ name: item, defaultInst: '', defaultFee: '', defaultDays: '0' });
-        } else {
-            setCbForm({ 
-                name: item.name, 
-                defaultInst: item.defaultInst, 
-                defaultFee: item.defaultFee.toString(), 
-                defaultDays: item.defaultDays 
-            });
-        }
-        setEditingCbIndex(index);
-    };
-
-    // B. 辦理機構操作
-    const handleInstSubmit = () => {
-        if (!instInput) return;
-        const newList = [...settings.cbInstitutions];
-        if (editingInstIndex !== null) {
-            newList[editingInstIndex] = instInput;
-        } else {
-            newList.push(instInput);
-        }
-        updateSettings('cbInstitutions', newList);
-        setInstInput('');
-        setEditingInstIndex(null);
-    };
-
-    const editInst = (index: number) => {
-        setInstInput(settings.cbInstitutions[index]);
-        setEditingInstIndex(index);
-    };
-
-    // ==========================================
-    // 邏輯區塊 6: 提醒與本地備份
-    // ==========================================
-    const handleSaveReminders = () => {
-        updateSettings('reminders', reminders);
-        alert('提醒設定已儲存');
-    };
-
-    const handleSaveBackupConfig = () => {
-        updateSettings('backup', backupConfig);
-        alert('備份排程已更新');
-    };
-
-    const handleExport = () => {
-        const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), settings, inventory }, null, 2);
-        const blob = new Blob([dataStr], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            try {
-                const data = JSON.parse(ev.target?.result as string);
-                if (data.settings) {
-                    setSettings((prev: any) => ({ ...prev, ...data.settings }));
-                    Object.keys(data.settings).forEach(k => updateSettings(k as keyof SystemSettings, data.settings[k]));
-                    alert('設定已成功匯入');
-                }
-            } catch (err) { alert('匯入失敗：檔案格式錯誤'); }
+    // --- ★★★ 邏輯區塊 5: 資料庫下級分類管理 ★★★ ---
+    const handleAddDocType = () => {
+        if (!newDocType) return;
+        const currentList = settings.dbDocTypes[selectedDbCat] || [];
+        const updatedDocTypes = {
+            ...settings.dbDocTypes,
+            [selectedDbCat]: [...currentList, newDocType]
         };
-        reader.readAsText(file);
+        updateSettings('dbDocTypes', updatedDocTypes);
+        setNewDocType('');
     };
 
-    // ==========================================
-    // 渲染介面 (Render)
-    // ==========================================
+    const handleRemoveDocType = (index: number) => {
+        const currentList = settings.dbDocTypes[selectedDbCat] || [];
+        const newList = currentList.filter((_, i) => i !== index);
+        const updatedDocTypes = {
+            ...settings.dbDocTypes,
+            [selectedDbCat]: newList
+        };
+        updateSettings('dbDocTypes', updatedDocTypes);
+    };
+
+    // --- 匯出入 ---
+    const handleSaveReminders = () => { updateSettings('reminders', reminders); alert('提醒設定已儲存'); };
+    const handleSaveBackupConfig = () => { updateSettings('backup', backupConfig); alert('備份排程已更新'); };
+    const handleExport = () => { const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=async(ev)=>{ try{ const d=JSON.parse(ev.target?.result as string); if(d.settings){ setSettings((p:any)=>({...p,...d.settings})); Object.keys(d.settings).forEach(k=>updateSettings(k as any, d.settings[k])); alert('匯入成功'); } }catch{alert('檔案錯誤');}}; r.readAsText(f); };
+
+    // --- Render ---
     return (
         <div className="flex h-full gap-6">
-            {/* Sidebar */}
             <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
                 {[
                     { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
+                    { id: 'database_config', icon: <Database size={16}/>, label: '資料庫分類' }, // 新增
                     { id: 'reminders', icon: <Bell size={16}/>, label: '系統提醒' },
                     { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' },
                     { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
@@ -2628,55 +2409,84 @@ const SettingsManager = ({
                 ))}
             </div>
 
-            {/* Content Area */}
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
-                <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab} Settings</h2>
+                <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
 
                 {/* 1. General */}
                 {activeTab === 'general' && (
-                    <div className="space-y-6">
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">顏色選項 (Colors)</h3>
-                            <div className="flex gap-2 mt-2">
-                                <input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/>
-                                <button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button>
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4">顏色選項 (Colors)</h3>
+                        <div className="flex gap-2 mt-2"><input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/><button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div>
+                        <div className="flex flex-wrap gap-2 mt-3">{settings.colors.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>))}</div>
+                    </div>
+                )}
+
+                {/* ★★★ 2. Database Config (新功能) ★★★ */}
+                {activeTab === 'database_config' && (
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Database size={18} className="mr-2"/> 資料庫下級分類設定</h3>
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
+                            <label className="text-xs font-bold text-blue-800 block mb-2">1. 選擇主分類 (Main Category)</label>
+                            <div className="flex gap-2">
+                                {['Person', 'Company', 'Vehicle', 'CrossBorder'].map(cat => (
+                                    <button 
+                                        key={cat} 
+                                        onClick={() => setSelectedDbCat(cat)} 
+                                        className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all ${selectedDbCat === cat ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-100'}`}
+                                    >
+                                        {cat === 'Person' ? '人員' : (cat === 'Company' ? '公司' : (cat === 'Vehicle' ? '車輛文件' : '中港文件'))}
+                                    </button>
+                                ))}
                             </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.colors.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 block mb-2">2. 管理下級文件類型 (Sub-types for {selectedDbCat})</label>
+                            <div className="flex gap-2 mb-4">
+                                <input 
+                                    value={newDocType} 
+                                    onChange={e => setNewDocType(e.target.value)} 
+                                    className="border rounded px-3 py-2 text-sm outline-none w-64" 
+                                    placeholder="輸入新類型 (例如: 國際駕照)"
+                                    onKeyDown={e => e.key === 'Enter' && handleAddDocType()}
+                                />
+                                <button onClick={handleAddDocType} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold hover:bg-slate-700">新增 (Add)</button>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2">
+                                {(settings.dbDocTypes?.[selectedDbCat] || []).length === 0 && <span className="text-gray-400 text-sm">暫無分類</span>}
+                                {(settings.dbDocTypes?.[selectedDbCat] || []).map((type, idx) => (
+                                    <span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border border-slate-200 group hover:border-blue-300 transition-colors">
+                                        {type}
+                                        <button onClick={() => handleRemoveDocType(idx)} className="text-slate-400 hover:text-red-500 p-0.5 rounded-full"><X size={14}/></button>
+                                    </span>
                                 ))}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* 2. Reminders (系統提醒) */}
+                {/* 3. Reminders */}
                 {activeTab === 'reminders' && (
-                    <div className="space-y-6">
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Bell size={18} className="mr-2 text-amber-500"/> 到期提醒設定</h3>
-                            <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 mb-6">
-                                <label className="flex items-center cursor-pointer">
-                                    <input type="checkbox" checked={reminders.isEnabled} onChange={e => setReminders({...reminders, isEnabled: e.target.checked})} className="w-5 h-5 accent-amber-600 mr-2"/>
-                                    <span className="font-bold text-sm text-slate-700">開啟系統提醒總開關</span>
-                                </label>
-                            </div>
-                            <div className="grid grid-cols-2 gap-6 mb-6">
-                                <div><label className="block text-xs font-bold text-slate-500 mb-1">提前通知天數</label><input type="number" value={reminders.daysBefore} onChange={e => setReminders({...reminders, daysBefore: Number(e.target.value)})} className="w-full p-2 border rounded text-sm"/></div>
-                                <div><label className="block text-xs font-bold text-slate-500 mb-1">每日檢查時間</label><input type="time" value={reminders.time} onChange={e => setReminders({...reminders, time: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                            </div>
-                            <h4 className="font-bold text-slate-600 text-xs uppercase border-b pb-2 mb-3">監控項目</h4>
-                            <div className="space-y-2">
-                                <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.license} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,license:e.target.checked}})}/> 牌費與驗車</label>
-                                <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.insurance} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,insurance:e.target.checked}})}/> 保險</label>
-                                <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.crossBorder} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,crossBorder:e.target.checked}})}/> 中港證件</label>
-                            </div>
-                            <div className="mt-6 flex justify-end"><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-amber-600">儲存提醒設定</button></div>
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Bell size={18} className="mr-2 text-amber-500"/> 到期提醒設定</h3>
+                        <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 mb-6">
+                            <label className="flex items-center cursor-pointer"><input type="checkbox" checked={reminders.isEnabled} onChange={e => setReminders({...reminders, isEnabled: e.target.checked})} className="w-5 h-5 accent-amber-600 mr-2"/><span className="font-bold text-sm text-slate-700">開啟系統提醒總開關</span></label>
                         </div>
+                        <div className="grid grid-cols-2 gap-6 mb-6">
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">提前通知天數</label><input type="number" value={reminders.daysBefore} onChange={e => setReminders({...reminders, daysBefore: Number(e.target.value)})} className="w-full p-2 border rounded text-sm"/></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1">每日檢查時間</label><input type="time" value={reminders.time} onChange={e => setReminders({...reminders, time: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.license} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,license:e.target.checked}})}/> 牌費與驗車</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.insurance} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,insurance:e.target.checked}})}/> 保險</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.crossBorder} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,crossBorder:e.target.checked}})}/> 中港證件</label>
+                        </div>
+                        <div className="mt-6 flex justify-end"><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-amber-600">儲存提醒設定</button></div>
                     </div>
                 )}
 
-                {/* 3. Vehicle (車輛資料) */}
+                {/* 4. Vehicle */}
                 {activeTab === 'vehicle' && (
                     <div className="space-y-6">
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -2688,10 +2498,7 @@ const SettingsManager = ({
                             <h3 className="font-bold text-slate-700 mb-4">2. 型號管理 (Models)</h3>
                             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
                                 <label className="text-xs font-bold text-slate-500 block mb-1">選擇廠牌</label>
-                                <select value={selectedMakeForModel} onChange={e => setSelectedMakeForModel(e.target.value)} className="w-full p-2 border rounded text-sm mb-3">
-                                    <option value="">-- 請選擇 --</option>
-                                    {settings.makes.map(m => <option key={m} value={m}>{m}</option>)}
-                                </select>
+                                <select value={selectedMakeForModel} onChange={e => setSelectedMakeForModel(e.target.value)} className="w-full p-2 border rounded text-sm mb-3"><option value="">-- 請選擇 --</option>{settings.makes.map(m => <option key={m} value={m}>{m}</option>)}</select>
                                 {selectedMakeForModel && (<div className="flex gap-2 animate-fade-in"><input value={newModelName} onChange={e => setNewModelName(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMakeForModel} 新型號...`} /><button onClick={addModel} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button></div>)}
                             </div>
                             {selectedMakeForModel && (<div className="flex flex-wrap gap-2">{(settings.models[selectedMakeForModel] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : (settings.models[selectedMakeForModel] || []).map((m, i) => (<span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeModel(m)}/></span>))}</div>)}
@@ -2699,220 +2506,69 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 4. Expenses (財務與費用 - 含編輯功能) */}
+                {/* 5. Expenses */}
                 {activeTab === 'expenses' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DollarSign size={18} className="mr-2"/> 費用類別與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingExpenseIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">費用名稱</label><input value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="例如: 維修費"/></div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司 (選單)</label>
-                                    <select value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded bg-white">
-                                        <option value="">-- 選擇 --</option>
-                                        {settings.expenseCompanies.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">預設公司</label><select value={expenseForm.defaultCompany} onChange={e => setExpenseForm({...expenseForm, defaultCompany: e.target.value})} className="w-full text-sm p-2 border rounded bg-white"><option value="">-- 選擇 --</option>{settings.expenseCompanies.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">金額 / 天數</label><div className="flex gap-1"><input type="number" value={expenseForm.defaultAmount} onChange={e => setExpenseForm({...expenseForm, defaultAmount: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={expenseForm.defaultDays} onChange={e => setExpenseForm({...expenseForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
-                                <div className="flex gap-1">
-                                    <button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>
-                                    {editingExpenseIndex !== null && <button onClick={() => { setEditingExpenseIndex(null); setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}
-                                </div>
+                                <div className="flex gap-1"><button onClick={handleExpenseSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingExpenseIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingExpenseIndex !== null ? '更新' : '新增'}</button>{editingExpenseIndex !== null && <button onClick={() => { setEditingExpenseIndex(null); setExpenseForm({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}</div>
                             </div>
-                            <div className="space-y-2">
-                                {settings.expenseTypes.map((item, i) => {
-                                    const isObj = typeof item !== 'string';
-                                    const name = isObj ? item.name : item;
-                                    const company = isObj ? item.defaultCompany : '-';
-                                    const amount = isObj ? item.defaultAmount : '-';
-                                    return (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                            <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">預設: {company}</span><span className="bg-white px-2 py-1 rounded border">${amount}</span></div></div>
-                                            <div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <div className="space-y-2">{settings.expenseTypes.map((item, i) => { const isObj = typeof item !== 'string'; return (<div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200"><div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{isObj ? item.name : item}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">預設: {isObj ? item.defaultCompany : '-'}</span><span className="bg-white px-2 py-1 rounded border">${isObj ? item.defaultAmount : '-'}</span></div></div><div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div></div>); })}</div>
                         </div>
-
-                        {/* 收款公司 (含編輯) */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房</h3>
-                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
-                                <input value={compInput} onChange={e => setCompInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingCompIndex !== null ? "Edit Company Name..." : "Add New Company..."} />
-                                <button onClick={handleCompanySubmit} className={`text-white px-3 rounded text-xs ${editingCompIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingCompIndex !== null ? 'Update' : 'Add'}</button>
-                                {editingCompIndex !== null && <button onClick={() => { setEditingCompIndex(null); setCompInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.expenseCompanies.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
-                                        {c} 
-                                        <button onClick={() => editCompany(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
-                                        <button onClick={() => removeItem('expenseCompanies', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
-                                    </span>
-                                ))}
-                            </div>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}><input value={compInput} onChange={e => setCompInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingCompIndex !== null ? "Edit..." : "Add..."} /><button onClick={handleCompanySubmit} className={`text-white px-3 rounded text-xs ${editingCompIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingCompIndex !== null ? 'Update' : 'Add'}</button>{editingCompIndex !== null && <button onClick={() => { setEditingCompIndex(null); setCompInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}</div>
+                            <div className="flex flex-wrap gap-2 mt-3">{settings.expenseCompanies.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">{c} <button onClick={() => {setCompInput(settings.expenseCompanies[i]); setEditingCompIndex(i);}} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button><button onClick={() => removeItem('expenseCompanies', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button></span>))}</div>
                         </div>
                     </div>
                 )}
 
-                {/* 5. CrossBorder (中港業務 - 含編輯功能) */}
+                {/* 6. CrossBorder */}
                 {activeTab === 'crossborder' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Globe size={18} className="mr-2"/> 代辦項目與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingCbIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">項目名稱</label><input value={cbForm.name} onChange={e => setCbForm({...cbForm, name: e.target.value})} className="w-full text-sm p-2 border rounded" placeholder="項目名"/></div>
-                                <div>
-                                    <label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構 (選單)</label>
-                                    <select value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded bg-white">
-                                        <option value="">-- 選擇 --</option>
-                                        {settings.cbInstitutions.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
+                                <div><label className="text-[10px] font-bold text-slate-400 block mb-1">辦理機構</label><select value={cbForm.defaultInst} onChange={e => setCbForm({...cbForm, defaultInst: e.target.value})} className="w-full text-sm p-2 border rounded bg-white"><option value="">-- 選擇 --</option>{settings.cbInstitutions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 <div><label className="text-[10px] font-bold text-slate-400 block mb-1">收費 / 天數</label><div className="flex gap-1"><input type="number" value={cbForm.defaultFee} onChange={e => setCbForm({...cbForm, defaultFee: e.target.value})} className="w-2/3 text-sm p-2 border rounded" placeholder="$"/><input type="text" value={cbForm.defaultDays} onChange={e => setCbForm({...cbForm, defaultDays: e.target.value})} className="w-1/3 text-sm p-2 border rounded text-center" placeholder="天"/></div></div>
-                                <div className="flex gap-1">
-                                    <button onClick={handleCbSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingCbIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingCbIndex !== null ? '更新' : '新增'}</button>
-                                    {editingCbIndex !== null && <button onClick={() => { setEditingCbIndex(null); setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}
-                                </div>
+                                <div className="flex gap-1"><button onClick={handleCbSubmit} className={`flex-1 text-white py-2 rounded text-xs font-bold ${editingCbIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{editingCbIndex !== null ? '更新' : '新增'}</button>{editingCbIndex !== null && <button onClick={() => { setEditingCbIndex(null); setCbForm({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' }); }} className="px-2 bg-gray-300 rounded text-xs">X</button>}</div>
                             </div>
-                            <div className="space-y-2">
-                                {(settings.cbItems || []).map((item, i) => {
-                                    const isObj = typeof item !== 'string';
-                                    const name = isObj ? item.name : item;
-                                    const inst = isObj ? item.defaultInst : '-';
-                                    const fee = isObj ? item.defaultFee : '-';
-                                    return (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200">
-                                             <div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{name}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">{inst}</span><span className="bg-white px-2 py-1 rounded border">${fee}</span></div></div>
-                                            <div className="flex gap-2"><button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <div className="space-y-2">{(settings.cbItems || []).map((item, i) => { const isObj = typeof item !== 'string'; return (<div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200"><div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{isObj ? item.name : item}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">{isObj ? item.defaultInst : '-'}</span><span className="bg-white px-2 py-1 rounded border">${isObj ? item.defaultFee : '-'}</span></div></div><div className="flex gap-2"><button onClick={() => editCbItem(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('cbItems', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div></div>); })}</div>
                         </div>
-
-                        {/* 辦理機構 (含編輯) */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">常用辦理機構</h3>
-                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingInstIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
-                                <input value={instInput} onChange={e => setInstInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingInstIndex !== null ? "Edit Institution..." : "Add Institution..."} />
-                                <button onClick={handleInstSubmit} className={`text-white px-3 rounded text-xs ${editingInstIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingInstIndex !== null ? 'Update' : 'Add'}</button>
-                                {editingInstIndex !== null && <button onClick={() => { setEditingInstIndex(null); setInstInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {settings.cbInstitutions.map((c, i) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
-                                        {c} 
-                                        <button onClick={() => editInst(i)} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
-                                        <button onClick={() => removeItem('cbInstitutions', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
-                                    </span>
-                                ))}
-                            </div>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingInstIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}><input value={instInput} onChange={e => setInstInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingInstIndex !== null ? "Edit..." : "Add..."} /><button onClick={handleInstSubmit} className={`text-white px-3 rounded text-xs ${editingInstIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingInstIndex !== null ? 'Update' : 'Add'}</button>{editingInstIndex !== null && <button onClick={() => { setEditingInstIndex(null); setInstInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}</div>
+                            <div className="flex flex-wrap gap-2 mt-3">{settings.cbInstitutions.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">{c} <button onClick={() => {setInstInput(settings.cbInstitutions[i]); setEditingInstIndex(i);}} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button><button onClick={() => removeItem('cbInstitutions', i)} className="text-slate-400 hover:text-red-500"><X size={10}/></button></span>))}</div>
                         </div>
                     </div>
                 )}
 
-                {/* 6. Users (系統用戶) */}
+                {/* 7. Users */}
                 {activeTab === 'users' && (
-                    <div className="space-y-6">
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限</h3>
-                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6 text-xs text-blue-700">
-                                <strong>說明：</strong> 設定 Email 與權限。新用戶需在登入頁使用 Google 登入或相同 Email 註冊。<br/>
-                                (系統會比對登入者的 Email 是否在下方清單中)
-                            </div>
-                            <div className="flex gap-2 mb-6">
-                                <input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="flex-1 border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100" placeholder="輸入用戶 Email..."/>
-                                <button onClick={handleAddUser} className="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700 shadow-sm">新增授權</button>
-                            </div>
-                            <div className="space-y-3">
-                                {systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (
-                                    <div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div>
-                                                <span className="text-sm font-bold text-slate-700">{u.email}</span>
-                                            </div>
-                                            <button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white">移除</button>
-                                        </div>
-                                        <div className="flex gap-4 pl-9 text-xs">
-                                            {[
-                                                { k: 'inventory', label: '車庫' },
-                                                { k: 'business', label: '業務' },
-                                                { k: 'database', label: '資料庫' },
-                                                { k: 'settings', label: '設定' }
-                                            ].map(mod => (
-                                                <label key={mod.k} className="flex items-center cursor-pointer select-none">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={u.modules?.includes(mod.k)} 
-                                                        onChange={() => toggleUserPermission(u.email, mod.k)}
-                                                        className="mr-1.5 accent-blue-600"
-                                                    />
-                                                    <span className={u.modules?.includes(mod.k) ? 'text-slate-700 font-bold' : 'text-slate-400'}>{mod.label}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限</h3>
+                        <div className="flex gap-2 mb-6"><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="flex-1 border rounded px-3 py-2 text-sm outline-none" placeholder="輸入用戶 Email..."/><button onClick={handleAddUser} className="bg-blue-600 text-white px-4 rounded text-sm font-bold hover:bg-blue-700 shadow-sm">新增授權</button></div>
+                        <div className="space-y-3">{systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (<div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100"><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-3"><div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div><span className="text-sm font-bold text-slate-700">{u.email}</span></div><button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white">移除</button></div><div className="flex gap-4 pl-9 text-xs">{[{k:'inventory',l:'車庫'},{k:'business',l:'業務'},{k:'database',l:'資料庫'},{k:'settings',l:'設定'}].map(mod=>(<label key={mod.k} className="flex items-center cursor-pointer select-none"><input type="checkbox" checked={u.modules?.includes(mod.k)} onChange={()=>toggleUserPermission(u.email, mod.k)} className="mr-1.5 accent-blue-600"/><span className={u.modules?.includes(mod.k)?'text-slate-700 font-bold':'text-slate-400'}>{mod.l}</span></label>))}</div></div>))}</div>
                     </div>
                 )}
 
-                {/* 7. Backup & Restore (雲端+本地) */}
+                {/* 8. Backup */}
                 {activeTab === 'backup' && (
-                    <div className="space-y-6">
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
-                            
-                            {/* 雲端備份控制 */}
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
-                                <h4 className="font-bold text-blue-800 text-sm mb-2">雲端自動備份 (Firebase Storage)</h4>
-                                <div className="flex items-center gap-4 mb-3">
-                                    <select value={backupConfig.frequency} onChange={e => setBackupConfig({...backupConfig, frequency: e.target.value as any})} className="text-xs p-1 border rounded">
-                                        <option value="manual">手動</option>
-                                        <option value="daily">每日</option>
-                                        <option value="weekly">每週</option>
-                                        <option value="monthly">每月</option>
-                                    </select>
-                                    <label className="flex items-center text-xs gap-1">
-                                        <input type="checkbox" checked={backupConfig.autoCloud} onChange={e => setBackupConfig({...backupConfig, autoCloud: e.target.checked})} className="accent-blue-600"/>
-                                        啟用自動上傳
-                                    </label>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <p className="text-xs text-blue-600/70">上次備份: <span className="font-mono font-bold">{backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}</span></p>
-                                    <div className="flex gap-2">
-                                        <button onClick={handleSaveBackupConfig} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">儲存設定</button>
-                                        <button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">
-                                            {isBackingUp ? <Loader2 className="animate-spin" size={12}/> : '立即備份'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* 本地檔案操作 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col justify-between">
-                                    <div>
-                                        <h4 className="font-bold text-gray-800 mb-2">匯出本地檔案 (Export)</h4>
-                                        <p className="text-xs text-gray-500 mb-4">下載完整設定檔 (.json)。</p>
-                                    </div>
-                                    <button onClick={handleExport} className="w-full bg-slate-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-slate-700">下載</button>
-                                </div>
-                                <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between">
-                                    <div>
-                                        <h4 className="font-bold text-amber-800 mb-2">匯入還原 (Import)</h4>
-                                        <p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p>
-                                    </div>
-                                    <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">
-                                        選擇檔案
-                                        <input type="file" accept=".json" className="hidden" onChange={handleImport} />
-                                    </label>
-                                </div>
-                            </div>
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
+                            <h4 className="font-bold text-blue-800 text-sm mb-2">雲端自動備份</h4>
+                            <div className="flex items-center gap-4 mb-3"><select value={backupConfig.frequency} onChange={e => setBackupConfig({...backupConfig, frequency: e.target.value as any})} className="text-xs p-1 border rounded"><option value="manual">手動</option><option value="daily">每日</option><option value="weekly">每週</option><option value="monthly">每月</option></select><label className="flex items-center text-xs gap-1"><input type="checkbox" checked={backupConfig.autoCloud} onChange={e => setBackupConfig({...backupConfig, autoCloud: e.target.checked})} className="accent-blue-600"/> 啟用自動上傳</label></div>
+                            <div className="flex justify-between items-center"><p className="text-xs text-blue-600/70">上次備份: <span className="font-mono font-bold">{backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}</span></p><div className="flex gap-2"><button onClick={handleSaveBackupConfig} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">儲存設定</button><button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">{isBackingUp ? <Loader2 className="animate-spin" size={12}/> : '立即備份'}</button></div></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col justify-between"><div><h4 className="font-bold text-gray-800 mb-2">匯出本地檔案</h4><p className="text-xs text-gray-500 mb-4">下載 .json 完整備份。</p></div><button onClick={handleExport} className="w-full bg-slate-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-slate-700">下載</button></div>
+                            <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between"><div><h4 className="font-bold text-amber-800 mb-2">匯入還原</h4><p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p></div><label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">選擇檔案<input type="file" accept=".json" className="hidden" onChange={handleImport} /></label></div>
                         </div>
                     </div>
                 )}
