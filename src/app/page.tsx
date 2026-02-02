@@ -1520,12 +1520,13 @@ type CrossBorderViewProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 6. Cross Border Module (v7.2 完整展開版：提醒標註 + 詳情列印) ★★★
+// ★★★ 6. Cross Border Module (v7.3 修復版：解決 dbEntries 類型錯誤) ★★★
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
-    inventory, settings, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
+    inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
 }: {
-    inventory: Vehicle[], settings: SystemSettings, activeCbVehicleId: string | null, setActiveCbVehicleId: (id: string | null) => void,
+    // ★★★ 這裡加入了 dbEntries: any[] 以匹配主程式的呼叫 ★★★
+    inventory: Vehicle[], settings: SystemSettings, dbEntries: any[], activeCbVehicleId: string | null, setActiveCbVehicleId: (id: string | null) => void,
     setEditingVehicle: (v: Vehicle) => void, addCbTask: (vid: string, t: CrossBorderTask) => void, updateCbTask: (vid: string, t: CrossBorderTask) => void, deleteCbTask: (vid: string, tid: string) => void, addPayment: (vid: string, p: Payment) => void, deletePayment: (vid: string, pid: string) => void
 }) => {
     
@@ -1542,7 +1543,7 @@ const CrossBorderView = ({
     const [expandedPaymentTaskId, setExpandedPaymentTaskId] = useState<string | null>(null);
     const [newPayAmount, setNewPayAmount] = useState('');
 
-    // ★★★ 新增：詳情報表狀態 (用於顯示彈窗) ★★★
+    // 詳情報表狀態
     const [reportModalData, setReportModalData] = useState<{ title: string, type: 'expired' | 'soon', items: any[] } | null>(null);
 
     // --- 資料準備 ---
@@ -1586,7 +1587,7 @@ const CrossBorderView = ({
     const filteredVehicles = cbVehicles.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
     const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    // --- 列印功能 (開新視窗列印) ---
+    // --- 列印功能 ---
     const handlePrint = () => {
         if (!reportModalData) return;
         const printWindow = window.open('', '_blank');
@@ -1667,7 +1668,7 @@ const CrossBorderView = ({
         );
     };
 
-    // --- 操作邏輯 (新增、編輯、付款) ---
+    // --- 操作邏輯 ---
     const openAddModal = () => { 
         if (!activeCar) { alert("請先選擇車輛"); return; } 
         const initialItem = serviceOptions[0] || '代辦服務'; 
@@ -1675,13 +1676,11 @@ const CrossBorderView = ({
         setNewTaskForm({ date: new Date().toISOString().split('T')[0], item: initialItem, fee: defaults.fee, days: defaults.days, note: '' }); 
         setIsAddModalOpen(true); 
     };
-    
     const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
         const newItem = e.target.value; 
         const defaults = findItemDefaults(newItem); 
         setNewTaskForm(prev => ({ ...prev, item: newItem, fee: defaults.fee, days: defaults.days })); 
     };
-    
     const handleAddTask = () => { 
         if (!activeCar) return; 
         if (!newTaskForm.item) { alert("請選擇服務項目"); return; } 
@@ -1689,22 +1688,18 @@ const CrossBorderView = ({
         addCbTask(activeCar.id!, newTask); 
         setIsAddModalOpen(false); 
     };
-    
     const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
-    
     const handleEditItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
         const newItem = e.target.value; 
         const defaults = findItemDefaults(newItem); 
         setEditForm(prev => ({ ...prev, item: newItem, fee: Number(defaults.fee) || 0, days: defaults.days })); 
     };
-    
     const saveEdit = () => { 
         if (!activeCar || !editingTaskId || !editForm.item) return; 
         const updatedTask = { ...editForm, fee: Number(editForm.fee) || 0, id: editingTaskId } as CrossBorderTask; 
         updateCbTask(activeCar.id!, updatedTask); 
         setEditingTaskId(null); 
     };
-    
     const handleAddPartPayment = (task: CrossBorderTask) => { 
         const amount = Number(newPayAmount); 
         if (!activeCar || amount <= 0) return; 
@@ -1715,7 +1710,7 @@ const CrossBorderView = ({
     return (
         <div className="flex flex-col h-full gap-4 relative">
             
-            {/* ★★★ 提醒詳情與列印 Modal (v7.2 新增) ★★★ */}
+            {/* ★★★ 提醒詳情與列印 Modal ★★★ */}
             {reportModalData && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setReportModalData(null)}>
                     <div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90%]" onClick={e => e.stopPropagation()}>
@@ -1724,7 +1719,6 @@ const CrossBorderView = ({
                             <button onClick={() => setReportModalData(null)} className="p-1 hover:bg-white/20 rounded"><X size={20}/></button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-                            {/* A4 紙張效果預覽區 */}
                             <div className="bg-white shadow-md border border-slate-200 p-8 min-h-[500px]">
                                 <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
                                     <h1 className="text-2xl font-bold mb-1">Gold Land Auto Limited</h1>
@@ -1763,7 +1757,7 @@ const CrossBorderView = ({
                 </div>
             )}
 
-            {/* Modal: 新增紀錄 (保持不變) */}
+            {/* Modal: 新增紀錄 */}
             {isAddModalOpen && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
                     <div className="bg-white w-80 p-5 rounded-xl shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
@@ -1800,7 +1794,7 @@ const CrossBorderView = ({
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{expiredItems.length} <span className="text-sm font-normal text-red-300/50">項</span></div>
                         </div>
                         <div className="flex gap-1">
-                            {/* ★★★ 提醒詳情按鈕 ★★★ */}
+                            {/* 提醒詳情按鈕 */}
                             {expiredItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '已過期項目報表 (Expired Items)', type: 'expired', items: expiredItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
                             {expiredItems.length > 0 && (<button onClick={() => setShowExpired(!showExpired)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showExpired ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
                         </div>
@@ -1817,7 +1811,7 @@ const CrossBorderView = ({
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{soonItems.length} <span className="text-sm font-normal text-amber-300/50">項</span></div>
                         </div>
                         <div className="flex gap-1">
-                             {/* ★★★ 提醒詳情按鈕 ★★★ */}
+                            {/* 提醒詳情按鈕 */}
                             {soonItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '即將到期報表 (Upcoming Items)', type: 'soon', items: soonItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
                             {soonItems.length > 0 && (<button onClick={() => setShowSoon(!showSoon)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showSoon ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
                         </div>
