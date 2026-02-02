@@ -5367,7 +5367,13 @@ const CreateDocModule = ({ inventory, openPrintPreview }: { inventory: Vehicle[]
         )}
 
           {/* Create Doc Tab */}
-          {activeTab === 'create_doc' && <CreateDocModule />}
+          {activeTab === 'create_doc' && (
+              <CreateDocModule 
+                  inventory={inventory} 
+                  openPrintPreview={openPrintPreview} 
+              />
+          )}
+          
           {/* ★★★ 新增：資料庫模塊渲染 ★★★ */}
           {activeTab === 'database' && <DatabaseModule 
           db={db}
