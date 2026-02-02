@@ -1991,6 +1991,222 @@ const CrossBorderView = ({
         </div>
     );
 };
+
+// ------------------------------------------------------------------
+// ★★★ 8. Smart Notification Center (首頁右上角：全域提醒與列印) ★★★
+// ------------------------------------------------------------------
+const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[], settings: SystemSettings }) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    // --- 1. 全域掃描邏輯 ---
+    // 這裡會掃描「所有車輛」的「所有證件」，包含一般與中港
+    const useScanReminders = () => {
+        const today = new Date();
+        const alerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number }[] = [];
+        
+        // 設定讀取 (預設 30 天)
+        const daysThreshold = settings.reminders?.daysBefore || 30;
+
+        inventory.forEach(car => {
+            // A. 一般證件 (牌費、保險)
+            const genDocs = [
+                { key: 'dateLicenceFee', label: '車輛牌費 (License)' },
+                { key: 'dateInsurance', label: '車輛保險 (Insurance)' }
+            ];
+            genDocs.forEach(d => {
+                const dateVal = (car as any)[d.key];
+                if (dateVal) {
+                    const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    if (diff <= daysThreshold) {
+                        alerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'General', item: d.label, date: dateVal, days: diff });
+                    }
+                }
+            });
+
+            // B. 中港證件 (如果有啟用)
+            if (car.crossBorder?.isEnabled) {
+                const cbDocs = { 
+                    dateApproval: '批文卡', dateClosedRoad: '禁區紙', dateMainlandLicense: '內地行駛證',
+                    dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateHkInspection: '香港驗車(中港)'
+                };
+                Object.entries(cbDocs).forEach(([key, label]) => {
+                    const dateVal = (car.crossBorder as any)?.[key];
+                    if (dateVal) {
+                        const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        if (diff <= daysThreshold) {
+                            alerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'CrossBorder', item: label, date: dateVal, days: diff });
+                        }
+                    }
+                });
+            }
+        });
+
+        // 排序：過期的在前，快到期的在後
+        return alerts.sort((a, b) => a.days - b.days);
+    };
+
+    const alerts = useScanReminders();
+    const expiredCount = alerts.filter(a => a.days < 0).length;
+    const warningCount = alerts.length - expiredCount;
+
+    // --- 2. 列印功能 ---
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>Alert Report - Gold Land Auto</title>
+                        <style>
+                            body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 40px; color: #333; }
+                            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+                            h1 { margin: 0 0 5px 0; font-size: 24px; }
+                            p { margin: 0; color: #666; font-size: 12px; }
+                            table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+                            th, td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; }
+                            th { background-color: #f8f9fa; font-weight: bold; color: #555; }
+                            .section-title { font-size: 14px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #1e40af; padding-left: 8px; }
+                            .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+                            .tag-general { background: #e0f2fe; color: #0369a1; }
+                            .tag-cb { background: #f3e8ff; color: #7e22ce; }
+                            .danger { color: #dc2626; font-weight: bold; }
+                            .warning { color: #d97706; font-weight: bold; }
+                            .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #999; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="header">
+                            <h1>Gold Land Auto Limited</h1>
+                            <p>EXPIRY REMINDER REPORT (到期事項監控報表)</p>
+                            <p>Generated: ${new Date().toLocaleString()}</p>
+                        </div>
+
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th width="15%">類別 (Type)</th>
+                                    <th width="20%">車牌 (Plate)</th>
+                                    <th width="30%">到期項目 (Item)</th>
+                                    <th width="20%">到期日 (Date)</th>
+                                    <th width="15%" style="text-align:right">狀態 (Status)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${alerts.map(it => `
+                                    <tr>
+                                        <td><span class="tag ${it.type === 'General' ? 'tag-general' : 'tag-cb'}">${it.type === 'General' ? '車輛文件' : '中港業務'}</span></td>
+                                        <td style="font-family:monospace; font-weight:bold;">${it.regMark}</td>
+                                        <td>${it.item}</td>
+                                        <td style="font-family:monospace;">${it.date}</td>
+                                        <td style="text-align:right" class="${it.days < 0 ? 'danger' : 'warning'}">
+                                            ${it.days < 0 ? `已過期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        
+                        <div style="margin-top: 20px; font-size: 12px;">
+                            <strong>Summary:</strong> 
+                            <span style="color:#dc2626; margin-right:15px;">Expired: ${expiredCount}</span>
+                            <span style="color:#d97706;">Expiring Soon: ${warningCount}</span>
+                        </div>
+                        <div class="footer">Confidential System Report</div>
+                        <script>window.onload = function() { window.print(); window.close(); }</script>
+                    </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+    };
+
+    return (
+        <>
+            {/* 1. Header Button (鈴鐺) */}
+            <button 
+                onClick={() => setIsOpen(true)} 
+                className="relative p-2 rounded-full hover:bg-slate-100 transition-colors group"
+                title="到期事項提醒中心"
+            >
+                <Bell size={20} className={`transition-colors ${alerts.length > 0 ? 'text-slate-600' : 'text-slate-400'}`} />
+                {alerts.length > 0 && (
+                    <span className={`absolute top-0 right-0 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white border-2 border-white shadow-sm ${expiredCount > 0 ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`}>
+                        {alerts.length > 9 ? '9+' : alerts.length}
+                    </span>
+                )}
+            </button>
+
+            {/* 2. Detail Modal (詳情彈窗) */}
+            {isOpen && (
+                <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsOpen(false)}>
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                        
+                        {/* Title Bar */}
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    <Bell size={20} className={expiredCount > 0 ? "text-red-500" : "text-amber-500"} />
+                                    提醒中心 (Notification Center)
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    共發現 <span className="font-bold text-red-500">{expiredCount}</span> 個過期項目，<span className="font-bold text-amber-500">{warningCount}</span> 個即將到期。
+                                </p>
+                            </div>
+                            <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                        </div>
+
+                        {/* List Content */}
+                        <div className="flex-1 overflow-y-auto p-2 bg-slate-100/50">
+                            {alerts.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                                    <CheckCircle size={48} className="mb-4 text-green-500/50"/>
+                                    <p>目前沒有任何急需處理的項目</p>
+                                    <p className="text-xs">系統運作良好</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {alerts.map(item => (
+                                        <div key={item.id} className={`p-3 rounded-xl border flex justify-between items-center bg-white shadow-sm transition-transform hover:scale-[1.01] ${item.days < 0 ? 'border-red-100 border-l-4 border-l-red-500' : 'border-amber-100 border-l-4 border-l-amber-500'}`}>
+                                            <div className="flex items-center gap-4">
+                                                <div className={`p-2 rounded-lg ${item.type === 'General' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+                                                    {item.type === 'General' ? <FileText size={18}/> : <Globe size={18}/>}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-sm text-slate-800 font-mono">{item.regMark}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold">{item.type === 'General' ? '車務' : '中港'}</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-600 font-medium">{item.item}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={`text-sm font-bold font-mono ${item.days < 0 ? 'text-red-500' : 'text-amber-500'}`}>
+                                                    {item.days < 0 ? `過期 ${Math.abs(item.days)} 天` : `剩 ${item.days} 天`}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400 font-mono">{item.date}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-4 border-t border-slate-100 bg-white flex justify-end gap-3">
+                            <button onClick={() => setIsOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">關閉</button>
+                            {alerts.length > 0 && (
+                                <button onClick={handlePrint} className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 shadow-lg shadow-slate-200 flex items-center transition-all active:scale-95">
+                                    <Printer size={16} className="mr-2"/> 列印報表 (Print Report)
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+};
+
 // ------------------------------------------------------------------
 // ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
 // ------------------------------------------------------------------
@@ -4744,8 +4960,10 @@ const CreateDocModule = () => {
           {/* Dashboard Tab - 完整修復版 */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
-              <h2 className="text-2xl font-bold text-slate-800 flex-none">業務儀表板</h2>
-              
+                <div className="flex justify-between items-center flex-none">
+                 <h2 className="text-2xl font-bold text-slate-800">業務儀表板</h2>
+                 <SmartNotificationCenter inventory={inventory} settings={settings} />
+                </div>
               {/* 1. 財務卡片 (Financial Cards) */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-none">
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><p className="text-xs text-gray-500 uppercase">庫存總值</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalStockValue)}</p></div>
