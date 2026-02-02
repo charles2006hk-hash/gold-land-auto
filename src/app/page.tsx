@@ -5085,7 +5085,7 @@ const CreateDocModule = ({
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
-          {/* Cross Border Tab - 修正版：解決 'cb' implicit any 類型錯誤 */}
+          {/* Cross Border Tab - 修正版：解決 Firebase function 錯誤 */}
           {activeTab === 'cross_border' && (
             <div className="flex-1 overflow-y-auto">
               <CrossBorderView 
@@ -5095,10 +5095,34 @@ const CreateDocModule = ({
                 activeCbVehicleId={activeCbVehicleId}
                 setActiveCbVehicleId={setActiveCbVehicleId}
                 setEditingVehicle={setEditingVehicle}
-                // 定義操作函數 (加入 :any 解決類型報錯)
-                addCbTask={(vid, task) => updateSubItem(vid, 'crossBorder', (cb: any) => ({ ...cb, tasks: [...(cb.tasks || []), task] }))}
-                updateCbTask={(vid, task) => updateSubItem(vid, 'crossBorder', (cb: any) => ({ ...cb, tasks: (cb.tasks || []).map((t: any) => t.id === task.id ? task : t) }))}
-                deleteCbTask={(vid, taskId) => updateSubItem(vid, 'crossBorder', (cb: any) => ({ ...cb, tasks: (cb.tasks || []).filter((t: any) => t.id !== taskId) }))}
+                
+                // ★★★ 修正 1: 新增項目 (Add) ★★★
+                addCbTask={(vid, task) => {
+                    const v = inventory.find(i => i.id === vid);
+                    if (v) {
+                        const newTasks = [...(v.crossBorder?.tasks || []), task];
+                        updateSubItem(vid, 'crossBorder', newTasks);
+                    }
+                }}
+                
+                // ★★★ 修正 2: 更新項目 (Update) ★★★
+                updateCbTask={(vid, task) => {
+                    const v = inventory.find(i => i.id === vid);
+                    if (v) {
+                        const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === task.id ? task : t);
+                        updateSubItem(vid, 'crossBorder', newTasks);
+                    }
+                }}
+                
+                // ★★★ 修正 3: 刪除項目 (Delete) ★★★
+                deleteCbTask={(vid, taskId) => {
+                    const v = inventory.find(i => i.id === vid);
+                    if (v) {
+                        const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
+                        updateSubItem(vid, 'crossBorder', newTasks);
+                    }
+                }}
+                
                 addPayment={addPayment}
                 deletePayment={deletePayment}
               />
