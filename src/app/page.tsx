@@ -1599,7 +1599,7 @@ const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 重構版 v5.0：智能圖庫模組 (含庫存配對 + 自動填寫) ★★★
+// ★★★ 重構版 v6.0：智能圖庫模組 (新增首圖大預覽模式) ★★★
 // ------------------------------------------------------------------
 const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }: any) => {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
@@ -1607,19 +1607,16 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     
     // 選取與操作狀態
     const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>([]);
-    const [isProcessing, setIsProcessing] = useState(false);
-    
-    // ★★★ 新增：選中的庫存車輛 ID ★★★
-    const [targetVehicleId, setTargetVehicleId] = useState<string>('');
+    const [targetVehicleId, setTargetVehicleId] = useState<string>(''); // 配對庫存ID
 
-    // 工作台表單 (歸類用)
+    // 工作台表單
     const [classifyForm, setClassifyForm] = useState({
         make: '', model: '', year: new Date().getFullYear().toString(),
         color: '', type: '外觀 (Exterior)' as '外觀 (Exterior)'|'內飾 (Interior)',
         tags: ''
     });
 
-    // 圖庫檢視狀態
+    // 檢視狀態
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -1639,14 +1636,15 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
     }, [db, staffId, appId]);
 
-    // 2. 智能分組與排序邏輯
+    // 2. 智能分組邏輯
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
-        const linkedItems = mediaItems.filter(i => i.status === 'linked');
-
-        const filteredItems = linkedItems.filter(item => {
+        
+        // 篩選與搜尋
+        const filteredItems = mediaItems.filter(i => {
+            if (i.status !== 'linked') return false;
             if (!searchQuery) return true;
-            const searchStr = `${item.aiData?.year} ${item.aiData?.make} ${item.aiData?.model} ${item.aiData?.color}`.toLowerCase();
+            const searchStr = `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase();
             return searchStr.includes(searchQuery.toLowerCase());
         });
 
@@ -1655,6 +1653,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             let groupTitle = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類車輛';
             let status = 'Unknown';
 
+            // 嘗試匹配庫存狀態
             if (item.relatedVehicleId) {
                 const car = inventory.find((v:any) => v.id === item.relatedVehicleId);
                 if (car) {
@@ -1674,6 +1673,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             groups[groupKey].items.push(item);
         });
 
+        // 排序：在庫優先 > 預定 > 已售 > 其他
         return Object.values(groups).sort((a, b) => {
             const getWeight = (s: string) => {
                 if (s === 'In Stock') return 1;
@@ -1688,7 +1688,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
     }, [mediaItems, inventory, searchQuery]);
 
-    // 3. 上傳功能
+    // 3. 上傳與歸檔邏輯
     const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !storage) return;
@@ -1710,27 +1710,17 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         setUploading(false);
     };
 
-    // 4. 執行歸檔 (升級版：支援選取關聯)
     const handleClassify = async () => {
         if (!db || selectedInboxIds.length === 0) return;
         if (!classifyForm.make || !classifyForm.model) { alert("請填寫廠牌與型號"); return; }
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const batch = writeBatch(db);
         
-        // 優先使用手動選擇的車輛 ID，若無則嘗試自動匹配
         let finalRelatedId = targetVehicleId;
         if (!finalRelatedId) {
-            const matchCar = inventory.find((v:any) => 
-                v.make === classifyForm.make && 
-                v.model === classifyForm.model && 
-                v.year == classifyForm.year && 
-                v.colorExt === classifyForm.color
-            );
+            const matchCar = inventory.find((v:any) => v.make === classifyForm.make && v.model === classifyForm.model && v.year == classifyForm.year && v.colorExt === classifyForm.color);
             if (matchCar) finalRelatedId = matchCar.id;
         }
-
-        // 如果有關聯車輛，同步更新車輛本身的 photos 欄位 (可選，視需求而定)
-        // 這裡我們主要更新 media_library 的指向
 
         selectedInboxIds.forEach(id => {
             const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
@@ -1743,7 +1733,6 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
         await batch.commit();
         setSelectedInboxIds([]);
-        // 歸檔後重置選取的車輛，避免誤操作
         setTargetVehicleId('');
     };
 
@@ -1790,12 +1779,10 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                     <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">已選: {selectedInboxIds.length}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    
-                    {/* ★★★ 新增：庫存配對選擇器 ★★★ */}
+                    {/* 配對選擇器 */}
                     <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm">
                         <label className="text-xs font-bold text-blue-800 mb-1 block flex items-center">
-                            <Link size={12} className="mr-1"/> 
-                            配對現有庫存 (Link to Inventory)
+                            <Link size={12} className="mr-1"/> 配對庫存 (Link to Inventory)
                         </label>
                         <select 
                             value={targetVehicleId} 
@@ -1804,112 +1791,40 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                 setTargetVehicleId(vId);
                                 const v = inventory.find((i:any) => i.id === vId);
                                 if (v) {
-                                    // 自動填入表單
-                                    setClassifyForm(prev => ({
-                                        ...prev,
-                                        make: v.make || '',
-                                        model: v.model || '',
-                                        year: v.year || '',
-                                        color: v.colorExt || ''
-                                    }));
+                                    setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' }));
                                 }
                             }}
                             className="w-full p-2 text-xs border border-blue-200 rounded bg-white outline-none focus:ring-2 focus:ring-blue-300"
                         >
-                            <option value="">-- 手動輸入 / 不關聯 --</option>
-                            {inventory.map((v: Vehicle) => (
-                                <option key={v.id} value={v.id}>
-                                    {v.regMark || '(未出牌)'} - {v.make} {v.model} ({v.year})
-                                </option>
-                            ))}
+                            <option value="">-- 手動 / 不關聯 --</option>
+                            {inventory.map((v: Vehicle) => <option key={v.id} value={v.id}>{v.regMark || '(未出牌)'} - {v.make} {v.model}</option>)}
                         </select>
                     </div>
-
                     <div className="h-[1px] bg-slate-100 w-full"></div>
-
                     {/* 表單區 */}
                     <div className="space-y-3">
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase">Year</label>
-                            <input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-2 border rounded text-sm font-mono" placeholder="2026"/>
-                        </div>
+                        <div><label className="text-[10px] font-bold text-slate-500 uppercase">Year</label><input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-2 border rounded text-sm font-mono" placeholder="2026"/></div>
                         <div className="grid grid-cols-1 gap-3">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Make (車廠)</label>
-                                <input list="makeList" value={classifyForm.make} onChange={e => setClassifyForm({...classifyForm, make: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="選擇或輸入..."/>
-                                <datalist id="makeList">
-                                    {settings?.makes?.map((m:string) => <option key={m} value={m}/>)}
-                                </datalist>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Model (型號)</label>
-                                <input list="modelList" value={classifyForm.model} onChange={e => setClassifyForm({...classifyForm, model: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="選擇或輸入..."/>
-                                <datalist id="modelList">
-                                    {(settings?.models?.[classifyForm.make] || []).map((m:string) => <option key={m} value={m}/>)}
-                                </datalist>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Color (顏色)</label>
-                                <input list="colorList" value={classifyForm.color} onChange={e => setClassifyForm({...classifyForm, color: e.target.value})} className="w-full p-2 border rounded text-sm" placeholder="選擇或輸入..."/>
-                                <datalist id="colorList">
-                                    {settings?.colors?.map((c:string) => <option key={c} value={c}/>)}
-                                </datalist>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 uppercase">Type (部位)</label>
-                                <select value={classifyForm.type} onChange={e => setClassifyForm({...classifyForm, type: e.target.value as any})} className="w-full p-2 border rounded text-sm bg-slate-50">
-                                    <option>外觀 (Exterior)</option>
-                                    <option>內飾 (Interior)</option>
-                                    <option>細節 (Detail)</option>
-                                </select>
-                            </div>
+                            <div><label className="text-[10px] font-bold text-slate-500 uppercase">Make</label><input list="makeList" value={classifyForm.make} onChange={e => setClassifyForm({...classifyForm, make: e.target.value})} className="w-full p-2 border rounded text-sm"/><datalist id="makeList">{settings?.makes?.map((m:string) => <option key={m} value={m}/>)}</datalist></div>
+                            <div><label className="text-[10px] font-bold text-slate-500 uppercase">Model</label><input list="modelList" value={classifyForm.model} onChange={e => setClassifyForm({...classifyForm, model: e.target.value})} className="w-full p-2 border rounded text-sm"/><datalist id="modelList">{(settings?.models?.[classifyForm.make] || []).map((m:string) => <option key={m} value={m}/>)}</datalist></div>
+                            <div><label className="text-[10px] font-bold text-slate-500 uppercase">Color</label><input list="colorList" value={classifyForm.color} onChange={e => setClassifyForm({...classifyForm, color: e.target.value})} className="w-full p-2 border rounded text-sm"/><datalist id="colorList">{settings?.colors?.map((c:string) => <option key={c} value={c}/>)}</datalist></div>
+                            <div><label className="text-[10px] font-bold text-slate-500 uppercase">Type</label><select value={classifyForm.type} onChange={e => setClassifyForm({...classifyForm, type: e.target.value as any})} className="w-full p-2 border rounded text-sm bg-slate-50"><option>外觀 (Exterior)</option><option>內飾 (Interior)</option><option>細節 (Detail)</option></select></div>
                         </div>
                     </div>
-                    
-                    <button 
-                        onClick={() => {
-                            if(inventory.length > 0) {
-                                const randomCar = inventory[Math.floor(Math.random() * inventory.length)];
-                                setClassifyForm({
-                                    make: randomCar.make, model: randomCar.model, year: randomCar.year, color: randomCar.colorExt, type: '外觀 (Exterior)', tags: ''
-                                });
-                            }
-                        }}
-                        className="w-full mt-4 bg-purple-50 text-purple-700 py-2 rounded text-xs font-bold border border-purple-200 hover:bg-purple-100 flex items-center justify-center"
-                    >
-                        <Zap size={14} className="mr-1"/> 模擬 AI 快速填寫
-                    </button>
                 </div>
                 <div className="p-3 border-t bg-slate-50">
-                    <button 
-                        onClick={handleClassify}
-                        disabled={selectedInboxIds.length === 0}
-                        className="w-full bg-slate-800 text-white py-2.5 rounded-lg text-sm font-bold shadow hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                    >
-                        確認歸檔 <ArrowRight size={16} className="ml-2"/>
-                    </button>
+                    <button onClick={handleClassify} disabled={selectedInboxIds.length === 0} className="w-full bg-slate-800 text-white py-2.5 rounded-lg text-sm font-bold shadow hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">確認歸檔 <ArrowRight size={16} className="ml-2"/></button>
                 </div>
             </div>
 
             {/* --- 右欄：車輛圖庫 (Gallery) --- */}
             <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
                 <div className="p-3 border-b bg-slate-50 flex justify-between items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <ImageIcon size={18} className="text-slate-700"/>
-                        <h3 className="font-bold text-slate-700 hidden md:block">車輛圖庫</h3>
-                    </div>
-                    <div className="flex-1 relative max-w-xs">
-                        <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/>
-                        <input 
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="搜尋車型 / 年份..."
-                            className="w-full pl-8 pr-3 py-1.5 text-xs border rounded-full bg-white focus:ring-2 focus:ring-blue-200 outline-none"
-                        />
-                    </div>
+                    <h3 className="font-bold text-slate-700 flex items-center"><ImageIcon size={18} className="mr-2"/> 車輛圖庫</h3>
+                    <div className="flex-1 relative max-w-xs"><Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/><input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋車型 / 年份..." className="w-full pl-8 pr-3 py-1.5 text-xs border rounded-full bg-white focus:ring-2 focus:ring-blue-200 outline-none"/></div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50">
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {libraryGroups.map(group => {
                             const isExpanded = expandedGroupKey === group.key;
@@ -1917,6 +1832,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                             
                             return (
                                 <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-200 shadow-md' : 'hover:shadow-md'}`}>
+                                    {/* Header */}
                                     <div 
                                         className="p-3 flex justify-between items-center cursor-pointer bg-white border-b border-slate-100"
                                         onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}
@@ -1928,47 +1844,59 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                             </div>
                                             <div className="min-w-0">
                                                 <h4 className="font-bold text-sm text-slate-800 truncate">{group.title}</h4>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className={`w-2 h-2 rounded-full ${statusColor}`}></span>
-                                                    <span className="text-xs text-slate-500">{group.status}</span>
-                                                    <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 rounded-full">{group.items.length}張</span>
-                                                </div>
+                                                <div className="flex items-center gap-2 mt-1"><span className={`w-2 h-2 rounded-full ${statusColor}`}></span><span className="text-xs text-slate-500">{group.status}</span><span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 rounded-full">{group.items.length}張</span></div>
                                             </div>
                                         </div>
                                         <div className="text-slate-400">{isExpanded ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</div>
                                     </div>
 
+                                    {/* Expanded Content */}
                                     {isExpanded && (
-                                        <div className="p-4 bg-slate-50 animate-fade-in">
-                                            <div className="flex justify-between mb-3">
-                                                <div className="text-xs text-slate-500">點擊圖片放大預覽</div>
-                                                <button 
-                                                    onClick={(e) => { e.stopPropagation(); /* WhatsApp 分享 */ }}
-                                                    className="text-[10px] bg-green-500 text-white px-3 py-1 rounded-full flex items-center hover:bg-green-600"
-                                                >
-                                                    <Share2 size={10} className="mr-1"/> 分享此車圖片
-                                                </button>
+                                        <div className="animate-fade-in">
+                                            {/* ★★★ 首圖大預覽區 (Hero Section) ★★★ */}
+                                            <div 
+                                                className="w-full h-64 bg-gray-100 relative group-hero cursor-zoom-in border-b border-slate-200"
+                                                onClick={() => setPreviewImage(group.items[0]?.url)}
+                                            >
+                                                <img src={group.items[0]?.url} className="w-full h-full object-cover" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hero-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+                                                    <span className="text-white text-sm font-bold flex items-center bg-black/30 px-3 py-1 rounded-full backdrop-blur-sm border border-white/20">
+                                                        <Maximize2 size={16} className="mr-2"/> 查看高清大圖
+                                                    </span>
+                                                </div>
+                                                <div className="absolute top-3 right-3">
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); /* WhatsApp Logic */ }}
+                                                        className="bg-green-500 text-white px-3 py-1.5 rounded-lg shadow-lg flex items-center text-xs font-bold hover:bg-green-600 hover:scale-105 transition-all"
+                                                    >
+                                                        <Share2 size={14} className="mr-1"/> WhatsApp
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                                                {group.items.map(img => (
-                                                    <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-zoom-in border bg-white shadow-sm">
-                                                        <img 
-                                                            src={img.url} 
-                                                            className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                                                            onClick={() => setPreviewImage(img.url)}
-                                                        />
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
-                                                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            title="刪除"
-                                                        >
-                                                            <X size={10}/>
-                                                        </button>
-                                                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-[8px] text-white p-0.5 text-center truncate opacity-0 group-hover:opacity-100">
-                                                            {img.aiData?.type?.slice(0,2) || 'img'}
+
+                                            {/* 縮圖網格 */}
+                                            <div className="p-4 bg-slate-50">
+                                                <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                                                    {group.items.map(img => (
+                                                        <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-zoom-in border bg-white shadow-sm hover:ring-2 ring-blue-400 transition-all">
+                                                            <img 
+                                                                src={img.url} 
+                                                                className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                                                onClick={() => setPreviewImage(img.url)}
+                                                            />
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
+                                                                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                                title="刪除"
+                                                            >
+                                                                <X size={10}/>
+                                                            </button>
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-[8px] text-white p-0.5 text-center truncate opacity-0 group-hover:opacity-100">
+                                                                {img.aiData?.type?.slice(0,2) || 'img'}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
@@ -1982,9 +1910,9 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
             {/* --- Lightbox --- */}
             {previewImage && (
-                <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
+                <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200" onClick={() => setPreviewImage(null)}>
                     <img src={previewImage} className="max-w-full max-h-[90vh] rounded shadow-2xl object-contain" onClick={e => e.stopPropagation()}/>
-                    <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2" onClick={() => setPreviewImage(null)}><X size={32}/></button>
+                    <button className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors" onClick={() => setPreviewImage(null)}><X size={32}/></button>
                 </div>
             )}
 
