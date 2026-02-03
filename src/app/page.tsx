@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  Check, AlertCircle, Link,
+  Check, AlertCircle, Link, Share2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft // Added Upload, Image as ImageIcon, File
 } from 'lucide-react';
 
