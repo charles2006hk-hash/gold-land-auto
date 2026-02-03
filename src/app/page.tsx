@@ -11,7 +11,7 @@ import {
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
   Check, AlertCircle, Link, Share2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
-  Minimize2, Maximize2, Eye
+  Minimize2, Maximize2, Eye, Star
 } from 'lucide-react';
 
 
@@ -173,6 +173,7 @@ type MediaLibraryItem = {
     status: 'unassigned' | 'linked'; 
     relatedVehicleId?: string;
     createdAt: any;
+    isPrimary?: boolean;
     // ★★★ 新增：AI 結構化數據 (解決編譯錯誤的關鍵) ★★★
     aiData?: {
         make?: string;
@@ -1599,7 +1600,7 @@ const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 重構版 v6.0：智能圖庫模組 (新增首圖大預覽模式) ★★★
+// ★★★ 重構版 v7.0：智能圖庫模組 (自訂封面圖 + 封面置頂邏輯) ★★★
 // ------------------------------------------------------------------
 const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }: any) => {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
@@ -1607,7 +1608,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     
     // 選取與操作狀態
     const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>([]);
-    const [targetVehicleId, setTargetVehicleId] = useState<string>(''); // 配對庫存ID
+    const [targetVehicleId, setTargetVehicleId] = useState<string>('');
 
     // 工作台表單
     const [classifyForm, setClassifyForm] = useState({
@@ -1636,11 +1637,10 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
     }, [db, staffId, appId]);
 
-    // 2. 智能分組邏輯
+    // 2. 智能分組邏輯 (含封面圖置頂)
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
         
-        // 篩選與搜尋
         const filteredItems = mediaItems.filter(i => {
             if (i.status !== 'linked') return false;
             if (!searchQuery) return true;
@@ -1653,7 +1653,6 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             let groupTitle = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類車輛';
             let status = 'Unknown';
 
-            // 嘗試匹配庫存狀態
             if (item.relatedVehicleId) {
                 const car = inventory.find((v:any) => v.id === item.relatedVehicleId);
                 if (car) {
@@ -1673,7 +1672,16 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             groups[groupKey].items.push(item);
         });
 
-        // 排序：在庫優先 > 預定 > 已售 > 其他
+        // 對每個群組內部的圖片進行排序：★ isPrimary (封面) 的圖片排第一，其他按時間 ★
+        Object.values(groups).forEach(group => {
+            group.items.sort((a, b) => {
+                if (a.isPrimary) return -1; // a 是封面，排前面
+                if (b.isPrimary) return 1;  // b 是封面，排前面
+                return 0; // 其他保持原樣 (原本已按時間排序)
+            });
+        });
+
+        // 群組間的排序
         return Object.values(groups).sort((a, b) => {
             const getWeight = (s: string) => {
                 if (s === 'In Stock') return 1;
@@ -1688,7 +1696,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
     }, [mediaItems, inventory, searchQuery]);
 
-    // 3. 上傳與歸檔邏輯
+    // 3. 功能邏輯 (上傳、歸檔、設為封面)
     const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !storage) return;
@@ -1708,6 +1716,28 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             } catch (err) { console.error(err); }
         }
         setUploading(false);
+    };
+
+    // ★★★ 新增：設為封面圖 (Set as Primary) ★★★
+    const handleSetPrimary = async (targetId: string, groupItems: MediaLibraryItem[]) => {
+        if (!db) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const batch = writeBatch(db);
+
+        // 1. 先把同組其他圖片的 isPrimary 設為 false (確保唯一)
+        groupItems.forEach(item => {
+            if (item.isPrimary) {
+                const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', item.id);
+                batch.update(ref, { isPrimary: false });
+            }
+        });
+
+        // 2. 把選中的圖片設為 true
+        const targetRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', targetId);
+        batch.update(targetRef, { isPrimary: true });
+
+        await batch.commit();
+        // UI 會自動因為 snapshot 更新而重繪，排序邏輯會自動把這張圖拉到第一位
     };
 
     const handleClassify = async () => {
@@ -1779,20 +1809,15 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                     <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">已選: {selectedInboxIds.length}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {/* 配對選擇器 */}
                     <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm">
-                        <label className="text-xs font-bold text-blue-800 mb-1 block flex items-center">
-                            <Link size={12} className="mr-1"/> 配對庫存 (Link to Inventory)
-                        </label>
+                        <label className="text-xs font-bold text-blue-800 mb-1 block flex items-center"><Link size={12} className="mr-1"/> 配對庫存</label>
                         <select 
                             value={targetVehicleId} 
                             onChange={(e) => {
                                 const vId = e.target.value;
                                 setTargetVehicleId(vId);
                                 const v = inventory.find((i:any) => i.id === vId);
-                                if (v) {
-                                    setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' }));
-                                }
+                                if (v) setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' }));
                             }}
                             className="w-full p-2 text-xs border border-blue-200 rounded bg-white outline-none focus:ring-2 focus:ring-blue-300"
                         >
@@ -1801,7 +1826,6 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                         </select>
                     </div>
                     <div className="h-[1px] bg-slate-100 w-full"></div>
-                    {/* 表單區 */}
                     <div className="space-y-3">
                         <div><label className="text-[10px] font-bold text-slate-500 uppercase">Year</label><input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-2 border rounded text-sm font-mono" placeholder="2026"/></div>
                         <div className="grid grid-cols-1 gap-3">
@@ -1829,7 +1853,8 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                         {libraryGroups.map(group => {
                             const isExpanded = expandedGroupKey === group.key;
                             const statusColor = group.status === 'In Stock' ? 'bg-green-500' : (group.status === 'Reserved' ? 'bg-yellow-500' : 'bg-slate-400');
-                            
+                            const primaryImage = group.items[0]; // 排序後的第一張就是封面
+
                             return (
                                 <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-200 shadow-md' : 'hover:shadow-md'}`}>
                                     {/* Header */}
@@ -1838,9 +1863,11 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                         onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}
                                     >
                                         <div className="flex items-center gap-3 overflow-hidden">
+                                            {/* 縮圖狀態的封面 (自動取 items[0]) */}
                                             <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden relative">
-                                                <img src={group.items[0]?.url} className="w-full h-full object-cover"/>
-                                                <div className="absolute inset-0 bg-black/10"></div>
+                                                <img src={primaryImage?.url} className="w-full h-full object-cover"/>
+                                                {/* 如果有手動設定封面，顯示星星標記 */}
+                                                {primaryImage?.isPrimary && <div className="absolute top-0 right-0 p-0.5 bg-yellow-400 text-white"><Star size={8} fill="currentColor"/></div>}
                                             </div>
                                             <div className="min-w-0">
                                                 <h4 className="font-bold text-sm text-slate-800 truncate">{group.title}</h4>
@@ -1853,16 +1880,22 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                     {/* Expanded Content */}
                                     {isExpanded && (
                                         <div className="animate-fade-in">
-                                            {/* ★★★ 首圖大預覽區 (Hero Section) ★★★ */}
+                                            {/* ★★★ Hero Section (使用排序後的第一張) ★★★ */}
                                             <div 
                                                 className="w-full h-64 bg-gray-100 relative group-hero cursor-zoom-in border-b border-slate-200"
-                                                onClick={() => setPreviewImage(group.items[0]?.url)}
+                                                onClick={() => setPreviewImage(primaryImage?.url)}
                                             >
-                                                <img src={group.items[0]?.url} className="w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hero-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+                                                <img src={primaryImage?.url} className="w-full h-full object-cover" />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-between p-4">
                                                     <span className="text-white text-sm font-bold flex items-center bg-black/30 px-3 py-1 rounded-full backdrop-blur-sm border border-white/20">
                                                         <Maximize2 size={16} className="mr-2"/> 查看高清大圖
                                                     </span>
+                                                    {/* 如果是手動封面，顯示標記 */}
+                                                    {primaryImage?.isPrimary && (
+                                                        <span className="text-yellow-400 text-xs font-bold flex items-center bg-black/50 px-2 py-1 rounded border border-yellow-500/50">
+                                                            <Star size={12} fill="currentColor" className="mr-1"/> 預設封面
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="absolute top-3 right-3">
                                                     <button 
@@ -1876,14 +1909,26 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
                                             {/* 縮圖網格 */}
                                             <div className="p-4 bg-slate-50">
+                                                <div className="text-xs text-slate-500 mb-2">點擊圖片右上角的星星 ⭐ 可設為預設封面</div>
                                                 <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
                                                     {group.items.map(img => (
-                                                        <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden cursor-zoom-in border bg-white shadow-sm hover:ring-2 ring-blue-400 transition-all">
+                                                        <div key={img.id} className={`group relative aspect-square rounded-lg overflow-hidden cursor-zoom-in border bg-white shadow-sm transition-all ${img.isPrimary ? 'ring-2 ring-yellow-400' : 'hover:ring-2 ring-blue-400'}`}>
                                                             <img 
                                                                 src={img.url} 
                                                                 className="w-full h-full object-cover transition-transform group-hover:scale-110"
                                                                 onClick={() => setPreviewImage(img.url)}
                                                             />
+                                                            
+                                                            {/* ★★★ 設為封面按鈕 ★★★ */}
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }}
+                                                                className={`absolute top-1 left-1 p-1 rounded-full transition-all z-20 ${img.isPrimary ? 'bg-yellow-400 text-white opacity-100' : 'bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-yellow-400'}`}
+                                                                title="設為封面"
+                                                            >
+                                                                <Star size={10} fill={img.isPrimary ? "currentColor" : "none"}/>
+                                                            </button>
+
+                                                            {/* 刪除按鈕 */}
                                                             <button 
                                                                 onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
                                                                 className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
@@ -1891,6 +1936,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                                             >
                                                                 <X size={10}/>
                                                             </button>
+                                                            
                                                             <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-[8px] text-white p-0.5 text-center truncate opacity-0 group-hover:opacity-100">
                                                                 {img.aiData?.type?.slice(0,2) || 'img'}
                                                             </div>
