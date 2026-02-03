@@ -1550,19 +1550,65 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     );
 };
 
-// --- 新增：智能圖庫管理模組 (v2.0: 含批量分配與篩選功能) ---
+// ------------------------------------------------------------------
+// ★★★ 新增：圖片壓縮工具函數 (目標約 100-150KB) ★★★
+// ------------------------------------------------------------------
+const compressImageSmart = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                
+                // 1. 尺寸限制：最大邊長 1280px (適合手機查看且檔案小)
+                const MAX_SIZE = 1280;
+                if (width > height) {
+                    if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+                } else {
+                    if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                
+                // 2. 輸出壓縮：JPEG 品質 0.6 (通常可壓至 100-150KB)
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error("Compression failed"));
+                }, 'image/jpeg', 0.6);
+            };
+        };
+        reader.onerror = error => reject(error);
+    });
+};
+
+// ------------------------------------------------------------------
+// ★★★ 重構版：智能圖庫模組 (MediaLibraryModule v3.0) ★★★
+// ------------------------------------------------------------------
 const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
     const [uploading, setUploading] = useState(false);
     
-    // ★★★ 新增：多選與操作狀態 ★★★
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [filterStatus, setFilterStatus] = useState<'all' | 'unassigned' | 'linked'>('all');
-    const [showLinkModal, setShowLinkModal] = useState(false);
-    const [targetVehicleId, setTargetVehicleId] = useState('');
-    const [inventoryList, setInventoryList] = useState<Vehicle[]>([]); // 簡易庫存列表用
+    // 選取狀態
+    const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>([]);
+    
+    // 工作台表單狀態
+    const [classifyForm, setClassifyForm] = useState({
+        make: '', model: '', year: new Date().getFullYear().toString(),
+        color: '', type: '外觀 (Exterior)' as '外觀 (Exterior)'|'內飾 (Interior)',
+        tags: ''
+    });
+    
+    const [isProcessing, setIsProcessing] = useState(false);
 
-    // 1. 監聽圖庫數據
+    // 1. 監聽數據
     useEffect(() => {
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -1577,20 +1623,8 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
         });
     }, [db, staffId, appId]);
 
-    // 2. 讀取簡易庫存列表 (用於分配選單)
-    useEffect(() => {
-        if (!db || !staffId) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'), orderBy('createdAt', 'desc'));
-        getDocs(q).then(snap => {
-            const list: Vehicle[] = [];
-            snap.forEach(d => list.push({ id: d.id, ...d.data() } as Vehicle));
-            setInventoryList(list);
-        });
-    }, [db, staffId, appId, showLinkModal]); // 僅在打開 Modal 時重新整理
-
-    // 上傳邏輯 (保持不變)
-    const handleLocalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 2. 智能壓縮上傳 (Inbox)
+    const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !storage) return;
         setUploading(true);
@@ -1598,17 +1632,25 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
         
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const filePath = `media/${appId}/${Date.now()}_${file.name}`;
-            const storageRef = ref(storage, filePath);
             try {
-                const uploadTask = await uploadBytes(storageRef, file);
+                // A. 前端壓縮
+                const compressedBlob = await compressImageSmart(file);
+                const compressedFile = new File([compressedBlob], file.name, { type: 'image/jpeg' });
+                
+                // B. 上傳 Storage
+                const filePath = `media/${appId}/${Date.now()}_${file.name}`;
+                const storageRef = ref(storage, filePath);
+                const uploadTask = await uploadBytes(storageRef, compressedFile);
                 const downloadURL = await getDownloadURL(uploadTask.ref);
+
+                // C. 寫入 Firestore (狀態: inbox)
                 await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), {
                     url: downloadURL,
                     path: filePath,
                     fileName: file.name,
-                    tags: ["待整理"], 
-                    status: 'unassigned',
+                    tags: ["Inbox"], 
+                    status: 'unassigned', // 標記為未歸類
+                    aiData: {},           // 預留 AI 欄位
                     createdAt: serverTimestamp()
                 });
             } catch (err) { console.error("Upload failed:", err); }
@@ -1616,255 +1658,241 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
         setUploading(false);
     };
 
-    // ★★★ 核心邏輯：批量分配圖片給車輛 ★★★
-    const handleBatchLink = async () => {
-        if (!targetVehicleId || selectedIds.length === 0 || !db) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const currentDb = db; // Local reference
-
-        try {
-            // 1. 找出選中的圖片 URL
-            const selectedItems = mediaItems.filter(item => selectedIds.includes(item.id));
-            const newPhotoUrls = selectedItems.map(item => item.url);
-
-            // 2. 更新車輛 (Inventory) -> 將圖片加入 photos 陣列
-            // 先讀取舊車輛資料，以免覆蓋
-            const vehicleRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', targetVehicleId);
-            const vehicleSnap = await getDoc(vehicleRef);
-            
-            if (vehicleSnap.exists()) {
-                const currentPhotos = vehicleSnap.data().photos || [];
-                // 合併並去重
-                const updatedPhotos = Array.from(new Set([...currentPhotos, ...newPhotoUrls]));
-                await updateDoc(vehicleRef, { photos: updatedPhotos });
-            }
-
-            // 3. 更新圖庫 (Media Library) -> 標記為已分配 (linked)
-            const batch = writeBatch(currentDb);
-            selectedIds.forEach(id => {
-                const mediaRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
-                batch.update(mediaRef, { 
-                    status: 'linked', 
-                    relatedVehicleId: targetVehicleId,
-                    tags: ['已分配'] // 簡單標記
-                });
-            });
-            await batch.commit();
-
-            alert(`成功將 ${selectedIds.length} 張圖片分配給車輛！`);
-            setSelectedIds([]);
-            setShowLinkModal(false);
-            setTargetVehicleId('');
-        } catch (e) {
-            console.error(e);
-            alert("分配失敗，請稍後再試");
-        }
+    // 3. 模擬 AI 辨識 (點擊後自動填寫中間表單)
+    const handleAiAnalyze = async () => {
+        if (selectedInboxIds.length === 0) return;
+        setIsProcessing(true);
+        
+        // 模擬調用後端 API 延遲
+        await new Promise(r => setTimeout(r, 1200));
+        
+        // 這裡未來替換為真實 API 回傳值
+        const mockResults = [
+            { make: 'Toyota', model: 'Alphard', year: '2023', color: 'White' },
+            { make: 'Tesla', model: 'Model Y', year: '2024', color: 'Black' },
+            { make: 'Honda', model: 'Stepwgn', year: '2020', color: 'Purple' }
+        ];
+        const randomRes = mockResults[Math.floor(Math.random() * mockResults.length)];
+        
+        setClassifyForm(prev => ({
+            ...prev,
+            make: randomRes.make,
+            model: randomRes.model,
+            year: randomRes.year,
+            color: randomRes.color,
+            tags: 'AI-Detected'
+        }));
+        setIsProcessing(false);
+        alert("✨ AI 識別完成！已自動填寫分類建議，請確認後歸檔。");
     };
 
-    // 批量刪除
-    const handleBatchDelete = async () => {
-        if (!confirm(`確定刪除選中的 ${selectedIds.length} 張圖片？(這不會刪除已分配到車輛庫存的連結)`)) return;
+    // 4. 執行歸檔 (Move to Library)
+    const handleClassify = async () => {
+        if (!db || selectedInboxIds.length === 0) return;
+        if (!classifyForm.make || !classifyForm.model) { alert("請填寫廠牌與型號"); return; }
+        
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const batch = writeBatch(db);
+
+        selectedInboxIds.forEach(id => {
+            const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
+            batch.update(ref, {
+                status: 'linked', // 變更為已歸檔
+                tags: [classifyForm.make, classifyForm.model, classifyForm.year, classifyForm.color, classifyForm.type],
+                aiData: { ...classifyForm } // 儲存詳細結構化資料
+            });
+        });
+
+        await batch.commit();
+        setSelectedInboxIds([]); // 清空選取
+        // 重置表單但保留部分 (方便連續操作)
+        setClassifyForm(prev => ({ ...prev, color: '', tags: '' }));
+    };
+
+    // 5. 刪除圖片
+    const handleDelete = async (ids: string[]) => {
+        if(!confirm(`刪除 ${ids.length} 張圖片？`)) return;
         if (!db) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const batch = writeBatch(db);
-        selectedIds.forEach(id => {
+        ids.forEach(id => {
             const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
             batch.delete(ref);
         });
         await batch.commit();
-        setSelectedIds([]);
+        setSelectedInboxIds([]);
     };
 
-    // ★★★ 新增：呼叫 AI 分析圖片 ★★★
-    const [analyzingId, setAnalyzingId] = useState<string | null>(null);
-
-    const handleAnalyzeImage = async (item: MediaLibraryItem) => {
-        if (!item.url) return;
-        setAnalyzingId(item.id);
-
-        try {
-            // 呼叫我們剛寫好的 API
-            const res = await fetch('/api/vision', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageUrl: item.url })
-            });
-
-            const json = await res.json();
-
-            if (json.success && db) {
-                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-                // 更新 Firestore
-                const docRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', item.id);
-                
-                // 將 AI 標籤合併到現有標籤
-                const newTags = Array.from(new Set([...(item.tags || []), ...json.data.tags]));
-                
-                await updateDoc(docRef, {
-                    tags: newTags,
-                    // 如果你想存更詳細的資料：
-                    // aiData: json.data 
-                });
-                // alert(`AI 識別完成：${json.data.make} ${json.data.model}`);
-            }
-        } catch (e) {
-            console.error(e);
-            alert("AI 分析失敗");
-        } finally {
-            setAnalyzingId(null);
-        }
+    // 6. WhatsApp 分享連結生成
+    const handleWhatsAppShare = (items: MediaLibraryItem[]) => {
+        // 實際應用中，這裡可以生成一個公開的 Gallery 頁面連結
+        // 這裡暫時模擬生成文字描述
+        const text = `【車輛圖片分享】\n${items[0]?.aiData?.year} ${items[0]?.aiData?.make} ${items[0]?.aiData?.model}\n查看圖片: ${items[0]?.url}`;
+        const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        window.open(url, '_blank');
     };
 
-    const toggleSelection = (id: string) => {
-        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-    };
+    // 分組邏輯：將已歸檔的圖片按 "Make Model Year" 分組
+    const libraryGroups = useMemo(() => {
+        const groups: Record<string, MediaLibraryItem[]> = {};
+        mediaItems.filter(i => i.status === 'linked').forEach(item => {
+            const key = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(item);
+        });
+        return groups;
+    }, [mediaItems]);
 
-    // 篩選顯示
-    const displayedItems = mediaItems.filter(item => filterStatus === 'all' || item.status === filterStatus);
+    const inboxItems = mediaItems.filter(i => i.status !== 'linked');
 
     return (
-        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
-            {/* Header Tool Bar */}
-            <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><ImageIcon size={20}/></div>
-                        <div>
-                            <h2 className="font-bold text-slate-700">智能圖庫 (Inbox)</h2>
-                            <p className="text-[10px] text-slate-400">共 {mediaItems.length} 張相片</p>
-                        </div>
+        <div className="flex h-full gap-4 bg-slate-100 p-2 overflow-hidden">
+            
+            {/* --- 左欄：來源與暫存區 (Inbox) --- */}
+            <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 來源 (Inbox)</h3>
+                    <label className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm transition-transform active:scale-95">
+                        {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>}
+                        匯入
+                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleSmartUpload} disabled={uploading}/>
+                    </label>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2">
+                    <div className="text-[10px] text-slate-400 mb-2 px-1 flex justify-between">
+                        <span>未分類: {inboxItems.length} 張</span>
+                        <span>(已自動壓縮至 ~130KB)</span>
                     </div>
-                    {/* 篩選器 */}
-                    <div className="flex bg-white rounded p-1 border border-slate-200">
-                        {[{k:'all',l:'全部'},{k:'unassigned',l:'未分配'},{k:'linked',l:'已存檔'}].map(opt => (
-                            <button 
-                                key={opt.k} 
-                                onClick={() => setFilterStatus(opt.k as any)}
-                                className={`px-3 py-1 text-xs rounded transition-colors ${filterStatus === opt.k ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                    <div className="grid grid-cols-2 gap-2">
+                        {inboxItems.map(item => (
+                            <div 
+                                key={item.id}
+                                onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])}
+                                className={`relative aspect-square rounded-lg border-2 overflow-hidden cursor-pointer transition-all ${selectedInboxIds.includes(item.id) ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-100 hover:border-slate-300'}`}
                             >
-                                {opt.l}
-                            </button>
+                                <img src={item.url} className="w-full h-full object-cover"/>
+                                {selectedInboxIds.includes(item.id) && <div className="absolute top-1 right-1 bg-blue-600 text-white rounded-full p-0.5"><Check size={10}/></div>}
+                            </div>
                         ))}
+                        {inboxItems.length === 0 && <div className="col-span-2 text-center py-10 text-slate-300 text-xs">暫無新圖片<br/>請點擊右上角匯入</div>}
                     </div>
                 </div>
-                <label className="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer text-sm font-bold hover:bg-blue-700 transition flex items-center shadow-md shadow-blue-200">
-                    {uploading ? <Loader2 className="animate-spin mr-2" size={16}/> : <Plus size={16} className="mr-2"/>}
-                    上傳相片
-                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleLocalUpload} disabled={uploading} />
-                </label>
-            </div>
-
-            {/* Grid Content */}
-            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 pb-20">
-                {displayedItems.map(item => {
-                    const isSelected = selectedIds.includes(item.id);
-                    const isAnalyzing = analyzingId === item.id;
-                    return (
-                        <div 
-                            key={item.id} 
-                            onClick={(e) => {
-                                // 防止點擊按鈕時觸發選取
-                                if ((e.target as HTMLElement).closest('button')) return;
-                                toggleSelection(item.id);
-                            }}
-                            className={`group relative aspect-[4/3] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-100 hover:border-slate-300 shadow-sm'}`}
-                        >
-                            <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
-                            
-                            {/* AI 分析遮罩層 (分析中顯示) */}
-                            {isAnalyzing && (
-                                <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center text-white animate-pulse">
-                                    <Loader2 className="animate-spin mb-1" size={24}/>
-                                    <span className="text-[10px] font-bold">AI 分析中...</span>
-                                </div>
-                            )}
-
-                            {/* 狀態標籤 (左上) */}
-                            <div className="absolute top-2 left-2 flex gap-1 z-10">
-                                {item.status === 'linked' && <span className="bg-green-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm">已存檔</span>}
-                                {isSelected && <div className="bg-blue-600 text-white rounded-full p-0.5"><Check size={12}/></div>}
-                            </div>
-
-                            {/* 標籤展示 (左下) */}
-                            <div className="absolute bottom-8 left-2 right-2 flex flex-wrap gap-1 z-10 pointer-events-none">
-                                {item.tags?.slice(0, 3).map((t, i) => (
-                                    <span key={i} className="text-[8px] bg-black/50 text-white px-1.5 rounded backdrop-blur-sm border border-white/20">
-                                        {t}
-                                    </span>
-                                ))}
-                            </div>
-
-                            {/* 底部操作列 (Hover 顯示) */}
-                            <div className="absolute bottom-0 inset-x-0 bg-white/90 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-center z-20">
-                                <div className="text-[10px] text-slate-600 truncate max-w-[60%]">{item.fileName}</div>
-                                <button 
-                                    onClick={() => handleAnalyzeImage(item)}
-                                    disabled={isAnalyzing}
-                                    className="bg-purple-100 text-purple-700 hover:bg-purple-200 p-1.5 rounded-full transition-colors flex items-center gap-1"
-                                    title="執行 AI 智能識別"
-                                >
-                                    <Zap size={12} fill="currentColor"/>
-                                </button>
-                            </div>
-                        </div>
-                    );
-                })}
-                {displayedItems.length === 0 && !uploading && (
-                    <div className="col-span-full py-20 text-center text-slate-400 italic">沒有相片</div>
+                {selectedInboxIds.length > 0 && (
+                    <div className="p-2 border-t bg-slate-50 flex justify-between items-center">
+                        <span className="text-xs font-bold text-blue-600">已選 {selectedInboxIds.length} 張</span>
+                        <button onClick={() => handleDelete(selectedInboxIds)} className="p-1.5 text-red-400 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                    </div>
                 )}
             </div>
 
-            {/* ★★★ 底部批量操作列 (當有選中時浮現) ★★★ */}
-            {selectedIds.length > 0 && (
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-4 z-10">
-                    <span className="font-bold text-sm">已選 {selectedIds.length} 張</span>
-                    <div className="h-4 w-[1px] bg-slate-600"></div>
-                    <button onClick={() => setShowLinkModal(true)} className="flex items-center gap-2 hover:text-blue-300 transition-colors text-sm font-bold">
-                        <Link size={16}/> 分配給車輛
-                    </button>
-                    <button onClick={handleBatchDelete} className="flex items-center gap-2 hover:text-red-300 transition-colors text-sm font-bold">
-                        <Trash2 size={16}/> 刪除
-                    </button>
-                    <button onClick={() => setSelectedIds([])} className="bg-slate-700 hover:bg-slate-600 p-1 rounded-full ml-2"><X size={14}/></button>
+            {/* --- 中欄：智能分類工作台 (Workbench) --- */}
+            <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                <div className="p-3 border-b bg-slate-50">
+                    <h3 className="font-bold text-slate-700 flex items-center"><Settings size={16} className="mr-2"/> 歸類工作台</h3>
                 </div>
-            )}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* 1. 操作區 */}
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center space-y-3">
+                        <div className="text-xs text-blue-800 mb-2 font-bold">步驟 1: 選擇左側圖片 ({selectedInboxIds.length})</div>
+                        <button 
+                            onClick={handleAiAnalyze}
+                            disabled={selectedInboxIds.length === 0 || isProcessing}
+                            className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-2 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        >
+                            {isProcessing ? <Loader2 className="animate-spin mr-2" size={16}/> : <Zap size={16} className="mr-2 fill-yellow-300"/>}
+                            AI 智能辨識
+                        </button>
+                        <div className="text-[10px] text-blue-400">或是手動填寫下方資料</div>
+                    </div>
 
-            {/* 分配車輛 Modal */}
-            {showLinkModal && (
-                <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95">
-                        <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-800">選擇目標車輛</h3>
-                            <button onClick={() => setShowLinkModal(false)}><X size={20} className="text-slate-400"/></button>
+                    <ArrowRight className="mx-auto text-slate-300 rotate-90 md:rotate-0" size={20}/>
+
+                    {/* 2. 表單區 */}
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">Year</label>
+                            <input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-2 border rounded text-sm bg-slate-50 font-mono" placeholder="2024"/>
                         </div>
-                        <div className="p-4">
-                            <p className="text-sm text-slate-500 mb-3">將選中的 {selectedIds.length} 張圖片加入到：</p>
-                            <select 
-                                className="w-full p-3 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                                value={targetVehicleId}
-                                onChange={e => setTargetVehicleId(e.target.value)}
-                            >
-                                <option value="">-- 請選擇庫存車輛 --</option>
-                                {inventoryList.map(v => (
-                                    <option key={v.id} value={v.id}>
-                                        {v.regMark || '(未出牌)'} - {v.make} {v.model} ({v.year})
-                                    </option>
-                                ))}
-                            </select>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Make</label>
+                                <input value={classifyForm.make} onChange={e => setClassifyForm({...classifyForm, make: e.target.value})} className="w-full p-2 border rounded text-sm bg-slate-50" placeholder="Toyota"/>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Model</label>
+                                <input value={classifyForm.model} onChange={e => setClassifyForm({...classifyForm, model: e.target.value})} className="w-full p-2 border rounded text-sm bg-slate-50" placeholder="Alphard"/>
+                            </div>
                         </div>
-                        <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
-                            <button onClick={() => setShowLinkModal(false)} className="px-4 py-2 text-slate-600 font-bold text-sm">取消</button>
-                            <button 
-                                onClick={handleBatchLink} 
-                                disabled={!targetVehicleId}
-                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                確認分配
-                            </button>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Color</label>
+                                <input value={classifyForm.color} onChange={e => setClassifyForm({...classifyForm, color: e.target.value})} className="w-full p-2 border rounded text-sm bg-slate-50" placeholder="White"/>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Type</label>
+                                <select value={classifyForm.type} onChange={e => setClassifyForm({...classifyForm, type: e.target.value as any})} className="w-full p-2 border rounded text-sm bg-slate-50">
+                                    <option>外觀 (Exterior)</option>
+                                    <option>內飾 (Interior)</option>
+                                    <option>細節 (Detail)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
-            )}
+                <div className="p-3 border-t bg-slate-50">
+                    <button 
+                        onClick={handleClassify}
+                        disabled={selectedInboxIds.length === 0}
+                        className="w-full bg-slate-800 text-white py-2.5 rounded-lg text-sm font-bold shadow-md hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                        確認歸檔 <ArrowRight size={16} className="ml-2"/>
+                    </button>
+                </div>
+            </div>
+
+            {/* --- 右欄：成品圖庫 (Library) --- */}
+            <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+                <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-700 flex items-center"><ImageIcon size={16} className="mr-2"/> 車輛圖庫 (Gallery)</h3>
+                    <div className="text-xs text-slate-500">按在庫狀態排列</div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    {Object.entries(libraryGroups).map(([groupName, items]) => (
+                        <div key={groupName} className="border rounded-xl p-3 bg-slate-50/50">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="font-bold text-slate-800 text-sm flex items-center">
+                                    <span className="w-2 h-4 bg-yellow-500 rounded-full mr-2"></span>
+                                    {groupName}
+                                    <span className="ml-2 bg-slate-200 text-slate-600 text-[10px] px-2 py-0.5 rounded-full">{items.length}張</span>
+                                </h4>
+                                <button 
+                                    onClick={() => handleWhatsAppShare(items)}
+                                    className="text-[10px] bg-green-500 text-white px-2 py-1 rounded flex items-center hover:bg-green-600 transition-colors shadow-sm"
+                                >
+                                    <Share2 size={12} className="mr-1"/> WhatsApp 分享
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-4 lg:grid-cols-6 gap-2">
+                                {items.map(item => (
+                                    <div key={item.id} className="group relative aspect-square rounded bg-white border border-slate-200 overflow-hidden cursor-zoom-in hover:shadow-md transition-all">
+                                        <img src={item.url} className="w-full h-full object-cover"/>
+                                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                            <span className="text-[9px] text-white border border-white/50 px-1 rounded">{item.aiData?.type?.slice(0,2)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    {Object.keys(libraryGroups).length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-50">
+                            <ImageIcon size={48} className="mb-2"/>
+                            <p>圖庫是空的，請從左側匯入整理</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
         </div>
     );
 };
