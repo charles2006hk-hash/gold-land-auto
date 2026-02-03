@@ -3915,10 +3915,10 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [vrdOwnerRaw, setVrdOwnerRaw] = useState(''); // 暫存 VRD 車主名稱
 
     // 計算邏輯
-    const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+    cconst cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
     const totalRevenue = (v.price || 0) + cbFees;
-    const totalReceived = (v.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
-    const totalExpenses = (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+    const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+    const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
 
