@@ -3883,7 +3883,7 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v9.3: UI 修復 - 找回欄位、搜尋折疊、相簿優化)
+  // 1. Vehicle Form Modal (v9.4: 浮動式 VRD 導入 + 內飾選單 + 版面優化)
 const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -3895,8 +3895,8 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold'>(v.status || 'In Stock');
 
-    // ★★★ 新增：控制 VRD 搜尋框是否展開 ★★★
-    const [isVrdSearchOpen, setIsVrdSearchOpen] = useState(false);
+    // ★★★ 新增：控制 VRD 浮動搜尋層顯示 ★★★
+    const [showVrdOverlay, setShowVrdOverlay] = useState(false);
 
     // 數值輸入狀態
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
@@ -4047,8 +4047,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
             }
         } else { alert("VRD 導入成功"); }
         setVrdResult(null); setVrdSearch('');
-        // 導入後自動收起搜尋框
-        setIsVrdSearchOpen(false);
+        setShowVrdOverlay(false); // 導入後關閉浮動層
     };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -4083,59 +4082,101 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
 
           <form onSubmit={handleSaveWrapper} className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
             
-            {/* 左側欄：VRD & Photos */}
-            <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin">
+            {/* 左側欄：VRD & Photos (設為 relative 以便浮動層定位) */}
+            <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin relative">
                  
-                 {/* VRD 導入區塊 (可折疊) */}
-                 <div className="bg-blue-50 border border-blue-100 rounded-lg shadow-sm mb-2 overflow-hidden transition-all">
-                        <div 
-                            className="p-3 flex justify-between items-center cursor-pointer hover:bg-blue-100/50"
-                            onClick={() => setIsVrdSearchOpen(!isVrdSearchOpen)}
-                        >
-                            <label className="text-xs font-bold text-blue-800 flex items-center cursor-pointer">
-                                <Database size={14} className="mr-1"/> 從資料庫中心導入 (VRD)
-                            </label>
-                            {isVrdSearchOpen ? <ChevronUp size={16} className="text-blue-500"/> : <ChevronDown size={16} className="text-blue-500"/>}
+                 {/* ★★★ 浮動式 VRD 導入層 (Overlay) ★★★ */}
+                 {showVrdOverlay && (
+                    <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex justify-between items-center mb-6 border-b pb-2">
+                            <h3 className="font-bold text-lg text-blue-800 flex items-center">
+                                <Database size={20} className="mr-2"/> 連動資料庫中心
+                            </h3>
+                            <button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
                         </div>
                         
-                        {isVrdSearchOpen && (
-                            <div className="p-3 pt-0 animate-fade-in">
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-600 mb-2">輸入車牌或底盤號搜尋：</label>
                                 <div className="flex gap-2">
                                     <input 
                                         value={vrdSearch}
                                         onChange={e => setVrdSearch(e.target.value.toUpperCase())}
-                                        placeholder="車牌 / 底盤號"
-                                        className="w-full flex-1 p-1.5 text-xs border border-blue-200 rounded focus:ring-2 focus:ring-blue-400 outline-none uppercase font-mono"
+                                        placeholder="例: AB1234"
+                                        className="flex-1 p-3 border-2 border-blue-200 rounded-lg text-lg font-mono uppercase focus:border-blue-500 outline-none"
+                                        autoFocus
                                         onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}}
                                     />
                                     <button 
                                         type="button"
                                         onClick={handleSearchVRD}
                                         disabled={searching}
-                                        className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center flex-none"
+                                        className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50"
                                     >
-                                        {searching ? <Loader2 className="animate-spin" size={12}/> : '搜尋'}
+                                        {searching ? <Loader2 className="animate-spin"/> : '搜尋'}
                                     </button>
                                 </div>
-                                {vrdResult && (
-                                    <div className="mt-2 bg-white p-2 rounded border border-blue-200 shadow-sm flex justify-between items-center animate-in slide-in-from-top-2">
-                                        <div className="text-xs">
-                                            <div className="font-bold text-slate-700">{vrdResult.plateNoHK || vrdResult.regNo}</div>
-                                            <div className="text-[10px] text-slate-500">{vrdResult.make} {vrdResult.model}</div>
-                                            {vrdResult.registeredOwnerName && <div className="text-[10px] text-blue-600">車主: {vrdResult.registeredOwnerName}</div>}
-                                        </div>
-                                        <button type="button" onClick={applyVrdData} className="text-[10px] bg-green-500 text-white px-2 py-1 rounded font-bold hover:bg-green-600 ml-2">導入</button>
-                                    </div>
-                                )}
                             </div>
-                        )}
-                 </div>
 
-                 {/* VRD Card Content (找回消失的欄位) */}
+                            {vrdResult && (
+                                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-3 animate-fade-in">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h4 className="font-bold text-lg text-slate-800">{vrdResult.plateNoHK || vrdResult.regNo}</h4>
+                                            <p className="text-sm text-slate-600">{vrdResult.manufactureYear} {vrdResult.make} {vrdResult.model}</p>
+                                            <p className="text-xs text-slate-500 font-mono mt-1">Chassis: {vrdResult.chassisNo}</p>
+                                        </div>
+                                        {vrdResult.registeredOwnerName && (
+                                            <div className="text-right">
+                                                <span className="text-[10px] text-slate-400 uppercase">Owner</span>
+                                                <p className="font-bold text-blue-700">{vrdResult.registeredOwnerName}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="pt-2 border-t border-blue-200 flex gap-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={applyVrdData} 
+                                            className="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold hover:bg-green-600 shadow-sm"
+                                        >
+                                            確認導入並配對
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => { setVrdResult(null); setVrdSearch(''); }}
+                                            className="px-4 py-2 bg-white text-slate-500 border border-slate-300 rounded-lg hover:bg-slate-50"
+                                        >
+                                            重設
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            <div className="mt-8 text-xs text-slate-400 text-center">
+                                <p>提示：導入後系統將自動填寫車輛規格，並嘗試配對現有客戶。</p>
+                            </div>
+                        </div>
+                    </div>
+                 )}
+
+                 {/* VRD Card Content */}
                  <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                     <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
                     <div className="p-4 space-y-3">
-                        <div className="flex justify-between items-start"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD Data)</h3></div>
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-bold text-red-800 text-sm flex items-center">
+                                <FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)
+                            </h3>
+                            {/* ★★★ 觸發浮動搜尋層的按鈕 ★★★ */}
+                            <button 
+                                type="button" 
+                                onClick={() => setShowVrdOverlay(true)}
+                                className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm transition-transform active:scale-95"
+                            >
+                                <Link size={10} className="mr-1"/> 連結資料庫
+                            </button>
+                        </div>
+                        
                         <div className="space-y-1 relative">
                             <label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label>
                             <div className="flex relative">
@@ -4153,13 +4194,16 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                             <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/></div>
                         </div>
 
-                        {/* ★★★ 找回：內外顏色並排 ★★★ */}
+                        {/* ★★★ 修正：內飾顏色使用 datalist 下拉選單 ★★★ */}
                         <div className="grid grid-cols-2 gap-3 pt-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="外觀"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label><input name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="內飾"/></div>
+                            <div>
+                                <label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label>
+                                <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="內飾"/>
+                                {/* 共用同一個 colors datalist */}
+                            </div>
                         </div>
 
-                        {/* ★★★ 找回：底盤與引擎號 ★★★ */}
                         <div className="space-y-1 pt-2 border-t border-dashed border-slate-200">
                             <label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No. (車身號碼)</label>
                             <input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
@@ -4169,7 +4213,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                             <input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
                         </div>
 
-                        {/* ★★★ 找回：排量 (Cyl. Cap.) ★★★ */}
                         <div className="grid grid-cols-2 gap-3 pt-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap. (排量)</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" placeholder="cc"/></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 7} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
@@ -4188,7 +4231,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                         <h3 className="font-bold text-slate-700 text-sm flex items-center">
                             <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片
                         </h3>
-                        {/* 先關彈窗，再跳轉 */}
                         <button 
                             type="button" 
                             onClick={handleGoToMediaLibrary} 
@@ -4198,12 +4240,11 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                         </button>
                     </div>
                     
-                    {/* ★★★ 圖片顯示區：移除上傳按鈕，增加 Scroll ★★★ */}
+                    {/* ★★★ 圖片顯示區：Scrolling ★★★ */}
                     <div className="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
                         {carPhotos.map((url, idx) => (
                             <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group bg-gray-100 cursor-zoom-in">
                                 <img src={url} className="w-full h-full object-cover" title="前往圖庫查看大圖"/>
-                                {/* 這裡只做顯示，要刪除建議去圖庫 */}
                             </div>
                         ))}
                         {carPhotos.length === 0 && (
