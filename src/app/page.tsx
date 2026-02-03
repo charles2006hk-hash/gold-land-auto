@@ -156,6 +156,18 @@ type DatabaseEntry = {
     renewalUnit?: 'year' | 'month'; // 續期區間單位 (年/月)
 };
 
+// --- 新增：媒體庫數據結構 ---
+type MediaLibraryItem = {
+    id: string;
+    url: string;        // Firebase Storage 下載連結
+    path: string;       // Storage 內部路徑，方便刪除
+    fileName: string;
+    tags: string[];     // AI 標籤：['Toyota', 'White', 'Exterior']
+    status: 'unassigned' | 'linked'; 
+    relatedVehicleId?: string;
+    createdAt: any;
+};
+
 // --- 類型定義 ---
 type Expense = {
   id: string;
@@ -754,7 +766,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
           {[
             { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard }, { id: 'inventory', label: '車輛管理', icon: Car },
             { id: 'create_doc', label: '開單系統', icon: FileText }, { id: 'reports', label: '統計報表', icon: FileBarChart },
-            { id: 'cross_border', label: '中港業務', icon: Globe }, { id: 'database', label: '資料庫中心', icon: Database },
+            { id: 'cross_border', label: '中港業務', icon: Globe }, { id: 'database', label: '資料庫中心', icon: Database },{ id: 'media_center', label: '智能圖庫', icon: ImageIcon },
             { id: 'business', label: '業務辦理流程', icon: Briefcase }, { id: 'settings', label: '系統設置', icon: Settings }
           ].map(item => (
              <button key={item.id} onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} className={`flex items-center w-full p-3 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} title={isSidebarCollapsed ? item.label : ''}>
@@ -783,6 +795,73 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
       </div>
     </>
 );
+
+// --- 新增：智能圖庫模組 ---
+const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
+    const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
+    const [uploading, setUploading] = useState(false);
+
+    // 監聽媒體庫數據
+    useEffect(() => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snap) => {
+            const list: MediaLibraryItem[] = [];
+            snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
+            setMediaItems(list);
+        });
+    }, [db, staffId]);
+
+    const handleLocalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || !storage) return;
+        setUploading(true);
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const filePath = `media/${appId}/${Date.now()}_${file.name}`;
+            const storageRef = ref(storage, filePath);
+            const uploadTask = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(uploadTask.ref);
+
+            await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), {
+                url: downloadURL,
+                path: filePath,
+                fileName: file.name,
+                tags: ["電腦上傳"], // 這裡後續可對接 AI 接口自動產生標籤
+                status: 'unassigned',
+                createdAt: serverTimestamp()
+            });
+        }
+        setUploading(false);
+        alert("上傳成功！圖片已進入預備庫。");
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200">
+            <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                <h2 className="font-bold text-slate-700 flex items-center"><ImageIcon className="mr-2"/> 智能圖庫預備庫</h2>
+                <label className="bg-slate-900 text-white px-4 py-2 rounded-lg cursor-pointer text-sm font-bold hover:bg-slate-800 transition">
+                    {uploading ? <Loader2 className="animate-spin" /> : "從電腦上傳相片"}
+                    <input type="file" multiple className="hidden" onChange={handleLocalUpload} disabled={uploading} />
+                </label>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {mediaItems.map(item => (
+                    <div key={item.id} className="group relative aspect-video rounded-lg overflow-hidden border bg-slate-100 shadow-sm">
+                        <img src={item.url} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-2">
+                            <span className="text-[10px] text-white bg-blue-600 px-2 py-1 rounded">{item.tags[0]}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 
 // --- 3. DatabaseModule (外部組件) ---
 type DatabaseModuleProps = {
@@ -2581,7 +2660,7 @@ const SettingsManager = ({
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
@@ -3625,9 +3704,26 @@ const DatabaseSelector = ({
                     </div>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex-1 flex flex-col min-h-[300px]">
-                    <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1"/> 車輛相片 ({carPhotos.length})</h3><label className={`cursor-pointer bg-slate-800 text-white text-[10px] px-2 py-1 rounded hover:bg-slate-700 flex items-center ${isCompressing ? 'opacity-50 pointer-events-none' : ''}`}>{isCompressing ? <Loader2 size={10} className="animate-spin mr-1"/> : <Plus size={10} className="mr-1"/>}{isCompressing ? '處理中...' : '加入相片'}<input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} disabled={isCompressing}/></label></div>
-                    <div className="flex-1 overflow-y-auto bg-slate-100 rounded-lg p-2 grid grid-cols-2 gap-2 content-start">{carPhotos.map((img, idx) => (<div key={idx} className="relative group aspect-video bg-black rounded overflow-hidden shadow-sm border border-slate-300"><img src={img} className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2"><button type="button" onClick={() => window.open(img)} className="p-1.5 bg-white/20 text-white rounded-full hover:bg-white/40 backdrop-blur-sm" title="放大"><ExternalLink size={14}/></button><button type="button" onClick={() => setCarPhotos(prev => prev.filter((_, i) => i !== idx))} className="p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 backdrop-blur-sm" title="刪除"><Trash2 size={14}/></button></div></div>))}{carPhotos.length === 0 && (<div className="col-span-2 h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-300 rounded-lg"><ImageIcon size={24} className="mb-2 opacity-50"/><span className="text-xs">暫無相片 (自動壓縮至~130KB)</span></div>)}</div>
+                {/* 替換原本的 carPhotos 顯示區域 */}
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1"/> 車輛相片 (圖庫連動)</h3>
+                        <button 
+                            type="button" 
+                            onClick={() => setActiveTab('media_center')} // 這裡可進階開發為 Modal 彈窗選擇
+                            className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded shadow-sm"
+                        >
+                            管理預備庫圖片
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        {carPhotos.map((url, idx) => (
+                            <div key={idx} className="relative aspect-video rounded border overflow-hidden">
+                                <img src={url} className="w-full h-full object-cover" />
+                                <button type="button" onClick={() => setCarPhotos(prev => prev.filter(p => p !== url))} className="absolute top-0 right-0 p-1 bg-red-500 text-white"><X size={10}/></button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -5176,8 +5272,8 @@ const CreateDocModule = ({
             />
         )}
 
-          {/* Create Doc Tab - v5.0: 傳入 db 參數以支援歷史紀錄 */}
-          {activeTab === 'create_doc' && (
+        {/* Create Doc Tab - v5.0: 傳入 db 參數以支援歷史紀錄 */}
+        {activeTab === 'create_doc' && (
               <CreateDocModule 
                   inventory={inventory} 
                   openPrintPreview={openPrintPreview} 
@@ -5187,8 +5283,8 @@ const CreateDocModule = ({
               />
           )}
           
-          {/* ★★★ 新增：資料庫模塊渲染 ★★★ */}
-          {activeTab === 'database' && <DatabaseModule 
+        {/* ★★★ 新增：資料庫模塊渲染 ★★★ */}
+        {activeTab === 'database' && <DatabaseModule 
           db={db}
                   staffId={staffId}
                   appId={appId}
@@ -5198,6 +5294,8 @@ const CreateDocModule = ({
                   isDbEditing={isDbEditing}
                   setIsDbEditing={setIsDbEditing}
                   inventory={inventory}/>}
+
+        {activeTab === 'media_center' && <MediaLibraryModule db={db} storage={storage} staffId={staffId} appId={appId} />}
                   
         </div>
       </main>
