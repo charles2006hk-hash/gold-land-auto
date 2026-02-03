@@ -172,6 +172,14 @@ type MediaLibraryItem = {
     status: 'unassigned' | 'linked'; 
     relatedVehicleId?: string;
     createdAt: any;
+    // ★★★ 新增：AI 結構化數據 (解決編譯錯誤的關鍵) ★★★
+    aiData?: {
+        make?: string;
+        model?: string;
+        year?: string;
+        color?: string;
+        type?: string;
+    };
 };
 
 // --- 類型定義 ---
