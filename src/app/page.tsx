@@ -3884,6 +3884,7 @@ const DatabaseSelector = ({
 };
 
   // 1. Vehicle Form Modal (v9.1: 修復 VRD 連動與客戶自動配對)
+// 1. Vehicle Form Modal (v9.2: 圖庫自動連動 + 按鈕修復)
 const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -3907,14 +3908,15 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
     const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
 
+    // ★★★ 圖片狀態：混合舊資料 (v.photos) 與 智能圖庫連動 (linkedPhotos) ★★★
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [isCompressing, setIsCompressing] = useState(false);
 
-    // ★★★ VRD 連動狀態 (補回) ★★★
+    // VRD 連動狀態
     const [vrdSearch, setVrdSearch] = useState('');
     const [vrdResult, setVrdResult] = useState<any>(null);
     const [searching, setSearching] = useState(false);
-    const [vrdOwnerRaw, setVrdOwnerRaw] = useState(''); // 暫存 VRD 車主名稱
+    const [vrdOwnerRaw, setVrdOwnerRaw] = useState(''); 
 
     // 計算邏輯
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
@@ -3939,6 +3941,59 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         const a1 = Number(priceA1Str.replace(/,/g, '')) || 0;
         const tax = Number(priceTaxStr.replace(/,/g, '')) || 0;
         return formatNumberInput(String(a1 + tax));
+    };
+
+    // ★★★ 核心功能：自動同步智能圖庫照片 ★★★
+    useEffect(() => {
+        // 如果是新車還沒 ID，就無法從圖庫拉資料
+        if (!v.id || !db || !staffId) return;
+
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const mediaRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library');
+        
+        // 查詢條件：狀態為 linked 且 relatedVehicleId 等於當前車輛 ID
+        const q = query(
+            mediaRef, 
+            where('status', '==', 'linked'),
+            where('relatedVehicleId', '==', v.id)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const linkedUrls: string[] = [];
+            let coverUrl = '';
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                // 如果是設定為封面的圖，優先處理
+                if (data.isPrimary) {
+                    coverUrl = data.url;
+                } else {
+                    linkedUrls.push(data.url);
+                }
+            });
+
+            // 如果有封面圖，放在第一張
+            if (coverUrl) linkedUrls.unshift(coverUrl);
+
+            // 合併邏輯：
+            // 1. 取出圖庫連動的圖
+            // 2. 取出原本存在 inventory 裡的圖 (v.photos)
+            // 3. 去除重複
+            const legacyPhotos = v.photos || [];
+            const combined = Array.from(new Set([...linkedUrls, ...legacyPhotos]));
+            
+            setCarPhotos(combined);
+        });
+
+        return () => unsubscribe();
+    }, [v.id, db, staffId, appId]);
+
+    // ★★★ 按鈕修復：跳轉到圖庫 ★★★
+    const handleGoToMediaLibrary = () => {
+        // 1. 關閉當前車輛編輯視窗
+        setEditingVehicle(null);
+        // 2. 切換 Tab 到媒體中心
+        setActiveTab('media_center');
     };
 
     // 圖片壓縮
@@ -4006,29 +4061,24 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         setNewExpense({ ...newExpense, type: selectedType, company: defaultComp, amount: defaultAmt, date: targetDate });
     };
 
-    // 自動搜尋客戶 (保留原樣)
-    const autoFetchCustomer = () => { /* 保留原本的邏輯 */ }; 
+    const autoFetchCustomer = () => { /* 保留 */ }; 
 
-    // ★★★ 實作：搜尋 VRD 資料庫 ★★★
+    // VRD 搜尋
     const handleSearchVRD = async () => {
         if (!vrdSearch || !db) return;
         setSearching(true);
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         try {
             const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-            // 嘗試車牌
             const q = query(dbRef, where('plateNoHK', '==', vrdSearch.toUpperCase())); 
             let snap = await getDocs(q);
             
-            // 嘗試底盤
             if (snap.empty) {
                 const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase()));
                 snap = await getDocs(q2);
             }
             
-            // 嘗試 Reg No (有些資料庫可能用不同欄位名)
             if (snap.empty) {
-                 // 備用：如果您的資料庫中心欄位是 regNo 而不是 plateNoHK
                  const q3 = query(dbRef, where('regNo', '==', vrdSearch.toUpperCase())); 
                  snap = await getDocs(q3);
             }
@@ -4042,11 +4092,10 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         } catch (e) { console.error(e); alert("搜尋錯誤"); } finally { setSearching(false); }
     };
 
-    // ★★★ 實作：導入 VRD 資料 (含客戶配對) ★★★
+    // VRD 導入
     const applyVrdData = () => {
         if (!vrdResult) return;
         
-        // 1. 填入基礎資料
         const regMark = vrdResult.plateNoHK || vrdResult.regNo || '';
         setFieldValue('regMark', regMark);
         if (vrdResult.make) setSelectedMake(vrdResult.make);
@@ -4061,36 +4110,27 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         if (vrdResult.priceTax) setPriceTaxStr(formatNumberInput(vrdResult.priceTax.toString()));
         if (vrdResult.prevOwners !== undefined) setFieldValue('previousOwners', vrdResult.prevOwners.toString());
 
-        // 2. 客戶匹配邏輯
-        const ownerName = vrdResult.registeredOwnerName || vrdResult.owner; // 支援兩種欄位名
+        const ownerName = vrdResult.registeredOwnerName || vrdResult.owner;
         
         if (ownerName) {
-            // 在 clients 列表中尋找
             const exist = clients.find((c: any) => c.name === ownerName);
-            
             if (exist) {
-                // 情境 A: 找到現有客戶 -> 自動帶入所有資料
                 setFieldValue('customerName', exist.name);
                 setFieldValue('customerPhone', exist.phone || '');
                 setFieldValue('customerID', exist.idNumber || exist.hkid || '');
                 setFieldValue('customerAddress', exist.address || '');
-                setVrdOwnerRaw(''); // 清除暫存
+                setVrdOwnerRaw(''); 
                 alert(`已成功導入 VRD 並自動配對客戶：${exist.name}`);
             } else {
-                // 情境 B: 沒找到 -> 填入名字，並提示
                 setVrdOwnerRaw(ownerName);
                 setFieldValue('customerName', ownerName); 
-                // 其他欄位留空或填入 VRD 的有限資訊
                 if(vrdResult.registeredOwnerId) setFieldValue('customerID', vrdResult.registeredOwnerId);
-                
                 alert(`VRD 導入成功。注意：系統內無客戶 "${ownerName}" 的完整檔案，已暫填姓名。`);
             }
         } else {
-            alert("VRD 導入成功 (此 VRD 無登記車主資料)");
+            alert("VRD 導入成功");
         }
-        
-        setVrdResult(null); 
-        setVrdSearch('');
+        setVrdResult(null); setVrdSearch('');
     };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -4128,9 +4168,8 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
             {/* 左側欄：VRD & Photos */}
             <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin">
                  
-                 {/* ★★★ 導入區塊 (只在新增模式顯示) ★★★ */}
-                 {isNew && (
-                    <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg shadow-sm">
+                 {/* VRD 導入區塊 */}
+                 <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg shadow-sm mb-2">
                         <label className="text-xs font-bold text-blue-800 mb-2 block flex items-center">
                             <Database size={14} className="mr-1"/> 從資料庫中心導入 (VRD)
                         </label>
@@ -4139,14 +4178,14 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                                 value={vrdSearch}
                                 onChange={e => setVrdSearch(e.target.value.toUpperCase())}
                                 placeholder="車牌 / 底盤號"
-                                className="flex-1 p-1.5 text-xs border border-blue-200 rounded focus:ring-2 focus:ring-blue-400 outline-none uppercase font-mono"
+                                className="w-full flex-1 p-1.5 text-xs border border-blue-200 rounded focus:ring-2 focus:ring-blue-400 outline-none uppercase font-mono"
                                 onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}}
                             />
                             <button 
                                 type="button"
                                 onClick={handleSearchVRD}
                                 disabled={searching}
-                                className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                                className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center flex-none"
                             >
                                 {searching ? <Loader2 className="animate-spin" size={12}/> : '搜尋'}
                             </button>
@@ -4161,8 +4200,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                                 <button type="button" onClick={applyVrdData} className="text-[10px] bg-green-500 text-white px-2 py-1 rounded font-bold hover:bg-green-600 ml-2">導入</button>
                             </div>
                         )}
-                    </div>
-                 )}
+                 </div>
 
                  {/* VRD Card Content */}
                  <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
@@ -4200,24 +4238,25 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                     </div>
                 </div>
 
-                {/* 車輛詳情 - 圖片管理區域 (圖庫連動版) */}
+                {/* 車輛詳情 - 圖片管理區域 (已自動連動) */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="font-bold text-slate-700 text-sm flex items-center">
-                            <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片 (圖庫連動)
+                            <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片 (已自動同步)
                         </h3>
+                        {/* ★★★ 修正後的按鈕：先關彈窗，再跳轉 ★★★ */}
                         <button 
                             type="button" 
-                            onClick={() => setActiveTab('media_center')} 
-                            className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 transition"
+                            onClick={handleGoToMediaLibrary} 
+                            className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-all font-bold shadow-sm"
                         >
-                            前往圖庫整理相片
+                            前往圖庫整理 <ArrowRight size={10} className="inline ml-1"/>
                         </button>
                     </div>
                     
                     <div className="grid grid-cols-3 gap-2">
                         {carPhotos.map((url, idx) => (
-                            <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group">
+                            <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group bg-gray-100">
                                 <img src={url} className="w-full h-full object-cover" />
                                 <button 
                                     type="button" 
@@ -4228,17 +4267,21 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                                 </button>
                             </div>
                         ))}
+                        {/* 這裡依然保留上傳按鈕，方便臨時補圖 */}
                         <label className="aspect-video border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition">
                             <Plus size={20}/>
                             <span className="text-[9px] mt-1">直接加入</span>
                             <input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                         </label>
                     </div>
-                    <p className="text-[9px] text-slate-400 mt-2 italic">* 建議從「智能圖庫」預備庫進行打包整理，以利 AI 分類。</p>
+                    <p className="text-[9px] text-slate-400 mt-2 italic flex items-center">
+                        <Info size={10} className="mr-1"/> 
+                        提示：系統會自動抓取「智能圖庫」中已歸類到此車 (ID: {v.id?.slice(0,4)}) 的照片。
+                    </p>
                 </div>
             </div>
             
-            {/* 右側欄：銷售與管理 */}
+            {/* 右側欄：銷售與管理 (保持完整) */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
                 {/* ... Status Buttons & Stock Dates ... */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -4256,7 +4299,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                 <div className="mb-6 relative">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>
-                        {/* 如果 VRD 有車主但未配對到客戶，顯示提示 */}
                         {vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200 flex items-center"><AlertTriangle size={10} className="mr-1"/> VRD 車主: {vrdOwnerRaw} (系統未建檔)</span>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 relative group-focus-within:ring-2 ring-blue-100 transition-all">
@@ -4276,8 +4318,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>收款記錄 (Payments)</span><span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span></h4>
                             <div className="space-y-1 mb-2">
-                                {(v.payments || []).map((p: any) => (<div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
-                                    <div className="col-span-2 text-gray-400">{p.date}</div><div className="col-span-3 font-bold">{p.type}</div><div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div><div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div><div className="col-span-1 text-right">{!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}</div></div>))}
+                                {(v.payments || []).map((p: any) => (<div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{p.date}</div><div className="col-span-3 font-bold">{p.type}</div><div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div><div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div><div className="col-span-1 text-right">{!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}</div></div>))}
                                 {pendingCbTasks.map((task: any) => (<div key={task.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊自動填入下方收款欄"><div className="col-span-2 text-amber-600/70">{task.date}</div><div className="col-span-3 font-bold flex items-center"><Info size={10} className="mr-1"/> {task.item}</div><div className="col-span-3 text-amber-700 truncate">{task.institution}</div><div className="col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div><div className="col-span-1 text-right"><span className="bg-amber-200 px-1 rounded text-[9px] font-bold">待收</span></div></div>))}
                             </div>
                             <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2"><input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/><select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select><input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/><input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/><button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button></div>
@@ -4286,8 +4327,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                         {/* 車輛費用區塊 (保持原樣) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>車輛費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span></h4>
-                            <div className="space-y-1 mb-2">{(v.expenses || []).map((exp: any) => (<div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
-                                <div className="col-span-2 text-gray-400">{exp.date}</div><div className="col-span-3 font-bold">{exp.type}</div><div className="col-span-3 text-gray-500 truncate">{exp.company}</div><div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div><div className="col-span-1 text-right"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></div></div>))}</div>
+                            <div className="space-y-1 mb-2">{(v.expenses || []).map((exp: any) => (<div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{exp.date}</div><div className="col-span-3 font-bold">{exp.type}</div><div className="col-span-3 text-gray-500 truncate">{exp.company}</div><div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div><div className="col-span-1 text-right"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></div></div>))}</div>
                             
                             <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
                                 <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
