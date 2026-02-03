@@ -1675,6 +1675,46 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
         setSelectedIds([]);
     };
 
+    // ★★★ 新增：呼叫 AI 分析圖片 ★★★
+    const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+
+    const handleAnalyzeImage = async (item: MediaLibraryItem) => {
+        if (!item.url) return;
+        setAnalyzingId(item.id);
+
+        try {
+            // 呼叫我們剛寫好的 API
+            const res = await fetch('/api/vision', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageUrl: item.url })
+            });
+
+            const json = await res.json();
+
+            if (json.success && db) {
+                const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+                // 更新 Firestore
+                const docRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', item.id);
+                
+                // 將 AI 標籤合併到現有標籤
+                const newTags = Array.from(new Set([...(item.tags || []), ...json.data.tags]));
+                
+                await updateDoc(docRef, {
+                    tags: newTags,
+                    // 如果你想存更詳細的資料：
+                    // aiData: json.data 
+                });
+                // alert(`AI 識別完成：${json.data.make} ${json.data.model}`);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("AI 分析失敗");
+        } finally {
+            setAnalyzingId(null);
+        }
+    };
+
     const toggleSelection = (id: string) => {
         setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
     };
@@ -1721,21 +1761,49 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
                     return (
                         <div 
                             key={item.id} 
-                            onClick={() => toggleSelection(item.id)}
-                            className={`group relative aspect-[4/3] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent hover:border-slate-300'}`}
+                            onClick={(e) => {
+                                // 防止點擊按鈕時觸發選取
+                                if ((e.target as HTMLElement).closest('button')) return;
+                                toggleSelection(item.id);
+                            }}
+                            className={`group relative aspect-[4/3] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-100 hover:border-slate-300 shadow-sm'}`}
                         >
                             <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
                             
-                            {/* 狀態標籤 */}
-                            <div className="absolute top-2 left-2 flex gap-1">
+                            {/* AI 分析遮罩層 (分析中顯示) */}
+                            {isAnalyzing && (
+                                <div className="absolute inset-0 bg-black/60 z-20 flex flex-col items-center justify-center text-white animate-pulse">
+                                    <Loader2 className="animate-spin mb-1" size={24}/>
+                                    <span className="text-[10px] font-bold">AI 分析中...</span>
+                                </div>
+                            )}
+
+                            {/* 狀態標籤 (左上) */}
+                            <div className="absolute top-2 left-2 flex gap-1 z-10">
                                 {item.status === 'linked' && <span className="bg-green-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm">已存檔</span>}
                                 {isSelected && <div className="bg-blue-600 text-white rounded-full p-0.5"><Check size={12}/></div>}
                             </div>
 
-                            {/* 底部資訊 */}
-                            <div className="absolute bottom-0 inset-x-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="text-[10px] text-white truncate">{item.fileName}</div>
-                                <div className="text-[9px] text-gray-300">{new Date(item.createdAt?.seconds * 1000).toLocaleDateString()}</div>
+                            {/* 標籤展示 (左下) */}
+                            <div className="absolute bottom-8 left-2 right-2 flex flex-wrap gap-1 z-10 pointer-events-none">
+                                {item.tags?.slice(0, 3).map((t, i) => (
+                                    <span key={i} className="text-[8px] bg-black/50 text-white px-1.5 rounded backdrop-blur-sm border border-white/20">
+                                        {t}
+                                    </span>
+                                ))}
+                            </div>
+
+                            {/* 底部操作列 (Hover 顯示) */}
+                            <div className="absolute bottom-0 inset-x-0 bg-white/90 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-center z-20">
+                                <div className="text-[10px] text-slate-600 truncate max-w-[60%]">{item.fileName}</div>
+                                <button 
+                                    onClick={() => handleAnalyzeImage(item)}
+                                    disabled={isAnalyzing}
+                                    className="bg-purple-100 text-purple-700 hover:bg-purple-200 p-1.5 rounded-full transition-colors flex items-center gap-1"
+                                    title="執行 AI 智能識別"
+                                >
+                                    <Zap size={12} fill="currentColor"/>
+                                </button>
                             </div>
                         </div>
                     );
