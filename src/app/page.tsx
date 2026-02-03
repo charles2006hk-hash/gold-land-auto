@@ -1635,12 +1635,12 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
             try {
                 // A. 前端壓縮
                 const compressedBlob = await compressImageSmart(file);
-                const compressedFile = new File([compressedBlob], file.name, { type: 'image/jpeg' });
+                
                 
                 // B. 上傳 Storage
                 const filePath = `media/${appId}/${Date.now()}_${file.name}`;
                 const storageRef = ref(storage, filePath);
-                const uploadTask = await uploadBytes(storageRef, compressedFile);
+                const uploadTask = await uploadBytes(storageRef, compressedBlob, { contentType: 'image/jpeg' });
                 const downloadURL = await getDownloadURL(uploadTask.ref);
 
                 // C. 寫入 Firestore (狀態: inbox)
