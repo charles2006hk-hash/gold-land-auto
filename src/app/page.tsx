@@ -1599,7 +1599,7 @@ const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 重構版 v4.0：智能圖庫模組 (堆疊分組 + 系統連動 + 預覽) ★★★
+// ★★★ 重構版 v5.0：智能圖庫模組 (含庫存配對 + 自動填寫) ★★★
 // ------------------------------------------------------------------
 const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }: any) => {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
@@ -1609,6 +1609,9 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     
+    // ★★★ 新增：選中的庫存車輛 ID ★★★
+    const [targetVehicleId, setTargetVehicleId] = useState<string>('');
+
     // 工作台表單 (歸類用)
     const [classifyForm, setClassifyForm] = useState({
         make: '', model: '', year: new Date().getFullYear().toString(),
@@ -1617,9 +1620,9 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     });
 
     // 圖庫檢視狀態
-    const [previewImage, setPreviewImage] = useState<string | null>(null); // 放大預覽圖片 URL
-    const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null); // 當前展開的車輛群組
-    const [searchQuery, setSearchQuery] = useState(''); // 搜尋關鍵字
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // 1. 監聽數據
     useEffect(() => {
@@ -1636,14 +1639,11 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
     }, [db, staffId, appId]);
 
-    // 2. 智能分組與排序邏輯 (核心)
+    // 2. 智能分組與排序邏輯
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
-        
-        // 只處理已歸檔的圖片
         const linkedItems = mediaItems.filter(i => i.status === 'linked');
 
-        // 過濾搜尋
         const filteredItems = linkedItems.filter(item => {
             if (!searchQuery) return true;
             const searchStr = `${item.aiData?.year} ${item.aiData?.make} ${item.aiData?.model} ${item.aiData?.color}`.toLowerCase();
@@ -1651,39 +1651,30 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         });
 
         filteredItems.forEach(item => {
-            // 建立分組 Key (優先使用 relatedVehicleId，如果沒有則用 文字描述)
             let groupKey = item.relatedVehicleId || `${item.aiData?.year}-${item.aiData?.make}-${item.aiData?.model}`;
             let groupTitle = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類車輛';
-            
-            // 嘗試從庫存 Inventory 獲取更準確的狀態
             let status = 'Unknown';
+
             if (item.relatedVehicleId) {
                 const car = inventory.find((v:any) => v.id === item.relatedVehicleId);
                 if (car) {
                     groupTitle = `${car.year} ${car.make} ${car.model} (${car.regMark || '未出牌'})`;
-                    status = car.status; // In Stock, Reserved, Sold
+                    status = car.status;
                 }
             } else {
-                // 如果沒有關聯 ID，嘗試用文字匹配 (模糊匹配)
                 const matchCar = inventory.find((v:any) => v.make === item.aiData?.make && v.model === item.aiData?.model && v.year == item.aiData?.year);
                 if (matchCar) status = matchCar.status;
             }
 
             if (!groups[groupKey]) {
                 groups[groupKey] = {
-                    key: groupKey,
-                    title: groupTitle,
-                    items: [],
-                    status: status,
-                    timestamp: item.createdAt?.seconds || 0
+                    key: groupKey, title: groupTitle, items: [], status: status, timestamp: item.createdAt?.seconds || 0
                 };
             }
             groups[groupKey].items.push(item);
         });
 
-        // 轉換為陣列並排序
         return Object.values(groups).sort((a, b) => {
-            // 權重排序: In Stock (1) > Reserved (2) > Unknown (3) > Sold (4)
             const getWeight = (s: string) => {
                 if (s === 'In Stock') return 1;
                 if (s === 'Reserved') return 2;
@@ -1692,13 +1683,12 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             };
             const weightA = getWeight(a.status);
             const weightB = getWeight(b.status);
-            
             if (weightA !== weightB) return weightA - weightB;
-            return b.timestamp - a.timestamp; // 同狀態下，新的在前
+            return b.timestamp - a.timestamp;
         });
     }, [mediaItems, inventory, searchQuery]);
 
-    // 3. 上傳功能 (保持不變)
+    // 3. 上傳功能
     const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !storage) return;
@@ -1720,32 +1710,41 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         setUploading(false);
     };
 
-    // 4. 執行歸檔
+    // 4. 執行歸檔 (升級版：支援選取關聯)
     const handleClassify = async () => {
         if (!db || selectedInboxIds.length === 0) return;
         if (!classifyForm.make || !classifyForm.model) { alert("請填寫廠牌與型號"); return; }
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const batch = writeBatch(db);
         
-        // 嘗試自動匹配庫存車輛 ID (如果有完全匹配的)
-        const matchCar = inventory.find((v:any) => 
-            v.make === classifyForm.make && 
-            v.model === classifyForm.model && 
-            v.year == classifyForm.year && 
-            v.colorExt === classifyForm.color
-        );
+        // 優先使用手動選擇的車輛 ID，若無則嘗試自動匹配
+        let finalRelatedId = targetVehicleId;
+        if (!finalRelatedId) {
+            const matchCar = inventory.find((v:any) => 
+                v.make === classifyForm.make && 
+                v.model === classifyForm.model && 
+                v.year == classifyForm.year && 
+                v.colorExt === classifyForm.color
+            );
+            if (matchCar) finalRelatedId = matchCar.id;
+        }
+
+        // 如果有關聯車輛，同步更新車輛本身的 photos 欄位 (可選，視需求而定)
+        // 這裡我們主要更新 media_library 的指向
 
         selectedInboxIds.forEach(id => {
             const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
             batch.update(ref, {
                 status: 'linked',
-                relatedVehicleId: matchCar ? matchCar.id : null, // 自動關聯
-                tags: [classifyForm.make, classifyForm.model, classifyForm.year, classifyForm.color],
+                relatedVehicleId: finalRelatedId || null,
+                tags: [classifyForm.make, classifyForm.model, classifyForm.year, classifyForm.color, classifyForm.type],
                 aiData: { ...classifyForm }
             });
         });
         await batch.commit();
         setSelectedInboxIds([]);
+        // 歸檔後重置選取的車輛，避免誤操作
+        setTargetVehicleId('');
     };
 
     const handleDeleteImage = async (id: string) => {
@@ -1791,7 +1790,44 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                     <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">已選: {selectedInboxIds.length}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {/* 表單區：使用 DataList 實現選擇後可修改 */}
+                    
+                    {/* ★★★ 新增：庫存配對選擇器 ★★★ */}
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 shadow-sm">
+                        <label className="text-xs font-bold text-blue-800 mb-1 block flex items-center">
+                            <Link size={12} className="mr-1"/> 
+                            配對現有庫存 (Link to Inventory)
+                        </label>
+                        <select 
+                            value={targetVehicleId} 
+                            onChange={(e) => {
+                                const vId = e.target.value;
+                                setTargetVehicleId(vId);
+                                const v = inventory.find((i:any) => i.id === vId);
+                                if (v) {
+                                    // 自動填入表單
+                                    setClassifyForm(prev => ({
+                                        ...prev,
+                                        make: v.make || '',
+                                        model: v.model || '',
+                                        year: v.year || '',
+                                        color: v.colorExt || ''
+                                    }));
+                                }
+                            }}
+                            className="w-full p-2 text-xs border border-blue-200 rounded bg-white outline-none focus:ring-2 focus:ring-blue-300"
+                        >
+                            <option value="">-- 手動輸入 / 不關聯 --</option>
+                            {inventory.map((v: Vehicle) => (
+                                <option key={v.id} value={v.id}>
+                                    {v.regMark || '(未出牌)'} - {v.make} {v.model} ({v.year})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="h-[1px] bg-slate-100 w-full"></div>
+
+                    {/* 表單區 */}
                     <div className="space-y-3">
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase">Year</label>
@@ -1819,12 +1855,19 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                     {settings?.colors?.map((c:string) => <option key={c} value={c}/>)}
                                 </datalist>
                             </div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase">Type (部位)</label>
+                                <select value={classifyForm.type} onChange={e => setClassifyForm({...classifyForm, type: e.target.value as any})} className="w-full p-2 border rounded text-sm bg-slate-50">
+                                    <option>外觀 (Exterior)</option>
+                                    <option>內飾 (Interior)</option>
+                                    <option>細節 (Detail)</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     
                     <button 
                         onClick={() => {
-                            // 模擬 AI 填充：隨機選一個庫存車填入
                             if(inventory.length > 0) {
                                 const randomCar = inventory[Math.floor(Math.random() * inventory.length)];
                                 setClassifyForm({
@@ -1848,14 +1891,13 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 </div>
             </div>
 
-            {/* --- 右欄：車輛圖庫 (Gallery) - 堆疊模式 --- */}
+            {/* --- 右欄：車輛圖庫 (Gallery) --- */}
             <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
                 <div className="p-3 border-b bg-slate-50 flex justify-between items-center gap-4">
                     <div className="flex items-center gap-2">
                         <ImageIcon size={18} className="text-slate-700"/>
                         <h3 className="font-bold text-slate-700 hidden md:block">車輛圖庫</h3>
                     </div>
-                    {/* 搜尋框 */}
                     <div className="flex-1 relative max-w-xs">
                         <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400"/>
                         <input 
@@ -1868,7 +1910,6 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50">
-                    {/* 堆疊列表 (Stack Grid) */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {libraryGroups.map(group => {
                             const isExpanded = expandedGroupKey === group.key;
@@ -1876,13 +1917,11 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                             
                             return (
                                 <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-200 shadow-md' : 'hover:shadow-md'}`}>
-                                    {/* Header (可點擊展開) */}
                                     <div 
                                         className="p-3 flex justify-between items-center cursor-pointer bg-white border-b border-slate-100"
                                         onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}
                                     >
                                         <div className="flex items-center gap-3 overflow-hidden">
-                                            {/* 封面圖 */}
                                             <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden relative">
                                                 <img src={group.items[0]?.url} className="w-full h-full object-cover"/>
                                                 <div className="absolute inset-0 bg-black/10"></div>
@@ -1899,13 +1938,12 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                         <div className="text-slate-400">{isExpanded ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</div>
                                     </div>
 
-                                    {/* 展開後的內容 (Expanded Content) */}
                                     {isExpanded && (
                                         <div className="p-4 bg-slate-50 animate-fade-in">
                                             <div className="flex justify-between mb-3">
                                                 <div className="text-xs text-slate-500">點擊圖片放大預覽</div>
                                                 <button 
-                                                    onClick={(e) => { e.stopPropagation(); /* 這裡加入 WhatsApp 分享邏輯 */ }}
+                                                    onClick={(e) => { e.stopPropagation(); /* WhatsApp 分享 */ }}
                                                     className="text-[10px] bg-green-500 text-white px-3 py-1 rounded-full flex items-center hover:bg-green-600"
                                                 >
                                                     <Share2 size={10} className="mr-1"/> 分享此車圖片
@@ -1942,7 +1980,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 </div>
             </div>
 
-            {/* --- Lightbox 圖片預覽視窗 --- */}
+            {/* --- Lightbox --- */}
             {previewImage && (
                 <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
                     <img src={previewImage} className="max-w-full max-h-[90vh] rounded shadow-2xl object-contain" onClick={e => e.stopPropagation()}/>
