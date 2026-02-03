@@ -3844,7 +3844,6 @@ const DatabaseSelector = ({
         </div>
       </div>
     );
-  };
 
   // 2. Report View (Linked to Edit)
   const ReportView = () => {
