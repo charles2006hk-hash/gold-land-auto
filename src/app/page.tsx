@@ -1550,11 +1550,19 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     );
 };
 
-// --- 新增：智能圖庫管理模組 ---
+// --- 新增：智能圖庫管理模組 (v2.0: 含批量分配與篩選功能) ---
 const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
     const [uploading, setUploading] = useState(false);
+    
+    // ★★★ 新增：多選與操作狀態 ★★★
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [filterStatus, setFilterStatus] = useState<'all' | 'unassigned' | 'linked'>('all');
+    const [showLinkModal, setShowLinkModal] = useState(false);
+    const [targetVehicleId, setTargetVehicleId] = useState('');
+    const [inventoryList, setInventoryList] = useState<Vehicle[]>([]); // 簡易庫存列表用
 
+    // 1. 監聽圖庫數據
     useEffect(() => {
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -1569,6 +1577,19 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
         });
     }, [db, staffId, appId]);
 
+    // 2. 讀取簡易庫存列表 (用於分配選單)
+    useEffect(() => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'), orderBy('createdAt', 'desc'));
+        getDocs(q).then(snap => {
+            const list: Vehicle[] = [];
+            snap.forEach(d => list.push({ id: d.id, ...d.data() } as Vehicle));
+            setInventoryList(list);
+        });
+    }, [db, staffId, appId, showLinkModal]); // 僅在打開 Modal 時重新整理
+
+    // 上傳邏輯 (保持不變)
     const handleLocalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !storage) return;
@@ -1579,53 +1600,202 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
             const file = files[i];
             const filePath = `media/${appId}/${Date.now()}_${file.name}`;
             const storageRef = ref(storage, filePath);
-            
             try {
-                // 使用 uploadBytes 處理二進位文件
                 const uploadTask = await uploadBytes(storageRef, file);
                 const downloadURL = await getDownloadURL(uploadTask.ref);
-
                 await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), {
                     url: downloadURL,
                     path: filePath,
                     fileName: file.name,
-                    tags: ["電腦上傳"], // 未來 AI 分類入口
+                    tags: ["待整理"], 
                     status: 'unassigned',
                     createdAt: serverTimestamp()
                 });
-            } catch (err) {
-                console.error("Upload failed:", err);
-            }
+            } catch (err) { console.error("Upload failed:", err); }
         }
         setUploading(false);
     };
 
+    // ★★★ 核心邏輯：批量分配圖片給車輛 ★★★
+    const handleBatchLink = async () => {
+        if (!targetVehicleId || selectedIds.length === 0 || !db) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const currentDb = db; // Local reference
+
+        try {
+            // 1. 找出選中的圖片 URL
+            const selectedItems = mediaItems.filter(item => selectedIds.includes(item.id));
+            const newPhotoUrls = selectedItems.map(item => item.url);
+
+            // 2. 更新車輛 (Inventory) -> 將圖片加入 photos 陣列
+            // 先讀取舊車輛資料，以免覆蓋
+            const vehicleRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', targetVehicleId);
+            const vehicleSnap = await getDoc(vehicleRef);
+            
+            if (vehicleSnap.exists()) {
+                const currentPhotos = vehicleSnap.data().photos || [];
+                // 合併並去重
+                const updatedPhotos = Array.from(new Set([...currentPhotos, ...newPhotoUrls]));
+                await updateDoc(vehicleRef, { photos: updatedPhotos });
+            }
+
+            // 3. 更新圖庫 (Media Library) -> 標記為已分配 (linked)
+            const batch = writeBatch(currentDb);
+            selectedIds.forEach(id => {
+                const mediaRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
+                batch.update(mediaRef, { 
+                    status: 'linked', 
+                    relatedVehicleId: targetVehicleId,
+                    tags: ['已分配'] // 簡單標記
+                });
+            });
+            await batch.commit();
+
+            alert(`成功將 ${selectedIds.length} 張圖片分配給車輛！`);
+            setSelectedIds([]);
+            setShowLinkModal(false);
+            setTargetVehicleId('');
+        } catch (e) {
+            console.error(e);
+            alert("分配失敗，請稍後再試");
+        }
+    };
+
+    // 批量刪除
+    const handleBatchDelete = async () => {
+        if (!confirm(`確定刪除選中的 ${selectedIds.length} 張圖片？(這不會刪除已分配到車輛庫存的連結)`)) return;
+        if (!db) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const batch = writeBatch(db);
+        selectedIds.forEach(id => {
+            const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
+            batch.delete(ref);
+        });
+        await batch.commit();
+        setSelectedIds([]);
+    };
+
+    const toggleSelection = (id: string) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
+    // 篩選顯示
+    const displayedItems = mediaItems.filter(item => filterStatus === 'all' || item.status === filterStatus);
+
     return (
-        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200">
+        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+            {/* Header Tool Bar */}
             <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><ImageIcon size={20}/></div>
-                    <h2 className="font-bold text-slate-700">智能圖庫預備庫 (Media Inbox)</h2>
-                </div>
-                <label className="bg-slate-900 text-white px-4 py-2 rounded-lg cursor-pointer text-sm font-bold hover:bg-slate-800 transition flex items-center">
-                    {uploading ? <Loader2 className="animate-spin mr-2" size={16}/> : <Plus size={16} className="mr-2"/>}
-                    從電腦上傳
-                    <input type="file" multiple className="hidden" onChange={handleLocalUpload} disabled={uploading} />
-                </label>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {mediaItems.map(item => (
-                    <div key={item.id} className="group relative aspect-[4/3] rounded-lg overflow-hidden border bg-slate-100 shadow-sm transition hover:shadow-md">
-                        <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center p-2">
-                            <span className="text-[10px] text-white bg-blue-600 px-2 py-1 rounded-full mb-2">{item.tags[0]}</span>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><ImageIcon size={20}/></div>
+                        <div>
+                            <h2 className="font-bold text-slate-700">智能圖庫 (Inbox)</h2>
+                            <p className="text-[10px] text-slate-400">共 {mediaItems.length} 張相片</p>
                         </div>
                     </div>
-                ))}
-                {mediaItems.length === 0 && !uploading && (
-                    <div className="col-span-full py-20 text-center text-slate-400 italic">預備庫暫無相片，請先上傳</div>
+                    {/* 篩選器 */}
+                    <div className="flex bg-white rounded p-1 border border-slate-200">
+                        {[{k:'all',l:'全部'},{k:'unassigned',l:'未分配'},{k:'linked',l:'已存檔'}].map(opt => (
+                            <button 
+                                key={opt.k} 
+                                onClick={() => setFilterStatus(opt.k as any)}
+                                className={`px-3 py-1 text-xs rounded transition-colors ${filterStatus === opt.k ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+                            >
+                                {opt.l}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <label className="bg-blue-600 text-white px-4 py-2 rounded-lg cursor-pointer text-sm font-bold hover:bg-blue-700 transition flex items-center shadow-md shadow-blue-200">
+                    {uploading ? <Loader2 className="animate-spin mr-2" size={16}/> : <Plus size={16} className="mr-2"/>}
+                    上傳相片
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleLocalUpload} disabled={uploading} />
+                </label>
+            </div>
+
+            {/* Grid Content */}
+            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 pb-20">
+                {displayedItems.map(item => {
+                    const isSelected = selectedIds.includes(item.id);
+                    return (
+                        <div 
+                            key={item.id} 
+                            onClick={() => toggleSelection(item.id)}
+                            className={`group relative aspect-[4/3] rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent hover:border-slate-300'}`}
+                        >
+                            <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
+                            
+                            {/* 狀態標籤 */}
+                            <div className="absolute top-2 left-2 flex gap-1">
+                                {item.status === 'linked' && <span className="bg-green-500 text-white text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm">已存檔</span>}
+                                {isSelected && <div className="bg-blue-600 text-white rounded-full p-0.5"><Check size={12}/></div>}
+                            </div>
+
+                            {/* 底部資訊 */}
+                            <div className="absolute bottom-0 inset-x-0 bg-black/60 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="text-[10px] text-white truncate">{item.fileName}</div>
+                                <div className="text-[9px] text-gray-300">{new Date(item.createdAt?.seconds * 1000).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                    );
+                })}
+                {displayedItems.length === 0 && !uploading && (
+                    <div className="col-span-full py-20 text-center text-slate-400 italic">沒有相片</div>
                 )}
             </div>
+
+            {/* ★★★ 底部批量操作列 (當有選中時浮現) ★★★ */}
+            {selectedIds.length > 0 && (
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-4 z-10">
+                    <span className="font-bold text-sm">已選 {selectedIds.length} 張</span>
+                    <div className="h-4 w-[1px] bg-slate-600"></div>
+                    <button onClick={() => setShowLinkModal(true)} className="flex items-center gap-2 hover:text-blue-300 transition-colors text-sm font-bold">
+                        <Link size={16}/> 分配給車輛
+                    </button>
+                    <button onClick={handleBatchDelete} className="flex items-center gap-2 hover:text-red-300 transition-colors text-sm font-bold">
+                        <Trash2 size={16}/> 刪除
+                    </button>
+                    <button onClick={() => setSelectedIds([])} className="bg-slate-700 hover:bg-slate-600 p-1 rounded-full ml-2"><X size={14}/></button>
+                </div>
+            )}
+
+            {/* 分配車輛 Modal */}
+            {showLinkModal && (
+                <div className="absolute inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+                        <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-800">選擇目標車輛</h3>
+                            <button onClick={() => setShowLinkModal(false)}><X size={20} className="text-slate-400"/></button>
+                        </div>
+                        <div className="p-4">
+                            <p className="text-sm text-slate-500 mb-3">將選中的 {selectedIds.length} 張圖片加入到：</p>
+                            <select 
+                                className="w-full p-3 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                                value={targetVehicleId}
+                                onChange={e => setTargetVehicleId(e.target.value)}
+                            >
+                                <option value="">-- 請選擇庫存車輛 --</option>
+                                {inventoryList.map(v => (
+                                    <option key={v.id} value={v.id}>
+                                        {v.regMark || '(未出牌)'} - {v.make} {v.model} ({v.year})
+                                    </button>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+                            <button onClick={() => setShowLinkModal(false)} className="px-4 py-2 text-slate-600 font-bold text-sm">取消</button>
+                            <button 
+                                onClick={handleBatchLink} 
+                                disabled={!targetVehicleId}
+                                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                確認分配
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
