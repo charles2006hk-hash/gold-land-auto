@@ -2687,7 +2687,7 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
             )}
         </>
     );
-//};
+};
 
 // ------------------------------------------------------------------
 // ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
