@@ -3883,8 +3883,7 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v9.1: 修復 VRD 連動與客戶自動配對)
-// 1. Vehicle Form Modal (v9.2: 圖庫自動連動 + 按鈕修復)
+  // 1. Vehicle Form Modal (v9.3: UI 修復 - 找回欄位、搜尋折疊、相簿優化)
 const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -3895,6 +3894,9 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold'>(v.status || 'In Stock');
+
+    // ★★★ 新增：控制 VRD 搜尋框是否展開 ★★★
+    const [isVrdSearchOpen, setIsVrdSearchOpen] = useState(false);
 
     // 數值輸入狀態
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
@@ -3908,7 +3910,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
     const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
 
-    // ★★★ 圖片狀態：混合舊資料 (v.photos) 與 智能圖庫連動 (linkedPhotos) ★★★
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [isCompressing, setIsCompressing] = useState(false);
 
@@ -3943,93 +3944,32 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         return formatNumberInput(String(a1 + tax));
     };
 
-    // ★★★ 核心功能：自動同步智能圖庫照片 ★★★
+    // 自動同步智能圖庫照片
     useEffect(() => {
-        // 如果是新車還沒 ID，就無法從圖庫拉資料
         if (!v.id || !db || !staffId) return;
-
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const mediaRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library');
-        
-        // 查詢條件：狀態為 linked 且 relatedVehicleId 等於當前車輛 ID
-        const q = query(
-            mediaRef, 
-            where('status', '==', 'linked'),
-            where('relatedVehicleId', '==', v.id)
-        );
+        const q = query(mediaRef, where('status', '==', 'linked'), where('relatedVehicleId', '==', v.id));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const linkedUrls: string[] = [];
             let coverUrl = '';
-
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // 如果是設定為封面的圖，優先處理
-                if (data.isPrimary) {
-                    coverUrl = data.url;
-                } else {
-                    linkedUrls.push(data.url);
-                }
+                if (data.isPrimary) coverUrl = data.url;
+                else linkedUrls.push(data.url);
             });
-
-            // 如果有封面圖，放在第一張
             if (coverUrl) linkedUrls.unshift(coverUrl);
-
-            // 合併邏輯：
-            // 1. 取出圖庫連動的圖
-            // 2. 取出原本存在 inventory 裡的圖 (v.photos)
-            // 3. 去除重複
             const legacyPhotos = v.photos || [];
             const combined = Array.from(new Set([...linkedUrls, ...legacyPhotos]));
-            
             setCarPhotos(combined);
         });
-
         return () => unsubscribe();
     }, [v.id, db, staffId, appId]);
 
-    // ★★★ 按鈕修復：跳轉到圖庫 ★★★
     const handleGoToMediaLibrary = () => {
-        // 1. 關閉當前車輛編輯視窗
         setEditingVehicle(null);
-        // 2. 切換 Tab 到媒體中心
         setActiveTab('media_center');
-    };
-
-    // 圖片壓縮
-    const compressImage = (file: File): Promise<string> => {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = (event) => {
-                const img = new Image();
-                img.src = event.target?.result as string;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    const MAX_WIDTH = 1280;
-                    if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                    canvas.width = width; canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx?.drawImage(img, 0, 0, width, height);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
-                    resolve(dataUrl);
-                };
-            };
-        });
-    };
-
-    const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-        setIsCompressing(true);
-        const newPhotos: string[] = [];
-        for (let i = 0; i < files.length; i++) {
-            try { const compressedData = await compressImage(files[i]); newPhotos.push(compressedData); } catch (err) { console.error(err); }
-        }
-        setCarPhotos(prev => [...prev, ...newPhotos]);
-        setIsCompressing(false); e.target.value = '';
     };
 
     const setFieldValue = (name: string, val: string) => {
@@ -4037,25 +3977,18 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         if(el) el.value = val;
     };
 
-    // 費用預設值邏輯
     const handleExpenseTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedType = e.target.value;
         const setting = settings.expenseTypes.find((item: any) => {
             if (typeof item === 'string') return item === selectedType;
             return item.name === selectedType;
         });
-
-        let defaultComp = '';
-        let defaultAmt = '';
-        let targetDate = newExpense.date;
-
+        let defaultComp = ''; let defaultAmt = ''; let targetDate = newExpense.date;
         if (setting && typeof setting !== 'string') {
             defaultComp = setting.defaultCompany || '';
             defaultAmt = setting.defaultAmount ? formatNumberInput(setting.defaultAmount.toString()) : '';
             if (setting.defaultDays && Number(setting.defaultDays) > 0) {
-                const d = new Date();
-                d.setDate(d.getDate() + Number(setting.defaultDays));
-                targetDate = d.toISOString().split('T')[0];
+                const d = new Date(); d.setDate(d.getDate() + Number(setting.defaultDays)); targetDate = d.toISOString().split('T')[0];
             }
         }
         setNewExpense({ ...newExpense, type: selectedType, company: defaultComp, amount: defaultAmt, date: targetDate });
@@ -4072,30 +4005,17 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
             const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
             const q = query(dbRef, where('plateNoHK', '==', vrdSearch.toUpperCase())); 
             let snap = await getDocs(q);
-            
-            if (snap.empty) {
-                const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase()));
-                snap = await getDocs(q2);
-            }
-            
-            if (snap.empty) {
-                 const q3 = query(dbRef, where('regNo', '==', vrdSearch.toUpperCase())); 
-                 snap = await getDocs(q3);
-            }
+            if (snap.empty) { const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q2); }
+            if (snap.empty) { const q3 = query(dbRef, where('regNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q3); }
 
-            if (!snap.empty) {
-                setVrdResult(snap.docs[0].data());
-            } else {
-                alert("資料庫中心找不到此車輛 (請確認車牌或底盤號)");
-                setVrdResult(null);
-            }
+            if (!snap.empty) { setVrdResult(snap.docs[0].data()); } 
+            else { alert("資料庫中心找不到此車輛 (請確認車牌或底盤號)"); setVrdResult(null); }
         } catch (e) { console.error(e); alert("搜尋錯誤"); } finally { setSearching(false); }
     };
 
     // VRD 導入
     const applyVrdData = () => {
         if (!vrdResult) return;
-        
         const regMark = vrdResult.plateNoHK || vrdResult.regNo || '';
         setFieldValue('regMark', regMark);
         if (vrdResult.make) setSelectedMake(vrdResult.make);
@@ -4104,14 +4024,12 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         setFieldValue('chassisNo', vrdResult.chassisNo || '');
         setFieldValue('engineNo', vrdResult.engineNo || '');
         setFieldValue('colorExt', vrdResult.vehicleColor || vrdResult.color || '');
-        
         if (vrdResult.engineSize) setEngineSizeStr(formatNumberInput(vrdResult.engineSize.toString()));
         if (vrdResult.priceA1) setPriceA1Str(formatNumberInput(vrdResult.priceA1.toString()));
         if (vrdResult.priceTax) setPriceTaxStr(formatNumberInput(vrdResult.priceTax.toString()));
         if (vrdResult.prevOwners !== undefined) setFieldValue('previousOwners', vrdResult.prevOwners.toString());
 
         const ownerName = vrdResult.registeredOwnerName || vrdResult.owner;
-        
         if (ownerName) {
             const exist = clients.find((c: any) => c.name === ownerName);
             if (exist) {
@@ -4127,10 +4045,10 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                 if(vrdResult.registeredOwnerId) setFieldValue('customerID', vrdResult.registeredOwnerId);
                 alert(`VRD 導入成功。注意：系統內無客戶 "${ownerName}" 的完整檔案，已暫填姓名。`);
             }
-        } else {
-            alert("VRD 導入成功");
-        }
+        } else { alert("VRD 導入成功"); }
         setVrdResult(null); setVrdSearch('');
+        // 導入後自動收起搜尋框
+        setIsVrdSearchOpen(false);
     };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -4168,41 +4086,52 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
             {/* 左側欄：VRD & Photos */}
             <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin">
                  
-                 {/* VRD 導入區塊 */}
-                 <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg shadow-sm mb-2">
-                        <label className="text-xs font-bold text-blue-800 mb-2 block flex items-center">
-                            <Database size={14} className="mr-1"/> 從資料庫中心導入 (VRD)
-                        </label>
-                        <div className="flex gap-2">
-                            <input 
-                                value={vrdSearch}
-                                onChange={e => setVrdSearch(e.target.value.toUpperCase())}
-                                placeholder="車牌 / 底盤號"
-                                className="w-full flex-1 p-1.5 text-xs border border-blue-200 rounded focus:ring-2 focus:ring-blue-400 outline-none uppercase font-mono"
-                                onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}}
-                            />
-                            <button 
-                                type="button"
-                                onClick={handleSearchVRD}
-                                disabled={searching}
-                                className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center flex-none"
-                            >
-                                {searching ? <Loader2 className="animate-spin" size={12}/> : '搜尋'}
-                            </button>
+                 {/* VRD 導入區塊 (可折疊) */}
+                 <div className="bg-blue-50 border border-blue-100 rounded-lg shadow-sm mb-2 overflow-hidden transition-all">
+                        <div 
+                            className="p-3 flex justify-between items-center cursor-pointer hover:bg-blue-100/50"
+                            onClick={() => setIsVrdSearchOpen(!isVrdSearchOpen)}
+                        >
+                            <label className="text-xs font-bold text-blue-800 flex items-center cursor-pointer">
+                                <Database size={14} className="mr-1"/> 從資料庫中心導入 (VRD)
+                            </label>
+                            {isVrdSearchOpen ? <ChevronUp size={16} className="text-blue-500"/> : <ChevronDown size={16} className="text-blue-500"/>}
                         </div>
-                        {vrdResult && (
-                            <div className="mt-2 bg-white p-2 rounded border border-blue-200 shadow-sm flex justify-between items-center animate-in slide-in-from-top-2">
-                                <div className="text-xs">
-                                    <div className="font-bold text-slate-700">{vrdResult.plateNoHK || vrdResult.regNo}</div>
-                                    <div className="text-[10px] text-slate-500">{vrdResult.make} {vrdResult.model}</div>
-                                    {vrdResult.registeredOwnerName && <div className="text-[10px] text-blue-600">車主: {vrdResult.registeredOwnerName}</div>}
+                        
+                        {isVrdSearchOpen && (
+                            <div className="p-3 pt-0 animate-fade-in">
+                                <div className="flex gap-2">
+                                    <input 
+                                        value={vrdSearch}
+                                        onChange={e => setVrdSearch(e.target.value.toUpperCase())}
+                                        placeholder="車牌 / 底盤號"
+                                        className="w-full flex-1 p-1.5 text-xs border border-blue-200 rounded focus:ring-2 focus:ring-blue-400 outline-none uppercase font-mono"
+                                        onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}}
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={handleSearchVRD}
+                                        disabled={searching}
+                                        className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center flex-none"
+                                    >
+                                        {searching ? <Loader2 className="animate-spin" size={12}/> : '搜尋'}
+                                    </button>
                                 </div>
-                                <button type="button" onClick={applyVrdData} className="text-[10px] bg-green-500 text-white px-2 py-1 rounded font-bold hover:bg-green-600 ml-2">導入</button>
+                                {vrdResult && (
+                                    <div className="mt-2 bg-white p-2 rounded border border-blue-200 shadow-sm flex justify-between items-center animate-in slide-in-from-top-2">
+                                        <div className="text-xs">
+                                            <div className="font-bold text-slate-700">{vrdResult.plateNoHK || vrdResult.regNo}</div>
+                                            <div className="text-[10px] text-slate-500">{vrdResult.make} {vrdResult.model}</div>
+                                            {vrdResult.registeredOwnerName && <div className="text-[10px] text-blue-600">車主: {vrdResult.registeredOwnerName}</div>}
+                                        </div>
+                                        <button type="button" onClick={applyVrdData} className="text-[10px] bg-green-500 text-white px-2 py-1 rounded font-bold hover:bg-green-600 ml-2">導入</button>
+                                    </div>
+                                )}
                             </div>
                         )}
                  </div>
 
-                 {/* VRD Card Content */}
+                 {/* VRD Card Content (找回消失的欄位) */}
                  <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                     <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
                     <div className="p-4 space-y-3">
@@ -4221,16 +4150,31 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                         <div className="grid grid-cols-3 gap-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
                             <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
-                            <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Color</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
+                            <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/></div>
                         </div>
 
-                        <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
-                        <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
-                        <div className="grid grid-cols-3 gap-2 pt-2">
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap.</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono"/></div>
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 7} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
+                        {/* ★★★ 找回：內外顏色並排 ★★★ */}
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="外觀"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label><input name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="內飾"/></div>
                         </div>
+
+                        {/* ★★★ 找回：底盤與引擎號 ★★★ */}
+                        <div className="space-y-1 pt-2 border-t border-dashed border-slate-200">
+                            <label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No. (車身號碼)</label>
+                            <input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] text-slate-400 font-bold uppercase">Engine No. (機器號碼)</label>
+                            <input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
+                        </div>
+
+                        {/* ★★★ 找回：排量 (Cyl. Cap.) ★★★ */}
+                        <div className="grid grid-cols-2 gap-3 pt-2">
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap. (排量)</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" placeholder="cc"/></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 7} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Petrol">Petrol (汽油)</option><option value="Diesel">Diesel (柴油)</option><option value="Electric">Electric (電動)</option></select></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Transmission</label><select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Automatic">Automatic (自動)</option><option value="Manual">Manual (棍波)</option></select></div>
@@ -4238,13 +4182,13 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                     </div>
                 </div>
 
-                {/* 車輛詳情 - 圖片管理區域 (已自動連動) */}
+                {/* 車輛詳情 - 圖片管理區域 (UI 優化) */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="font-bold text-slate-700 text-sm flex items-center">
-                            <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片 (已自動同步)
+                            <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片
                         </h3>
-                        {/* ★★★ 修正後的按鈕：先關彈窗，再跳轉 ★★★ */}
+                        {/* 先關彈窗，再跳轉 */}
                         <button 
                             type="button" 
                             onClick={handleGoToMediaLibrary} 
@@ -4254,29 +4198,23 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                         </button>
                     </div>
                     
-                    <div className="grid grid-cols-3 gap-2">
+                    {/* ★★★ 圖片顯示區：移除上傳按鈕，增加 Scroll ★★★ */}
+                    <div className="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
                         {carPhotos.map((url, idx) => (
-                            <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group bg-gray-100">
-                                <img src={url} className="w-full h-full object-cover" />
-                                <button 
-                                    type="button" 
-                                    onClick={() => setCarPhotos(prev => prev.filter(p => p !== url))} 
-                                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition"
-                                >
-                                    <X size={10}/>
-                                </button>
+                            <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group bg-gray-100 cursor-zoom-in">
+                                <img src={url} className="w-full h-full object-cover" title="前往圖庫查看大圖"/>
+                                {/* 這裡只做顯示，要刪除建議去圖庫 */}
                             </div>
                         ))}
-                        {/* 這裡依然保留上傳按鈕，方便臨時補圖 */}
-                        <label className="aspect-video border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition">
-                            <Plus size={20}/>
-                            <span className="text-[9px] mt-1">直接加入</span>
-                            <input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                        </label>
+                        {carPhotos.length === 0 && (
+                            <div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">
+                                暫無照片<br/>請至圖庫新增
+                            </div>
+                        )}
                     </div>
                     <p className="text-[9px] text-slate-400 mt-2 italic flex items-center">
                         <Info size={10} className="mr-1"/> 
-                        提示：系統會自動抓取「智能圖庫」中已歸類到此車 (ID: {v.id?.slice(0,4)}) 的照片。
+                        已顯示前 {carPhotos.length} 張。如需完整管理請至「智能圖庫」。
                     </p>
                 </div>
             </div>
