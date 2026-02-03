@@ -1779,7 +1779,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
                                 {inventoryList.map(v => (
                                     <option key={v.id} value={v.id}>
                                         {v.regMark || '(未出牌)'} - {v.make} {v.model} ({v.year})
-                                    </button>
+                                    </option>
                                 ))}
                             </select>
                         </div>
