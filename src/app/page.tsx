@@ -1758,6 +1758,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 pb-20">
                 {displayedItems.map(item => {
                     const isSelected = selectedIds.includes(item.id);
+                    const isAnalyzing = analyzingId === item.id;
                     return (
                         <div 
                             key={item.id} 
