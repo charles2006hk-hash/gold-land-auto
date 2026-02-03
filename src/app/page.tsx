@@ -25,7 +25,13 @@ import {
   orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
   getDocs, where 
 } from "firebase/firestore";
-import { getStorage, ref, uploadString } from "firebase/storage";
+import { 
+  getStorage, 
+  ref, 
+  uploadString, 
+  uploadBytes,      // 新增：處理 Blob/File 上傳
+  getDownloadURL    // 新增：獲取下載連結
+} from "firebase/storage";
 
 // ------------------------------------------------------------------
 // ★★★ Firebase 設定 (已鎖定) ★★★
@@ -1584,6 +1590,87 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         </div>
     );
 };
+
+// --- 新增：智能圖庫管理模組 ---
+const MediaLibraryModule = ({ db, storage, staffId, appId }: any) => {
+    const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
+    const [uploading, setUploading] = useState(false);
+
+    useEffect(() => {
+        if (!db || !staffId) return;
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        const q = query(
+            collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), 
+            orderBy('createdAt', 'desc')
+        );
+        return onSnapshot(q, (snap) => {
+            const list: MediaLibraryItem[] = [];
+            snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
+            setMediaItems(list);
+        });
+    }, [db, staffId, appId]);
+
+    const handleLocalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || !storage) return;
+        setUploading(true);
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const filePath = `media/${appId}/${Date.now()}_${file.name}`;
+            const storageRef = ref(storage, filePath);
+            
+            try {
+                // 使用 uploadBytes 處理二進位文件
+                const uploadTask = await uploadBytes(storageRef, file);
+                const downloadURL = await getDownloadURL(uploadTask.ref);
+
+                await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), {
+                    url: downloadURL,
+                    path: filePath,
+                    fileName: file.name,
+                    tags: ["電腦上傳"], // 未來 AI 分類入口
+                    status: 'unassigned',
+                    createdAt: serverTimestamp()
+                });
+            } catch (err) {
+                console.error("Upload failed:", err);
+            }
+        }
+        setUploading(false);
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200">
+            <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><ImageIcon size={20}/></div>
+                    <h2 className="font-bold text-slate-700">智能圖庫預備庫 (Media Inbox)</h2>
+                </div>
+                <label className="bg-slate-900 text-white px-4 py-2 rounded-lg cursor-pointer text-sm font-bold hover:bg-slate-800 transition flex items-center">
+                    {uploading ? <Loader2 className="animate-spin mr-2" size={16}/> : <Plus size={16} className="mr-2"/>}
+                    從電腦上傳
+                    <input type="file" multiple className="hidden" onChange={handleLocalUpload} disabled={uploading} />
+                </label>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {mediaItems.map(item => (
+                    <div key={item.id} className="group relative aspect-[4/3] rounded-lg overflow-hidden border bg-slate-100 shadow-sm transition hover:shadow-md">
+                        <img src={item.url} className="w-full h-full object-cover" loading="lazy" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center p-2">
+                            <span className="text-[10px] text-white bg-blue-600 px-2 py-1 rounded-full mb-2">{item.tags[0]}</span>
+                        </div>
+                    </div>
+                ))}
+                {mediaItems.length === 0 && !uploading && (
+                    <div className="col-span-full py-20 text-center text-slate-400 italic">預備庫暫無相片，請先上傳</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ------------------------------------------------------------------
 // ★★★ 1. CrossBorderView (已移至外部，解決輸入跳走問題) ★★★
 // ------------------------------------------------------------------
@@ -3705,27 +3792,43 @@ const DatabaseSelector = ({
                 </div>
 
                 {/* 替換原本的 carPhotos 顯示區域 */}
+                {/* 車輛詳情 - 圖片管理區域改版 */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                     <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1"/> 車輛相片 (圖庫連動)</h3>
+                        <h3 className="font-bold text-slate-700 text-sm flex items-center">
+                            <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片 (圖庫連動)
+                        </h3>
                         <button 
                             type="button" 
-                            onClick={() => setActiveTab('media_center')} // 這裡可進階開發為 Modal 彈窗選擇
-                            className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded shadow-sm"
+                            onClick={() => setActiveTab('media_center')} 
+                            className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100 transition"
                         >
-                            管理預備庫圖片
+                            前往圖庫整理相片
                         </button>
                     </div>
+                    
                     <div className="grid grid-cols-3 gap-2">
                         {carPhotos.map((url, idx) => (
-                            <div key={idx} className="relative aspect-video rounded border overflow-hidden">
+                            <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group">
                                 <img src={url} className="w-full h-full object-cover" />
-                                <button type="button" onClick={() => setCarPhotos(prev => prev.filter(p => p !== url))} className="absolute top-0 right-0 p-1 bg-red-500 text-white"><X size={10}/></button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setCarPhotos(prev => prev.filter(p => p !== url))} 
+                                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition"
+                                >
+                                    <X size={10}/>
+                                </button>
                             </div>
                         ))}
+                        {/* 快速上傳區域 (保留電腦上傳) */}
+                        <label className="aspect-video border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition">
+                            <Plus size={20}/>
+                            <span className="text-[9px] mt-1">直接加入</span>
+                            <input type="file" multiple accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                        </label>
                     </div>
+                    <p className="text-[9px] text-slate-400 mt-2 italic">* 建議從「智能圖庫」預備庫進行打包整理，以利 AI 分類。</p>
                 </div>
-            </div>
 
             {/* 右側欄：銷售與管理 */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
