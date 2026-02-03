@@ -5336,7 +5336,7 @@ const CreateDocModule = ({
         {activeTab === 'media_center' && (
           <MediaLibraryModule db={db} storage={storage} staffId={staffId} appId={appId} />
         )}
-                  
+         </div>         
       </main>
     </div>
   );
