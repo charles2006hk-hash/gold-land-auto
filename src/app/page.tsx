@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
   Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, 
