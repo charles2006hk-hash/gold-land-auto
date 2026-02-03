@@ -5386,8 +5386,25 @@ const CreateDocModule = ({
         {/* 修正：如果是報表模式 (reports)，則在打印時允許顯示主要內容區 */}
         <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} flex flex-col h-full overflow-hidden`}>
           
-          {/* Modal for Add/Edit Vehicle */}
-          {(activeTab === 'inventory_add' || editingVehicle) && <VehicleFormModal />}
+          {/* Modal for Add/Edit Vehicle (完整參數版) */}
+          {(activeTab === 'inventory_add' || editingVehicle) && (
+              <VehicleFormModal 
+                  db={db}
+                  staffId={staffId}
+                  appId={appId}
+                  clients={clients}              // 連動 VRD 需要這個
+                  settings={settings}
+                  editingVehicle={editingVehicle} // ★ 關鍵：必須把要編輯的車傳進去，彈窗才會開！
+                  setEditingVehicle={setEditingVehicle}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  saveVehicle={saveVehicle}
+                  addPayment={addPayment}
+                  deletePayment={deletePayment}
+                  addExpense={addExpense}
+                  deleteExpense={deleteExpense}
+              />
+          )}
           
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
