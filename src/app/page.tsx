@@ -3920,7 +3920,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
     const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
     const balance = totalRevenue - totalReceived; 
-    const pendingCbTasks = (v.crossBorder?.tasks || []).filter(t => (t.fee !== 0) && !(v.payments || []).some(p => p.relatedTaskId === t.id));
+    const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     // 新增費用/收款的暫存狀態
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
