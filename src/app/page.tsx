@@ -11,6 +11,7 @@ import {
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
   Check, AlertCircle, Link, Share2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft // Added Upload, Image as ImageIcon, File
+  Minimize2, Maximize2, Eye
 } from 'lucide-react';
 
 
