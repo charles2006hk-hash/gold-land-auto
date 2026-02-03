@@ -3764,7 +3764,7 @@ const DatabaseSelector = ({
                     </div>
                     <p className="text-[9px] text-slate-400 mt-2 italic">* 建議從「智能圖庫」預備庫進行打包整理，以利 AI 分類。</p>
                 </div>
-
+            </div>
             {/* 右側欄：銷售與管理 */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
                 {/* ... Status Buttons & Stock Dates (保持不變) ... */}
