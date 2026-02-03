@@ -3881,8 +3881,8 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v8.0: 支援費用項目自動帶入預設值)
-  const VehicleFormModal = () => {
+  // 1. Vehicle Form Modal (v9.1: 修復 VRD 連動與客戶自動配對)
+const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
     const v = editingVehicle || {} as Partial<Vehicle>;
@@ -3907,6 +3907,12 @@ const DatabaseSelector = ({
 
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [isCompressing, setIsCompressing] = useState(false);
+
+    // ★★★ VRD 連動狀態 (補回) ★★★
+    const [vrdSearch, setVrdSearch] = useState('');
+    const [vrdResult, setVrdResult] = useState<any>(null);
+    const [searching, setSearching] = useState(false);
+    const [vrdOwnerRaw, setVrdOwnerRaw] = useState(''); // 暫存 VRD 車主名稱
 
     // 計算邏輯
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
@@ -3974,12 +3980,10 @@ const DatabaseSelector = ({
         if(el) el.value = val;
     };
 
-    // ★★★ 關鍵：當選擇費用類別時，自動帶入預設值 ★★★
+    // 費用預設值邏輯
     const handleExpenseTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedType = e.target.value;
-        
-        // 在 settings.expenseTypes 中尋找設定
-        const setting = settings.expenseTypes.find(item => {
+        const setting = settings.expenseTypes.find((item: any) => {
             if (typeof item === 'string') return item === selectedType;
             return item.name === selectedType;
         });
@@ -3991,36 +3995,108 @@ const DatabaseSelector = ({
         if (setting && typeof setting !== 'string') {
             defaultComp = setting.defaultCompany || '';
             defaultAmt = setting.defaultAmount ? formatNumberInput(setting.defaultAmount.toString()) : '';
-            
-            // 如果有設定天數，自動計算日期 (例如今天 + 30天)
             if (setting.defaultDays && Number(setting.defaultDays) > 0) {
                 const d = new Date();
                 d.setDate(d.getDate() + Number(setting.defaultDays));
                 targetDate = d.toISOString().split('T')[0];
             }
         }
-
-        setNewExpense({
-            ...newExpense,
-            type: selectedType,
-            company: defaultComp,  // 自動填入公司
-            amount: defaultAmt,    // 自動填入金額
-            date: targetDate       // 自動填入日期
-        });
+        setNewExpense({ ...newExpense, type: selectedType, company: defaultComp, amount: defaultAmt, date: targetDate });
     };
 
-    const autoFetchVRD = () => { /* ...省略(保持原樣)... */ }; // 為節省篇幅，此處邏輯保持不變
-    const autoFetchCustomer = () => { /* ...省略(保持原樣)... */ }; 
+    // 自動搜尋客戶 (保留原樣)
+    const autoFetchCustomer = () => { /* 保留原本的邏輯 */ }; 
+
+    // ★★★ 實作：搜尋 VRD 資料庫 ★★★
+    const handleSearchVRD = async () => {
+        if (!vrdSearch || !db) return;
+        setSearching(true);
+        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        try {
+            const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+            // 嘗試車牌
+            const q = query(dbRef, where('plateNoHK', '==', vrdSearch.toUpperCase())); 
+            let snap = await getDocs(q);
+            
+            // 嘗試底盤
+            if (snap.empty) {
+                const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase()));
+                snap = await getDocs(q2);
+            }
+            
+            // 嘗試 Reg No (有些資料庫可能用不同欄位名)
+            if (snap.empty) {
+                 // 備用：如果您的資料庫中心欄位是 regNo 而不是 plateNoHK
+                 const q3 = query(dbRef, where('regNo', '==', vrdSearch.toUpperCase())); 
+                 snap = await getDocs(q3);
+            }
+
+            if (!snap.empty) {
+                setVrdResult(snap.docs[0].data());
+            } else {
+                alert("資料庫中心找不到此車輛 (請確認車牌或底盤號)");
+                setVrdResult(null);
+            }
+        } catch (e) { console.error(e); alert("搜尋錯誤"); } finally { setSearching(false); }
+    };
+
+    // ★★★ 實作：導入 VRD 資料 (含客戶配對) ★★★
+    const applyVrdData = () => {
+        if (!vrdResult) return;
+        
+        // 1. 填入基礎資料
+        const regMark = vrdResult.plateNoHK || vrdResult.regNo || '';
+        setFieldValue('regMark', regMark);
+        if (vrdResult.make) setSelectedMake(vrdResult.make);
+        setFieldValue('model', vrdResult.model || '');
+        setFieldValue('year', vrdResult.manufactureYear || vrdResult.year || '');
+        setFieldValue('chassisNo', vrdResult.chassisNo || '');
+        setFieldValue('engineNo', vrdResult.engineNo || '');
+        setFieldValue('colorExt', vrdResult.vehicleColor || vrdResult.color || '');
+        
+        if (vrdResult.engineSize) setEngineSizeStr(formatNumberInput(vrdResult.engineSize.toString()));
+        if (vrdResult.priceA1) setPriceA1Str(formatNumberInput(vrdResult.priceA1.toString()));
+        if (vrdResult.priceTax) setPriceTaxStr(formatNumberInput(vrdResult.priceTax.toString()));
+        if (vrdResult.prevOwners !== undefined) setFieldValue('previousOwners', vrdResult.prevOwners.toString());
+
+        // 2. 客戶匹配邏輯
+        const ownerName = vrdResult.registeredOwnerName || vrdResult.owner; // 支援兩種欄位名
+        
+        if (ownerName) {
+            // 在 clients 列表中尋找
+            const exist = clients.find((c: any) => c.name === ownerName);
+            
+            if (exist) {
+                // 情境 A: 找到現有客戶 -> 自動帶入所有資料
+                setFieldValue('customerName', exist.name);
+                setFieldValue('customerPhone', exist.phone || '');
+                setFieldValue('customerID', exist.idNumber || exist.hkid || '');
+                setFieldValue('customerAddress', exist.address || '');
+                setVrdOwnerRaw(''); // 清除暫存
+                alert(`已成功導入 VRD 並自動配對客戶：${exist.name}`);
+            } else {
+                // 情境 B: 沒找到 -> 填入名字，並提示
+                setVrdOwnerRaw(ownerName);
+                setFieldValue('customerName', ownerName); 
+                // 其他欄位留空或填入 VRD 的有限資訊
+                if(vrdResult.registeredOwnerId) setFieldValue('customerID', vrdResult.registeredOwnerId);
+                
+                alert(`VRD 導入成功。注意：系統內無客戶 "${ownerName}" 的完整檔案，已暫填姓名。`);
+            }
+        } else {
+            alert("VRD 導入成功 (此 VRD 無登記車主資料)");
+        }
+        
+        setVrdResult(null); 
+        setVrdSearch('');
+    };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         if(!formData.has('mileage')) {
             const hiddenMileage = document.createElement('input');
-            hiddenMileage.type = 'hidden';
-            hiddenMileage.name = 'mileage';
-            hiddenMileage.value = mileageStr.replace(/,/g, '');
-            e.currentTarget.appendChild(hiddenMileage);
+            hiddenMileage.type = 'hidden'; hiddenMileage.name = 'mileage'; hiddenMileage.value = mileageStr.replace(/,/g, ''); e.currentTarget.appendChild(hiddenMileage);
         }
         try {
             if(editingVehicle) editingVehicle.photos = carPhotos;
@@ -4047,9 +4123,46 @@ const DatabaseSelector = ({
 
           <form onSubmit={handleSaveWrapper} className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
             
-            {/* 左側欄：VRD & Photos (保持不變) */}
+            {/* 左側欄：VRD & Photos */}
             <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin">
-                 {/* ... VRD Card Content (保持不變) ... */}
+                 
+                 {/* ★★★ 導入區塊 (只在新增模式顯示) ★★★ */}
+                 {isNew && (
+                    <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg shadow-sm">
+                        <label className="text-xs font-bold text-blue-800 mb-2 block flex items-center">
+                            <Database size={14} className="mr-1"/> 從資料庫中心導入 (VRD)
+                        </label>
+                        <div className="flex gap-2">
+                            <input 
+                                value={vrdSearch}
+                                onChange={e => setVrdSearch(e.target.value.toUpperCase())}
+                                placeholder="車牌 / 底盤號"
+                                className="flex-1 p-1.5 text-xs border border-blue-200 rounded focus:ring-2 focus:ring-blue-400 outline-none uppercase font-mono"
+                                onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}}
+                            />
+                            <button 
+                                type="button"
+                                onClick={handleSearchVRD}
+                                disabled={searching}
+                                className="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                            >
+                                {searching ? <Loader2 className="animate-spin" size={12}/> : '搜尋'}
+                            </button>
+                        </div>
+                        {vrdResult && (
+                            <div className="mt-2 bg-white p-2 rounded border border-blue-200 shadow-sm flex justify-between items-center animate-in slide-in-from-top-2">
+                                <div className="text-xs">
+                                    <div className="font-bold text-slate-700">{vrdResult.plateNoHK || vrdResult.regNo}</div>
+                                    <div className="text-[10px] text-slate-500">{vrdResult.make} {vrdResult.model}</div>
+                                    {vrdResult.registeredOwnerName && <div className="text-[10px] text-blue-600">車主: {vrdResult.registeredOwnerName}</div>}
+                                </div>
+                                <button type="button" onClick={applyVrdData} className="text-[10px] bg-green-500 text-white px-2 py-1 rounded font-bold hover:bg-green-600 ml-2">導入</button>
+                            </div>
+                        )}
+                    </div>
+                 )}
+
+                 {/* VRD Card Content */}
                  <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                     <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
                     <div className="p-4 space-y-3">
@@ -4058,18 +4171,17 @@ const DatabaseSelector = ({
                             <label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label>
                             <div className="flex relative">
                                 <input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-yellow-50 border-b-2 border-yellow-200 p-1 text-2xl font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-yellow-400 uppercase placeholder:text-gray-300"/>
-                                {/*<button type="button" onClick={autoFetchVRD} className="absolute right-0 bottom-1 bg-red-100 text-red-600 p-1.5 rounded-full hover:bg-red-200 transition-colors shadow-sm z-10" title="依車牌搜尋資料庫並自動填入"><RefreshCw size={14}/></button>*/}
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map(m => <option key={m} value={m} />)}</datalist></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</select></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist></div>
                         </div>
                         
                         <div className="grid grid-cols-3 gap-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
                             <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
-                            <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Color</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm"/><datalist id="colors">{settings.colors.map(c => <option key={c} value={c} />)}</datalist></div>
+                            <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Color</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
                         </div>
 
                         <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
@@ -4086,8 +4198,7 @@ const DatabaseSelector = ({
                     </div>
                 </div>
 
-                {/* 替換原本的 carPhotos 顯示區域 */}
-                {/* 車輛詳情 - 圖片管理區域改版 */}
+                {/* 車輛詳情 - 圖片管理區域 (圖庫連動版) */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                     <div className="flex justify-between items-center mb-3">
                         <h3 className="font-bold text-slate-700 text-sm flex items-center">
@@ -4115,7 +4226,6 @@ const DatabaseSelector = ({
                                 </button>
                             </div>
                         ))}
-                        {/* 快速上傳區域 (保留電腦上傳) */}
                         <label className="aspect-video border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition">
                             <Plus size={20}/>
                             <span className="text-[9px] mt-1">直接加入</span>
@@ -4125,9 +4235,10 @@ const DatabaseSelector = ({
                     <p className="text-[9px] text-slate-400 mt-2 italic">* 建議從「智能圖庫」預備庫進行打包整理，以利 AI 分類。</p>
                 </div>
             </div>
+            
             {/* 右側欄：銷售與管理 */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
-                {/* ... Status Buttons & Stock Dates (保持不變) ... */}
+                {/* ... Status Buttons & Stock Dates ... */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
                         <input type="hidden" name="status" value={currentStatus} />
@@ -4141,7 +4252,11 @@ const DatabaseSelector = ({
                 </div>
 
                 <div className="mb-6 relative">
-                    <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3></div>
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>
+                        {/* 如果 VRD 有車主但未配對到客戶，顯示提示 */}
+                        {vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200 flex items-center"><AlertTriangle size={10} className="mr-1"/> VRD 車主: {vrdOwnerRaw} (系統未建檔)</span>}
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 relative group-focus-within:ring-2 ring-blue-100 transition-all">
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">NAME</span><input name="customerName" defaultValue={v.customerName} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-gray-200" placeholder="輸入姓名..."/><button type="button" onClick={autoFetchCustomer} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-colors z-10" title="依姓名搜尋資料庫"><Search size={14}/></button></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">PHONE</span><input name="customerPhone" defaultValue={v.customerPhone} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
@@ -4165,24 +4280,24 @@ const DatabaseSelector = ({
                             <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2"><input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/><select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select><input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/><input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/><button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button></div>
                         </div>
 
-                        {/* ★★★ 車輛費用區塊 (升級版：支援預設值自動帶入) ★★★ */}
+                        {/* 車輛費用區塊 (保持原樣) */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>車輛費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span></h4>
                             <div className="space-y-1 mb-2">{(v.expenses || []).map(exp => (<div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{exp.date}</div><div className="col-span-3 font-bold">{exp.type}</div><div className="col-span-3 text-gray-500 truncate">{exp.company}</div><div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div><div className="col-span-1 text-right"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></div></div>))}</div>
                             
                             <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
                                 <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                {/* Expense Type Dropdown (Updated with Lookup) */}
+                                {/* Expense Type Dropdown (With default value logic) */}
                                 <select value={newExpense.type} onChange={handleExpenseTypeChange} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white">
                                     <option value="">項目...</option>
-                                    {settings.expenseTypes.map((t, i) => {
+                                    {settings.expenseTypes.map((t: any, i: number) => {
                                         const name = typeof t === 'string' ? t : t.name;
                                         return <option key={i} value={name}>{name}</option>;
                                     })}
                                 </select>
                                 <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white">
                                     <option value="">公司...</option>
-                                    {settings.expenseCompanies?.map(c=><option key={c} value={c}>{c}</option>)}
+                                    {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
                                 </select>
                                 <input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
                                 <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button>
