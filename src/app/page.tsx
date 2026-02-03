@@ -3092,6 +3092,8 @@ export default function GoldLandAutoDMS() {
   const printAreaRef = useRef<HTMLDivElement>(null);
   const handlePrint = () => { window.print(); };
 
+  const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
+
   // --- Auth & Data Loading ---
   useEffect(() => {
     // 修正：強化 PWA/App Icon 及瀏覽器 Favicon 更新邏輯
@@ -5358,6 +5360,7 @@ const CreateDocModule = ({
 };
 
 
+
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
       <Sidebar 
@@ -5405,7 +5408,7 @@ const CreateDocModule = ({
                   deleteExpense={deleteExpense}
               />
           )}
-          
+
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
