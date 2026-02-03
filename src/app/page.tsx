@@ -3845,6 +3845,7 @@ const DatabaseSelector = ({
       </div>
     );
 
+
   // 2. Report View (Linked to Edit)
   const ReportView = () => {
     const handleReportItemClick = (vehicleId: string) => {
@@ -5332,9 +5333,10 @@ const CreateDocModule = ({
                   setIsDbEditing={setIsDbEditing}
                   inventory={inventory}/>}
 
-        {activeTab === 'media_center' && <MediaLibraryModule db={db} storage={storage} staffId={staffId} appId={appId} />}
+        {activeTab === 'media_center' && (
+          <MediaLibraryModule db={db} storage={storage} staffId={staffId} appId={appId} />
+        )}
                   
-        </div>
       </main>
     </div>
   );
