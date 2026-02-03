@@ -3844,7 +3844,7 @@ const DatabaseSelector = ({
         </div>
       </div>
     );
-
+};
 
   // 2. Report View (Linked to Edit)
   const ReportView = () => {
@@ -5333,10 +5333,12 @@ const CreateDocModule = ({
                   setIsDbEditing={setIsDbEditing}
                   inventory={inventory}/>}
 
+        </div>
+
         {activeTab === 'media_center' && (
           <MediaLibraryModule db={db} storage={storage} staffId={staffId} appId={appId} />
         )}
-         </div>         
+                
       </main>
     </div>
   );
