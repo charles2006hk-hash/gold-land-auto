@@ -3141,7 +3141,7 @@ const SettingsManager = ({
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
-  const [staffId, setStaffId] = useState<string | null>(null);
+  const [staffId, setStaffId] = useState<string | null>('charles');
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
