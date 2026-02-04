@@ -354,7 +354,8 @@ type SystemSettings = {
   makes: string[];
   models: Record<string, string[]>; 
   expenseTypes: (string | { name: string; defaultCompany: string; defaultAmount: number; defaultDays: string })[];
-  expenseCompanies: string[]; 
+  expenseCompanies: string[];
+  paymentTypes: string[]; 
   colors: string[];
   // ★★★ 新增：中港代辦服務項目列表 (解決 serviceItems 報錯) ★★★
   serviceItems?: string[];
@@ -409,6 +410,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Porsche': ['911', 'Cayenne', 'Macan', 'Taycan', 'Panamera'],
     'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7']
   },
+  // ★★★ 新增：預設收款項目 ★★★
+  paymentTypes: ['訂金 (Deposit)', '大訂 (Part Payment)', '尾數 (Balance)', '全數 (Full Payment)', '服務費 (Service Fee)', '代支 (Advance)'],
   expenseTypes: [
       { name: '政府牌費', defaultCompany: '香港運輸署', defaultAmount: 5860, defaultDays: '0' },
       { name: '驗車費', defaultCompany: '指定驗車中心', defaultAmount: 800, defaultDays: '0' },
@@ -638,37 +641,125 @@ const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
     );
 };
 
-// --- Components: Staff Login Screen ---
-const StaffLoginScreen = ({ onLogin }: { onLogin: (id: string) => void }) => {
-  const [input, setInput] = useState('charles');
-  const handleSubmit = (e: React.FormEvent) => {
+// --- Components: Modern Staff Login Screen v2.0 ---
+const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => void, systemUsers: any[] }) => {
+  const [userId, setUserId] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 自動登入檢查
+  useEffect(() => {
+      const savedUser = localStorage.getItem('gla_saved_user');
+      if (savedUser) {
+          try {
+              const parsed = JSON.parse(savedUser);
+              // 簡單驗證過期時間 (例如 7 天)
+              if (new Date().getTime() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
+                  onLogin(parsed.user);
+              }
+          } catch (e) { localStorage.removeItem('gla_saved_user'); }
+      }
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(input.trim()) onLogin(input.trim().toUpperCase());
+    setError('');
+    setIsLoading(true);
+
+    // 模擬網路延遲
+    await new Promise(r => setTimeout(r, 800));
+
+    // 1. 超級管理員後門 (開發用，可自行移除)
+    if (userId.toUpperCase() === 'BOSS' && password === '8888') {
+        const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'] };
+        handleSuccess(adminUser);
+        return;
+    }
+
+    // 2. 驗證用戶
+    const validUser = systemUsers.find(u => u.email.toUpperCase() === userId.toUpperCase() && u.password === password);
+    
+    if (validUser) {
+        handleSuccess(validUser);
+    } else {
+        setError('帳號或密碼錯誤 (Invalid Credentials)');
+        setIsLoading(false);
+    }
   };
+
+  const handleSuccess = (user: any) => {
+      if (rememberMe) {
+          localStorage.setItem('gla_saved_user', JSON.stringify({ user, timestamp: new Date().getTime() }));
+      }
+      onLogin(user);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* 背景裝飾 */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-20 pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600 rounded-full blur-[100px]"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-yellow-600 rounded-full blur-[100px]"></div>
+      </div>
+
+      <div className="bg-white/10 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/20 relative z-10">
         <div className="text-center mb-8">
-          <div className="w-24 h-24 bg-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-md border border-slate-100 p-2">
-             <img src={COMPANY_INFO.logo_url} alt="Gold Land Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.parentElement!.innerHTML='<svg class="w-12 h-12 text-yellow-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>'; }} />
+          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-2">
+             <img src={COMPANY_INFO.logo_url} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">金田汽車DMS系統</h1>
-          <p className="text-slate-500 text-sm mt-1 font-medium">v3.0.3 Sales & Management</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">GOLD LAND AUTO</h1>
+          <p className="text-blue-200 text-xs mt-1 font-medium tracking-widest uppercase">Secure DMS Access</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">員工編號 / Staff ID</label>
-            <input 
-              type="text" 
-              className="w-full p-4 border border-slate-300 rounded-xl text-lg text-slate-900 font-bold focus:ring-2 focus:ring-yellow-500 outline-none transition placeholder:text-slate-400" 
-              placeholder="e.g. BOSS, SALES01" 
-              value={input} 
-              onChange={e => setInput(e.target.value)} 
-              autoFocus 
-            />
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-blue-200 ml-1 uppercase">User ID</label>
+            <div className="relative">
+                <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" size={18}/>
+                <input 
+                  type="text" 
+                  className="w-full pl-10 pr-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white placeholder-white/30 focus:ring-2 focus:ring-yellow-500 outline-none transition" 
+                  placeholder="員工帳號" 
+                  value={userId} 
+                  onChange={e => setUserId(e.target.value)} 
+                  autoFocus 
+                />
+            </div>
           </div>
-          <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center transition transform active:scale-95 shadow-lg">Login <ArrowRight className="ml-2" /></button>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-blue-200 ml-1 uppercase">Password</label>
+            <div className="relative">
+                <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" size={18}/>
+                <input 
+                  type="password" 
+                  className="w-full pl-10 pr-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white placeholder-white/30 focus:ring-2 focus:ring-yellow-500 outline-none transition" 
+                  placeholder="密碼" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-blue-200">
+              <label className="flex items-center cursor-pointer hover:text-white transition">
+                  <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="mr-2 rounded text-yellow-500 focus:ring-yellow-500 bg-white/10 border-white/20"/>
+                  鎖定本機 (Keep me signed in)
+              </label>
+          </div>
+
+          {error && <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-xs text-center flex items-center justify-center"><AlertTriangle size={14} className="mr-2"/>{error}</div>}
+
+          <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black p-3.5 rounded-xl font-bold text-sm flex items-center justify-center transition transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+              {isLoading ? <Loader2 className="animate-spin" size={20}/> : <><span className="mr-2">安全登入</span> <ArrowRight size={16}/></>}
+          </button>
         </form>
+        
+        <div className="mt-6 text-center">
+            <p className="text-[10px] text-white/20">Authorized Personnel Only</p>
+        </div>
       </div>
     </div>
   );
@@ -755,7 +846,7 @@ const InfoWidget = () => {
     );
 };
 
-// --- 2. Sidebar (外部組件 - 精緻化版) ---
+// --- 2. Sidebar (外部組件 - 修復登出功能 v2.1) ---
 type SidebarProps = {
     activeTab: string;
     setActiveTab: (tab: any) => void;
@@ -767,74 +858,87 @@ type SidebarProps = {
     setStaffId: (id: string | null) => void;
 };
 
-const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId }: SidebarProps) => (
-    <>
-      {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
-        
-        {/* Header 區域 */}
-        <div className={`h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
-            <div className="flex items-center gap-3 overflow-hidden">
-                <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
-                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
-                </div>
-                <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
-                    <h1 className="text-base font-bold text-yellow-500 tracking-tight leading-none">金田汽車</h1>
-                    <span className="text-[10px] text-slate-400 font-medium">DMS 智能管理系統</span>
-                </div>
-            </div>
-            <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors" title={isSidebarCollapsed ? "展開選單" : "縮起選單"}>{isSidebarCollapsed ? null : <ChevronLeft size={16} />}</button>
-        </div>
+const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId }: SidebarProps) => {
+    
+    // ★★★ 新增：登出處理函數 (同時清除自動登入紀錄) ★★★
+    const handleLogout = () => {
+        if (confirm("確定登出系統？(Confirm Logout?)")) {
+            // 1. 清除瀏覽器記憶的自動登入資料
+            localStorage.removeItem('gla_saved_user');
+            // 2. 清空當前使用者狀態
+            setStaffId(null);
+        }
+    };
 
-        {/* 導航列表 (樣式優化：間距縮小，字體變細) */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-          {[
-            { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard }, 
-            { id: 'inventory', label: '車輛管理', icon: Car },
-            { id: 'create_doc', label: '開單系統', icon: FileText }, 
-            { id: 'reports', label: '統計報表', icon: FileBarChart },
-            { id: 'cross_border', label: '中港業務', icon: Globe }, 
-            { id: 'database', label: '資料庫中心', icon: Database },
-            { id: 'media_center', label: '智能圖庫', icon: ImageIcon },
-            { id: 'business', label: '業務辦理流程', icon: Briefcase }, 
-            { id: 'settings', label: '系統設置', icon: Settings }
-          ].map(item => (
-             <button 
-                key={item.id} 
-                onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                className={`flex items-center w-full p-2.5 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
-                title={isSidebarCollapsed ? item.label : ''}
-             >
-                <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
-                {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
-                
-                {/* 收起時的懸浮提示 */}
-                {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
-             </button>
-          ))}
-        </nav>
-        
-        {!isSidebarCollapsed && <InfoWidget />}
-        
-        {/* 底部登入資訊 */}
-        <div className="p-3 bg-slate-900 border-t border-slate-800 flex-none">
-             {isSidebarCollapsed ? (
-                 <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
-             ) : (
-                 <div className="flex items-center justify-between px-1">
-                     <div className="flex items-center space-x-2 overflow-hidden">
-                         <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500 border border-slate-700"><UserCircle size={16} /></div>
-                         <div className="flex-1 min-w-0"><p className="text-xs font-bold text-white truncate">{staffId}</p><p className="text-[9px] text-slate-500">在線</p></div>
+    return (
+        <>
+          {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
+          <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
+            
+            {/* Header 區域 */}
+            <div className={`h-16 border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
+                <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
+                        <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
+                    </div>
+                    <div className={`transition-opacity duration-200 ${isSidebarCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
+                        <h1 className="text-base font-bold text-yellow-500 tracking-tight leading-none">金田汽車</h1>
+                        <span className="text-[10px] text-slate-400 font-medium">DMS 智能管理系統</span>
+                    </div>
+                </div>
+                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors" title={isSidebarCollapsed ? "展開選單" : "縮起選單"}>{isSidebarCollapsed ? null : <ChevronLeft size={16} />}</button>
+            </div>
+
+            {/* 導航列表 */}
+            <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+              {[
+                { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard }, 
+                { id: 'inventory', label: '車輛管理', icon: Car },
+                { id: 'create_doc', label: '開單系統', icon: FileText }, 
+                { id: 'reports', label: '統計報表', icon: FileBarChart },
+                { id: 'cross_border', label: '中港業務', icon: Globe }, 
+                { id: 'database', label: '資料庫中心', icon: Database },
+                { id: 'media_center', label: '智能圖庫', icon: ImageIcon },
+                { id: 'business', label: '業務辦理流程', icon: Briefcase }, 
+                { id: 'settings', label: '系統設置', icon: Settings }
+              ].map(item => (
+                 <button 
+                    key={item.id} 
+                    onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
+                    className={`flex items-center w-full p-2.5 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
+                    title={isSidebarCollapsed ? item.label : ''}
+                 >
+                    <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                    {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
+                    
+                    {/* 收起時的懸浮提示 */}
+                    {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
+                 </button>
+              ))}
+            </nav>
+            
+            {!isSidebarCollapsed && <InfoWidget />}
+            
+            {/* 底部登入資訊 (已綁定新的 handleLogout) */}
+            <div className="p-3 bg-slate-900 border-t border-slate-800 flex-none">
+                 {isSidebarCollapsed ? (
+                     <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
+                 ) : (
+                     <div className="flex items-center justify-between px-1">
+                         <div className="flex items-center space-x-2 overflow-hidden">
+                             <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500 border border-slate-700"><UserCircle size={16} /></div>
+                             <div className="flex-1 min-w-0"><p className="text-xs font-bold text-white truncate">{staffId}</p><p className="text-[9px] text-slate-500">在線</p></div>
+                         </div>
+                         <button onClick={handleLogout} className="text-slate-500 hover:text-red-400 transition p-1.5 hover:bg-slate-800 rounded"><LogOut size={16} /></button>
                      </div>
-                     <button onClick={() => {if(confirm("確定登出？")) setStaffId(null);}} className="text-slate-500 hover:text-red-400 transition p-1.5 hover:bg-slate-800 rounded"><LogOut size={16} /></button>
-                 </div>
-             )}
-             {isSidebarCollapsed && <button onClick={() => setIsSidebarCollapsed(false)} className="w-full mt-3 flex justify-center text-slate-600 hover:text-white py-1 md:flex hidden"><ChevronRight size={16} /></button>}
-        </div>
-        <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white"><X size={24} /></button>
-      </div>
-    </>
-);
+                 )}
+                 {isSidebarCollapsed && <button onClick={() => setIsSidebarCollapsed(false)} className="w-full mt-3 flex justify-center text-slate-600 hover:text-white py-1 md:flex hidden"><ChevronRight size={16} /></button>}
+            </div>
+            <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-4 right-4 text-slate-400 hover:text-white"><X size={24} /></button>
+          </div>
+        </>
+    );
+};
 
 
 
@@ -1832,7 +1936,21 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                             <div><label className="text-[10px] font-bold text-slate-500 uppercase">Make</label><input list="makeList" value={classifyForm.make} onChange={e => setClassifyForm({...classifyForm, make: e.target.value})} className="w-full p-2 border rounded text-sm"/><datalist id="makeList">{settings?.makes?.map((m:string) => <option key={m} value={m}/>)}</datalist></div>
                             <div><label className="text-[10px] font-bold text-slate-500 uppercase">Model</label><input list="modelList" value={classifyForm.model} onChange={e => setClassifyForm({...classifyForm, model: e.target.value})} className="w-full p-2 border rounded text-sm"/><datalist id="modelList">{(settings?.models?.[classifyForm.make] || []).map((m:string) => <option key={m} value={m}/>)}</datalist></div>
                             <div><label className="text-[10px] font-bold text-slate-500 uppercase">Color</label><input list="colorList" value={classifyForm.color} onChange={e => setClassifyForm({...classifyForm, color: e.target.value})} className="w-full p-2 border rounded text-sm"/><datalist id="colorList">{settings?.colors?.map((c:string) => <option key={c} value={c}/>)}</datalist></div>
-                            <div><label className="text-[10px] font-bold text-slate-500 uppercase">Type</label><select value={classifyForm.type} onChange={e => setClassifyForm({...classifyForm, type: e.target.value as any})} className="w-full p-2 border rounded text-sm bg-slate-50"><option>外觀 (Exterior)</option><option>內飾 (Interior)</option><option>細節 (Detail)</option></select></div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Type</label>
+                                <div className="grid grid-cols-3 gap-1">
+                                    {['外觀 (Exterior)', '內飾 (Interior)', '細節 (Detail)'].map(t => (
+                                        <button 
+                                            key={t} 
+                                            onClick={() => setClassifyForm({...classifyForm, type: t as any})}
+                                            className={`text-[10px] py-1.5 px-1 rounded border transition-all ${classifyForm.type === t ? 'bg-blue-600 text-white border-blue-600 font-bold' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                                        >
+                                            {t.split(' ')[0]}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        
                         </div>
                     </div>
                 </div>
@@ -2703,7 +2821,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v9.0: 新增資料庫下級分類管理功能) ★★★
+// ★★★ 5. Settings Manager (v9.2: 修復版 - 含收款項目管理) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, 
@@ -2723,30 +2841,33 @@ const SettingsManager = ({
     updateSettings: (k: keyof SystemSettings, v: any) => void 
 }) => {
     
-    // --- 頁面狀態 ---
     const [activeTab, setActiveTab] = useState('general');
     
-    // --- 1. 車輛資料狀態 ---
+    // 1. Vehicle Data
     const [selectedMakeForModel, setSelectedMakeForModel] = useState('');
     const [newModelName, setNewModelName] = useState('');
 
-    // --- 2. 系統用戶狀態 ---
+    // 2. Users
     const [newUserEmail, setNewUserEmail] = useState('');
     const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[] }[]>([]);
     
-    // --- 3. 財務費用狀態 ---
+    // 3. Finance (Expenses & Payments)
     const [expenseForm, setExpenseForm] = useState({ name: '', defaultCompany: '', defaultAmount: '', defaultDays: '0' });
     const [editingExpenseIndex, setEditingExpenseIndex] = useState<number | null>(null);
     const [compInput, setCompInput] = useState('');
     const [editingCompIndex, setEditingCompIndex] = useState<number | null>(null);
     
-    // --- 4. 中港業務狀態 ---
+    // ★★★ Payment Types State ★★★
+    const [payTypeInput, setPayTypeInput] = useState('');
+    const [editingPayTypeIndex, setEditingPayTypeIndex] = useState<number | null>(null);
+
+    // 4. Cross Border
     const [cbForm, setCbForm] = useState({ name: '', defaultInst: '', defaultFee: '', defaultDays: '0' });
     const [editingCbIndex, setEditingCbIndex] = useState<number | null>(null);
     const [instInput, setInstInput] = useState('');
     const [editingInstIndex, setEditingInstIndex] = useState<number | null>(null);
 
-    // --- 5. 提醒與備份狀態 ---
+    // 5. Reminders & Backup
     const [reminders, setReminders] = useState(settings.reminders || { 
         isEnabled: true, daysBefore: 30, time: '10:00', 
         categories: { license: true, insurance: true, crossBorder: true, installments: false } 
@@ -2754,11 +2875,11 @@ const SettingsManager = ({
     const [backupConfig, setBackupConfig] = useState(settings.backup || { frequency: 'monthly', lastBackupDate: '', autoCloud: true });
     const [isBackingUp, setIsBackingUp] = useState(false);
 
-    // ★★★ 6. 新增：資料庫分類狀態 ★★★
+    // 6. Database Categories
     const [selectedDbCat, setSelectedDbCat] = useState('Person');
     const [newDocType, setNewDocType] = useState('');
 
-    // --- 邏輯區塊 1: 雲端自動備份 ---
+    // --- Logic ---
     useEffect(() => {
         const checkAutoBackup = async () => {
             if (backupConfig.autoCloud && !isBackingUp && inventory.length > 0) {
@@ -2790,7 +2911,6 @@ const SettingsManager = ({
         finally { setIsBackingUp(false); }
     };
 
-    // --- 邏輯區塊 2: 系統用戶 ---
     useEffect(() => {
         if (!db || !appId) return;
         const unsub = onSnapshot(doc(db, 'artifacts', appId, 'system', 'users'), (docSnap) => {
@@ -2803,60 +2923,53 @@ const SettingsManager = ({
     }, [db, appId]);
 
     const updateUsersDb = async (newList: any[]) => { if (db) await setDoc(doc(db, 'artifacts', appId, 'system', 'users'), { list: newList }, { merge: true }); };
-    const handleAddUser = () => { if (!newUserEmail) return; const l = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }]; setSystemUsers(l); updateUsersDb(l); setNewUserEmail(''); };
+    // ★★★ 修正：新增用戶時，給予預設密碼 1234 ★★★
+    const handleAddUser = () => { 
+        if (!newUserEmail) return; 
+        const l = [...systemUsers, { 
+            email: newUserEmail, 
+            password: '1234', // 預設密碼
+            modules: ['inventory', 'business', 'database', 'settings'] 
+        }]; 
+        setSystemUsers(l); 
+        updateUsersDb(l); 
+        setNewUserEmail(''); 
+        alert(`用戶 ${newUserEmail} 已新增，預設密碼為: 1234`);
+    };
     const handleRemoveUser = (email: string) => { if (confirm(`移除用戶 ${email}?`)) { const l = systemUsers.filter(u => u.email !== email); setSystemUsers(l); updateUsersDb(l); } };
     const toggleUserPermission = (email: string, modKey: string) => { const l = systemUsers.map(u => u.email === email ? { ...u, modules: u.modules.includes(modKey) ? u.modules.filter(m => m !== modKey) : [...u.modules, modKey] } : u); setSystemUsers(l); updateUsersDb(l); };
 
-    // --- 邏輯區塊 3: 通用設定 ---
     const addItem = (key: keyof SystemSettings, val: string) => { if(val) updateSettings(key, [...(settings[key] as string[] || []), val]); };
     const removeItem = (key: keyof SystemSettings, idx: number) => { const arr = [...(settings[key] as any[] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
     const addModel = () => { if (selectedMakeForModel && newModelName) { updateSettings('models', { ...settings.models, [selectedMakeForModel]: [...(settings.models[selectedMakeForModel] || []), newModelName] }); setNewModelName(''); } };
     const removeModel = (name: string) => { if (selectedMakeForModel) updateSettings('models', { ...settings.models, [selectedMakeForModel]: (settings.models[selectedMakeForModel] || []).filter(m => m !== name) }); };
 
-    // --- 邏輯區塊 4: 費用與中港 ---
     const handleExpenseSubmit = () => { if(!expenseForm.name)return; const item = {...expenseForm, defaultAmount: Number(expenseForm.defaultAmount)||0}; const list=[...settings.expenseTypes]; if(editingExpenseIndex!==null) list[editingExpenseIndex]=item; else list.push(item); updateSettings('expenseTypes', list); setExpenseForm({name:'',defaultCompany:'',defaultAmount:'',defaultDays:'0'}); setEditingExpenseIndex(null); };
     const editExpense = (i: number) => { const item=settings.expenseTypes[i]; setExpenseForm(typeof item==='string'?{name:item,defaultCompany:'',defaultAmount:'',defaultDays:'0'}: {name:item.name,defaultCompany:item.defaultCompany,defaultAmount:item.defaultAmount.toString(),defaultDays:item.defaultDays}); setEditingExpenseIndex(i); };
     const handleCompanySubmit = () => { if(!compInput)return; const list=[...settings.expenseCompanies]; if(editingCompIndex!==null) list[editingCompIndex]=compInput; else list.push(compInput); updateSettings('expenseCompanies', list); setCompInput(''); setEditingCompIndex(null); };
+    
+    // ★★★ Payment Types Logic ★★★
+    const handlePayTypeSubmit = () => { if(!payTypeInput)return; const list=[...(settings.paymentTypes || [])]; if(editingPayTypeIndex!==null) list[editingPayTypeIndex]=payTypeInput; else list.push(payTypeInput); updateSettings('paymentTypes', list); setPayTypeInput(''); setEditingPayTypeIndex(null); };
+
     const handleCbSubmit = () => { if(!cbForm.name)return; const item={...cbForm, defaultFee: Number(cbForm.defaultFee)||0}; const list=[...settings.cbItems]; if(editingCbIndex!==null) list[editingCbIndex]=item; else list.push(item); updateSettings('cbItems', list); setCbForm({name:'',defaultInst:'',defaultFee:'',defaultDays:'0'}); setEditingCbIndex(null); };
     const editCbItem = (i: number) => { const item=settings.cbItems[i]; setCbForm(typeof item==='string'?{name:item,defaultInst:'',defaultFee:'',defaultDays:'0'}: {name:item.name,defaultInst:item.defaultInst,defaultFee:item.defaultFee.toString(),defaultDays:item.defaultDays}); setEditingCbIndex(i); };
     const handleInstSubmit = () => { if(!instInput)return; const list=[...settings.cbInstitutions]; if(editingInstIndex!==null) list[editingInstIndex]=instInput; else list.push(instInput); updateSettings('cbInstitutions', list); setInstInput(''); setEditingInstIndex(null); };
 
-    // --- ★★★ 邏輯區塊 5: 資料庫下級分類管理 ★★★ ---
-    const handleAddDocType = () => {
-        if (!newDocType) return;
-        const currentList = settings.dbDocTypes[selectedDbCat] || [];
-        const updatedDocTypes = {
-            ...settings.dbDocTypes,
-            [selectedDbCat]: [...currentList, newDocType]
-        };
-        updateSettings('dbDocTypes', updatedDocTypes);
-        setNewDocType('');
-    };
+    const handleAddDocType = () => { if (!newDocType) return; const currentList = settings.dbDocTypes[selectedDbCat] || []; const updatedDocTypes = { ...settings.dbDocTypes, [selectedDbCat]: [...currentList, newDocType] }; updateSettings('dbDocTypes', updatedDocTypes); setNewDocType(''); };
+    const handleRemoveDocType = (index: number) => { const currentList = settings.dbDocTypes[selectedDbCat] || []; const newList = currentList.filter((_, i) => i !== index); const updatedDocTypes = { ...settings.dbDocTypes, [selectedDbCat]: newList }; updateSettings('dbDocTypes', updatedDocTypes); };
 
-    const handleRemoveDocType = (index: number) => {
-        const currentList = settings.dbDocTypes[selectedDbCat] || [];
-        const newList = currentList.filter((_, i) => i !== index);
-        const updatedDocTypes = {
-            ...settings.dbDocTypes,
-            [selectedDbCat]: newList
-        };
-        updateSettings('dbDocTypes', updatedDocTypes);
-    };
-
-    // --- 匯出入 ---
     const handleSaveReminders = () => { updateSettings('reminders', reminders); alert('提醒設定已儲存'); };
     const handleSaveBackupConfig = () => { updateSettings('backup', backupConfig); alert('備份排程已更新'); };
     const handleExport = () => { const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=async(ev)=>{ try{ const d=JSON.parse(ev.target?.result as string); if(d.settings){ setSettings((p:any)=>({...p,...d.settings})); Object.keys(d.settings).forEach(k=>updateSettings(k as any, d.settings[k])); alert('匯入成功'); } }catch{alert('檔案錯誤');}}; r.readAsText(f); };
 
-    // --- Render ---
     return (
         <div className="flex h-full gap-6">
             <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
                 {[
                     { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
-                    { id: 'database_config', icon: <Database size={16}/>, label: '資料庫分類' }, // 新增
+                    { id: 'database_config', icon: <Database size={16}/>, label: '資料庫分類' }, 
                     { id: 'reminders', icon: <Bell size={16}/>, label: '系統提醒' },
                     { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' },
                     { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
@@ -2873,7 +2986,6 @@ const SettingsManager = ({
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
 
-                {/* 1. General */}
                 {activeTab === 'general' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4">顏色選項 (Colors)</h3>
@@ -2882,7 +2994,6 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* ★★★ 2. Database Config (新功能) ★★★ */}
                 {activeTab === 'database_config' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Database size={18} className="mr-2"/> 資料庫下級分類設定</h3>
@@ -2890,64 +3001,34 @@ const SettingsManager = ({
                             <label className="text-xs font-bold text-blue-800 block mb-2">1. 選擇主分類 (Main Category)</label>
                             <div className="flex gap-2">
                                 {['Person', 'Company', 'Vehicle', 'CrossBorder'].map(cat => (
-                                    <button 
-                                        key={cat} 
-                                        onClick={() => setSelectedDbCat(cat)} 
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all ${selectedDbCat === cat ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-100'}`}
-                                    >
-                                        {cat === 'Person' ? '人員' : (cat === 'Company' ? '公司' : (cat === 'Vehicle' ? '車輛文件' : '中港文件'))}
-                                    </button>
+                                    <button key={cat} onClick={() => setSelectedDbCat(cat)} className={`px-4 py-2 rounded-lg text-sm font-bold border transition-all ${selectedDbCat === cat ? 'bg-blue-600 text-white border-blue-600 shadow' : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-100'}`}>{cat === 'Person' ? '人員' : (cat === 'Company' ? '公司' : (cat === 'Vehicle' ? '車輛文件' : '中港文件'))}</button>
                                 ))}
                             </div>
                         </div>
-
                         <div>
                             <label className="text-xs font-bold text-slate-500 block mb-2">2. 管理下級文件類型 (Sub-types for {selectedDbCat})</label>
                             <div className="flex gap-2 mb-4">
-                                <input 
-                                    value={newDocType} 
-                                    onChange={e => setNewDocType(e.target.value)} 
-                                    className="border rounded px-3 py-2 text-sm outline-none w-64" 
-                                    placeholder="輸入新類型 (例如: 國際駕照)"
-                                    onKeyDown={e => e.key === 'Enter' && handleAddDocType()}
-                                />
+                                <input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm outline-none w-64" placeholder="輸入新類型 (例如: 國際駕照)" onKeyDown={e => e.key === 'Enter' && handleAddDocType()} />
                                 <button onClick={handleAddDocType} className="bg-slate-800 text-white px-4 py-2 rounded text-sm font-bold hover:bg-slate-700">新增 (Add)</button>
                             </div>
-                            
                             <div className="flex flex-wrap gap-2">
                                 {(settings.dbDocTypes?.[selectedDbCat] || []).length === 0 && <span className="text-gray-400 text-sm">暫無分類</span>}
-                                {(settings.dbDocTypes?.[selectedDbCat] || []).map((type, idx) => (
-                                    <span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border border-slate-200 group hover:border-blue-300 transition-colors">
-                                        {type}
-                                        <button onClick={() => handleRemoveDocType(idx)} className="text-slate-400 hover:text-red-500 p-0.5 rounded-full"><X size={14}/></button>
-                                    </span>
-                                ))}
+                                {(settings.dbDocTypes?.[selectedDbCat] || []).map((type, idx) => (<span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border border-slate-200 group hover:border-blue-300 transition-colors">{type}<button onClick={() => handleRemoveDocType(idx)} className="text-slate-400 hover:text-red-500 p-0.5 rounded-full"><X size={14}/></button></span>))}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* 3. Reminders */}
                 {activeTab === 'reminders' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Bell size={18} className="mr-2 text-amber-500"/> 到期提醒設定</h3>
-                        <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 mb-6">
-                            <label className="flex items-center cursor-pointer"><input type="checkbox" checked={reminders.isEnabled} onChange={e => setReminders({...reminders, isEnabled: e.target.checked})} className="w-5 h-5 accent-amber-600 mr-2"/><span className="font-bold text-sm text-slate-700">開啟系統提醒總開關</span></label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6 mb-6">
-                            <div><label className="block text-xs font-bold text-slate-500 mb-1">提前通知天數</label><input type="number" value={reminders.daysBefore} onChange={e => setReminders({...reminders, daysBefore: Number(e.target.value)})} className="w-full p-2 border rounded text-sm"/></div>
-                            <div><label className="block text-xs font-bold text-slate-500 mb-1">每日檢查時間</label><input type="time" value={reminders.time} onChange={e => setReminders({...reminders, time: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.license} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,license:e.target.checked}})}/> 牌費與驗車</label>
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.insurance} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,insurance:e.target.checked}})}/> 保險</label>
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.crossBorder} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,crossBorder:e.target.checked}})}/> 中港證件</label>
-                        </div>
+                        <div className="bg-amber-50 p-4 rounded-lg border border-amber-100 mb-6"><label className="flex items-center cursor-pointer"><input type="checkbox" checked={reminders.isEnabled} onChange={e => setReminders({...reminders, isEnabled: e.target.checked})} className="w-5 h-5 accent-amber-600 mr-2"/><span className="font-bold text-sm text-slate-700">開啟系統提醒總開關</span></label></div>
+                        <div className="grid grid-cols-2 gap-6 mb-6"><div><label className="block text-xs font-bold text-slate-500 mb-1">提前通知天數</label><input type="number" value={reminders.daysBefore} onChange={e => setReminders({...reminders, daysBefore: Number(e.target.value)})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">每日檢查時間</label><input type="time" value={reminders.time} onChange={e => setReminders({...reminders, time: e.target.value})} className="w-full p-2 border rounded text-sm"/></div></div>
+                        <div className="space-y-2"><label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.license} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,license:e.target.checked}})}/> 牌費與驗車</label><label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.insurance} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,insurance:e.target.checked}})}/> 保險</label><label className="flex items-center gap-2"><input type="checkbox" checked={reminders.categories.crossBorder} onChange={e=>setReminders({...reminders,categories:{...reminders.categories,crossBorder:e.target.checked}})}/> 中港證件</label></div>
                         <div className="mt-6 flex justify-end"><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-amber-600">儲存提醒設定</button></div>
                     </div>
                 )}
 
-                {/* 4. Vehicle */}
                 {activeTab === 'vehicle' && (
                     <div className="space-y-6">
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -2967,9 +3048,29 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 5. Expenses */}
+                {/* 5. Expenses (Fixed Nesting) */}
                 {activeTab === 'expenses' && (
                     <div className="space-y-6">
+                        {/* 1. Payment Types */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center"><CreditCard size={18} className="mr-2"/> 收款項目設定 (Payment Types)</h3>
+                            <div className={`flex gap-2 mt-2 p-2 rounded border ${editingPayTypeIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}>
+                                <input value={payTypeInput} onChange={e => setPayTypeInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingPayTypeIndex !== null ? "編輯項目..." : "新增項目 (例如: 訂金)"} />
+                                <button onClick={handlePayTypeSubmit} className={`text-white px-3 rounded text-xs ${editingPayTypeIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingPayTypeIndex !== null ? '更新' : '新增'}</button>
+                                {editingPayTypeIndex !== null && <button onClick={() => { setEditingPayTypeIndex(null); setPayTypeInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {(settings.paymentTypes || []).map((pt, i) => (
+                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200 group">
+                                        {pt} 
+                                        <button onClick={() => {setPayTypeInput(settings.paymentTypes[i]); setEditingPayTypeIndex(i);}} className="text-slate-400 hover:text-blue-600"><Edit size={10}/></button>
+                                        <button onClick={() => { const list = [...settings.paymentTypes]; list.splice(i, 1); updateSettings('paymentTypes', list); }} className="text-slate-400 hover:text-red-500"><X size={10}/></button>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 2. Expense Types */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DollarSign size={18} className="mr-2"/> 費用類別與預設值</h3>
                             <div className={`grid grid-cols-4 gap-3 p-3 rounded-lg mb-4 border transition-colors ${editingExpenseIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'} items-end`}>
@@ -2980,6 +3081,8 @@ const SettingsManager = ({
                             </div>
                             <div className="space-y-2">{settings.expenseTypes.map((item, i) => { const isObj = typeof item !== 'string'; return (<div key={i} className="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200"><div className="flex items-center gap-4"><span className="font-bold text-sm w-32 truncate">{isObj ? item.name : item}</span><div className="flex gap-2 text-xs text-slate-500"><span className="bg-white px-2 py-1 rounded border">預設: {isObj ? item.defaultCompany : '-'}</span><span className="bg-white px-2 py-1 rounded border">${isObj ? item.defaultAmount : '-'}</span></div></div><div className="flex gap-2"><button onClick={() => editExpense(i)} className="text-slate-400 hover:text-blue-600 p-1"><Edit size={14}/></button><button onClick={() => removeItem('expenseTypes', i)} className="text-slate-400 hover:text-red-500 p-1"><Trash2 size={14}/></button></div></div>); })}</div>
                         </div>
+
+                        {/* 3. Expense Companies */}
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">常用收款公司/車房</h3>
                             <div className={`flex gap-2 mt-2 p-2 rounded border ${editingCompIndex !== null ? 'bg-amber-50 border-amber-200' : 'bg-transparent border-transparent'}`}><input value={compInput} onChange={e => setCompInput(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder={editingCompIndex !== null ? "Edit..." : "Add..."} /><button onClick={handleCompanySubmit} className={`text-white px-3 rounded text-xs ${editingCompIndex !== null ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}>{editingCompIndex !== null ? 'Update' : 'Add'}</button>{editingCompIndex !== null && <button onClick={() => { setEditingCompIndex(null); setCompInput(''); }} className="bg-gray-300 px-2 rounded text-xs hover:bg-gray-400">Cancel</button>}</div>
@@ -2988,7 +3091,6 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 6. CrossBorder */}
                 {activeTab === 'crossborder' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -3009,7 +3111,6 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 7. Users */}
                 {activeTab === 'users' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限</h3>
@@ -3018,7 +3119,6 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 8. Backup */}
                 {activeTab === 'backup' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
@@ -3041,7 +3141,8 @@ const SettingsManager = ({
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
-  const [staffId, setStaffId] = useState<string | null>(null);
+  const [staffId, setStaffId] = useState<string | null>('CHARLES');
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
   // Data States
@@ -3093,6 +3194,19 @@ export default function GoldLandAutoDMS() {
   const handlePrint = () => { window.print(); };
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
+
+  useEffect(() => {
+    if (!db || !appId) return;
+    const unsub = onSnapshot(doc(db, 'artifacts', appId, 'system', 'users'), (docSnap) => {
+        if (docSnap.exists()) {
+            const rawList = docSnap.data().list || [];
+            // 格式化資料，確保有 email 欄位
+            setSystemUsers(rawList.map((u: any) => (typeof u === 'string' ? { email: u, password: '', modules: ['all'] } : u)));
+        }
+    });
+    return () => unsub();
+  }, [db, appId]);
+
 
   // --- Auth & Data Loading ---
   useEffect(() => {
@@ -3246,7 +3360,14 @@ useEffect(() => {
         return () => unsubDb();
     }, [staffId]);
 
-  if (!staffId) return <StaffLoginScreen onLogin={setStaffId} />;
+  if (!staffId) {
+      return (
+          <StaffLoginScreen 
+              onLogin={(user: any) => setStaffId(user.email || user)} 
+              systemUsers={systemUsers} 
+          />
+      );
+  }
 
 
 
@@ -3883,22 +4004,22 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v9.4: 浮動式 VRD 導入 + 內飾選單 + 版面優化)
+  // 1. Vehicle Form Modal (v9.6: Full Features - VRD Overlay, Scrolling, Payment Settings, & Complete Finance Module)
 const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
     const v = editingVehicle || {} as Partial<Vehicle>;
     const isNew = !v.id; 
     
-    // --- 狀態定義 ---
+    // --- State Definitions ---
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold'>(v.status || 'In Stock');
-
-    // ★★★ 新增：控制 VRD 浮動搜尋層顯示 ★★★
+    
+    // ★ New: Control Floating VRD Search Overlay
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
 
-    // 數值輸入狀態
+    // Number Inputs
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
     const [mileageStr, setMileageStr] = useState(formatNumberInput(String(v.mileage || '')));
@@ -3913,13 +4034,13 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [isCompressing, setIsCompressing] = useState(false);
 
-    // VRD 連動狀態
+    // VRD Logic State
     const [vrdSearch, setVrdSearch] = useState('');
     const [vrdResult, setVrdResult] = useState<any>(null);
     const [searching, setSearching] = useState(false);
     const [vrdOwnerRaw, setVrdOwnerRaw] = useState(''); 
 
-    // 計算邏輯
+    // Calculation Logic
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
     const totalRevenue = (v.price || 0) + cbFees;
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
@@ -3927,11 +4048,17 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const balance = totalRevenue - totalReceived; 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
-    // 新增費用/收款的暫存狀態
+    // Finance Temporary State
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
-    const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
+    
+    // ★ Updated: Payment type defaults to settings or 'Deposit'
+    const [newPayment, setNewPayment] = useState({ 
+        date: new Date().toISOString().split('T')[0], 
+        type: settings.paymentTypes?.[0] || 'Deposit', 
+        amount: '', method: 'Cash', note: '', relatedTaskId: '' 
+    });
 
-    // 自動計算牌費
+    // Auto License Fee
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
         const fee = calculateLicenseFee(fuelType, size);
@@ -3944,7 +4071,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         return formatNumberInput(String(a1 + tax));
     };
 
-    // 自動同步智能圖庫照片
+    // Auto-Sync Media Library
     useEffect(() => {
         if (!v.id || !db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -3954,11 +4081,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const linkedUrls: string[] = [];
             let coverUrl = '';
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                if (data.isPrimary) coverUrl = data.url;
-                else linkedUrls.push(data.url);
-            });
+            snapshot.forEach(doc => { const data = doc.data(); if (data.isPrimary) coverUrl = data.url; else linkedUrls.push(data.url); });
             if (coverUrl) linkedUrls.unshift(coverUrl);
             const legacyPhotos = v.photos || [];
             const combined = Array.from(new Set([...linkedUrls, ...legacyPhotos]));
@@ -3967,15 +4090,8 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         return () => unsubscribe();
     }, [v.id, db, staffId, appId]);
 
-    const handleGoToMediaLibrary = () => {
-        setEditingVehicle(null);
-        setActiveTab('media_center');
-    };
-
-    const setFieldValue = (name: string, val: string) => {
-        const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement;
-        if(el) el.value = val;
-    };
+    const handleGoToMediaLibrary = () => { setEditingVehicle(null); setActiveTab('media_center'); };
+    const setFieldValue = (name: string, val: string) => { const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement; if(el) el.value = val; };
 
     const handleExpenseTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedType = e.target.value;
@@ -3987,16 +4103,14 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         if (setting && typeof setting !== 'string') {
             defaultComp = setting.defaultCompany || '';
             defaultAmt = setting.defaultAmount ? formatNumberInput(setting.defaultAmount.toString()) : '';
-            if (setting.defaultDays && Number(setting.defaultDays) > 0) {
-                const d = new Date(); d.setDate(d.getDate() + Number(setting.defaultDays)); targetDate = d.toISOString().split('T')[0];
-            }
+            if (setting.defaultDays && Number(setting.defaultDays) > 0) { const d = new Date(); d.setDate(d.getDate() + Number(setting.defaultDays)); targetDate = d.toISOString().split('T')[0]; }
         }
         setNewExpense({ ...newExpense, type: selectedType, company: defaultComp, amount: defaultAmt, date: targetDate });
     };
 
-    const autoFetchCustomer = () => { /* 保留 */ }; 
+    const autoFetchCustomer = () => { /* Logic Kept */ }; 
 
-    // VRD 搜尋
+    // VRD Search
     const handleSearchVRD = async () => {
         if (!vrdSearch || !db) return;
         setSearching(true);
@@ -4008,17 +4122,21 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
             if (snap.empty) { const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q2); }
             if (snap.empty) { const q3 = query(dbRef, where('regNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q3); }
 
-            if (!snap.empty) { setVrdResult(snap.docs[0].data()); } 
-            else { alert("資料庫中心找不到此車輛 (請確認車牌或底盤號)"); setVrdResult(null); }
+            if (!snap.empty) { setVrdResult(snap.docs[0].data()); } else { alert("資料庫中心找不到此車輛"); setVrdResult(null); }
         } catch (e) { console.error(e); alert("搜尋錯誤"); } finally { setSearching(false); }
     };
 
-    // VRD 導入
+    // VRD Import
     const applyVrdData = () => {
         if (!vrdResult) return;
         const regMark = vrdResult.plateNoHK || vrdResult.regNo || '';
         setFieldValue('regMark', regMark);
-        if (vrdResult.make) setSelectedMake(vrdResult.make);
+        
+        if (vrdResult.make) {
+            const matchedMake = settings.makes.find((m: string) => m.toLowerCase() === vrdResult.make.toLowerCase());
+            setSelectedMake(matchedMake || vrdResult.make);
+        }
+
         setFieldValue('model', vrdResult.model || '');
         setFieldValue('year', vrdResult.manufactureYear || vrdResult.year || '');
         setFieldValue('chassisNo', vrdResult.chassisNo || '');
@@ -4033,34 +4151,24 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         if (ownerName) {
             const exist = clients.find((c: any) => c.name === ownerName);
             if (exist) {
-                setFieldValue('customerName', exist.name);
-                setFieldValue('customerPhone', exist.phone || '');
-                setFieldValue('customerID', exist.idNumber || exist.hkid || '');
-                setFieldValue('customerAddress', exist.address || '');
+                setFieldValue('customerName', exist.name); setFieldValue('customerPhone', exist.phone || '');
+                setFieldValue('customerID', exist.idNumber || exist.hkid || ''); setFieldValue('customerAddress', exist.address || '');
                 setVrdOwnerRaw(''); 
                 alert(`已成功導入 VRD 並自動配對客戶：${exist.name}`);
             } else {
-                setVrdOwnerRaw(ownerName);
-                setFieldValue('customerName', ownerName); 
+                setVrdOwnerRaw(ownerName); setFieldValue('customerName', ownerName); 
                 if(vrdResult.registeredOwnerId) setFieldValue('customerID', vrdResult.registeredOwnerId);
-                alert(`VRD 導入成功。注意：系統內無客戶 "${ownerName}" 的完整檔案，已暫填姓名。`);
+                alert(`VRD 導入成功。注意：無客戶 "${ownerName}" 檔案，已暫填姓名。`);
             }
         } else { alert("VRD 導入成功"); }
-        setVrdResult(null); setVrdSearch('');
-        setShowVrdOverlay(false); // 導入後關閉浮動層
+        setVrdResult(null); setVrdSearch(''); setShowVrdOverlay(false);
     };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
-        if(!formData.has('mileage')) {
-            const hiddenMileage = document.createElement('input');
-            hiddenMileage.type = 'hidden'; hiddenMileage.name = 'mileage'; hiddenMileage.value = mileageStr.replace(/,/g, ''); e.currentTarget.appendChild(hiddenMileage);
-        }
-        try {
-            if(editingVehicle) editingVehicle.photos = carPhotos;
-            await saveVehicle(e);
-        } catch (err) { console.error("儲存失敗:", err); alert(`儲存失敗: ${err}`); }
+        if(!formData.has('mileage')) { const hiddenMileage = document.createElement('input'); hiddenMileage.type = 'hidden'; hiddenMileage.name = 'mileage'; hiddenMileage.value = mileageStr.replace(/,/g, ''); e.currentTarget.appendChild(hiddenMileage); }
+        try { if(editingVehicle) editingVehicle.photos = carPhotos; await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
     };
 
     return (
@@ -4070,216 +4178,78 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
           <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20">
             <div className="flex items-center gap-3">
                 <div className="p-2 bg-yellow-500 rounded-lg text-black"><Car size={24} /></div>
-                <div>
-                    <h2 className="text-xl font-bold">{isNew ? '車輛入庫 (Stock In)' : `車輛詳情: ${v.regMark || '未出牌'}`}</h2>
-                    <p className="text-xs text-slate-400 font-mono">{v.id || 'NEW_ENTRY'}</p>
-                </div>
+                <div><h2 className="text-xl font-bold">{isNew ? '車輛入庫' : `車輛詳情: ${v.regMark || '未出牌'}`}</h2><p className="text-xs text-slate-400 font-mono">{v.id || 'NEW_ENTRY'}</p></div>
             </div>
-            <div className="flex gap-3">
-                <button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
-            </div>
+            <div className="flex gap-3"><button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button></div>
           </div>
 
           <form onSubmit={handleSaveWrapper} className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
-            
-            {/* 左側欄：VRD & Photos (設為 relative 以便浮動層定位) */}
             <div className="w-full md:w-[35%] bg-slate-200/50 p-4 overflow-y-auto border-r border-slate-300 flex flex-col gap-4 scrollbar-thin relative">
-                 
-                 {/* ★★★ 浮動式 VRD 導入層 (Overlay) ★★★ */}
+                 {/* Floating VRD Search Overlay */}
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2">
-                            <h3 className="font-bold text-lg text-blue-800 flex items-center">
-                                <Database size={20} className="mr-2"/> 連動資料庫中心
-                            </h3>
+                            <h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫中心</h3>
                             <button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
                         </div>
-                        
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-bold text-gray-600 mb-2">輸入車牌或底盤號搜尋：</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        value={vrdSearch}
-                                        onChange={e => setVrdSearch(e.target.value.toUpperCase())}
-                                        placeholder="例: AB1234"
-                                        className="flex-1 p-3 border-2 border-blue-200 rounded-lg text-lg font-mono uppercase focus:border-blue-500 outline-none"
-                                        autoFocus
-                                        onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}}
-                                    />
-                                    <button 
-                                        type="button"
-                                        onClick={handleSearchVRD}
-                                        disabled={searching}
-                                        className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50"
-                                    >
-                                        {searching ? <Loader2 className="animate-spin"/> : '搜尋'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {vrdResult && (
-                                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-3 animate-fade-in">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h4 className="font-bold text-lg text-slate-800">{vrdResult.plateNoHK || vrdResult.regNo}</h4>
-                                            <p className="text-sm text-slate-600">{vrdResult.manufactureYear} {vrdResult.make} {vrdResult.model}</p>
-                                            <p className="text-xs text-slate-500 font-mono mt-1">Chassis: {vrdResult.chassisNo}</p>
-                                        </div>
-                                        {vrdResult.registeredOwnerName && (
-                                            <div className="text-right">
-                                                <span className="text-[10px] text-slate-400 uppercase">Owner</span>
-                                                <p className="font-bold text-blue-700">{vrdResult.registeredOwnerName}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="pt-2 border-t border-blue-200 flex gap-2">
-                                        <button 
-                                            type="button" 
-                                            onClick={applyVrdData} 
-                                            className="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold hover:bg-green-600 shadow-sm"
-                                        >
-                                            確認導入並配對
-                                        </button>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => { setVrdResult(null); setVrdSearch(''); }}
-                                            className="px-4 py-2 bg-white text-slate-500 border border-slate-300 rounded-lg hover:bg-slate-50"
-                                        >
-                                            重設
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                            
-                            <div className="mt-8 text-xs text-slate-400 text-center">
-                                <p>提示：導入後系統將自動填寫車輛規格，並嘗試配對現有客戶。</p>
-                            </div>
+                            <div><label className="block text-sm font-bold text-gray-600 mb-2">輸入車牌或底盤號搜尋：</label><div className="flex gap-2"><input value={vrdSearch} onChange={e => setVrdSearch(e.target.value.toUpperCase())} placeholder="例: AB1234" className="flex-1 p-3 border-2 border-blue-200 rounded-lg text-lg font-mono uppercase focus:border-blue-500 outline-none" autoFocus onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}} /><button type="button" onClick={handleSearchVRD} disabled={searching} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{searching ? <Loader2 className="animate-spin"/> : '搜尋'}</button></div></div>
+                            {vrdResult && (<div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-3 animate-fade-in"><div className="flex justify-between items-start"><div><h4 className="font-bold text-lg text-slate-800">{vrdResult.plateNoHK || vrdResult.regNo}</h4><p className="text-sm text-slate-600">{vrdResult.manufactureYear} {vrdResult.make} {vrdResult.model}</p><p className="text-xs text-slate-500 font-mono mt-1">Chassis: {vrdResult.chassisNo}</p></div>{vrdResult.registeredOwnerName && (<div className="text-right"><span className="text-[10px] text-slate-400 uppercase">Owner</span><p className="font-bold text-blue-700">{vrdResult.registeredOwnerName}</p></div>)}</div><div className="pt-2 border-t border-blue-200 flex gap-2"><button type="button" onClick={applyVrdData} className="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold hover:bg-green-600 shadow-sm">確認導入並配對</button><button type="button" onClick={() => { setVrdResult(null); setVrdSearch(''); }} className="px-4 py-2 bg-white text-slate-500 border border-slate-300 rounded-lg hover:bg-slate-50">重設</button></div></div>)}
                         </div>
                     </div>
                  )}
 
-                 {/* VRD Card Content */}
                  <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                     <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
-                    <div className="p-4 space-y-3">
-                        <div className="flex justify-between items-center">
-                            <h3 className="font-bold text-red-800 text-sm flex items-center">
-                                <FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)
-                            </h3>
-                            {/* ★★★ 觸發浮動搜尋層的按鈕 ★★★ */}
-                            <button 
-                                type="button" 
-                                onClick={() => setShowVrdOverlay(true)}
-                                className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm transition-transform active:scale-95"
-                            >
-                                <Link size={10} className="mr-1"/> 連結資料庫
-                            </button>
-                        </div>
-                        
-                        <div className="space-y-1 relative">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label>
-                            <div className="flex relative">
-                                <input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-yellow-50 border-b-2 border-yellow-200 p-1 text-2xl font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-yellow-400 uppercase placeholder:text-gray-300"/>
-                            </div>
-                        </div>
+                    
+                    {/* ★ VRD Data Area with Scrolling (max-h-600px) ★ */}
+                    <div className="p-4 space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin">
+                        <div className="flex justify-between items-center"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)</h3><button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm transition-transform active:scale-95"><Link size={10} className="mr-1"/> 連結資料庫</button></div>
+                        <div className="space-y-1 relative"><label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label><div className="flex relative"><input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-yellow-50 border-b-2 border-yellow-200 p-1 text-2xl font-bold font-mono text-center text-slate-800 focus:outline-none focus:border-yellow-400 uppercase placeholder:text-gray-300"/></div></div>
                         <div className="grid grid-cols-2 gap-3">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</select></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist></div>
                         </div>
-                        
                         <div className="grid grid-cols-3 gap-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
                             <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
                             <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/></div>
                         </div>
-
-                        {/* ★★★ 修正：內飾顏色使用 datalist 下拉選單 ★★★ */}
                         <div className="grid grid-cols-2 gap-3 pt-2">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="外觀"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
-                            <div>
-                                <label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label>
-                                <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="內飾"/>
-                                {/* 共用同一個 colors datalist */}
-                            </div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label><input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="內飾"/></div>
                         </div>
-
-                        <div className="space-y-1 pt-2 border-t border-dashed border-slate-200">
-                            <label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No. (車身號碼)</label>
-                            <input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[9px] text-slate-400 font-bold uppercase">Engine No. (機器號碼)</label>
-                            <input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/>
-                        </div>
-
+                        <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
+                        <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
                         <div className="grid grid-cols-2 gap-3 pt-2">
-                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap. (排量)</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" placeholder="cc"/></div>
+                            <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap.</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" placeholder="cc"/></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 7} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
                         </div>
-
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Petrol">Petrol (汽油)</option><option value="Diesel">Diesel (柴油)</option><option value="Electric">Electric (電動)</option></select></div>
                             <div><label className="text-[9px] text-slate-400 font-bold uppercase">Transmission</label><select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Automatic">Automatic (自動)</option><option value="Manual">Manual (棍波)</option></select></div>
                         </div>
                     </div>
-                </div>
+                 </div>
 
-                {/* 車輛詳情 - 圖片管理區域 (UI 優化) */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                    <div className="flex justify-between items-center mb-3">
-                        <h3 className="font-bold text-slate-700 text-sm flex items-center">
-                            <ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片
-                        </h3>
-                        <button 
-                            type="button" 
-                            onClick={handleGoToMediaLibrary} 
-                            className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-all font-bold shadow-sm"
-                        >
-                            前往圖庫整理 <ArrowRight size={10} className="inline ml-1"/>
-                        </button>
-                    </div>
-                    
-                    {/* ★★★ 圖片顯示區：Scrolling ★★★ */}
+                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                    <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100 transition-all font-bold shadow-sm">前往圖庫整理 <ArrowRight size={10} className="inline ml-1"/></button></div>
                     <div className="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pr-1">
-                        {carPhotos.map((url, idx) => (
-                            <div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group bg-gray-100 cursor-zoom-in">
-                                <img src={url} className="w-full h-full object-cover" title="前往圖庫查看大圖"/>
-                            </div>
-                        ))}
-                        {carPhotos.length === 0 && (
-                            <div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">
-                                暫無照片<br/>請至圖庫新增
-                            </div>
-                        )}
+                        {carPhotos.map((url, idx) => (<div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm group bg-gray-100 cursor-zoom-in"><img src={url} className="w-full h-full object-cover" title="前往圖庫查看大圖"/></div>))}
+                        {carPhotos.length === 0 && (<div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片<br/>請至圖庫新增</div>)}
                     </div>
-                    <p className="text-[9px] text-slate-400 mt-2 italic flex items-center">
-                        <Info size={10} className="mr-1"/> 
-                        已顯示前 {carPhotos.length} 張。如需完整管理請至「智能圖庫」。
-                    </p>
+                    <p className="text-[9px] text-slate-400 mt-2 italic flex items-center"><Info size={10} className="mr-1"/> 已顯示前 {carPhotos.length} 張。如需完整管理請至「智能圖庫」。</p>
                 </div>
             </div>
             
-            {/* 右側欄：銷售與管理 (保持完整) */}
             <div className="flex-1 bg-white p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 pb-24">
-                {/* ... Status Buttons & Stock Dates ... */}
                 <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-                        <input type="hidden" name="status" value={currentStatus} />
-                        {['In Stock', 'Reserved', 'Sold'].map(status => (
-                            <button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all border ${currentStatus === status ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>
-                                {status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : '已售')}
-                            </button>
-                        ))}
-                    </div>
+                    <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><input type="hidden" name="status" value={currentStatus} />{['In Stock', 'Reserved', 'Sold'].map(status => (<button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all border ${currentStatus === status ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>{status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : '已售')}</button>))}</div>
                     <div className="flex gap-3 text-xs"><div className="flex items-center gap-1"><span className="text-gray-400">入庫:</span><input name="stockInDate" type="date" defaultValue={v.stockInDate || new Date().toISOString().split('T')[0]} className="bg-transparent font-mono font-bold text-slate-700 outline-none"/></div><div className="flex items-center gap-1"><span className="text-gray-400">出庫:</span><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="bg-transparent font-mono font-bold text-green-600 outline-none"/></div></div>
                 </div>
 
                 <div className="mb-6 relative">
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>
-                        {vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200 flex items-center"><AlertTriangle size={10} className="mr-1"/> VRD 車主: {vrdOwnerRaw} (系統未建檔)</span>}
-                    </div>
+                    <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-slate-800 text-sm flex items-center"><UserCircle size={16} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>{vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded border border-yellow-200 flex items-center"><AlertTriangle size={10} className="mr-1"/> VRD 車主: {vrdOwnerRaw} (系統未建檔)</span>}</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 relative group-focus-within:ring-2 ring-blue-100 transition-all">
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">NAME</span><input name="customerName" defaultValue={v.customerName} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none placeholder:text-gray-200" placeholder="輸入姓名..."/><button type="button" onClick={autoFetchCustomer} className="absolute right-1 top-1/2 -translate-y-1/2 p-1.5 text-blue-500 hover:bg-blue-50 rounded-full transition-colors z-10" title="依姓名搜尋資料庫"><Search size={14}/></button></div>
                         <div className="relative"><span className="absolute top-2 left-2 text-[10px] text-gray-400 font-bold">PHONE</span><input name="customerPhone" defaultValue={v.customerPhone} className="w-full pt-5 pb-1 px-2 bg-white border border-slate-200 rounded text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
@@ -4291,48 +4261,40 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                 <div className="mb-6"><h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center"><DollarSign size={16} className="mr-2 text-green-600"/> 價格設定 (Pricing)</h3><div className="grid grid-cols-2 md:grid-cols-5 gap-4"><div className="bg-yellow-50 p-2 rounded border border-yellow-200"><label className="block text-[10px] text-yellow-800 font-bold mb-1">售價 (Price)</label><input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-lg font-bold text-slate-900 outline-none" placeholder="$0"/></div><div className="bg-gray-50 p-2 rounded border border-gray-200"><label className="block text-[10px] text-gray-500 font-bold mb-1">成本 (Cost)</label><input name="costPrice" value={costStr} onChange={e => setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono text-slate-600 outline-none" placeholder="$0"/></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-blue-400 font-bold mb-1">收購類型</label><select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full bg-transparent text-sm font-bold text-blue-800 outline-none"><option value="Used">二手 (Used)</option><option value="New">新車 (New)</option><option value="Consignment">寄賣 (Consign)</option></select></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">A1 Tax</label><input name="priceA1" value={priceA1Str} onChange={e => setPriceA1Str(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">Paid Tax</label><input name="priceTax" value={priceTaxStr} onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div></div><div className="flex justify-between items-center mt-2 px-1"><div className="text-xs text-gray-400">牌簿價: <span className="font-mono text-slate-600">{calcRegisteredPrice()}</span></div><div className="text-xs font-bold text-blue-600">餘額 (Balance): {formatCurrency(balance)}</div></div></div>
 
                 <div className="space-y-4">
+                    {/* ★ Full Cross-Border Module ★ */}
                     <div className="border border-blue-100 rounded-xl overflow-hidden"><div className="bg-blue-50/50 p-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-colors" onClick={() => setIsCbExpanded(!isCbExpanded)}><div className="flex items-center gap-2"><Globe size={16} className="text-blue-600"/><span className="font-bold text-sm text-blue-900">中港車管家 (Cross-Border)</span><label className="flex items-center ml-4 text-xs text-slate-500 cursor-pointer" onClick={e => e.stopPropagation()}><input type="checkbox" name="cb_isEnabled" defaultChecked={v.crossBorder?.isEnabled} className="mr-1 accent-blue-600"/> 啟用</label></div>{isCbExpanded ? <ChevronUp size={16} className="text-blue-400"/> : <ChevronDown size={16} className="text-blue-400"/>}</div>{isCbExpanded && (<div className="p-4 bg-white border-t border-blue-100 grid grid-cols-2 md:grid-cols-4 gap-3 animate-fade-in"><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">內地車牌</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">指標號</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">香港公司</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">內地公司</label><input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">主司機</label><input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 1</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 2</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">保險代理</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div><div className="col-span-4 grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 pt-2 border-t border-dashed border-blue-100">{['HkInsurance', 'ReservedPlate', 'Br', 'LicenseFee', 'MainlandJqx', 'MainlandSyx', 'ClosedRoad', 'Approval', 'MainlandLicense', 'HkInspection'].map(key => (<div key={key} className="bg-slate-50 p-1.5 rounded"><label className="block text-[8px] text-slate-400 uppercase mb-0.5">{key}</label><input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-[10px] outline-none"/></div>))}</div></div>)}</div>
 
                     <div className="grid grid-cols-1 gap-4">
+                        {/* ★ Payment Records Module ★ */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>收款記錄 (Payments)</span><span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span></h4>
                             <div className="space-y-1 mb-2">
                                 {(v.payments || []).map((p: any) => (<div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{p.date}</div><div className="col-span-3 font-bold">{p.type}</div><div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div><div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div><div className="col-span-1 text-right">{!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}</div></div>))}
                                 {pendingCbTasks.map((task: any) => (<div key={task.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊自動填入下方收款欄"><div className="col-span-2 text-amber-600/70">{task.date}</div><div className="col-span-3 font-bold flex items-center"><Info size={10} className="mr-1"/> {task.item}</div><div className="col-span-3 text-amber-700 truncate">{task.institution}</div><div className="col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div><div className="col-span-1 text-right"><span className="bg-amber-200 px-1 rounded text-[9px] font-bold">待收</span></div></div>))}
                             </div>
-                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2"><input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/><select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"><option>Deposit</option><option>Balance</option><option>Service Fee</option></select><input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/><input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/><button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button></div>
+                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
+                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
+                                {/* ★ Payment Type Dropdown: Uses System Settings ★ */}
+                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white font-bold">
+                                    {(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}
+                                </select>
+                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/>
+                                <input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
+                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
+                            </div>
                         </div>
 
-                        {/* 車輛費用區塊 (保持原樣) */}
+                        {/* ★ Vehicle Expenses Module ★ */}
                         <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>車輛費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span></h4>
                             <div className="space-y-1 mb-2">{(v.expenses || []).map((exp: any) => (<div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{exp.date}</div><div className="col-span-3 font-bold">{exp.type}</div><div className="col-span-3 text-gray-500 truncate">{exp.company}</div><div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div><div className="col-span-1 text-right"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></div></div>))}</div>
-                            
-                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
-                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                {/* Expense Type Dropdown (With default value logic) */}
-                                <select value={newExpense.type} onChange={handleExpenseTypeChange} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white">
-                                    <option value="">項目...</option>
-                                    {settings.expenseTypes.map((t: any, i: number) => {
-                                        const name = typeof t === 'string' ? t : t.name;
-                                        return <option key={i} value={name}>{name}</option>;
-                                    })}
-                                </select>
-                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white">
-                                    <option value="">公司...</option>
-                                    {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
-                                </select>
-                                <input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
-                                <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button>
-                            </div>
+                            <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2"><input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/><select value={newExpense.type} onChange={handleExpenseTypeChange} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select><select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select><input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/><button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button></div>
                         </div>
                     </div>
                 </div>
 
                 <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 sticky bottom-0 bg-white z-10">
-                    <div className="flex-1 mr-4">
-                        <textarea name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2 border rounded h-16 resize-none outline-none focus:ring-1 ring-blue-200"></textarea>
-                    </div>
+                    <div className="flex-1 mr-4"><textarea name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2 border rounded h-16 resize-none outline-none focus:ring-1 ring-blue-200"></textarea></div>
                     {v.id && (<div className="flex mr-auto gap-2"><button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印合約"><FileText size={18}/></button><button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印發票"><Printer size={18}/></button></div>)}
                     <button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="px-5 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
                     <button type="submit" className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center"><Save size={16} className="mr-2"/> 儲存變更</button>
