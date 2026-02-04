@@ -4191,16 +4191,29 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         }
     };
 
-    // VRD 導入
+    // ★★★ VRD 導入 (已修復：增強車廠匹配邏輯) ★★★
     const applyVrdData = (vrdData: any) => {
         if (!vrdData) return;
         
         const regMark = vrdData.plateNoHK || vrdData.regNo || '';
         setFieldValue('regMark', regMark);
         
-        if (vrdData.make) {
-            const matchedMake = settings.makes.find((m: string) => m.toLowerCase() === vrdData.make.toLowerCase());
-            setSelectedMake(matchedMake || vrdData.make);
+        // --- 車廠匹配邏輯 (修復重點) ---
+        const rawMake = vrdData.make || vrdData.brand || ''; // 嘗試讀取 make 或 brand
+        if (rawMake) {
+            // 1. 嘗試完全匹配 (忽略大小寫)
+            let matchedMake = settings.makes.find((m: string) => m.toLowerCase() === rawMake.toLowerCase());
+
+            // 2. 如果沒找到，嘗試模糊匹配 (例如: 'TOYOTA MOTOR' 包含 'Toyota')
+            if (!matchedMake) {
+                matchedMake = settings.makes.find((m: string) => 
+                    rawMake.toLowerCase().includes(m.toLowerCase()) || 
+                    m.toLowerCase().includes(rawMake.toLowerCase())
+                );
+            }
+
+            // 3. 設定選中的車廠 (如果真的找不到，就用原始資料，雖然下拉選單可能顯示空白)
+            setSelectedMake(matchedMake || rawMake);
         }
 
         setFieldValue('model', vrdData.model || '');
@@ -4214,6 +4227,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         if (vrdData.priceTax) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
         if (vrdData.prevOwners !== undefined) setFieldValue('previousOwners', vrdData.prevOwners.toString());
 
+        // 自動配對車主
         const ownerName = vrdData.registeredOwnerName || vrdData.owner;
         if (ownerName) {
             const exist = clients.find((c: any) => c.name === ownerName);
