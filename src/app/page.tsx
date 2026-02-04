@@ -2910,7 +2910,19 @@ const SettingsManager = ({
     }, [db, appId]);
 
     const updateUsersDb = async (newList: any[]) => { if (db) await setDoc(doc(db, 'artifacts', appId, 'system', 'users'), { list: newList }, { merge: true }); };
-    const handleAddUser = () => { if (!newUserEmail) return; const l = [...systemUsers, { email: newUserEmail, modules: ['inventory', 'business', 'database'] }]; setSystemUsers(l); updateUsersDb(l); setNewUserEmail(''); };
+    // ★★★ 修正：新增用戶時，給予預設密碼 1234 ★★★
+    const handleAddUser = () => { 
+        if (!newUserEmail) return; 
+        const l = [...systemUsers, { 
+            email: newUserEmail, 
+            password: '1234', // 預設密碼
+            modules: ['inventory', 'business', 'database', 'settings'] 
+        }]; 
+        setSystemUsers(l); 
+        updateUsersDb(l); 
+        setNewUserEmail(''); 
+        alert(`用戶 ${newUserEmail} 已新增，預設密碼為: 1234`);
+    };
     const handleRemoveUser = (email: string) => { if (confirm(`移除用戶 ${email}?`)) { const l = systemUsers.filter(u => u.email !== email); setSystemUsers(l); updateUsersDb(l); } };
     const toggleUserPermission = (email: string, modKey: string) => { const l = systemUsers.map(u => u.email === email ? { ...u, modules: u.modules.includes(modKey) ? u.modules.filter(m => m !== modKey) : [...u.modules, modKey] } : u); setSystemUsers(l); updateUsersDb(l); };
 
