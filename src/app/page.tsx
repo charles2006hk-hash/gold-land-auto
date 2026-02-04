@@ -4251,7 +4251,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                                 <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
                                 {/* ★ Payment Type Dropdown: Uses System Settings ★ */}
                                 <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white font-bold">
-                                    {(settings.paymentTypes || ['Deposit']).map(pt => <option key={pt} value={pt}>{pt}</option>)}
+                                    {(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}
                                 </select>
                                 <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/>
                                 <input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
