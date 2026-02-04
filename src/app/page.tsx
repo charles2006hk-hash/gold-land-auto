@@ -4043,7 +4043,7 @@ const DatabaseSelector = ({
     );
 };
 
-  // 1. Vehicle Form Modal (v9.7: 修復中港車日期中文標示 + 找回口岸選擇)
+  // 1. Vehicle Form Modal (v9.9: 路徑修正為 CHARLES_data + 完整功能)
 const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -4071,27 +4071,18 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [isCompressing, setIsCompressing] = useState(false);
 
-    // VRD 連動狀態
+    // VRD 搜尋狀態
     const [vrdSearch, setVrdSearch] = useState('');
-    const [vrdResult, setVrdResult] = useState<any>(null);
+    const [vrdResults, setVrdResults] = useState<any[]>([]);
     const [searching, setSearching] = useState(false);
     const [vrdOwnerRaw, setVrdOwnerRaw] = useState(''); 
 
-    // ★★★ 中港車日期欄位對照表 (中文) ★★★
+    // 中港車日期欄位對照表
     const cbDateMap: Record<string, string> = {
-        'HkInsurance': '香港保險',
-        'ReservedPlate': '留牌紙',
-        'Br': '商業登記 (BR)',
-        'LicenseFee': '香港牌費',
-        'MainlandJqx': '內地交強險',
-        'MainlandSyx': '內地商業險',
-        'ClosedRoad': '禁區紙',
-        'Approval': '批文卡',
-        'MainlandLicense': '內地行駛證',
-        'HkInspection': '香港驗車(中港)'
+        'HkInsurance': '香港保險', 'ReservedPlate': '留牌紙', 'Br': '商業登記 (BR)', 'LicenseFee': '香港牌費',
+        'MainlandJqx': '內地交強險', 'MainlandSyx': '內地商業險', 'ClosedRoad': '禁區紙', 'Approval': '批文卡',
+        'MainlandLicense': '內地行駛證', 'HkInspection': '香港驗車(中港)'
     };
-
-    // ★★★ 口岸定義 ★★★
     const HK_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
     const MO_PORTS = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
 
@@ -4103,15 +4094,8 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     const balance = totalRevenue - totalReceived; 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
-    // 新增費用/收款的暫存狀態
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
-    
-    // 收款預設值
-    const [newPayment, setNewPayment] = useState({ 
-        date: new Date().toISOString().split('T')[0], 
-        type: settings.paymentTypes?.[0] || 'Deposit', 
-        amount: '', method: 'Cash', note: '', relatedTaskId: '' 
-    });
+    const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
 
     useEffect(() => {
         const size = Number(engineSizeStr.replace(/,/g, ''));
@@ -4125,11 +4109,11 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         return formatNumberInput(String(a1 + tax));
     };
 
-    // 圖片同步
+    // 圖片同步 (★ 已修正路徑 ★)
     useEffect(() => {
         if (!v.id || !db || !staffId) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const mediaRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library');
+        // ★ 修正：指向 CHARLES_data
+        const mediaRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library');
         const q = query(mediaRef, where('status', '==', 'linked'), where('relatedVehicleId', '==', v.id));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -4164,59 +4148,95 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
 
     const autoFetchCustomer = () => { /* 保留 */ }; 
 
-    // VRD 搜尋
+    // ★★★ VRD 模糊搜尋邏輯 (★ 已修正路徑 ★) ★★★
     const handleSearchVRD = async () => {
         if (!vrdSearch || !db) return;
         setSearching(true);
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        try {
-            const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
-            const q = query(dbRef, where('plateNoHK', '==', vrdSearch.toUpperCase())); 
-            let snap = await getDocs(q);
-            if (snap.empty) { const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q2); }
-            if (snap.empty) { const q3 = query(dbRef, where('regNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q3); }
+        setVrdResults([]); 
 
-            if (!snap.empty) { setVrdResult(snap.docs[0].data()); } else { alert("資料庫中心找不到此車輛"); setVrdResult(null); }
-        } catch (e) { console.error(e); alert("搜尋錯誤"); } finally { setSearching(false); }
+        try {
+            // 1. 指向正確的 CHARLES_data 路徑
+            const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
+            
+            // 2. 獲取所有 "Vehicle" 類別的資料
+            const q = query(dbRef, where('category', '==', 'Vehicle')); 
+            const snapshot = await getDocs(q);
+            
+            const searchKey = vrdSearch.toUpperCase().trim();
+            const matches: any[] = [];
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                // 3. 前端模糊比對
+                const plate = (data.plateNoHK || '').toUpperCase();
+                const chassis = (data.chassisNo || '').toUpperCase();
+                const engine = (data.engineNo || '').toUpperCase();
+                const name = (data.name || '').toUpperCase();
+
+                if (plate.includes(searchKey) || chassis.includes(searchKey) || engine.includes(searchKey) || name.includes(searchKey)) {
+                    matches.push(data);
+                }
+            });
+
+            if (matches.length > 0) {
+                setVrdResults(matches);
+            } else {
+                alert("資料庫中心找不到相符的車輛 (請嘗試輸入部分車牌或底盤號)");
+            }
+        } catch (e) { 
+            console.error(e); 
+            alert("搜尋錯誤，請檢查網路連線"); 
+        } finally { 
+            setSearching(false); 
+        }
     };
 
     // VRD 導入
-    const applyVrdData = () => {
-        if (!vrdResult) return;
-        const regMark = vrdResult.plateNoHK || vrdResult.regNo || '';
+    const applyVrdData = (vrdData: any) => {
+        if (!vrdData) return;
+        
+        const regMark = vrdData.plateNoHK || vrdData.regNo || '';
         setFieldValue('regMark', regMark);
         
-        if (vrdResult.make) {
-            const matchedMake = settings.makes.find((m: string) => m.toLowerCase() === vrdResult.make.toLowerCase());
-            setSelectedMake(matchedMake || vrdResult.make);
+        if (vrdData.make) {
+            const matchedMake = settings.makes.find((m: string) => m.toLowerCase() === vrdData.make.toLowerCase());
+            setSelectedMake(matchedMake || vrdData.make);
         }
 
-        setFieldValue('model', vrdResult.model || '');
-        setFieldValue('year', vrdResult.manufactureYear || vrdResult.year || '');
-        setFieldValue('chassisNo', vrdResult.chassisNo || '');
-        setFieldValue('engineNo', vrdResult.engineNo || '');
-        setFieldValue('colorExt', vrdResult.vehicleColor || vrdResult.color || '');
+        setFieldValue('model', vrdData.model || '');
+        setFieldValue('year', vrdData.manufactureYear || vrdData.year || '');
+        setFieldValue('chassisNo', vrdData.chassisNo || '');
+        setFieldValue('engineNo', vrdData.engineNo || '');
+        setFieldValue('colorExt', vrdData.vehicleColor || vrdData.color || '');
         
-        if (vrdResult.engineSize) setEngineSizeStr(formatNumberInput(vrdResult.engineSize.toString()));
-        if (vrdResult.priceA1) setPriceA1Str(formatNumberInput(vrdResult.priceA1.toString()));
-        if (vrdResult.priceTax) setPriceTaxStr(formatNumberInput(vrdResult.priceTax.toString()));
-        if (vrdResult.prevOwners !== undefined) setFieldValue('previousOwners', vrdResult.prevOwners.toString());
+        if (vrdData.engineSize) setEngineSizeStr(formatNumberInput(vrdData.engineSize.toString()));
+        if (vrdData.priceA1) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
+        if (vrdData.priceTax) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
+        if (vrdData.prevOwners !== undefined) setFieldValue('previousOwners', vrdData.prevOwners.toString());
 
-        const ownerName = vrdResult.registeredOwnerName || vrdResult.owner;
+        const ownerName = vrdData.registeredOwnerName || vrdData.owner;
         if (ownerName) {
             const exist = clients.find((c: any) => c.name === ownerName);
             if (exist) {
-                setFieldValue('customerName', exist.name); setFieldValue('customerPhone', exist.phone || '');
-                setFieldValue('customerID', exist.idNumber || exist.hkid || ''); setFieldValue('customerAddress', exist.address || '');
+                setFieldValue('customerName', exist.name); 
+                setFieldValue('customerPhone', exist.phone || '');
+                setFieldValue('customerID', exist.idNumber || exist.hkid || ''); 
+                setFieldValue('customerAddress', exist.address || '');
                 setVrdOwnerRaw(''); 
                 alert(`已成功導入 VRD 並自動配對客戶：${exist.name}`);
             } else {
-                setVrdOwnerRaw(ownerName); setFieldValue('customerName', ownerName); 
-                if(vrdResult.registeredOwnerId) setFieldValue('customerID', vrdResult.registeredOwnerId);
-                alert(`VRD 導入成功。注意：無客戶 "${ownerName}" 檔案，已暫填姓名。`);
+                setVrdOwnerRaw(ownerName); 
+                setFieldValue('customerName', ownerName); 
+                if(vrdData.registeredOwnerId) setFieldValue('customerID', vrdData.registeredOwnerId);
+                alert(`VRD 導入成功。注意：系統內無客戶 "${ownerName}" 的完整檔案，已暫填姓名。`);
             }
-        } else { alert("VRD 導入成功"); }
-        setVrdResult(null); setVrdSearch(''); setShowVrdOverlay(false);
+        } else { 
+            alert("VRD 導入成功"); 
+        }
+        
+        setVrdResults([]); 
+        setVrdSearch(''); 
+        setShowVrdOverlay(false);
     };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -4240,23 +4260,60 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
 
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
             
-            {/* 左側欄 (VRD & Photos) */}
+            {/* 左側欄 */}
             <div className="w-full md:w-[35%] bg-slate-200/50 border-r border-slate-300 flex flex-col h-full overflow-hidden relative">
-                 {/* Floating VRD Overlay */}
+                 
+                 {/* VRD 浮動搜尋層 */}
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2">
                             <h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫中心</h3>
                             <button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button>
                         </div>
-                        <div className="space-y-4">
-                            <div><label className="block text-sm font-bold text-gray-600 mb-2">輸入車牌或底盤號搜尋：</label><div className="flex gap-2"><input value={vrdSearch} onChange={e => setVrdSearch(e.target.value.toUpperCase())} placeholder="例: AB1234" className="flex-1 p-3 border-2 border-blue-200 rounded-lg text-lg font-mono uppercase focus:border-blue-500 outline-none" autoFocus onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}} /><button type="button" onClick={handleSearchVRD} disabled={searching} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{searching ? <Loader2 className="animate-spin"/> : '搜尋'}</button></div></div>
-                            {vrdResult && (<div className="bg-blue-50 border border-blue-200 p-4 rounded-xl space-y-3 animate-fade-in"><div className="flex justify-between items-start"><div><h4 className="font-bold text-lg text-slate-800">{vrdResult.plateNoHK || vrdResult.regNo}</h4><p className="text-sm text-slate-600">{vrdResult.manufactureYear} {vrdResult.make} {vrdResult.model}</p><p className="text-xs text-slate-500 font-mono mt-1">Chassis: {vrdResult.chassisNo}</p></div>{vrdResult.registeredOwnerName && (<div className="text-right"><span className="text-[10px] text-slate-400 uppercase">Owner</span><p className="font-bold text-blue-700">{vrdResult.registeredOwnerName}</p></div>)}</div><div className="pt-2 border-t border-blue-200 flex gap-2"><button type="button" onClick={applyVrdData} className="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold hover:bg-green-600 shadow-sm">確認導入並配對</button><button type="button" onClick={() => { setVrdResult(null); setVrdSearch(''); }} className="px-4 py-2 bg-white text-slate-500 border border-slate-300 rounded-lg hover:bg-slate-50">重設</button></div></div>)}
+                        <div className="flex flex-col h-full overflow-hidden pb-10">
+                            <div className="flex gap-2 mb-4 flex-none">
+                                <input 
+                                    value={vrdSearch} 
+                                    onChange={e => setVrdSearch(e.target.value.toUpperCase())} 
+                                    placeholder="輸入車牌、底盤號或車主名 (模糊搜尋)" 
+                                    className="flex-1 p-3 border-2 border-blue-200 rounded-lg text-lg font-mono uppercase focus:border-blue-500 outline-none" 
+                                    autoFocus 
+                                    onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleSearchVRD(); }}} 
+                                />
+                                <button type="button" onClick={handleSearchVRD} disabled={searching} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">
+                                    {searching ? <Loader2 className="animate-spin"/> : '搜尋'}
+                                </button>
+                            </div>
+
+                            {/* 搜尋結果列表 */}
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                                {vrdResults.length > 0 ? (
+                                    vrdResults.map((res, idx) => (
+                                        <div key={idx} className="bg-blue-50 border border-blue-200 p-3 rounded-xl flex justify-between items-center hover:bg-blue-100 transition-colors">
+                                            <div>
+                                                <div className="font-bold text-lg text-slate-800">{res.plateNoHK || res.regNo}</div>
+                                                <div className="text-xs text-slate-600">{res.manufactureYear} {res.make} {res.model}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono">Chassis: {res.chassisNo}</div>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => applyVrdData(res)} 
+                                                className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-600 shadow-sm text-xs"
+                                            >
+                                                導入此車
+                                            </button>
+                                        </div>
+                                    ))
+                                ) : (
+                                    !searching && vrdSearch && <div className="text-center text-slate-400 mt-10">無相符資料</div>
+                                )}
+                            </div>
                         </div>
                     </div>
                  )}
 
                  <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+                     {/* VRD Card */}
                      <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                         <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
                         <div className="p-4 space-y-3">
@@ -4299,7 +4356,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                  </div>
             </div>
             
-            {/* 右側欄 (Sales & Finance) */}
+            {/* 右側欄 */}
             <div className="flex-1 flex flex-col h-full bg-white overflow-hidden">
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-thin pb-24">
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -4320,7 +4377,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                     <div className="mb-6"><h3 className="font-bold text-slate-800 text-sm mb-2 flex items-center"><DollarSign size={16} className="mr-2 text-green-600"/> 價格設定 (Pricing)</h3><div className="grid grid-cols-2 md:grid-cols-5 gap-4"><div className="bg-yellow-50 p-2 rounded border border-yellow-200"><label className="block text-[10px] text-yellow-800 font-bold mb-1">售價 (Price)</label><input name="price" value={priceStr} onChange={e => setPriceStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-lg font-bold text-slate-900 outline-none" placeholder="$0"/></div><div className="bg-gray-50 p-2 rounded border border-gray-200"><label className="block text-[10px] text-gray-500 font-bold mb-1">成本 (Cost)</label><input name="costPrice" value={costStr} onChange={e => setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono text-slate-600 outline-none" placeholder="$0"/></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-blue-400 font-bold mb-1">收購類型</label><select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="w-full bg-transparent text-sm font-bold text-blue-800 outline-none"><option value="Used">二手 (Used)</option><option value="New">新車 (New)</option><option value="Consignment">寄賣 (Consign)</option></select></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">A1 Tax</label><input name="priceA1" value={priceA1Str} onChange={e => setPriceA1Str(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div><div className="bg-white p-2 rounded border border-slate-200"><label className="block text-[10px] text-gray-400 font-bold mb-1">Paid Tax</label><input name="priceTax" value={priceTaxStr} onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono outline-none"/></div></div><div className="flex justify-between items-center mt-2 px-1"><div className="text-xs text-gray-400">牌簿價: <span className="font-mono text-slate-600">{calcRegisteredPrice()}</span></div><div className="text-xs font-bold text-blue-600">餘額 (Balance): {formatCurrency(balance)}</div></div></div>
 
                     <div className="space-y-4">
-                        {/* ★ 中港車模塊 (修復：中文日期 + 口岸選擇) ★ */}
                         <div className="border border-blue-100 rounded-xl overflow-hidden">
                             <div className="bg-blue-50/50 p-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 transition-colors" onClick={() => setIsCbExpanded(!isCbExpanded)}>
                                 <div className="flex items-center gap-2"><Globe size={16} className="text-blue-600"/><span className="font-bold text-sm text-blue-900">中港車管家 (Cross-Border)</span><label className="flex items-center ml-4 text-xs text-slate-500 cursor-pointer" onClick={e => e.stopPropagation()}><input type="checkbox" name="cb_isEnabled" defaultChecked={v.crossBorder?.isEnabled} className="mr-1 accent-blue-600"/> 啟用</label></div>{isCbExpanded ? <ChevronUp size={16} className="text-blue-400"/> : <ChevronDown size={16} className="text-blue-400"/>}
@@ -4337,7 +4393,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                                     <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">副司機 2</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
                                     <div className="col-span-1"><label className="text-[9px] text-blue-800 font-bold">保險代理</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full border-b border-blue-100 text-sm py-1 outline-none"/></div>
                                     
-                                    {/* ★★★ 找回：口岸選擇區塊 (Port Selection) ★★★ */}
                                     <div className="col-span-4 mt-2 pt-2 border-t border-dashed border-blue-100">
                                         <label className="text-[9px] text-blue-800 font-bold mb-1 block">口岸選擇 (Ports)</label>
                                         <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -4355,7 +4410,6 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
                                         </div>
                                     </div>
 
-                                    {/* ★★★ 日期欄位 (使用中文對照表) ★★★ */}
                                     <div className="col-span-4 grid grid-cols-2 md:grid-cols-5 gap-2 mt-2 pt-2 border-t border-dashed border-blue-100">
                                         {Object.entries(cbDateMap).map(([key, label]) => (
                                             <div key={key} className="bg-slate-50 p-1.5 rounded border border-slate-100 hover:border-blue-200 transition-colors">
