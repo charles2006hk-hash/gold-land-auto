@@ -641,7 +641,7 @@ const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
     );
 };
 
-// --- Components: Modern Staff Login Screen v2.0 ---
+// --- Components: Modern Staff Login Screen v2.1 (Fix: Case Sensitivity) ---
 const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => void, systemUsers: any[] }) => {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
@@ -669,17 +669,24 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
     setIsLoading(true);
 
     // 模擬網路延遲
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 500));
 
-    // 1. 超級管理員後門 (開發用，可自行移除)
-    if (userId.toUpperCase() === 'BOSS' && password === '8888') {
+    const inputId = userId.trim();
+
+    // 1. 超級管理員後門 (緊急用，不分大小寫)
+    if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
         const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'] };
         handleSuccess(adminUser);
         return;
     }
 
-    // 2. 驗證用戶
-    const validUser = systemUsers.find(u => u.email.toUpperCase() === userId.toUpperCase() && u.password === password);
+    // 2. 驗證用戶 (★ 關鍵修正：大小寫不敏感比對 ★)
+    // 這樣無論輸入 "Charles" 還是 "charles"，只要密碼對，都能找到資料庫裡那個正確的 user 物件
+    // 注意：systemUsers 是從主程式傳進來的，裡面是資料庫的正確名單
+    const validUser = systemUsers.find(u => 
+        u.email.toLowerCase() === inputId.toLowerCase() && 
+        u.password === password
+    );
     
     if (validUser) {
         handleSuccess(validUser);
@@ -1059,7 +1066,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         if (!db || !staffId) return;
         const currentDb = db; 
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+        const colRef = collection(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
         
         const q = query(colRef, orderBy('createdAt', 'desc'));
         
@@ -1291,7 +1298,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         try {
             if (editingEntry.id) {
                 // 更新
-                const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', editingEntry.id);
+                const docRef = doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
                 const cleanData = JSON.parse(JSON.stringify(finalEntry));
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
                 
@@ -1301,7 +1308,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             } else {
                 // 新增
                 const { id, ...dataToSave } = finalEntry;
-                const colRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+                const colRef = collection(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
                 const cleanData = JSON.parse(JSON.stringify(dataToSave));
                 const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
                 
@@ -1321,7 +1328,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         const currentDb = db; 
         if (!confirm('確定刪除此筆資料？無法復原。')) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const docRef = doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
+        const docRef = doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', id);
         await deleteDoc(docRef);
         if (editingEntry?.id === id) { setEditingEntry(null); setIsDbEditing(false); }
     };
@@ -1364,7 +1371,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         try {
             const batch = writeBatch(db);
             deleteIds.forEach(id => {
-                const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database', id);
+                const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', id);
                 batch.delete(ref);
             });
             await batch.commit();
@@ -1731,7 +1738,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         const q = query(
-            collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), 
+            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), 
             orderBy('createdAt', 'desc')
         );
         return onSnapshot(q, (snap) => {
@@ -1814,7 +1821,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 const storageRef = ref(storage, filePath);
                 const uploadTask = await uploadBytes(storageRef, compressedBlob, { contentType: 'image/jpeg' }); 
                 const downloadURL = await getDownloadURL(uploadTask.ref);
-                await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library'), {
+                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), {
                     url: downloadURL, path: filePath, fileName: file.name, tags: ["Inbox"], status: 'unassigned', aiData: {}, createdAt: serverTimestamp()
                 });
             } catch (err) { console.error(err); }
@@ -1831,13 +1838,13 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         // 1. 先把同組其他圖片的 isPrimary 設為 false (確保唯一)
         groupItems.forEach(item => {
             if (item.isPrimary) {
-                const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', item.id);
+                const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
                 batch.update(ref, { isPrimary: false });
             }
         });
 
         // 2. 把選中的圖片設為 true
-        const targetRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', targetId);
+        const targetRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', targetId);
         batch.update(targetRef, { isPrimary: true });
 
         await batch.commit();
@@ -1857,7 +1864,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         }
 
         selectedInboxIds.forEach(id => {
-            const ref = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id);
+            const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', id);
             batch.update(ref, {
                 status: 'linked',
                 relatedVehicleId: finalRelatedId || null,
@@ -1874,7 +1881,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         if(!confirm("確定刪除此圖片？")) return;
         if (!db) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library', id));
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', id));
     };
 
     const inboxItems = mediaItems.filter(i => i.status !== 'linked');
@@ -3141,7 +3148,8 @@ const SettingsManager = ({
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
-  const [staffId, setStaffId] = useState<string | null>('CHARLES');
+  const [staffId, setStaffId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[] } | null>(null); // 存權限物件
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
@@ -3197,11 +3205,15 @@ export default function GoldLandAutoDMS() {
 
   useEffect(() => {
     if (!db || !appId) return;
-    const unsub = onSnapshot(doc(db, 'artifacts', appId, 'system', 'users'), (docSnap) => {
+    
+    // 注意：這裡應該已經被替換為 'charles_data'
+    const unsub = onSnapshot(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users'), (docSnap) => {
         if (docSnap.exists()) {
             const rawList = docSnap.data().list || [];
-            // 格式化資料，確保有 email 欄位
-            setSystemUsers(rawList.map((u: any) => (typeof u === 'string' ? { email: u, password: '', modules: ['all'] } : u)));
+            setSystemUsers(rawList);
+        } else {
+            // 如果還沒有用戶名單，預設建立一個 BOSS 帳號 (密碼 8888)
+            setSystemUsers([{ email: 'BOSS', password: '8888', modules: ['all'] }]);
         }
     });
     return () => unsub();
@@ -3293,7 +3305,7 @@ export default function GoldLandAutoDMS() {
     if (!db || !staffId) return;
     const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     
-    const invRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory');
+    const invRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory');
     const q = query(invRef, orderBy('createdAt', 'desc')); 
     const unsubInv = onSnapshot(q, (snapshot) => {
       const list: Vehicle[] = [];
@@ -3301,7 +3313,7 @@ export default function GoldLandAutoDMS() {
       setInventory(list);
     }, (err) => console.error("Inv sync error", err));
 
-    const settingsDocRef = doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'system_config', 'general_settings');
+    const settingsDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_config', 'general_settings');
     getDoc(settingsDocRef).then(docSnap => {
       if (docSnap.exists()) {
         const loadedSettings = docSnap.data() as SystemSettings;
@@ -3324,7 +3336,7 @@ export default function GoldLandAutoDMS() {
 useEffect(() => {
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+        const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
         
         // 這裡只需要監聽，不用太複雜的排序，減輕負載
         const unsubDb = onSnapshot(dbRef, (snapshot) => {
@@ -3363,8 +3375,19 @@ useEffect(() => {
   if (!staffId) {
       return (
           <StaffLoginScreen 
-              onLogin={(user: any) => setStaffId(user.email || user)} 
-              systemUsers={systemUsers} 
+              systemUsers={systemUsers}
+              onLogin={(userObj: any) => {
+                  // userObj 是從 LoginScreen 驗證成功後傳回來的物件
+                  setStaffId(userObj.email);
+                  setCurrentUser(userObj); 
+                  
+                  // 權限跳轉邏輯：如果沒權限看儀表板，跳到他能看的第一個頁面
+                  if (userObj.modules && !userObj.modules.includes('all') && !userObj.modules.includes('dashboard') && userObj.modules.length > 0) {
+                      const firstModule = userObj.modules[0];
+                      const map: Record<string,any> = { 'inventory': 'inventory', 'business': 'business', 'database': 'database', 'settings': 'settings' };
+                      setActiveTab(map[firstModule] || 'inventory');
+                  }
+              }} 
           />
       );
   }
@@ -3379,7 +3402,7 @@ useEffect(() => {
       if (!db || !staffId || !data.name) return;
       const currentDb = db;
       const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      const dbRef = collection(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+      const dbRef = collection(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
       
       try {
           // 1. 檢查是否已存在 (根據姓名和分類)
@@ -3522,10 +3545,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
     try {
       if (editingVehicle && editingVehicle.id) {
-        await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', editingVehicle.id), vData);
+        await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
         alert('車輛資料已更新');
       } else {
-        await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory'), {
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
           ...vData,
           createdAt: serverTimestamp(),
           expenses: [],
@@ -3568,7 +3591,7 @@ const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
     if (confirm('確定刪除？資料將無法復原。')) {
       const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', id));
+      await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', id));
     }
   };
 
@@ -3594,7 +3617,7 @@ const deleteVehicle = async (id: string) => {
     }
 
     // 使用 currentDb
-    await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), updateData);
+    await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), updateData);
     
     if (editingVehicle && editingVehicle.id === vehicleId) {
         setEditingVehicle(prev => {
@@ -3667,7 +3690,7 @@ const deleteVehicle = async (id: string) => {
       const newPayments = (v.payments || []).filter(p => p.relatedTaskId !== taskId);
 
       // 使用 currentDb 替代 db
-      await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'inventory', vehicleId), {
+      await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), {
           crossBorder: { ...v.crossBorder, tasks: newTasks },
           payments: newPayments
       });
@@ -4075,7 +4098,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
     useEffect(() => {
         if (!v.id || !db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const mediaRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'media_library');
+        const mediaRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library');
         const q = query(mediaRef, where('status', '==', 'linked'), where('relatedVehicleId', '==', v.id));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -4116,7 +4139,7 @@ const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicl
         setSearching(true);
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         try {
-            const dbRef = collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'database');
+            const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
             const q = query(dbRef, where('plateNoHK', '==', vrdSearch.toUpperCase())); 
             let snap = await getDocs(q);
             if (snap.empty) { const q2 = query(dbRef, where('chassisNo', '==', vrdSearch.toUpperCase())); snap = await getDocs(q2); }
@@ -4729,7 +4752,7 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         // 這裡建立一個新的 collection 'service_cases'
-        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'service_cases'), orderBy('updatedAt', 'desc'));
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'service_cases'), orderBy('updatedAt', 'desc'));
         const unsub = onSnapshot(q, (snap) => {
             const list: ServiceCase[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() } as ServiceCase));
@@ -4764,7 +4787,7 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
         newCase.stepsData[0].status = 'In Progress';
         newCase.stepsData[0].startDate = new Date().toISOString().split('T')[0];
 
-        await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'service_cases'), newCase);
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'service_cases'), newCase);
         setIsCreating(false);
         setNewCaseVehicleId('');
     };
@@ -4791,7 +4814,7 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, dbEntries }: any
             }
         }
 
-        await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'service_cases', caseId), {
+        await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'service_cases', caseId), {
             stepsData: newStepsData,
             currentStepIndex: newIndex,
             updatedAt: serverTimestamp()
@@ -5071,7 +5094,7 @@ const CreateDocModule = ({
     useEffect(() => {
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const q = query(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents'), orderBy('updatedAt', 'desc'));
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
         const unsub = onSnapshot(q, (snap) => {
             const list: any[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() }));
@@ -5100,7 +5123,7 @@ const CreateDocModule = ({
         if(!confirm("確定刪除此單據紀錄？")) return;
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        await deleteDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents', id));
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', id));
     };
 
     const saveDocRecord = async () => {
@@ -5115,8 +5138,8 @@ const CreateDocModule = ({
             summary: `${formData.regMark} - ${formData.customerName}`
         };
         try {
-            if (docId) { await updateDoc(doc(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents', docId), docData); } 
-            else { const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', `${safeStaffId}_data`, 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); setDocId(ref.id); }
+            if (docId) { await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', docId), docData); } 
+            else { const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); setDocId(ref.id); }
             alert("單據已儲存");
         } catch (e) { console.error(e); alert("儲存失敗"); }
     };
@@ -5375,7 +5398,9 @@ const CreateDocModule = ({
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
           staffId={staffId}
-          setStaffId={setStaffId}/>
+          setStaffId={setStaffId}
+          currentUser={currentUser}/>
+           
 
       <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
         <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land</span><div className="w-7"></div></div>
