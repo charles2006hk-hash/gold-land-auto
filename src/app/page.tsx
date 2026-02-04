@@ -3117,6 +3117,7 @@ const SettingsManager = ({
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
   // Data States
@@ -3168,6 +3169,19 @@ export default function GoldLandAutoDMS() {
   const handlePrint = () => { window.print(); };
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
+
+  useEffect(() => {
+    if (!db || !appId) return;
+    const unsub = onSnapshot(doc(db, 'artifacts', appId, 'system', 'users'), (docSnap) => {
+        if (docSnap.exists()) {
+            const rawList = docSnap.data().list || [];
+            // 格式化資料，確保有 email 欄位
+            setSystemUsers(rawList.map((u: any) => (typeof u === 'string' ? { email: u, password: '', modules: ['all'] } : u)));
+        }
+    });
+    return () => unsub();
+  }, [db, appId]);
+
 
   // --- Auth & Data Loading ---
   useEffect(() => {
@@ -3321,7 +3335,14 @@ useEffect(() => {
         return () => unsubDb();
     }, [staffId]);
 
-  if (!staffId) return <StaffLoginScreen onLogin={setStaffId} />;
+  if (!staffId) {
+      return (
+          <StaffLoginScreen 
+              onLogin={(user: any) => setStaffId(user.email || user)} 
+              systemUsers={systemUsers} 
+          />
+      );
+  }
 
 
 
