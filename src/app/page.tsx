@@ -853,7 +853,7 @@ const InfoWidget = () => {
     );
 };
 
-// --- 2. Sidebar (外部組件 - 修復登出功能 v2.1) ---
+// --- 2. Sidebar (外部組件 - v2.2: 含權限過濾與登出修復) ---
 type SidebarProps = {
     activeTab: string;
     setActiveTab: (tab: any) => void;
@@ -863,19 +863,46 @@ type SidebarProps = {
     setIsSidebarCollapsed: (collapsed: boolean) => void;
     staffId: string | null;
     setStaffId: (id: string | null) => void;
+    // ★★★ 新增：接收當前用戶權限物件 ★★★
+    currentUser: { email: string, modules: string[] } | null;
 };
 
-const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId }: SidebarProps) => {
+const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId, currentUser }: SidebarProps) => {
     
-    // ★★★ 新增：登出處理函數 (同時清除自動登入紀錄) ★★★
     const handleLogout = () => {
         if (confirm("確定登出系統？(Confirm Logout?)")) {
-            // 1. 清除瀏覽器記憶的自動登入資料
             localStorage.removeItem('gla_saved_user');
-            // 2. 清空當前使用者狀態
             setStaffId(null);
         }
     };
+
+    // ★★★ 定義完整選單與權限對應 ★★★
+    const allMenuItems = [
+        { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard, permission: 'dashboard' },
+        { id: 'inventory', label: '車輛管理', icon: Car, permission: 'inventory' },
+        { id: 'create_doc', label: '開單系統', icon: FileText, permission: 'inventory' }, // 開單通常跟隨車庫
+        { id: 'reports', label: '統計報表', icon: FileBarChart, permission: 'reports' },
+        { id: 'cross_border', label: '中港業務', icon: Globe, permission: 'business' }, 
+        { id: 'business', label: '業務辦理流程', icon: Briefcase, permission: 'business' },
+        { id: 'database', label: '資料庫中心', icon: Database, permission: 'database' },
+        { id: 'media_center', label: '智能圖庫', icon: ImageIcon, permission: 'inventory' },
+        { id: 'settings', label: '系統設置', icon: Settings, permission: 'settings' }
+    ];
+
+    // ★★★ 過濾選單邏輯 ★★★
+    const visibleMenuItems = allMenuItems.filter(item => {
+        // 1. 還沒登入或資料未載入 -> 不顯示
+        if (!currentUser) return false;
+
+        // 2. 超級管理員 (BOSS) 或擁有 'all' 權限 -> 全部顯示
+        if (currentUser.modules?.includes('all') || currentUser.email.toUpperCase() === 'BOSS') return true;
+        
+        // 3. Dashboard 預設每個人都能看 (或者您可以限制)
+        if (item.id === 'dashboard') return true;
+
+        // 4. 檢查用戶的 modules 陣列是否包含該項目的 permission
+        return currentUser.modules?.includes(item.permission);
+    });
 
     return (
         <>
@@ -896,19 +923,9 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                 <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors" title={isSidebarCollapsed ? "展開選單" : "縮起選單"}>{isSidebarCollapsed ? null : <ChevronLeft size={16} />}</button>
             </div>
 
-            {/* 導航列表 */}
+            {/* 導航列表 (使用 visibleMenuItems 渲染) */}
             <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-              {[
-                { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard }, 
-                { id: 'inventory', label: '車輛管理', icon: Car },
-                { id: 'create_doc', label: '開單系統', icon: FileText }, 
-                { id: 'reports', label: '統計報表', icon: FileBarChart },
-                { id: 'cross_border', label: '中港業務', icon: Globe }, 
-                { id: 'database', label: '資料庫中心', icon: Database },
-                { id: 'media_center', label: '智能圖庫', icon: ImageIcon },
-                { id: 'business', label: '業務辦理流程', icon: Briefcase }, 
-                { id: 'settings', label: '系統設置', icon: Settings }
-              ].map(item => (
+              {visibleMenuItems.map(item => (
                  <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
@@ -918,7 +935,6 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                     <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
                     {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
                     
-                    {/* 收起時的懸浮提示 */}
                     {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
                  </button>
               ))}
@@ -926,7 +942,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
             
             {!isSidebarCollapsed && <InfoWidget />}
             
-            {/* 底部登入資訊 (已綁定新的 handleLogout) */}
+            {/* 底部登入資訊 */}
             <div className="p-3 bg-slate-900 border-t border-slate-800 flex-none">
                  {isSidebarCollapsed ? (
                      <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
