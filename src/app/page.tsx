@@ -3204,20 +3204,96 @@ const SettingsManager = ({
 
                 {activeTab === 'logs' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold">系統操作日誌</h3><div className="mt-4 border rounded max-h-96 overflow-y-auto"><table className="w-full text-xs text-left"><tbody className="divide-y">{logs.map(l => (<tr key={l.id} className="hover:bg-slate-50"><td className="p-2 text-gray-500">{l.timestamp?.toDate().toLocaleString()}</td><td className="p-2 font-bold">{l.user}</td><td className="p-2">{l.action}</td><td className="p-2 text-gray-600">{l.detail}</td></tr>))}</tbody></table></div></div> )}
 
-                {/* Backup Tab (Restored) */}
+                {/* 8. Backup (v9.93: 完整修復版 - 含設定、還原、救援) */}
                 {activeTab === 'backup' && (
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
-                            <h4 className="font-bold text-blue-800 text-sm mb-2">雲端自動備份</h4>
-                            <div className="flex justify-between items-center">
-                                <p className="text-xs text-blue-600/70">上次備份: {backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}</p>
-                                <button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">{isBackingUp ? <Loader2 className="animate-spin" size={12}/> : '立即備份 (Backup Now)'}</button>
+                        
+                        {/* 1. 雲端自動備份設定 (補回) */}
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <h4 className="font-bold text-blue-800 text-sm mb-3">雲端自動備份設定</h4>
+                            
+                            {/* 頻率與開關設定 */}
+                            <div className="flex flex-wrap items-center gap-4 mb-4 bg-white p-2 rounded border border-blue-100">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-500">備份頻率:</span>
+                                    <select 
+                                        value={backupConfig.frequency} 
+                                        onChange={e => setBackupConfig({...backupConfig, frequency: e.target.value as any})} 
+                                        className="text-xs p-1.5 border rounded outline-none"
+                                    >
+                                        <option value="manual">手動 (Manual)</option>
+                                        <option value="daily">每日 (Daily)</option>
+                                        <option value="weekly">每週 (Weekly)</option>
+                                        <option value="monthly">每月 (Monthly)</option>
+                                    </select>
+                                </div>
+                                <label className="flex items-center text-xs gap-1 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={backupConfig.autoCloud} 
+                                        onChange={e => setBackupConfig({...backupConfig, autoCloud: e.target.checked})} 
+                                        className="accent-blue-600 w-4 h-4"
+                                    /> 
+                                    <span className="font-bold text-slate-700">啟用自動上傳 (Enable Auto-Backup)</span>
+                                </label>
+                            </div>
+
+                            {/* 操作按鈕 */}
+                            <div className="flex justify-between items-center pt-2 border-t border-blue-200/50">
+                                <p className="text-xs text-blue-600/70 font-mono">
+                                    上次備份: {backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}
+                                </p>
+                                <div className="flex gap-2">
+                                    <button onClick={handleSaveBackupConfig} className="text-xs bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-50 font-bold">
+                                        儲存設定
+                                    </button>
+                                    <button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-4 py-1.5 rounded hover:bg-indigo-700 font-bold flex items-center shadow-sm">
+                                        {isBackingUp ? <Loader2 className="animate-spin mr-1" size={12}/> : <Save size={12} className="mr-1"/>}
+                                        立即備份 (Backup Now)
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div className="bg-red-50 p-5 rounded-xl border border-red-200 mt-6">
-                            <h4 className="font-bold text-red-800 mb-2 flex items-center"><AlertTriangle size={18} className="mr-2"/> 進階資料修復 (Data Rescue)</h4>
-                            <label className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer shadow-sm inline-flex items-center"><Upload size={16} className="mr-2"/> 上傳 CSV 進行修復 <input type="file" accept=".csv" className="hidden" onChange={handleRescueImport} /></label>
+
+                        {/* 2. 本地匯出與匯入 (補回) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col justify-between">
+                                <div>
+                                    <h4 className="font-bold text-gray-800 mb-2 flex items-center"><FileText size={16} className="mr-2"/> 匯出本地檔案</h4>
+                                    <p className="text-xs text-gray-500 mb-4">下載完整的系統數據 (.json) 到您的電腦作為備份。</p>
+                                </div>
+                                <button onClick={handleExport} className="w-full bg-slate-700 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-slate-600 shadow-sm transition-all active:scale-95">
+                                    下載備份檔案 (Download JSON)
+                                </button>
+                            </div>
+                            
+                            <div className="bg-amber-50 p-5 rounded-xl border border-amber-200 flex flex-col justify-between">
+                                <div>
+                                    <h4 className="font-bold text-amber-800 mb-2 flex items-center"><RefreshCw size={16} className="mr-2"/> 系統還原 (Restore)</h4>
+                                    <p className="text-xs text-amber-700/70 mb-4">從 .json 檔案還原系統資料。<br/><span className="font-bold text-red-500">注意：這將覆蓋目前的設定與庫存！</span></p>
+                                </div>
+                                <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer shadow-sm transition-all active:scale-95">
+                                    選擇檔案並還原
+                                    <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* 3. 資料救援區塊 (保留) */}
+                        <div className="bg-red-50 p-5 rounded-xl border border-red-200 mt-6 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><AlertTriangle size={100} className="text-red-500"/></div>
+                            <h4 className="font-bold text-red-800 mb-2 flex items-center relative z-10">
+                                <AlertTriangle size={18} className="mr-2"/> 進階資料修復 (Data Rescue)
+                            </h4>
+                            <p className="text-xs text-red-700/80 mb-4 relative z-10 max-w-lg">
+                                此功能用於從舊 CSV 檔案「合併」中港資料到現有車輛中。<br/>
+                                系統會根據車牌 (RegMark) 自動配對，只修復中港日期與資料，不影響財務紀錄。
+                            </p>
+                            <label className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer shadow-sm inline-flex items-center transition-colors relative z-10">
+                                <Upload size={16} className="mr-2"/> 上傳 CSV 進行修復
+                                <input type="file" accept=".csv" className="hidden" onChange={handleRescueImport} />
+                            </label>
                         </div>
                     </div>
                 )}
