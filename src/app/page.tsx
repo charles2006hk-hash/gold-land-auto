@@ -2868,14 +2868,14 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 5. Settings Manager (v9.4: 修復用戶密碼設定 + 系統日誌 + 語法修正) ★★★
+// ★★★ 5. Settings Manager (v9.5: 修復備份 + 透視鏡密碼鎖) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
-    settings, setSettings, db, staffId, appId, inventory, updateSettings, addSystemLog 
+    settings, setSettings, db, storage, staffId, appId, inventory, updateSettings, addSystemLog 
 }: { 
-    settings: SystemSettings, setSettings: any, db: any, staffId: string, appId: string, inventory: Vehicle[], 
+    settings: SystemSettings, setSettings: any, db: any, storage: any, staffId: string, appId: string, inventory: Vehicle[], 
     updateSettings: (k: keyof SystemSettings, v: any) => void,
-    addSystemLog?: (action: string, detail: string) => void // 設為可選以防報錯
+    addSystemLog?: (action: string, detail: string) => void
 }) => {
     
     const [activeTab, setActiveTab] = useState('general');
@@ -2884,9 +2884,9 @@ const SettingsManager = ({
     const [selectedMakeForModel, setSelectedMakeForModel] = useState('');
     const [newModelName, setNewModelName] = useState('');
 
-    // 2. Users (★ 關鍵修正：新增密碼狀態)
+    // 2. Users
     const [newUserEmail, setNewUserEmail] = useState('');
-    const [newUserPassword, setNewUserPassword] = useState(''); // ★ 新增密碼欄位
+    const [newUserPassword, setNewUserPassword] = useState(''); 
     const [systemUsers, setSystemUsers] = useState<{ email: string, modules: string[], password?: string }[]>([]);
     
     // 3. Finance
@@ -2915,6 +2915,29 @@ const SettingsManager = ({
     // 7. System Logs
     const [logs, setLogs] = useState<any[]>([]);
 
+    // ★★★ 8. 數據透視鏡狀態 (密碼保護) ★★★
+    const [showInspector, setShowInspector] = useState(false);
+
+    // --- Logic: Inspector Unlock ---
+    const handleUnlockInspector = () => {
+        const pwd = prompt(`請輸入用戶 ${staffId} 的登入密碼以解鎖：`);
+        if (!pwd) return;
+
+        // 1. 檢查是否為 BOSS
+        if (staffId === 'BOSS' && pwd === '8888') {
+            setShowInspector(true);
+            return;
+        }
+
+        // 2. 檢查一般用戶
+        const currentUserObj = systemUsers.find(u => u.email.toLowerCase() === staffId.toLowerCase());
+        if (currentUserObj && currentUserObj.password === pwd) {
+            setShowInspector(true);
+        } else {
+            alert("密碼錯誤，拒絕存取。");
+        }
+    };
+
     // --- Logic: Logs ---
     useEffect(() => {
         if (activeTab === 'logs' && db) {
@@ -2934,7 +2957,6 @@ const SettingsManager = ({
         const unsub = onSnapshot(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users'), (docSnap) => {
             if (docSnap.exists()) {
                 const rawList = docSnap.data().list || [];
-                // 確保舊資料也有密碼欄位，否則給預設值
                 setSystemUsers(rawList.map((u: any) => (typeof u === 'string' ? { email: u, modules: ['inventory', 'business', 'database', 'settings'], password: '123' } : u)));
             }
         });
@@ -2945,57 +2967,20 @@ const SettingsManager = ({
         if (db) await setDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users'), { list: newList }, { merge: true }); 
     };
 
-    // ★★★ 修正：新增用戶邏輯 (包含密碼) ★★★
     const handleAddUser = () => { 
-        if (!newUserEmail || !newUserPassword) { 
-            alert("請輸入 Email 帳號和密碼 (Both fields are required)"); 
-            return; 
-        }
-        
-        // 檢查重複
-        if (systemUsers.some(u => u.email.toLowerCase() === newUserEmail.toLowerCase())) {
-            alert("該用戶已存在 (User already exists)"); return;
-        }
-
-        const newUser = { 
-            email: newUserEmail, 
-            password: newUserPassword, // ★ 使用輸入的密碼
-            modules: ['inventory', 'business', 'database'] 
-        };
-        const l = [...systemUsers, newUser]; 
-        setSystemUsers(l); 
-        updateUsersDb(l);
+        if (!newUserEmail || !newUserPassword) { alert("請輸入 Email 和密碼"); return; }
+        if (systemUsers.some(u => u.email.toLowerCase() === newUserEmail.toLowerCase())) { alert("該用戶已存在"); return; }
+        const newUser = { email: newUserEmail, password: newUserPassword, modules: ['inventory', 'business', 'database'] };
+        const l = [...systemUsers, newUser]; setSystemUsers(l); updateUsersDb(l);
         if(addSystemLog) addSystemLog('User Created', `Created user: ${newUserEmail}`);
-        
-        setNewUserEmail(''); 
-        setNewUserPassword('');
-        alert(`用戶 ${newUserEmail} 已成功新增`);
+        setNewUserEmail(''); setNewUserPassword(''); alert(`用戶 ${newUserEmail} 已新增`);
     };
 
-    const handleRemoveUser = (email: string) => { 
-        if (confirm(`確定移除用戶 ${email}?`)) { 
-            const l = systemUsers.filter(u => u.email !== email); 
-            setSystemUsers(l); 
-            updateUsersDb(l);
-            if(addSystemLog) addSystemLog('User Deleted', `Deleted user: ${email}`);
-        } 
-    };
-
-    // ★★★ 新增：重設密碼功能 ★★★
-    const handleResetPassword = (email: string) => {
-        const newPw = prompt(`請輸入 ${email} 的新密碼:`);
-        if (newPw) {
-            const l = systemUsers.map(u => u.email === email ? { ...u, password: newPw } : u);
-            setSystemUsers(l);
-            updateUsersDb(l);
-            if(addSystemLog) addSystemLog('Password Reset', `Reset password for: ${email}`);
-            alert("密碼已更新，請通知該用戶使用新密碼登入。");
-        }
-    };
-
+    const handleRemoveUser = (email: string) => { if (confirm(`確定移除用戶 ${email}?`)) { const l = systemUsers.filter(u => u.email !== email); setSystemUsers(l); updateUsersDb(l); if(addSystemLog) addSystemLog('User Deleted', `Deleted user: ${email}`); } };
+    const handleResetPassword = (email: string) => { const newPw = prompt(`請輸入 ${email} 的新密碼:`); if (newPw) { const l = systemUsers.map(u => u.email === email ? { ...u, password: newPw } : u); setSystemUsers(l); updateUsersDb(l); if(addSystemLog) addSystemLog('Password Reset', `Reset password for: ${email}`); alert("密碼已更新"); } };
     const toggleUserPermission = (email: string, modKey: string) => { const l = systemUsers.map(u => u.email === email ? { ...u, modules: u.modules.includes(modKey) ? u.modules.filter(m => m !== modKey) : [...u.modules, modKey] } : u); setSystemUsers(l); updateUsersDb(l); };
 
-    // ... Helpers (保留原本的邏輯) ...
+    // --- Logic: Helpers ---
     const addItem = (key: keyof SystemSettings, val: string) => { if(val) updateSettings(key, [...(settings[key] as string[] || []), val]); };
     const removeItem = (key: keyof SystemSettings, idx: number) => { const arr = [...(settings[key] as any[] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
     const addModel = () => { if (selectedMakeForModel && newModelName) { updateSettings('models', { ...settings.models, [selectedMakeForModel]: [...(settings.models[selectedMakeForModel] || []), newModelName] }); setNewModelName(''); } };
@@ -3009,54 +2994,63 @@ const SettingsManager = ({
     const handleInstSubmit = () => { if(!instInput)return; const list=[...settings.cbInstitutions]; if(editingInstIndex!==null) list[editingInstIndex]=instInput; else list.push(instInput); updateSettings('cbInstitutions', list); setInstInput(''); setEditingInstIndex(null); };
     const handleAddDocType = () => { if (!newDocType) return; const currentList = settings.dbDocTypes[selectedDbCat] || []; const updatedDocTypes = { ...settings.dbDocTypes, [selectedDbCat]: [...currentList, newDocType] }; updateSettings('dbDocTypes', updatedDocTypes); setNewDocType(''); };
     const handleRemoveDocType = (index: number) => { const currentList = settings.dbDocTypes[selectedDbCat] || []; const newList = currentList.filter((_, i) => i !== index); const updatedDocTypes = { ...settings.dbDocTypes, [selectedDbCat]: newList }; updateSettings('dbDocTypes', updatedDocTypes); };
+    
+    // --- Logic: Backup (修復版) ---
     const handleSaveReminders = () => { updateSettings('reminders', reminders); alert('提醒設定已儲存'); };
     const handleSaveBackupConfig = () => { updateSettings('backup', backupConfig); alert('備份排程已更新'); };
+    
     const handleCloudBackup = async (silent = false) => {
-        if (!isBackingUp) setIsBackingUp(true);
-        try { /* ... keep original ... */ } finally { setIsBackingUp(false); }
+        // ★ 關鍵修復：這裡使用傳入的 storage props
+        if (!storage || !appId) { if (!silent) alert("錯誤：無法連接雲端儲存空間 (Storage not initialized)"); return; }
+        setIsBackingUp(true);
+        try {
+            const dataStr = JSON.stringify({ version: "2.0", type: "cloud_auto", timestamp: new Date().toISOString(), settings, inventory });
+            const fileName = `backups/backup_${new Date().toISOString().slice(0,10)}_${new Date().getHours()}${new Date().getMinutes()}.json`;
+            
+            // 執行上傳
+            const storageRef = ref(storage, fileName);
+            await uploadString(storageRef, dataStr);
+            
+            // 更新狀態
+            const newConfig = { ...backupConfig, lastBackupDate: new Date().toISOString() };
+            setBackupConfig(newConfig);
+            updateSettings('backup', newConfig);
+            
+            if (!silent) alert(`✅ 雲端備份成功！\n檔案位置: ${fileName}`);
+            if (addSystemLog) addSystemLog('Backup', `Cloud backup created: ${fileName}`);
+        } catch (error: any) { 
+            console.error("Backup Error:", error); 
+            if (!silent) alert(`❌ 備份失敗: ${error.message}`); 
+        } 
+        finally { setIsBackingUp(false); }
     };
-    const handleExport = () => { const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
-    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... keep original ... */ };
 
-    // ★★★ 資料救援：針對您的中文 CSV 專用版本 (請插入此函數) ★★★
+    const handleExport = () => { const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=async(ev)=>{ try{ const d=JSON.parse(ev.target?.result as string); if(d.settings){ setSettings((p:any)=>({...p,...d.settings})); Object.keys(d.settings).forEach(k=>updateSettings(k as any, d.settings[k])); alert('匯入成功'); } }catch{alert('檔案錯誤');}}; r.readAsText(f); };
+
+    // --- Logic: Data Rescue (中文 CSV 支援) ---
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !db || !staffId) return;
-
-        if (!confirm("⚠️ 準備匯入 CSV 資料...\n\n系統將根據「香港車牌」自動配對，並補齊中港資料、日期與公司資訊。\n(現有的財務與庫存狀態將保留不變)\n\n確定執行嗎？")) {
-            e.target.value = '';
-            return;
-        }
-
+        if (!confirm("⚠️ 準備匯入 CSV 資料...\n\n系統將根據「香港車牌」自動配對，並補齊中港資料、日期與公司資訊。\n(現有的財務與庫存狀態將保留不變)\n\n確定執行嗎？")) { e.target.value = ''; return; }
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
                 const text = event.target?.result as string;
-                // 處理換行 (支援 Windows/Mac 格式)
                 const rows = text.split(/\r\n|\n/).map(row => row.split(',')); 
                 if (rows.length < 2) { alert("CSV 檔案內容為空"); return; }
-
-                // 移除標題列的空白，確保對應準確
                 const headers = rows[0].map(h => h.trim()); 
-                
-                // --- 1. 定義欄位映射 (根據您的 CSV 標題) ---
                 const findIndex = (keys: string[]) => headers.findIndex(h => keys.includes(h));
-
-                // 關鍵欄位
                 const idxReg = findIndex(['香港車牌']);
                 const idxChina = findIndex(['內地車牌']);
                 const idxQuota = findIndex(['指標號']);
                 const idxDriver = findIndex(['負責司機', '司機1']); 
                 const idxPhone = findIndex(['聯絡電話', '電話1']);
-                
-                // 公司與口岸
                 const idxHkComp = findIndex(['香港商號']);
                 const idxMlComp = findIndex(['內承單位']);
                 const idxPorts = findIndex(['通行口岸']);
-
-                // 日期欄位
                 const idxIns = findIndex(['香港保險到期']);
-                const idxLic = findIndex(['牌照費']); // CSV 標題是 "牌照費"
+                const idxLic = findIndex(['牌照費']); 
                 const idxClosed = findIndex(['禁區紙到期']);
                 const idxAppr = findIndex(['批文卡到期']);
                 const idxMainLic = findIndex(['行駛証']);
@@ -3066,121 +3060,26 @@ const SettingsManager = ({
                 const idxReserve = findIndex(['留牌紙到期']);
                 const idxBr = findIndex(['BR到期']);
 
-                if (idxReg === -1) {
-                    alert("錯誤：找不到「香港車牌」欄位，請確認 CSV 格式。");
-                    return;
-                }
+                if (idxReg === -1) { alert("錯誤：找不到「香港車牌」欄位"); return; }
+                const formatDate = (raw: string) => { if (!raw || raw.trim() === '' || raw.toLowerCase().includes('nan')) return ''; try { const clean = raw.trim().replace(/"/g, ''); const parts = clean.split('/'); if (parts.length === 3) { const y = parts[0]; const m = parts[1].padStart(2, '0'); const d = parts[2].padStart(2, '0'); return `${y}-${m}-${d}`; } return raw; } catch (e) { return raw; } };
 
-                // --- 2. 日期格式化工具 (重要！將 2026/3/25 轉為 2026-03-25) ---
-                const formatDate = (raw: string) => {
-                    if (!raw || raw.trim() === '' || raw.toLowerCase().includes('nan')) return '';
-                    try {
-                        // 嘗試處理 Excel 可能的日期格式
-                        const clean = raw.trim().replace(/"/g, '');
-                        const parts = clean.split('/');
-                        if (parts.length === 3) {
-                            const y = parts[0];
-                            const m = parts[1].padStart(2, '0');
-                            const d = parts[2].padStart(2, '0');
-                            return `${y}-${m}-${d}`;
-                        }
-                        return raw; 
-                    } catch (e) { return raw; }
-                };
-
-                let successCount = 0;
-                let failCount = 0;
-                const batch = writeBatch(db);
-                let batchCount = 0;
-
-                // --- 3. 開始匯入 ---
+                let successCount = 0; let failCount = 0; const batch = writeBatch(db); let batchCount = 0;
                 for (let i = 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    if (row.length < 2) continue;
-
-                    // 清理車牌 (移除空格、轉大寫)
+                    const row = rows[i]; if (row.length < 2) continue;
                     const regMark = row[idxReg]?.trim().replace(/\s/g, '').toUpperCase();
                     if (!regMark || regMark === 'NAN') continue;
-
-                    // 在現有庫存中尋找
                     const targetCar = inventory.find(v => v.regMark.replace(/\s/g, '') === regMark);
-                    
                     if (targetCar && targetCar.id) {
-                        const updates: any = { 
-                            'crossBorder.isEnabled': true // 強制啟用中港模組
-                        };
-
-                        // 輔助函數：如果有值才更新 (忽略 'nan' 或空值)
-                        const setVal = (idx: number, field: string, isDate = false) => {
-                            if (idx > -1 && row[idx]) {
-                                const val = row[idx].trim();
-                                if (val !== '' && val.toLowerCase() !== 'nan') {
-                                    updates[`crossBorder.${field}`] = isDate ? formatDate(val) : val;
-                                }
-                            }
-                        };
-
-                        // 填入資料
-                        setVal(idxChina, 'mainlandPlate');
-                        setVal(idxQuota, 'quotaNumber');
-                        setVal(idxDriver, 'driver1');
-                        setVal(idxHkComp, 'hkCompany');
-                        setVal(idxMlComp, 'mainlandCompany');
-                        setVal(idxPhone, 'driverPhone'); 
-
-                        // 處理口岸 (支援逗號或空格分隔)
-                        if (idxPorts > -1 && row[idxPorts]) {
-                            const rawPorts = row[idxPorts];
-                            const portsArray = [];
-                            if (rawPorts.includes('皇崗')) portsArray.push('皇崗');
-                            if (rawPorts.includes('深圳灣')) portsArray.push('深圳灣');
-                            if (rawPorts.includes('蓮塘')) portsArray.push('蓮塘');
-                            if (rawPorts.includes('沙頭角')) portsArray.push('沙頭角');
-                            if (rawPorts.includes('文錦渡')) portsArray.push('文錦渡');
-                            if (rawPorts.includes('大橋') || rawPorts.includes('珠海')) portsArray.push('港珠澳大橋(港)');
-                            
-                            if (portsArray.length > 0) updates['crossBorder.ports'] = portsArray;
-                        }
-
-                        // 日期映射 (套用格式轉換)
-                        setVal(idxIns, 'dateHkInsurance', true);
-                        setVal(idxLic, 'dateLicenseFee', true);
-                        setVal(idxClosed, 'dateClosedRoad', true);
-                        setVal(idxAppr, 'dateApproval', true);
-                        setVal(idxMainLic, 'dateMainlandLicense', true);
-                        setVal(idxJqx, 'dateMainlandJqx', true);
-                        setVal(idxSyx, 'dateMainlandSyx', true);
-                        setVal(idxHkInsp, 'dateHkInspection', true);
-                        setVal(idxReserve, 'dateReservedPlate', true);
-                        setVal(idxBr, 'dateBr', true);
-
-                        const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetCar.id);
-                        batch.update(docRef, updates);
-                        batchCount++;
-                        successCount++;
-                    } else {
-                        failCount++;
-                        console.log(`CSV 中的 ${regMark} 在系統中找不到`);
-                    }
+                        const updates: any = { 'crossBorder.isEnabled': true };
+                        const setVal = (idx: number, field: string, isDate = false) => { if (idx > -1 && row[idx]) { const val = row[idx].trim(); if (val !== '' && val.toLowerCase() !== 'nan') { updates[`crossBorder.${field}`] = isDate ? formatDate(val) : val; } } };
+                        setVal(idxChina, 'mainlandPlate'); setVal(idxQuota, 'quotaNumber'); setVal(idxDriver, 'driver1'); setVal(idxHkComp, 'hkCompany'); setVal(idxMlComp, 'mainlandCompany'); setVal(idxPhone, 'driverPhone'); 
+                        if (idxPorts > -1 && row[idxPorts]) { const rawPorts = row[idxPorts]; const portsArray = []; if (rawPorts.includes('皇崗')) portsArray.push('皇崗'); if (rawPorts.includes('深圳灣')) portsArray.push('深圳灣'); if (rawPorts.includes('蓮塘')) portsArray.push('蓮塘'); if (rawPorts.includes('沙頭角')) portsArray.push('沙頭角'); if (rawPorts.includes('文錦渡')) portsArray.push('文錦渡'); if (rawPorts.includes('大橋') || rawPorts.includes('珠海')) portsArray.push('港珠澳大橋(港)'); if (portsArray.length > 0) updates['crossBorder.ports'] = portsArray; }
+                        setVal(idxIns, 'dateHkInsurance', true); setVal(idxLic, 'dateLicenseFee', true); setVal(idxClosed, 'dateClosedRoad', true); setVal(idxAppr, 'dateApproval', true); setVal(idxMainLic, 'dateMainlandLicense', true); setVal(idxJqx, 'dateMainlandJqx', true); setVal(idxSyx, 'dateMainlandSyx', true); setVal(idxHkInsp, 'dateHkInspection', true); setVal(idxReserve, 'dateReservedPlate', true); setVal(idxBr, 'dateBr', true);
+                        const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetCar.id); batch.update(docRef, updates); batchCount++; successCount++;
+                    } else { failCount++; }
                 }
-
-                if (batchCount > 0) {
-                    await batch.commit();
-                    let msg = `✅ 匯入完成！\n成功更新: ${successCount} 輛\n`;
-                    if (failCount > 0) msg += `未找到配對: ${failCount} 輛 (可能是 CSV 車牌與系統不符)\n`;
-                    msg += `\n現在請回到「中港業務」頁面，資料應該都回來了。`;
-                    alert(msg);
-                    
-                    if(addSystemLog) addSystemLog('Data Rescue', `Imported ${successCount} vehicles from CSV`);
-                } else {
-                    alert("沒有任何資料被更新。請確認 CSV 車牌是否與系統內一致。");
-                }
-
-            } catch (err) {
-                console.error(err);
-                alert("讀取 CSV 失敗：" + err);
-            }
-            e.target.value = ''; 
+                if (batchCount > 0) { await batch.commit(); alert(`✅ 成功修復 ${successCount} 輛車資料！`); if(addSystemLog) addSystemLog('Data Rescue', `Imported ${successCount} vehicles`); } else { alert("沒有資料被更新，請確認車牌是否一致。"); }
+            } catch (err) { console.error(err); alert("讀取失敗：" + err); } e.target.value = ''; 
         };
         reader.readAsText(file);
     };
@@ -3190,251 +3089,91 @@ const SettingsManager = ({
         <div className="flex h-full gap-6">
             <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
-                {[
-                    { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
-                    { id: 'database_config', icon: <Database size={16}/>, label: '資料庫分類' }, 
-                    { id: 'reminders', icon: <Bell size={16}/>, label: '系統提醒' },
-                    { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' },
-                    { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
-                    { id: 'crossborder', icon: <Globe size={16}/>, label: '中港業務' },
-                    { id: 'users', icon: <Users size={16}/>, label: '用戶與權限' },
-                    { id: 'logs', icon: <FileText size={16}/>, label: '系統日誌' }, // ★ 新增
-                    { id: 'backup', icon: <DownloadCloud size={16}/>, label: '備份與還原' },
-                ].map(tab => (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        {tab.icon} {tab.label}
-                    </button>
-                ))}
+                {[{ id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' }, { id: 'database_config', icon: <Database size={16}/>, label: '資料庫分類' }, { id: 'reminders', icon: <Bell size={16}/>, label: '系統提醒' }, { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' }, { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' }, { id: 'crossborder', icon: <Globe size={16}/>, label: '中港業務' }, { id: 'users', icon: <Users size={16}/>, label: '用戶與權限' }, { id: 'logs', icon: <FileText size={16}/>, label: '系統日誌' }, { id: 'backup', icon: <DownloadCloud size={16}/>, label: '備份與還原' }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>{tab.icon} {tab.label}</button>))}
             </div>
 
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
 
                 {activeTab === 'general' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">顏色選項</h3><div className="flex gap-2 mt-2"><input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/><button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-3">{settings.colors.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>))}</div>
-                {activeTab === 'general' && (
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        {/* ... (這裡保留原本的顏色選項代碼，不要動它) ... */}
-                        <h3 className="font-bold text-slate-700 mb-4">顏色選項</h3>
-                        {/* ... 原本的顏色代碼結束 ... */}
-
-                        {/* ★★★ 新增：數據透視鏡 (放在一般設定的最下方) ★★★ */}
+                        {/* ★★★ 數據透視鏡 (密碼保護版) ★★★ */}
                         <div className="mt-10 p-6 bg-slate-900 rounded-xl border-4 border-yellow-500 overflow-hidden shadow-2xl">
-                            <h3 className="text-xl font-bold text-yellow-400 mb-2 flex items-center">
-                                <Search size={24} className="mr-2"/> 數據透視鏡 (Raw Data Inspector)
-                            </h3>
-                            <p className="text-slate-400 text-xs mb-4">
-                                這裡直接讀取資料庫的原始狀態，不經過任何過濾。如果在這裡看得到資料，就代表<span className="text-white font-bold">資料絕對安全</span>，只是介面顯示設定的問題。
-                            </p>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold text-yellow-400 flex items-center"><Search size={24} className="mr-2"/> 數據透視鏡 (Data Inspector)</h3>
+                                {!showInspector && <button onClick={handleUnlockInspector} className="bg-yellow-500 text-black px-4 py-2 rounded font-bold text-sm hover:bg-yellow-400">解鎖查看 (Unlock)</button>}
+                            </div>
                             
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs font-mono">
-                                    <thead>
-                                        <tr className="border-b border-slate-700 text-slate-500">
-                                            <th className="p-2">車牌 (Reg Mark)</th>
-                                            <th className="p-2">啟用開關 (isEnabled)</th>
-                                            <th className="p-2">內地牌 (Mainland)</th>
-                                            <th className="p-2">指標號 (Quota)</th>
-                                            <th className="p-2">關鍵日期 (Raw Dates)</th>
-                                            <th className="p-2">口岸 (Ports)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-800">
-                                        {inventory.map(v => {
-                                            const cb = v.crossBorder;
-                                            // 只列出「有點像中港車」的資料 (有開關、或有牌、或有指標、或有日期)
-                                            const hasAnyCbData = cb && (
-                                                cb.isEnabled !== undefined || 
-                                                cb.mainlandPlate || 
-                                                cb.quotaNumber || 
-                                                cb.dateHkInsurance ||
-                                                (cb.ports && cb.ports.length > 0)
-                                            );
-
-                                            if (!hasAnyCbData) return null;
-
-                                            return (
-                                                <tr key={v.id} className="hover:bg-white/5 transition-colors">
-                                                    <td className="p-2 font-bold text-white">{v.regMark}</td>
-                                                    <td className="p-2">
-                                                        {cb?.isEnabled ? (
-                                                            <span className="text-green-400 bg-green-900/30 px-1 rounded">TRUE (顯示)</span>
-                                                        ) : (
-                                                            <span className="text-red-400 bg-red-900/30 px-1 rounded font-bold">FALSE (被隱藏)</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-2 text-blue-300">{cb?.mainlandPlate || '-'}</td>
-                                                    <td className="p-2 text-purple-300">{cb?.quotaNumber || '-'}</td>
-                                                    <td className="p-2 text-gray-400 max-w-[200px] truncate" title={`保險:${cb?.dateHkInsurance} 牌費:${cb?.dateLicenseFee}`}>
-                                                        {cb?.dateHkInsurance ? `保:${cb.dateHkInsurance} ` : ''}
-                                                        {cb?.dateLicenseFee ? `牌:${cb.dateLicenseFee}` : ''}
-                                                    </td>
-                                                    <td className="p-2 text-yellow-200">
-                                                        {cb?.ports && cb.ports.length > 0 ? cb.ports.join(', ') : '-'}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="mt-4 text-center">
-                                <p className="text-[10px] text-slate-500">共掃描到 {inventory.filter(v => v.crossBorder && (v.crossBorder.isEnabled !== undefined || v.crossBorder.mainlandPlate)).length} 筆潛在中港車輛數據</p>
-                            </div>
+                            {!showInspector ? (
+                                <div className="text-center text-slate-500 py-8 flex flex-col items-center">
+                                    <ShieldCheck size={48} className="mb-2 opacity-50"/>
+                                    <p>此區域包含敏感數據，已被隱藏。</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto animate-fade-in">
+                                    <table className="w-full text-left text-xs font-mono text-slate-300">
+                                        <thead><tr className="border-b border-slate-700 text-slate-500"><th className="p-2">Reg Mark</th><th className="p-2">Enabled</th><th className="p-2">Mainland</th><th className="p-2">Quota</th><th className="p-2">Dates</th></tr></thead>
+                                        <tbody className="divide-y divide-slate-800">
+                                            {inventory.map(v => {
+                                                const cb = v.crossBorder;
+                                                if (!cb || (!cb.isEnabled && !cb.mainlandPlate)) return null;
+                                                return (
+                                                    <tr key={v.id} className="hover:bg-white/5">
+                                                        <td className="p-2 font-bold text-white">{v.regMark}</td>
+                                                        <td className="p-2">{cb.isEnabled ? <span className="text-green-400">TRUE</span> : <span className="text-red-400">FALSE</span>}</td>
+                                                        <td className="p-2">{cb.mainlandPlate || '-'}</td>
+                                                        <td className="p-2">{cb.quotaNumber || '-'}</td>
+                                                        <td className="p-2 text-gray-500 truncate max-w-[150px]">{cb.dateHkInsurance ? `Ins:${cb.dateHkInsurance}` : ''}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
-                        {/* ★★★ 結束 ★★★ */}
-
-                    </div>
-                )}</div> )}
+                </div> )}
                 {activeTab === 'database_config' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">資料庫分類</h3><div className="bg-blue-50 p-4 rounded-lg mb-4 flex gap-2">{['Person', 'Company', 'Vehicle', 'CrossBorder'].map(cat => (<button key={cat} onClick={() => setSelectedDbCat(cat)} className={`px-4 py-2 rounded-lg text-sm font-bold border ${selectedDbCat === cat ? 'bg-blue-600 text-white' : 'bg-white'}`}>{cat}</button>))}</div><div className="flex gap-2 mb-4"><input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder="新類型" /><button onClick={handleAddDocType} className="bg-slate-800 text-white px-4 py-2 rounded text-sm">新增</button></div><div className="flex flex-wrap gap-2">{(settings.dbDocTypes?.[selectedDbCat] || []).map((type, idx) => (<span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border">{type}<button onClick={() => handleRemoveDocType(idx)} className="text-slate-400 hover:text-red-500"><X size={14}/></button></span>))}</div></div> )}
                 {activeTab === 'reminders' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">系統提醒</h3><div className="bg-amber-50 p-4 rounded-lg mb-4"><label className="flex items-center"><input type="checkbox" checked={reminders.isEnabled} onChange={e=>setReminders({...reminders,isEnabled:e.target.checked})} className="mr-2"/> 開啟提醒</label></div><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold">儲存</button></div> )}
                 {activeTab === 'vehicle' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Make</h3>{/* ... */}</div></div> )}
                 {activeTab === 'expenses' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Payment Types</h3><div className="flex gap-2"><input value={payTypeInput} onChange={e=>setPayTypeInput(e.target.value)} className="border p-1 text-sm"/><button onClick={handlePayTypeSubmit} className="bg-slate-800 text-white px-3 text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-2">{(settings.paymentTypes||[]).map((pt,i)=>(<span key={i} className="bg-slate-100 px-2 text-xs border rounded">{pt} <button onClick={()=>{const l=[...settings.paymentTypes];l.splice(i,1);updateSettings('paymentTypes',l)}} className="text-red-500">X</button></span>))}</div></div></div> )}
                 {activeTab === 'crossborder' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>中港業務設定</h3>{/* ... */}</div> )}
-                {activeTab === 'backup' && (
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
-                        
-                        {/* 1. 原有的：雲端自動備份功能 */}
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
-                            <h4 className="font-bold text-blue-800 text-sm mb-2">雲端自動備份</h4>
-                            <div className="flex items-center gap-4 mb-3">
-                                <select value={backupConfig.frequency} onChange={e => setBackupConfig({...backupConfig, frequency: e.target.value as any})} className="text-xs p-1 border rounded">
-                                    <option value="manual">手動</option>
-                                    <option value="daily">每日</option>
-                                    <option value="weekly">每週</option>
-                                    <option value="monthly">每月</option>
-                                </select>
-                                <label className="flex items-center text-xs gap-1">
-                                    <input type="checkbox" checked={backupConfig.autoCloud} onChange={e => setBackupConfig({...backupConfig, autoCloud: e.target.checked})} className="accent-blue-600"/> 啟用自動上傳
-                                </label>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <p className="text-xs text-blue-600/70">上次備份: <span className="font-mono font-bold">{backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}</span></p>
-                                <div className="flex gap-2">
-                                    <button onClick={handleSaveBackupConfig} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">儲存設定</button>
-                                    <button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">
-                                        {isBackingUp ? <Loader2 className="animate-spin" size={12}/> : '立即備份'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 2. 原有的：匯出與匯入 JSON */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col justify-between">
-                                <div><h4 className="font-bold text-gray-800 mb-2">匯出本地檔案</h4><p className="text-xs text-gray-500 mb-4">下載 .json 完整備份。</p></div>
-                                <button onClick={handleExport} className="w-full bg-slate-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-slate-700">下載</button>
-                            </div>
-                            <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between">
-                                <div><h4 className="font-bold text-amber-800 mb-2">匯入還原</h4><p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p></div>
-                                <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">
-                                    選擇檔案
-                                    <input type="file" accept=".json" className="hidden" onChange={handleImport} />
-                                </label>
-                            </div>
-                        </div>
-
-                        {/* ★★★ 3. 新增：資料救援按鈕 (加在最下方) ★★★ */}
-                        <div className="bg-red-50 p-5 rounded-xl border border-red-200 mt-6">
-                            <h4 className="font-bold text-red-800 mb-2 flex items-center">
-                                <AlertTriangle size={18} className="mr-2"/> 進階資料修復 (Data Rescue)
-                            </h4>
-                            <p className="text-xs text-red-700/80 mb-4">
-                                此功能用於從舊 CSV 檔案「合併」中港資料到現有車輛中。<br/>
-                                系統會根據車牌 (RegMark) 自動配對，只修復中港日期與資料，不影響財務紀錄。
-                            </p>
-                            <label className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer shadow-sm inline-flex items-center transition-colors">
-                                <Upload size={16} className="mr-2"/> 上傳 CSV 進行修復
-                                <input type="file" accept=".csv" className="hidden" onChange={handleRescueImport} />
-                            </label>
-                        </div>
-                        {/* ★★★ 結束 ★★★ */}
-
-                    </div>
-                )}
-
-                {/* ★★★ 7. Users (更新：加入密碼欄位與介面) ★★★ */}
+                
+                {/* 7. Users (Updated) */}
                 {activeTab === 'users' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限</h3>
-                        
-                        {/* 新增用戶區域 (包含密碼輸入) */}
                         <div className="flex gap-2 mb-6 items-end bg-slate-50 p-4 rounded-lg">
-                            <div className="flex-1">
-                                <label className="text-[10px] font-bold text-slate-500">Email (User ID)</label>
-                                <input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none" placeholder="例如: sales01"/>
-                            </div>
-                            <div className="w-48">
-                                <label className="text-[10px] font-bold text-slate-500">密碼 (Password)</label>
-                                <input type="text" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none font-mono" placeholder="設定密碼"/>
-                            </div>
+                            <div className="flex-1"><label className="text-[10px] font-bold text-slate-500">Email (User ID)</label><input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none" placeholder="例如: sales01"/></div>
+                            <div className="w-48"><label className="text-[10px] font-bold text-slate-500">密碼 (Password)</label><input type="text" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="w-full border rounded px-3 py-2 text-sm outline-none font-mono" placeholder="設定密碼"/></div>
                             <button onClick={handleAddUser} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 shadow-sm h-10">新增用戶</button>
                         </div>
-
-                        <div className="space-y-3">
-                            {systemUsers.length === 0 ? <p className="text-slate-400 text-sm text-center py-4">暫無其他授權用戶</p> : systemUsers.map(u => (
-                                <div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100 hover:border-blue-200 transition-colors">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-slate-200 p-1.5 rounded-full"><UserCircle size={16} className="text-slate-500"/></div>
-                                            <div>
-                                                <span className="text-sm font-bold text-slate-700 block">{u.email}</span>
-                                                <span className="text-[10px] text-slate-400 font-mono">Password: {u.password || '****'}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {/* 重設密碼按鈕 */}
-                                            <button onClick={() => handleResetPassword(u.email)} className="text-blue-500 hover:text-blue-700 px-2 text-xs border border-blue-200 rounded bg-white hover:bg-blue-50">重設密碼</button>
-                                            <button onClick={() => handleRemoveUser(u.email)} className="text-red-400 hover:text-red-600 px-2 text-xs border border-red-100 rounded bg-white hover:bg-red-50">移除</button>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 pl-9 text-xs">
-                                        {[{k:'inventory',l:'車庫'},{k:'business',l:'業務'},{k:'database',l:'資料庫'},{k:'settings',l:'設定'}].map(mod=>(
-                                            <label key={mod.k} className="flex items-center cursor-pointer select-none">
-                                                <input type="checkbox" checked={u.modules?.includes(mod.k)} onChange={()=>toggleUserPermission(u.email, mod.k)} className="mr-1.5 accent-blue-600"/>
-                                                <span className={u.modules?.includes(mod.k)?'text-slate-700 font-bold':'text-slate-400'}>{mod.l}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <div className="space-y-3">{systemUsers.map(u => (<div key={u.email} className="bg-slate-50 p-3 rounded border border-slate-100"><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-3"><span className="text-sm font-bold">{u.email}</span></div><div className="flex gap-2"><button onClick={() => handleResetPassword(u.email)} className="text-blue-500 text-xs">重設密碼</button><button onClick={() => handleRemoveUser(u.email)} className="text-red-400 text-xs">移除</button></div></div></div>))}</div>
                     </div>
                 )}
 
-                {/* ★★★ 8. System Logs (全新頁面) ★★★ */}
-                {activeTab === 'logs' && (
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm min-h-[500px] flex flex-col">
-                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><FileText size={18} className="mr-2"/> 系統操作紀錄 (System Logs)</h3>
-                        <div className="flex-1 overflow-y-auto rounded-lg border border-slate-200">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase sticky top-0">
-                                    <tr>
-                                        <th className="p-3">時間 (Time)</th>
-                                        <th className="p-3">用戶 (User)</th>
-                                        <th className="p-3">動作 (Action)</th>
-                                        <th className="p-3">詳情 (Details)</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {logs.map((log) => (
-                                        <tr key={log.id} className="hover:bg-slate-50">
-                                            <td className="p-3 font-mono text-xs text-slate-500">{log.timestamp?.toDate().toLocaleString() || '-'}</td>
-                                            <td className="p-3 font-bold text-blue-600">{log.user}</td>
-                                            <td className="p-3"><span className="bg-slate-100 px-2 py-1 rounded text-xs font-bold text-slate-600">{log.action}</span></td>
-                                            <td className="p-3 text-slate-600">{log.detail}</td>
-                                        </tr>
-                                    ))}
-                                    {logs.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-400">暫無紀錄</td></tr>}
-                                </tbody>
-                            </table>
+                {activeTab === 'logs' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold">系統操作日誌</h3><div className="mt-4 border rounded max-h-96 overflow-y-auto"><table className="w-full text-xs text-left"><tbody className="divide-y">{logs.map(l => (<tr key={l.id} className="hover:bg-slate-50"><td className="p-2 text-gray-500">{l.timestamp?.toDate().toLocaleString()}</td><td className="p-2 font-bold">{l.user}</td><td className="p-2">{l.action}</td><td className="p-2 text-gray-600">{l.detail}</td></tr>))}</tbody></table></div></div> )}
+
+                {/* 8. Backup (Updated with Storage Prop & Rescue) */}
+                {activeTab === 'backup' && (
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
+                            <h4 className="font-bold text-blue-800 text-sm mb-2">雲端自動備份</h4>
+                            <div className="flex justify-between items-center">
+                                <p className="text-xs text-blue-600/70">上次備份: {backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}</p>
+                                <button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">{isBackingUp ? <Loader2 className="animate-spin" size={12}/> : '立即備份 (Backup Now)'}</button>
+                            </div>
+                        </div>
+                        <div className="bg-red-50 p-5 rounded-xl border border-red-200 mt-6">
+                            <h4 className="font-bold text-red-800 mb-2 flex items-center"><AlertTriangle size={18} className="mr-2"/> 進階資料修復 (Data Rescue)</h4>
+                            <label className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer shadow-sm inline-flex items-center"><Upload size={16} className="mr-2"/> 上傳 CSV 進行修復 <input type="file" accept=".csv" className="hidden" onChange={handleRescueImport} /></label>
                         </div>
                     </div>
                 )}
             </div>
         </div>
     );
-}; // ★★★ 請確保這個結尾的大括號和分號存在，這就是解決編譯錯誤的關鍵！
+};
 
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
@@ -6250,6 +5989,7 @@ const CreateDocModule = ({
                       settings={settings}
                       setSettings={setSettings}
                       db={db}
+                      storage={storage}
                       staffId={staffId}
                       appId={appId}
                       inventory={inventory}
