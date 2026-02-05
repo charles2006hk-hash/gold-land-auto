@@ -3044,7 +3044,55 @@ export default function GoldLandAutoDMS() {
 
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
-  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+  // 1. 定義預設設定 (修正版：補回 dbCategories 與 dbRoles)
+    const defaultSettings: SystemSettings = {
+        makes: ['Toyota', 'Honda', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Nissan', 'Mazda', 'Porsche', 'Tesla'],
+        models: { 
+            'Toyota': ['Alphard', 'Vellfire', 'Noah', 'Sienta', 'Corolla', 'Camry', 'Hiace'], 
+            'Honda': ['Stepwgn', 'Freed', 'Jazz', 'Odyssey', 'Civic'], 
+            'BMW': ['X5', 'X3', '520i', '320i', '118i'], 
+            'Mercedes-Benz': ['E200', 'C200', 'S500', 'V250', 'A200', 'GLC'],
+            'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7'],
+            'Lexus': ['RX', 'NX', 'UX', 'ES'],
+            'Porsche': ['Cayenne', 'Macan', 'Panamera', '911'],
+            'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X']
+        },
+        colors: ['White', 'Black', 'Silver', 'Grey', 'Blue', 'Red', 'Pearl White', 'Metallic Grey'],
+        expenseTypes: [
+            { name: '維修費', defaultCompany: '捷信車房', defaultAmount: 0, defaultDays: '0' },
+            { name: '美容費', defaultCompany: '3M美容中心', defaultAmount: 0, defaultDays: '0' },
+            { name: '驗車費', defaultCompany: '政府驗車中心', defaultAmount: 580, defaultDays: '0' },
+            { name: '牌費', defaultCompany: '運輸署', defaultAmount: 0, defaultDays: '0' },
+            { name: '保險費', defaultCompany: '安盛保險', defaultAmount: 0, defaultDays: '0' },
+            { name: '入油', defaultCompany: 'Shell', defaultAmount: 0, defaultDays: '0' },
+            { name: '泊車', defaultCompany: '領展', defaultAmount: 0, defaultDays: '0' }
+        ],
+        expenseCompanies: ['捷信車房', '3M美容中心', '政府驗車中心', '運輸署', '安盛保險', '中石化', 'Shell', 'Caltex', '領展'],
+        paymentTypes: ['Deposit', 'Balance', 'Full Payment', 'Installment', 'Service Fee', 'Commission'],
+        serviceItems: ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢'],
+        cbItems: [
+            { name: '代辦驗車', defaultInst: '中檢公司', defaultFee: 500, defaultDays: '7' },
+            { name: '批文延期', defaultInst: '廣東省公安廳', defaultFee: 0, defaultDays: '14' }
+        ],
+        cbInstitutions: ['中檢公司', '廣東省公安廳', '海關', '邊檢', '保險公司'],
+        
+        // ★★★ 補回缺少的這兩個欄位 ★★★
+        dbCategories: ['Person', 'Company', 'Vehicle', 'CrossBorder', 'Other'],
+        dbRoles: ['Admin', 'Manager', 'Staff', 'Viewer'],
+        // ★★★ 補回結束 ★★★
+
+        dbDocTypes: {
+            'Person': ['身份證', '回鄉證', '駕駛執照', '住址證明'],
+            'Company': ['商業登記證 (BR)', '公司註冊證 (CI)', '周年申報表 (NAR1)'],
+            'Vehicle': ['牌簿 (VRD)', '行車證', '保險單', '驗車紙'],
+            'CrossBorder': ['批文卡', '禁區紙', '行駛證', '海關本']
+        },
+        reminders: { isEnabled: true, daysBefore: 30, time: '10:00', categories: { license: true, insurance: true, crossBorder: true, installments: true } },
+        backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
+    };
+
+    // 2. 初始化 State (使用上面的 defaultSettings 作為初始值)
+    const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
   const [dbEntries, setDbEntries] = useState<DatabaseEntry[]>([]);
   // UI States
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
@@ -3109,6 +3157,38 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
+  // -------------------------------------------------------------
+  // 2. 讀取系統設定 (修正版：加入 db! 解決 TypeScript 報錯)
+  // -------------------------------------------------------------
+  useEffect(() => {
+      if (!db || !appId) return;
+
+      const fetchSettings = async () => {
+          try {
+              // ★★★ 修正點：在 db 後面加上 !，在 appId 後面也加上 ! ★★★
+              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
+              const docSnap = await getDoc(docRef);
+
+              if (docSnap.exists()) {
+                  const savedSettings = docSnap.data() as SystemSettings;
+                  // 合併預設值與資料庫設定
+                  setSettings(prev => ({
+                      ...defaultSettings, 
+                      ...savedSettings    
+                  }));
+                  console.log("✅ 成功載入系統設定");
+              } else {
+                  // 如果資料庫完全沒設定 (第一次使用)，則寫入預設值
+                  await setDoc(docRef, defaultSettings);
+                  console.log("⚠️ 無設定檔，已寫入預設值");
+              }
+          } catch (error) {
+              console.error("❌ 讀取設定失敗:", error);
+          }
+      };
+
+      fetchSettings();
+  }, [db, appId]);
 
   // --- Auth & Data Loading ---
   useEffect(() => {
@@ -3621,21 +3701,19 @@ const deleteVehicle = async (id: string) => {
       }
   };
 
-  // 更新系統設定 (v2.0 通用版：直接儲存新值，支援物件與陣列)
+  // 更新設定並同步到資料庫
     const updateSettings = async (key: keyof SystemSettings, value: any) => {
-        // 1. 更新本地狀態 (讓畫面即時反應)
-        setSettings(prev => ({ ...prev, [key]: value }));
-
-        // 2. 寫入 Firebase
+        const newSettings = { ...settings, [key]: value };
+        setSettings(newSettings); // 更新畫面
+        
+        // ★ 寫入資料庫 ★
         if (db && appId) {
             try {
-                const docRef = doc(db, 'artifacts', appId, 'system', 'settings');
-                // 使用 merge: true 確保只更新變動的欄位，不會覆蓋其他設定
-                await setDoc(docRef, { [key]: value }, { merge: true }); 
-                console.log(`Settings updated: ${key}`, value);
+                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+                await setDoc(docRef, newSettings, { merge: true });
+                // console.log(`Setting [${key}] saved.`);
             } catch (err) {
-                console.error("Settings update failed:", err);
-                alert("儲存設定失敗，請檢查網路連線");
+                console.error("Save setting failed:", err);
             }
         }
     };
@@ -5646,7 +5724,7 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 2. 提醒中心 (v10.8: 文字格式修正) */}
+              {/* 2. 提醒中心 (v10.9: 修正數量不一致問題 - 補齊所有欄位) */}
               {(() => {
                   // --- A. 資料庫文件提醒 ---
                   const docAlerts: any[] = [];
@@ -5660,16 +5738,43 @@ const CreateDocModule = ({
                   });
                   docAlerts.sort((a, b) => a.days - b.days);
 
-                  // --- B. 中港業務提醒 ---
+                  // --- B. 中港業務提醒 (修正：補齊欄位，放寬過濾) ---
                   const cbAlerts: any[] = [];
-                  const cbDateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateClosedRoad: '禁區紙', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
-                  inventory.filter(v => v.crossBorder?.isEnabled).forEach(v => { 
+                  
+                  // 1. 定義完整的檢查欄位 (與 CrossBorderView 完全一致)
+                  const cbDateFields = { 
+                      dateHkInsurance: '香港保險', 
+                      dateReservedPlate: '留牌紙', 
+                      dateBr: '商業登記 (BR)', // 補回
+                      dateLicenseFee: '香港牌費', 
+                      dateMainlandJqx: '內地交強險', 
+                      dateMainlandSyx: '內地商業險', // 補回
+                      dateClosedRoad: '禁區紙', 
+                      dateApproval: '批文卡', // 補回
+                      dateMainlandLicense: '內地行駛證', 
+                      dateHkInspection: '香港驗車' 
+                  };
+
+                  // 2. 遍歷車輛 (邏輯與 CrossBorderView 同步：只要有 CrossBorder 物件就檢查)
+                  inventory.forEach(v => { 
+                      const cb = v.crossBorder;
+                      if (!cb) return;
+
+                      // 檢查每一個日期欄位
                       Object.entries(cbDateFields).forEach(([field, label]) => { 
-                          const dateStr = (v.crossBorder as any)?.[field]; 
+                          const dateStr = (cb as any)?.[field]; 
                           if (dateStr) { 
                               const days = getDaysRemaining(dateStr); 
                               if (days !== null && days <= 30) {
-                                  cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); 
+                                  cbAlerts.push({ 
+                                      id: v.id, 
+                                      title: v.regMark || '未出牌', 
+                                      desc: label, 
+                                      date: dateStr, 
+                                      days, 
+                                      status: days < 0 ? 'expired' : 'soon', 
+                                      raw: v 
+                                  }); 
                               }
                           } 
                       }); 
@@ -5682,7 +5787,7 @@ const CreateDocModule = ({
                   const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
                   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
-                  // ★★★ 修正：AlertList 文字顯示邏輯 ★★★
+                  // 列表顯示組件
                   const AlertList = ({ items, onItemClick }: any) => (
                       <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
@@ -5690,11 +5795,8 @@ const CreateDocModule = ({
                                   <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
                                       <div className="flex-1 min-w-0 mr-2"><div className="font-bold truncate text-white">{item.title}</div><div className="text-white/60 truncate">{item.desc}</div></div>
                                       <div className="text-right whitespace-nowrap">
-                                          {/* 這裡使用了您指定的文字格式 */}
                                           <div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>
-                                              {item.status === 'expired' 
-                                                  ? `已過期 ${Math.abs(item.days)} 天` 
-                                                  : `還有 ${item.days} 天就過期`}
+                                              {item.status === 'expired' ? `已過期 ${Math.abs(item.days)} 天` : `還有 ${item.days} 天就過期`}
                                           </div>
                                           <div className="text-white/40 scale-90">{item.date}</div>
                                       </div>
