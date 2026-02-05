@@ -3018,6 +3018,173 @@ const SettingsManager = ({
     const handleExport = () => { const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `GL_Backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); };
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... keep original ... */ };
 
+    // ★★★ 資料救援：針對您的中文 CSV 專用版本 (請插入此函數) ★★★
+    const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !db || !staffId) return;
+
+        if (!confirm("⚠️ 準備匯入 CSV 資料...\n\n系統將根據「香港車牌」自動配對，並補齊中港資料、日期與公司資訊。\n(現有的財務與庫存狀態將保留不變)\n\n確定執行嗎？")) {
+            e.target.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const text = event.target?.result as string;
+                // 處理換行 (支援 Windows/Mac 格式)
+                const rows = text.split(/\r\n|\n/).map(row => row.split(',')); 
+                if (rows.length < 2) { alert("CSV 檔案內容為空"); return; }
+
+                // 移除標題列的空白，確保對應準確
+                const headers = rows[0].map(h => h.trim()); 
+                
+                // --- 1. 定義欄位映射 (根據您的 CSV 標題) ---
+                const findIndex = (keys: string[]) => headers.findIndex(h => keys.includes(h));
+
+                // 關鍵欄位
+                const idxReg = findIndex(['香港車牌']);
+                const idxChina = findIndex(['內地車牌']);
+                const idxQuota = findIndex(['指標號']);
+                const idxDriver = findIndex(['負責司機', '司機1']); 
+                const idxPhone = findIndex(['聯絡電話', '電話1']);
+                
+                // 公司與口岸
+                const idxHkComp = findIndex(['香港商號']);
+                const idxMlComp = findIndex(['內承單位']);
+                const idxPorts = findIndex(['通行口岸']);
+
+                // 日期欄位
+                const idxIns = findIndex(['香港保險到期']);
+                const idxLic = findIndex(['牌照費']); // CSV 標題是 "牌照費"
+                const idxClosed = findIndex(['禁區紙到期']);
+                const idxAppr = findIndex(['批文卡到期']);
+                const idxMainLic = findIndex(['行駛証']);
+                const idxJqx = findIndex(['內地交強險到期']);
+                const idxSyx = findIndex(['內地商業險到期']);
+                const idxHkInsp = findIndex(['香港驗車日期']);
+                const idxReserve = findIndex(['留牌紙到期']);
+                const idxBr = findIndex(['BR到期']);
+
+                if (idxReg === -1) {
+                    alert("錯誤：找不到「香港車牌」欄位，請確認 CSV 格式。");
+                    return;
+                }
+
+                // --- 2. 日期格式化工具 (重要！將 2026/3/25 轉為 2026-03-25) ---
+                const formatDate = (raw: string) => {
+                    if (!raw || raw.trim() === '' || raw.toLowerCase().includes('nan')) return '';
+                    try {
+                        // 嘗試處理 Excel 可能的日期格式
+                        const clean = raw.trim().replace(/"/g, '');
+                        const parts = clean.split('/');
+                        if (parts.length === 3) {
+                            const y = parts[0];
+                            const m = parts[1].padStart(2, '0');
+                            const d = parts[2].padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                        }
+                        return raw; 
+                    } catch (e) { return raw; }
+                };
+
+                let successCount = 0;
+                let failCount = 0;
+                const batch = writeBatch(db);
+                let batchCount = 0;
+
+                // --- 3. 開始匯入 ---
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row.length < 2) continue;
+
+                    // 清理車牌 (移除空格、轉大寫)
+                    const regMark = row[idxReg]?.trim().replace(/\s/g, '').toUpperCase();
+                    if (!regMark || regMark === 'NAN') continue;
+
+                    // 在現有庫存中尋找
+                    const targetCar = inventory.find(v => v.regMark.replace(/\s/g, '') === regMark);
+                    
+                    if (targetCar && targetCar.id) {
+                        const updates: any = { 
+                            'crossBorder.isEnabled': true // 強制啟用中港模組
+                        };
+
+                        // 輔助函數：如果有值才更新 (忽略 'nan' 或空值)
+                        const setVal = (idx: number, field: string, isDate = false) => {
+                            if (idx > -1 && row[idx]) {
+                                const val = row[idx].trim();
+                                if (val !== '' && val.toLowerCase() !== 'nan') {
+                                    updates[`crossBorder.${field}`] = isDate ? formatDate(val) : val;
+                                }
+                            }
+                        };
+
+                        // 填入資料
+                        setVal(idxChina, 'mainlandPlate');
+                        setVal(idxQuota, 'quotaNumber');
+                        setVal(idxDriver, 'driver1');
+                        setVal(idxHkComp, 'hkCompany');
+                        setVal(idxMlComp, 'mainlandCompany');
+                        setVal(idxPhone, 'driverPhone'); 
+
+                        // 處理口岸 (支援逗號或空格分隔)
+                        if (idxPorts > -1 && row[idxPorts]) {
+                            const rawPorts = row[idxPorts];
+                            const portsArray = [];
+                            if (rawPorts.includes('皇崗')) portsArray.push('皇崗');
+                            if (rawPorts.includes('深圳灣')) portsArray.push('深圳灣');
+                            if (rawPorts.includes('蓮塘')) portsArray.push('蓮塘');
+                            if (rawPorts.includes('沙頭角')) portsArray.push('沙頭角');
+                            if (rawPorts.includes('文錦渡')) portsArray.push('文錦渡');
+                            if (rawPorts.includes('大橋') || rawPorts.includes('珠海')) portsArray.push('港珠澳大橋(港)');
+                            
+                            if (portsArray.length > 0) updates['crossBorder.ports'] = portsArray;
+                        }
+
+                        // 日期映射 (套用格式轉換)
+                        setVal(idxIns, 'dateHkInsurance', true);
+                        setVal(idxLic, 'dateLicenseFee', true);
+                        setVal(idxClosed, 'dateClosedRoad', true);
+                        setVal(idxAppr, 'dateApproval', true);
+                        setVal(idxMainLic, 'dateMainlandLicense', true);
+                        setVal(idxJqx, 'dateMainlandJqx', true);
+                        setVal(idxSyx, 'dateMainlandSyx', true);
+                        setVal(idxHkInsp, 'dateHkInspection', true);
+                        setVal(idxReserve, 'dateReservedPlate', true);
+                        setVal(idxBr, 'dateBr', true);
+
+                        const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetCar.id);
+                        batch.update(docRef, updates);
+                        batchCount++;
+                        successCount++;
+                    } else {
+                        failCount++;
+                        console.log(`CSV 中的 ${regMark} 在系統中找不到`);
+                    }
+                }
+
+                if (batchCount > 0) {
+                    await batch.commit();
+                    let msg = `✅ 匯入完成！\n成功更新: ${successCount} 輛\n`;
+                    if (failCount > 0) msg += `未找到配對: ${failCount} 輛 (可能是 CSV 車牌與系統不符)\n`;
+                    msg += `\n現在請回到「中港業務」頁面，資料應該都回來了。`;
+                    alert(msg);
+                    
+                    if(addSystemLog) addSystemLog('Data Rescue', `Imported ${successCount} vehicles from CSV`);
+                } else {
+                    alert("沒有任何資料被更新。請確認 CSV 車牌是否與系統內一致。");
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("讀取 CSV 失敗：" + err);
+            }
+            e.target.value = ''; 
+        };
+        reader.readAsText(file);
+    };
+
     // --- Render ---
     return (
         <div className="flex h-full gap-6">
@@ -3123,7 +3290,68 @@ const SettingsManager = ({
                 {activeTab === 'vehicle' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Make</h3>{/* ... */}</div></div> )}
                 {activeTab === 'expenses' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Payment Types</h3><div className="flex gap-2"><input value={payTypeInput} onChange={e=>setPayTypeInput(e.target.value)} className="border p-1 text-sm"/><button onClick={handlePayTypeSubmit} className="bg-slate-800 text-white px-3 text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-2">{(settings.paymentTypes||[]).map((pt,i)=>(<span key={i} className="bg-slate-100 px-2 text-xs border rounded">{pt} <button onClick={()=>{const l=[...settings.paymentTypes];l.splice(i,1);updateSettings('paymentTypes',l)}} className="text-red-500">X</button></span>))}</div></div></div> )}
                 {activeTab === 'crossborder' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>中港業務設定</h3>{/* ... */}</div> )}
-                {activeTab === 'backup' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>備份與還原</h3>{/* ... */}</div> )}
+                {activeTab === 'backup' && (
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
+                        
+                        {/* 1. 原有的：雲端自動備份功能 */}
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-6">
+                            <h4 className="font-bold text-blue-800 text-sm mb-2">雲端自動備份</h4>
+                            <div className="flex items-center gap-4 mb-3">
+                                <select value={backupConfig.frequency} onChange={e => setBackupConfig({...backupConfig, frequency: e.target.value as any})} className="text-xs p-1 border rounded">
+                                    <option value="manual">手動</option>
+                                    <option value="daily">每日</option>
+                                    <option value="weekly">每週</option>
+                                    <option value="monthly">每月</option>
+                                </select>
+                                <label className="flex items-center text-xs gap-1">
+                                    <input type="checkbox" checked={backupConfig.autoCloud} onChange={e => setBackupConfig({...backupConfig, autoCloud: e.target.checked})} className="accent-blue-600"/> 啟用自動上傳
+                                </label>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <p className="text-xs text-blue-600/70">上次備份: <span className="font-mono font-bold">{backupConfig.lastBackupDate ? new Date(backupConfig.lastBackupDate).toLocaleString() : 'Never'}</span></p>
+                                <div className="flex gap-2">
+                                    <button onClick={handleSaveBackupConfig} className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">儲存設定</button>
+                                    <button onClick={() => handleCloudBackup(false)} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">
+                                        {isBackingUp ? <Loader2 className="animate-spin" size={12}/> : '立即備份'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. 原有的：匯出與匯入 JSON */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 flex flex-col justify-between">
+                                <div><h4 className="font-bold text-gray-800 mb-2">匯出本地檔案</h4><p className="text-xs text-gray-500 mb-4">下載 .json 完整備份。</p></div>
+                                <button onClick={handleExport} className="w-full bg-slate-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-slate-700">下載</button>
+                            </div>
+                            <div className="bg-amber-50 p-5 rounded-xl border border-amber-100 flex flex-col justify-between">
+                                <div><h4 className="font-bold text-amber-800 mb-2">匯入還原</h4><p className="text-xs text-amber-600/70 mb-4">注意：這將覆蓋目前設定！</p></div>
+                                <label className="w-full bg-amber-500 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-amber-600 text-center block cursor-pointer">
+                                    選擇檔案
+                                    <input type="file" accept=".json" className="hidden" onChange={handleImport} />
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* ★★★ 3. 新增：資料救援按鈕 (加在最下方) ★★★ */}
+                        <div className="bg-red-50 p-5 rounded-xl border border-red-200 mt-6">
+                            <h4 className="font-bold text-red-800 mb-2 flex items-center">
+                                <AlertTriangle size={18} className="mr-2"/> 進階資料修復 (Data Rescue)
+                            </h4>
+                            <p className="text-xs text-red-700/80 mb-4">
+                                此功能用於從舊 CSV 檔案「合併」中港資料到現有車輛中。<br/>
+                                系統會根據車牌 (RegMark) 自動配對，只修復中港日期與資料，不影響財務紀錄。
+                            </p>
+                            <label className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer shadow-sm inline-flex items-center transition-colors">
+                                <Upload size={16} className="mr-2"/> 上傳 CSV 進行修復
+                                <input type="file" accept=".csv" className="hidden" onChange={handleRescueImport} />
+                            </label>
+                        </div>
+                        {/* ★★★ 結束 ★★★ */}
+
+                    </div>
+                )}
 
                 {/* ★★★ 7. Users (更新：加入密碼欄位與介面) ★★★ */}
                 {activeTab === 'users' && (
