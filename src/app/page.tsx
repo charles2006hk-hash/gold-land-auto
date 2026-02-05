@@ -2488,7 +2488,7 @@ const CrossBorderView = ({
                 <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                     {activeCar ? (
                         <>
-                            {/* 車輛標題區 */}
+                            {/* 車輛標題區 (Existing) */}
                             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center flex-none">
                                 <div>
                                     <div className="flex items-center gap-3">
@@ -2496,6 +2496,19 @@ const CrossBorderView = ({
                                         <span className="bg-slate-800 text-white px-2 py-0.5 rounded text-sm font-bold">{activeCar.crossBorder?.mainlandPlate}</span>
                                     </div>
                                     <p className="text-xs text-slate-500 mt-1">指標: {activeCar.crossBorder?.quotaNumber} | 司機: {activeCar.crossBorder?.driver1}</p>
+                                    
+                                    {/* ★★★ 新增：顯示已選口岸 (Ports Display) ★★★ */}
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                        {(activeCar.crossBorder?.ports || []).length > 0 ? (
+                                            activeCar.crossBorder?.ports?.map(port => (
+                                                <span key={port} className="text-[10px] px-2 py-0.5 rounded border bg-blue-50 border-blue-200 text-blue-700 font-bold">
+                                                    {port}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-[10px] text-gray-400 italic">未指定口岸</span>
+                                        )}
+                                    </div>
                                 </div>
                                 <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs rounded-lg shadow-sm font-bold flex items-center transition-all active:scale-95"><Edit size={14} className="mr-2"/> 編輯完整資料</button>
                             </div>
@@ -2621,19 +2634,16 @@ const CrossBorderView = ({
 const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[], settings: SystemSettings }) => {
     const [isOpen, setIsOpen] = useState(false);
 
-    // --- 1. 全域掃描邏輯 ---
-    // 這裡會掃描「所有車輛」的「所有證件」，包含一般與中港
+    // --- 1. 全域掃描邏輯 (修正版：補齊所有中港欄位) ---
     const useScanReminders = () => {
         const today = new Date();
         const alerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number }[] = [];
-        
-        // 設定讀取 (預設 30 天)
         const daysThreshold = settings.reminders?.daysBefore || 30;
 
         inventory.forEach(car => {
-            // A. 一般證件 (牌費、保險)
+            // A. 一般證件
             const genDocs = [
-                { key: 'dateLicenceFee', label: '車輛牌費 (License)' },
+                { key: 'licenseExpiry', label: '車輛牌費 (License)' }, // 注意：資料庫欄位通常是 licenseExpiry
                 { key: 'dateInsurance', label: '車輛保險 (Insurance)' }
             ];
             genDocs.forEach(d => {
@@ -2646,11 +2656,19 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                 }
             });
 
-            // B. 中港證件 (如果有啟用)
+            // B. 中港證件 (★ 關鍵修正：補齊所有 10 個日期欄位 ★)
             if (car.crossBorder?.isEnabled) {
                 const cbDocs = { 
-                    dateApproval: '批文卡', dateClosedRoad: '禁區紙', dateMainlandLicense: '內地行駛證',
-                    dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateHkInspection: '香港驗車(中港)'
+                    dateHkInsurance: '香港保險', 
+                    dateReservedPlate: '留牌紙', 
+                    dateBr: '商業登記(BR)', 
+                    dateLicenseFee: '香港牌費', 
+                    dateMainlandJqx: '內地交強險', 
+                    dateMainlandSyx: '內地商業險', 
+                    dateClosedRoad: '禁區紙', 
+                    dateApproval: '批文卡', 
+                    dateMainlandLicense: '內地行駛證', 
+                    dateHkInspection: '香港驗車(中港)'
                 };
                 Object.entries(cbDocs).forEach(([key, label]) => {
                     const dateVal = (car.crossBorder as any)?.[key];
@@ -2663,8 +2681,6 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                 });
             }
         });
-
-        // 排序：過期的在前，快到期的在後
         return alerts.sort((a, b) => a.days - b.days);
     };
 
