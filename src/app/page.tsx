@@ -2245,31 +2245,24 @@ const CrossBorderView = ({
         }
     };
 
-    // --- 2. 跑馬燈組件 (完整還原) ---
-    const TickerList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => {
-        const [currentIndex, setCurrentIndex] = useState(0);
-        const [isPaused, setIsPaused] = useState(false);
-        useEffect(() => { 
-            if (items.length <= 1) return; 
-            const interval = setInterval(() => { if (!isPaused) setCurrentIndex((prev) => (prev + 1) % items.length); }, 3000); 
-            return () => clearInterval(interval); 
-        }, [items.length, isPaused]);
-        
-        const visibleItems = []; 
-        for (let i = 0; i < Math.min(items.length, 5); i++) { visibleItems.push(items[(currentIndex + i) % items.length]); }
-        
+    // --- 2. 捲動列表組件 (取代跑馬燈，改為垂直捲動) ---
+    const ScrollableList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => {
         return (
-            <div className="bg-white/10 mt-3 rounded-lg overflow-hidden text-xs animate-fade-in border-t border-white/10" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)}>
-                <div className="h-28 overflow-hidden relative">
-                    {items.length === 0 ? <div className="p-4 text-white/50 text-center">無項目</div> : (
-                        <div className="transition-all duration-500 ease-in-out">
-                            {visibleItems.map((it, idx) => (
-                                <div key={`${it.vid}-${idx}-${currentIndex}`} onClick={() => setActiveCbVehicleId(it.vid)} className={`flex justify-between items-center p-2 hover:bg-white/20 cursor-pointer border-b border-white/5 last:border-0`}>
-                                    <div className="flex items-center gap-2"><span className="font-bold font-mono bg-black/20 px-1.5 rounded">{it.plate}</span><span className="text-white/90">{it.item}</span></div>
-                                    <div className={`text-right font-mono font-bold ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>{type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}<span className="ml-2 text-[10px] text-white/40 font-normal">{it.date}</span></div>
+            <div className="bg-black/20 mt-3 rounded-lg overflow-hidden text-xs border-t border-white/10 flex-1 min-h-0">
+                <div className="overflow-y-auto h-32 scrollbar-thin scrollbar-thumb-white/20 p-1 space-y-1">
+                    {items.length === 0 ? <div className="p-4 text-white/50 text-center flex flex-col items-center justify-center h-full"><span>無項目</span></div> : (
+                        items.map((it, idx) => (
+                            <div key={`${it.vid}-${idx}`} onClick={() => setActiveCbVehicleId(it.vid)} className="flex justify-between items-center p-2 hover:bg-white/10 cursor-pointer rounded border-b border-white/5 last:border-0 transition-colors">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-bold font-mono bg-black/30 px-1.5 py-0.5 rounded text-white shadow-sm whitespace-nowrap">{it.plate}</span>
+                                    <span className="text-white/90 truncate">{it.item}</span>
                                 </div>
-                            ))}
-                        </div>
+                                <div className={`text-right font-mono font-bold whitespace-nowrap ml-2 ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>
+                                    {type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}
+                                    <div className="text-[9px] text-white/40 font-normal text-right">{it.date}</div>
+                                </div>
+                            </div>
+                        ))
                     )}
                 </div>
             </div>
@@ -3958,42 +3951,52 @@ const deleteVehicle = async (id: string) => {
     setIsPreviewMode(true);
   };
 
-  // --- Report Logic ---
+  // --- Report Logic (v9.7: 修復中港費用顯示問題) ---
   const generateReportData = () => {
     let data: any[] = [];
     
     if (reportType === 'receivable') {
         data = inventory.filter(v => {
+            // 1. 計算應收與已收
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
             const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
             const balance = totalReceivable - received;
-            const isRelevantStatus = v.status === 'Sold' || v.status === 'Reserved';
-            const refDate = v.stockOutDate || v.stockInDate || ''; 
             
-            // Only show if there is a positive balance
-            // Include In-Stock items IF they have pending cross-border fees
-            const hasPendingCB = cbFees > 0 && balance > 0;
-            const showItem = (isRelevantStatus && balance > 0) || hasPendingCB;
+            // 2. 判斷是否顯示：只要有餘額 (欠款) 就應該顯示，不論狀態
+            if (balance <= 0) return false;
 
-            return showItem && 
-                   (!reportStartDate || refDate >= reportStartDate) &&
-                   (!reportEndDate || refDate <= reportEndDate);
+            // 3. 日期過濾邏輯
+            // A. 如果是賣車，看依據出庫/入庫日
+            const stockDate = v.stockOutDate || v.stockInDate || '';
+            const isStockMatch = stockDate && (!reportStartDate || stockDate >= reportStartDate) && (!reportEndDate || stockDate <= reportEndDate);
+            
+            // B. 如果是純代辦，看任務日期 (只要有一個任務在區間內就顯示)
+            const isTaskMatch = (v.crossBorder?.tasks || []).some(t => 
+                (!reportStartDate || t.date >= reportStartDate) && 
+                (!reportEndDate || t.date <= reportEndDate)
+            );
+
+            // 如果沒有選日期，或是符合日期區間
+            const isDateMatch = (!reportStartDate && !reportEndDate) || isStockMatch || isTaskMatch;
+
+            return isDateMatch;
         }).map(v => {
             const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
             const totalReceivable = (v.price || 0) + cbFees;
             const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
             return {
                 vehicleId: v.id,
-                date: v.stockOutDate || 'Unknown',
+                date: v.stockOutDate || (v.crossBorder?.tasks?.[0]?.date) || 'Service', // 顯示出庫日或第一個任務日
                 title: `${v.year} ${v.make} ${v.model}`,
                 regMark: v.regMark,
-                amount: totalReceivable - received, 
+                amount: totalReceivable - received, // 顯示欠款餘額
                 status: v.status
             };
         });
 
     } else if (reportType === 'payable') {
+        // ... (應付帳款邏輯保持不變) ...
         inventory.forEach(v => {
             (v.expenses || []).forEach(exp => {
                 if (exp.status === 'Unpaid' && 
@@ -4014,6 +4017,7 @@ const deleteVehicle = async (id: string) => {
             });
         });
     } else if (reportType === 'sales') {
+        // ... (銷售報表邏輯保持不變) ...
         data = inventory.filter(v => 
             v.status === 'Sold' &&
             (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
