@@ -2166,7 +2166,13 @@ const CrossBorderView = ({
     };
 
     // --- 資料過濾與計算 ---
-    const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
+    // ★★★ 修正 1：放寬過濾條件，找回消失的車輛 ★★★
+    const cbVehicles = inventory.filter(v => {
+        const cb = v.crossBorder;
+        if (!cb) return false;
+        // 只要有啟用，或者有填寫內地車牌、指標號、或有任務紀錄，都算中港車
+        return cb.isEnabled || !!cb.mainlandPlate || !!cb.quotaNumber || (cb.tasks && cb.tasks.length > 0);
+    });
     const expiredItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
     const soonItems: { vid: string, plate: string, item: string, date: string, days: number }[] = [];
 
@@ -2656,8 +2662,10 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                 }
             });
 
-            // B. 中港證件 (★ 關鍵修正：補齊所有 10 個日期欄位 ★)
-            if (car.crossBorder?.isEnabled) {
+            // B. 中港證件 (★ 修正 2：補齊所有日期欄位 + 放寬掃描條件 ★)
+            const cb = car.crossBorder;
+            // 只要有資料物件，且 (已啟用 或 有車牌 或 有指標)，就進行掃描
+            if (cb && (cb.isEnabled || cb.mainlandPlate || cb.quotaNumber)) {
                 const cbDocs = { 
                     dateHkInsurance: '香港保險', 
                     dateReservedPlate: '留牌紙', 
@@ -2671,7 +2679,7 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                     dateHkInspection: '香港驗車(中港)'
                 };
                 Object.entries(cbDocs).forEach(([key, label]) => {
-                    const dateVal = (car.crossBorder as any)?.[key];
+                    const dateVal = (cb as any)?.[key];
                     if (dateVal) {
                         const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                         if (diff <= daysThreshold) {
@@ -3792,7 +3800,12 @@ const deleteVehicle = async (id: string) => {
 
   // --- Cross Border Logic ---
   const crossBorderStats = () => {
-      const cbVehicles = inventory.filter(v => v.crossBorder?.isEnabled);
+      // ★★★ 修正 3：儀表板統計也使用寬鬆條件 ★★★
+      const cbVehicles = inventory.filter(v => {
+          const cb = v.crossBorder;
+          if (!cb) return false;
+          return cb.isEnabled || !!cb.mainlandPlate || !!cb.quotaNumber;
+      });
       const today = new Date();
       today.setHours(0,0,0,0);
 
