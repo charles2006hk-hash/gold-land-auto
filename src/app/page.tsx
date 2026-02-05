@@ -5626,7 +5626,7 @@ const CreateDocModule = ({
           )}
 
           
-          {/* Dashboard Tab (v10.6: 修復狀態顯示、補全欄位、手機隱藏提醒) */}
+          {/* Dashboard Tab (v10.8: 修復提醒文字格式 + 系統名稱說明) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
                 
@@ -5646,7 +5646,7 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 2. 提醒中心 (v10.7: 修復「即將到期」數字顯示) */}
+              {/* 2. 提醒中心 (v10.8: 文字格式修正) */}
               {(() => {
                   // --- A. 資料庫文件提醒 ---
                   const docAlerts: any[] = [];
@@ -5676,20 +5676,28 @@ const CreateDocModule = ({
                   });
                   cbAlerts.sort((a, b) => a.days - b.days);
 
-                  // ★★★ 關鍵修復：分開計算「過期」與「即將到期」 ★★★
+                  // 計算分類數量
                   const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
                   const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
-                  
                   const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
                   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
+                  // ★★★ 修正：AlertList 文字顯示邏輯 ★★★
                   const AlertList = ({ items, onItemClick }: any) => (
                       <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
                               {items.map((item:any, idx:number) => (
                                   <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
                                       <div className="flex-1 min-w-0 mr-2"><div className="font-bold truncate text-white">{item.title}</div><div className="text-white/60 truncate">{item.desc}</div></div>
-                                      <div className="text-right"><div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `過期 ${Math.abs(item.days)}` : `剩 ${item.days}`}</div></div>
+                                      <div className="text-right whitespace-nowrap">
+                                          {/* 這裡使用了您指定的文字格式 */}
+                                          <div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>
+                                              {item.status === 'expired' 
+                                                  ? `已過期 ${Math.abs(item.days)} 天` 
+                                                  : `還有 ${item.days} 天就過期`}
+                                          </div>
+                                          <div className="text-white/40 scale-90">{item.date}</div>
+                                      </div>
                                   </div>
                               ))}
                               {items.length === 0 && <div className="text-white/30 text-xs text-center mt-4">無提醒事項</div>}
@@ -5704,15 +5712,8 @@ const CreateDocModule = ({
                               <div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center">
                                   <div className="font-bold mb-3 flex items-center text-xs text-slate-300"><Globe size={14} className="mr-1"/> 中港提醒</div>
                                   <div className="space-y-3">
-                                      {/* ★★★ 這裡補回了兩個分開的數字 ★★★ */}
-                                      <div>
-                                          <div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div>
-                                          <div className="text-[10px] text-red-200/70">已過期</div>
-                                      </div>
-                                      <div>
-                                          <div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div>
-                                          <div className="text-[10px] text-amber-200/70">即將到期</div>
-                                      </div>
+                                      <div><div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div>
+                                      <div><div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div>
                                   </div>
                               </div>
                               <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
@@ -5723,15 +5724,8 @@ const CreateDocModule = ({
                               <div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center">
                                   <div className="font-bold mb-3 flex items-center text-xs text-blue-200"><Database size={14} className="mr-1"/> 文件提醒</div>
                                   <div className="space-y-3">
-                                      {/* ★★★ 這裡補回了兩個分開的數字 ★★★ */}
-                                      <div>
-                                          <div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div>
-                                          <div className="text-[10px] text-red-200/70">已過期</div>
-                                      </div>
-                                      <div>
-                                          <div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div>
-                                          <div className="text-[10px] text-amber-200/70">即將到期</div>
-                                      </div>
+                                      <div><div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div>
+                                      <div><div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div>
                                   </div>
                               </div>
                               <AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} />
@@ -5740,7 +5734,7 @@ const CreateDocModule = ({
                   );
               })()}
               
-              {/* 3. 庫存列表 (★ 修正：狀態顯示、補全欄位 ★) */}
+              {/* 3. 庫存列表 (保持原本的手機優化版) */}
               {(() => {
                   const sortedList = [...inventory].sort((a,b) => (a.status==='In Stock'?0:1) - (b.status==='In Stock'?0:1)); 
                   return (
@@ -5752,19 +5746,17 @@ const CreateDocModule = ({
                                     <th className="p-3 w-10 text-center">Act</th>
                                     <th className="p-3 w-20">狀態</th>
                                     <th className="p-3">車牌 / 車型</th>
-                                    <th className="p-3 hidden md:table-cell">詳細規格</th> {/* 手機隱藏 */}
+                                    <th className="p-3 hidden md:table-cell">詳細規格</th>
                                     <th className="p-3 text-right">牌費</th>
                                     <th className="p-3 text-right">財務狀況</th>
                                 </tr>
                             </thead>
                             <tbody>
                               {sortedList.map(car => {
-                                  // 計算財務
                                   const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                                   const balance = (car.price || 0) - received;
                                   const unpaidExps = (car.expenses || []).filter(e => e.status === 'Unpaid').length || 0;
                                   
-                                  // 狀態樣式與文字 (Status Logic Fixed)
                                   let statusText = '在庫';
                                   let statusClass = "bg-green-100 text-green-700 border-green-200";
                                   if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-100 text-yellow-700 border-yellow-200"; }
@@ -5772,47 +5764,12 @@ const CreateDocModule = ({
 
                                   return (
                                     <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group text-xs md:text-sm" onClick={() => setEditingVehicle(car)}>
-                                      <td className="p-3 text-center" onClick={e=>e.stopPropagation()}>
-                                          <button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button>
-                                      </td>
+                                      <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button></td>
                                       <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span></td>
-                                      
-                                      {/* 車牌與型號 (手機版合併顯示) */}
-                                      <td className="p-3">
-                                          <div className="font-bold text-slate-800 text-sm">{car.regMark || '未出牌'}</div>
-                                          <div className="text-slate-500">{car.year} {car.make} {car.model}</div>
-                                          {/* 手機版顯示詳細規格 */}
-                                          <div className="md:hidden text-[10px] text-gray-400 mt-1 space-x-1">
-                                              <span>{car.previousOwners}手</span>|<span>{car.seating}座</span>|<span>{car.engineSize}cc</span>
-                                          </div>
-                                      </td>
-
-                                      {/* 詳細規格 (桌面版顯示) */}
-                                      <td className="p-3 hidden md:table-cell">
-                                          <div className="flex gap-2 text-xs text-gray-600">
-                                              <span className="bg-slate-50 px-1 border rounded">{car.previousOwners || 0}手</span>
-                                              <span className="bg-slate-50 px-1 border rounded">{car.seating || 5}座</span>
-                                              <span className="bg-slate-50 px-1 border rounded">{car.engineSize}cc</span>
-                                          </div>
-                                      </td>
-
-                                      {/* 牌費與售價 */}
-                                      <td className="p-3 text-right">
-                                          <div className="font-bold text-slate-700">{formatCurrency(car.price)}</div>
-                                          <div className="text-[10px] text-gray-400 mt-1">牌: {car.licenseExpiry || '-'}</div>
-                                      </td>
-
-                                      {/* 財務狀況 */}
-                                      <td className="p-3 text-right">
-                                          {balance > 0 && car.status !== 'In Stock' ? (
-                                              <span className="text-blue-600 font-bold block">欠 {formatCurrency(balance)}</span>
-                                          ) : (
-                                              (car.status === 'Sold' && unpaidExps === 0) ? 
-                                              <span className="text-green-500 font-bold">完成</span> : 
-                                              <span className="text-gray-300">-</span>
-                                          )}
-                                          {unpaidExps > 0 && <span className="text-red-500 text-[10px] block mt-0.5">{unpaidExps} 筆未付</span>}
-                                      </td>
+                                      <td className="p-3"><div className="font-bold text-slate-800 text-sm">{car.regMark || '未出牌'}</div><div className="text-slate-500">{car.year} {car.make} {car.model}</div><div className="md:hidden text-[10px] text-gray-400 mt-1 space-x-1"><span>{car.previousOwners}手</span>|<span>{car.seating}座</span>|<span>{car.engineSize}cc</span></div></td>
+                                      <td className="p-3 hidden md:table-cell"><div className="flex gap-2 text-xs text-gray-600"><span className="bg-slate-50 px-1 border rounded">{car.previousOwners || 0}手</span><span className="bg-slate-50 px-1 border rounded">{car.seating || 5}座</span><span className="bg-slate-50 px-1 border rounded">{car.engineSize}cc</span></div></td>
+                                      <td className="p-3 text-right"><div className="font-bold text-slate-700">{formatCurrency(car.price)}</div><div className="text-[10px] text-gray-400 mt-1">牌: {car.licenseExpiry || '-'}</div></td>
+                                      <td className="p-3 text-right">{balance > 0 && car.status !== 'In Stock' ? (<span className="text-blue-600 font-bold block">欠 {formatCurrency(balance)}</span>) : ((car.status === 'Sold' && unpaidExps === 0) ? <span className="text-green-500 font-bold">完成</span> : <span className="text-gray-300">-</span>)}{unpaidExps > 0 && <span className="text-red-500 text-[10px] block mt-0.5">{unpaidExps} 筆未付</span>}</td>
                                     </tr>
                                   );
                               })}
