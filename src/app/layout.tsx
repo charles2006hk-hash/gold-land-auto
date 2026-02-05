@@ -3044,7 +3044,7 @@ export default function GoldLandAutoDMS() {
 
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
-  // 1. 定義預設設定 (這是當資料庫沒資料時的備案，也是完整的預設結構)
+  // 1. 定義預設設定 (修正版：補回 dbCategories 與 dbRoles)
     const defaultSettings: SystemSettings = {
         makes: ['Toyota', 'Honda', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Nissan', 'Mazda', 'Porsche', 'Tesla'],
         models: { 
@@ -3075,6 +3075,12 @@ export default function GoldLandAutoDMS() {
             { name: '批文延期', defaultInst: '廣東省公安廳', defaultFee: 0, defaultDays: '14' }
         ],
         cbInstitutions: ['中檢公司', '廣東省公安廳', '海關', '邊檢', '保險公司'],
+        
+        // ★★★ 補回缺少的這兩個欄位 ★★★
+        dbCategories: ['Person', 'Company', 'Vehicle', 'CrossBorder', 'Other'],
+        dbRoles: ['Admin', 'Manager', 'Staff', 'Viewer'],
+        // ★★★ 補回結束 ★★★
+
         dbDocTypes: {
             'Person': ['身份證', '回鄉證', '駕駛執照', '住址證明'],
             'Company': ['商業登記證 (BR)', '公司註冊證 (CI)', '周年申報表 (NAR1)'],
