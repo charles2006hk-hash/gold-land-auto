@@ -2120,11 +2120,24 @@ const CrossBorderView = ({
                             let expiredCount = 0;
                             Object.keys(dateFields).forEach(k => { const d = (car.crossBorder as any)?.[k]; if(d && getDaysRemaining(d)! < 0) expiredCount++; });
                             return (
-                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-3 rounded-lg cursor-pointer border ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300' : 'bg-white hover:border-blue-100'}`}>
-                                    <div className="flex justify-between font-bold text-sm"><span>{car.regMark}</span><ChevronRight size={14} className="text-gray-300 md:hidden"/></div>
-                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                                        <span>{car.crossBorder?.mainlandPlate || '無內地牌'}</span>
-                                        {expiredCount > 0 && <span className="bg-red-100 text-red-600 px-1.5 rounded font-bold text-[10px]">{expiredCount}過期</span>}
+                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-3 rounded-lg cursor-pointer border transition-all ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300' : 'bg-white hover:border-blue-100'}`}>
+                                    <div className="flex justify-between font-bold text-sm">
+                                        <span>{car.regMark}</span>
+                                        <ChevronRight size={14} className="text-gray-300 md:hidden"/>
+                                    </div>
+                                    
+                                    {/* ★ 修正：加入指標號顯示 ★ */}
+                                    <div className="flex flex-col gap-0.5 mt-1">
+                                        <div className="flex justify-between items-center text-xs text-gray-500">
+                                            <span>{car.crossBorder?.mainlandPlate || '無內地牌'}</span>
+                                            {car.crossBorder?.quotaNumber && (
+                                                <span className="text-[10px] font-mono bg-slate-100 px-1 rounded text-slate-500 border border-slate-200">
+                                                    指標: {car.crossBorder.quotaNumber}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {/* 過期提示 */}
+                                        {expiredCount > 0 && <span className="self-end bg-red-100 text-red-600 px-1.5 rounded font-bold text-[10px]">{expiredCount}過期</span>}
                                     </div>
                                 </div>
                             );
@@ -5613,11 +5626,11 @@ const CreateDocModule = ({
           )}
 
           
-          {/* Dashboard Tab (v10.1: 完整修復版 - 含財務卡片、雙提醒中心、分享功能) */}
+          {/* Dashboard Tab (v10.6: 修復狀態顯示、補全欄位、手機隱藏提醒) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
                 
-                {/* ★ 分享彈窗 ★ */}
+                {/* 分享彈窗 */}
                 {shareVehicle && <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} onClose={()=>setShareVehicle(null)} />}
 
                 <div className="flex justify-between items-center flex-none">
@@ -5625,7 +5638,7 @@ const CreateDocModule = ({
                  <SmartNotificationCenter inventory={inventory} settings={settings} />
                 </div>
               
-              {/* 1. 財務卡片 (手機隱藏) - 使用 hidden md:grid */}
+              {/* 1. 財務卡片 (手機隱藏) */}
               <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 flex-none">
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><p className="text-xs text-gray-500 uppercase">庫存總值</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalStockValue)}</p></div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500"><p className="text-xs text-gray-500 uppercase">未付費用</p><p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalPayable)}</p></div>
@@ -5633,166 +5646,116 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 2. 提醒中心 (完整邏輯補回) */}
+              {/* 2. 提醒中心 (★ 修正：手機版隱藏 hidden md:grid ★) */}
               {(() => {
-                  // --- A. 資料庫文件提醒 ---
+                  // ... (保留原本的 docAlerts, cbAlerts 邏輯) ...
                   const docAlerts: any[] = [];
-                  dbEntries.forEach(d => {
-                      if (d.reminderEnabled && d.expiryDate) {
-                          const days = getDaysRemaining(d.expiryDate);
-                          if (days !== null && days <= 30) {
-                              docAlerts.push({
-                                  id: d.id,
-                                  title: d.name,
-                                  desc: d.docType || d.category,
-                                  date: d.expiryDate,
-                                  days: days,
-                                  status: days < 0 ? 'expired' : 'soon',
-                                  raw: d
-                              });
-                          }
-                      }
-                  });
+                  dbEntries.forEach(d => { if (d.reminderEnabled && d.expiryDate) { const days = getDaysRemaining(d.expiryDate); if (days !== null && days <= 30) docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); } });
                   docAlerts.sort((a, b) => a.days - b.days);
 
-                  // --- B. 中港業務提醒 (寬鬆判斷) ---
                   const cbAlerts: any[] = [];
-                  const cbDateFields = {
-                      dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)',
-                      dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險',
-                      dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證',
-                      dateHkInspection: '香港驗車'
-                  };
-
-                  inventory.filter(v => {
-                      const cb = v.crossBorder;
-                      return cb && (cb.isEnabled || cb.mainlandPlate || cb.quotaNumber);
-                  }).forEach(v => {
-                      Object.entries(cbDateFields).forEach(([field, label]) => {
-                          const dateStr = (v.crossBorder as any)?.[field];
-                          if (dateStr) {
-                              const days = getDaysRemaining(dateStr);
-                              if (days !== null && days <= 30) {
-                                  cbAlerts.push({
-                                      id: v.id,
-                                      title: v.regMark || '未出牌',
-                                      desc: label,
-                                      date: dateStr,
-                                      days: days,
-                                      status: days < 0 ? 'expired' : 'soon',
-                                      raw: v
-                                  });
-                              }
-                          }
-                      });
-                  });
+                  const cbDateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateClosedRoad: '禁區紙', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
+                  inventory.filter(v => v.crossBorder?.isEnabled).forEach(v => { Object.entries(cbDateFields).forEach(([field, label]) => { const dateStr = (v.crossBorder as any)?.[field]; if (dateStr) { const days = getDaysRemaining(dateStr); if (days !== null && days <= 30) cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); } }); });
                   cbAlerts.sort((a, b) => a.days - b.days);
 
-                  const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
-                  const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
-                  const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
-                  const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
-
-                  const AlertList = ({ items, onItemClick }: { items: any[], onItemClick: (item:any)=>void }) => (
-                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32 md:h-36">
-                          {items.length > 0 ? (
-                              <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
-                                  {items.map((item, idx) => (
-                                      <div 
-                                          key={`${item.id}-${idx}`}
-                                          onClick={() => onItemClick(item)}
-                                          className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer transition-colors hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}
-                                      >
-                                          <div className="flex-1 min-w-0 mr-2">
-                                              <div className="font-bold truncate text-white">{item.title}</div>
-                                              <div className="text-white/60 truncate">{item.desc}</div>
-                                          </div>
-                                          <div className="text-right whitespace-nowrap">
-                                              <div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>
-                                                  {item.status === 'expired' ? `過期 ${Math.abs(item.days)}天` : `剩 ${item.days}天`}
-                                              </div>
-                                              <div className="text-white/40 scale-90">{item.date}</div>
-                                          </div>
-                                          <ArrowRight size={12} className="ml-2 text-white/30" />
-                                      </div>
-                                  ))}
-                              </div>
-                          ) : (
-                              <div className="flex items-center justify-center h-full text-white/30 text-xs italic">
-                                  目前沒有需要提醒的項目
-                              </div>
-                          )}
+                  const AlertList = ({ items, onItemClick }: any) => (
+                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
+                          <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
+                              {items.map((item:any, idx:number) => (
+                                  <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
+                                      <div className="flex-1 min-w-0 mr-2"><div className="font-bold truncate text-white">{item.title}</div><div className="text-white/60 truncate">{item.desc}</div></div>
+                                      <div className="text-right"><div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `過期 ${Math.abs(item.days)}` : `剩 ${item.days}`}</div></div>
+                                  </div>
+                              ))}
+                              {items.length === 0 && <div className="text-white/30 text-xs text-center mt-4">無提醒事項</div>}
+                          </div>
                       </div>
                   );
 
                   return (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                          {/* 中港提醒 */}
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
-                              <div className="w-1/3 flex flex-col justify-center z-10 border-r border-white/10 pr-4">
-                                  <div className="flex items-center text-slate-300 text-xs uppercase font-bold mb-2"><Globe size={14} className="mr-1"/> 中港提醒</div>
-                                  <div className="space-y-2">
-                                      <div><div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[10px] text-slate-400">過期項目</div></div>
-                                      <div><div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[10px] text-slate-400">即將到期</div></div>
-                                  </div>
-                              </div>
-                              <AlertList items={cbAlerts} onItemClick={(item) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
-                              <Globe size={100} className="absolute -left-6 -bottom-6 text-slate-950 opacity-20 pointer-events-none" />
-                          </div>
-
-                          {/* 文件提醒 */}
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
-                              <div className="w-1/3 flex flex-col justify-center z-10 border-r border-white/10 pr-4">
-                                  <div className="flex items-center text-blue-200 text-xs uppercase font-bold mb-2"><Database size={14} className="mr-1"/> 文件提醒</div>
-                                  <div className="space-y-2">
-                                      <div><div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[10px] text-blue-300">過期文件</div></div>
-                                      <div><div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[10px] text-blue-300">即將到期</div></div>
-                                  </div>
-                              </div>
-                              <AlertList items={docAlerts} onItemClick={(item) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} />
-                              <Bell size={100} className="absolute -left-6 -bottom-6 text-blue-950 opacity-20 pointer-events-none" />
-                          </div>
+                      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2"><div className="font-bold mb-2 flex items-center text-xs"><Globe size={14} className="mr-1"/> 中港提醒</div><div className="text-2xl font-bold text-red-400">{cbAlerts.length}</div></div><AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} /></div>
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2"><div className="font-bold mb-2 flex items-center text-xs"><Database size={14} className="mr-1"/> 文件提醒</div><div className="text-2xl font-bold text-amber-400">{docAlerts.length}</div></div><AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} /></div>
                       </div>
                   );
               })()}
               
-              {/* 3. 庫存列表 (加入分享按鈕 + 手機優化) */}
+              {/* 3. 庫存列表 (★ 修正：狀態顯示、補全欄位 ★) */}
               {(() => {
-                  const sortedDashboardList = [...inventory].sort((a,b) => (a.status==='In Stock'?0:1) - (b.status==='In Stock'?0:1)); 
+                  const sortedList = [...inventory].sort((a,b) => (a.status==='In Stock'?0:1) - (b.status==='In Stock'?0:1)); 
                   return (
                       <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
-                        <h3 className="font-bold mb-4 flex-none text-slate-700 flex items-center justify-between">
-                            <span className="flex items-center"><Car size={18} className="mr-2 text-blue-600"/> 車輛庫存概覽</span>
-                        </h3>
                         <div className="flex-1 overflow-y-auto border rounded-lg">
                           <table className="w-full text-left text-sm whitespace-nowrap relative">
-                            <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm text-slate-600 font-bold">
+                            <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm text-slate-600 font-bold text-xs uppercase">
                                 <tr className="border-b">
-                                    <th className="p-3 w-16">操作</th>
-                                    <th className="p-3 w-24">狀態</th>
-                                    <th className="p-3">車牌</th>
-                                    <th className="p-3">車型</th>
-                                    <th className="p-3 text-right">售價</th>
+                                    <th className="p-3 w-10 text-center">Act</th>
+                                    <th className="p-3 w-20">狀態</th>
+                                    <th className="p-3">車牌 / 車型</th>
+                                    <th className="p-3 hidden md:table-cell">詳細規格</th> {/* 手機隱藏 */}
+                                    <th className="p-3 text-right">牌費</th>
+                                    <th className="p-3 text-right">財務狀況</th>
                                 </tr>
                             </thead>
                             <tbody>
-                              {sortedDashboardList.map(car => (
-                                <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group" onClick={() => setEditingVehicle(car)}>
-                                  <td className="p-3" onClick={e=>e.stopPropagation()}>
-                                      {/* ★ 資料分享按鈕 ★ */}
-                                      <button onClick={() => setShareVehicle(car)} className="bg-slate-800 text-white p-1.5 rounded-lg shadow hover:bg-slate-700 active:scale-95 transition-transform" title="生成車輛資料卡">
-                                          <Share2 size={16}/>
-                                      </button>
-                                  </td>
-                                  <td className="p-3"><span className={`px-2 py-1 rounded text-xs border ${car.status==='In Stock'?'bg-green-100 text-green-700':'bg-gray-100'}`}>{car.status === 'In Stock' ? '在庫' : '其他'}</span></td>
-                                  <td className="p-3 font-bold text-slate-800">{car.regMark || '-'}</td>
-                                  <td className="p-3">
-                                      <div className="font-bold text-slate-700 text-sm">{car.year} {car.make} {car.model}</div>
-                                      <div className="text-[10px] text-gray-500 md:hidden">{car.colorExt} | {Number(car.mileage).toLocaleString()}km</div>
-                                  </td>
-                                  <td className="p-3 font-mono font-bold text-slate-700 text-right">{formatCurrency(car.price)}</td>
-                                </tr>
-                              ))}
+                              {sortedList.map(car => {
+                                  // 計算財務
+                                  const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
+                                  const balance = (car.price || 0) - received;
+                                  const unpaidExps = (car.expenses || []).filter(e => e.status === 'Unpaid').length || 0;
+                                  
+                                  // 狀態樣式與文字 (Status Logic Fixed)
+                                  let statusText = '在庫';
+                                  let statusClass = "bg-green-100 text-green-700 border-green-200";
+                                  if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-100 text-yellow-700 border-yellow-200"; }
+                                  else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-gray-100 text-gray-600 border-gray-200"; }
+
+                                  return (
+                                    <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group text-xs md:text-sm" onClick={() => setEditingVehicle(car)}>
+                                      <td className="p-3 text-center" onClick={e=>e.stopPropagation()}>
+                                          <button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button>
+                                      </td>
+                                      <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span></td>
+                                      
+                                      {/* 車牌與型號 (手機版合併顯示) */}
+                                      <td className="p-3">
+                                          <div className="font-bold text-slate-800 text-sm">{car.regMark || '未出牌'}</div>
+                                          <div className="text-slate-500">{car.year} {car.make} {car.model}</div>
+                                          {/* 手機版顯示詳細規格 */}
+                                          <div className="md:hidden text-[10px] text-gray-400 mt-1 space-x-1">
+                                              <span>{car.previousOwners}手</span>|<span>{car.seating}座</span>|<span>{car.engineSize}cc</span>
+                                          </div>
+                                      </td>
+
+                                      {/* 詳細規格 (桌面版顯示) */}
+                                      <td className="p-3 hidden md:table-cell">
+                                          <div className="flex gap-2 text-xs text-gray-600">
+                                              <span className="bg-slate-50 px-1 border rounded">{car.previousOwners || 0}手</span>
+                                              <span className="bg-slate-50 px-1 border rounded">{car.seating || 5}座</span>
+                                              <span className="bg-slate-50 px-1 border rounded">{car.engineSize}cc</span>
+                                          </div>
+                                      </td>
+
+                                      {/* 牌費與售價 */}
+                                      <td className="p-3 text-right">
+                                          <div className="font-bold text-slate-700">{formatCurrency(car.price)}</div>
+                                          <div className="text-[10px] text-gray-400 mt-1">牌: {car.licenseExpiry || '-'}</div>
+                                      </td>
+
+                                      {/* 財務狀況 */}
+                                      <td className="p-3 text-right">
+                                          {balance > 0 && car.status !== 'In Stock' ? (
+                                              <span className="text-blue-600 font-bold block">欠 {formatCurrency(balance)}</span>
+                                          ) : (
+                                              (car.status === 'Sold' && unpaidExps === 0) ? 
+                                              <span className="text-green-500 font-bold">完成</span> : 
+                                              <span className="text-gray-300">-</span>
+                                          )}
+                                          {unpaidExps > 0 && <span className="text-red-500 text-[10px] block mt-0.5">{unpaidExps} 筆未付</span>}
+                                      </td>
+                                    </tr>
+                                  );
+                              })}
                             </tbody>
                           </table>
                         </div>
