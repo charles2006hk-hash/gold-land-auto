@@ -3317,6 +3317,22 @@ useEffect(() => {
       }
   };
 
+// --- 核心功能：更新單一車輛資料 (通用函數) ---
+    const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
+        if (!db || !appId) return;
+        try {
+            // 1. 更新資料庫
+            const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', id);
+            await setDoc(docRef, updates, { merge: true });
+            
+            // 2. 更新本地狀態 (讓畫面即時反應)
+            setInventory(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
+        } catch (error) {
+            console.error("Update Vehicle Error:", error);
+            alert("資料更新失敗，請檢查網路連線。");
+        }
+    };
+
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!db || !staffId) return;
