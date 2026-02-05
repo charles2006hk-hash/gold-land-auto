@@ -3157,13 +3157,16 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
+  // -------------------------------------------------------------
+  // 2. 讀取系統設定 (修正版：加入 db! 解決 TypeScript 報錯)
+  // -------------------------------------------------------------
   useEffect(() => {
       if (!db || !appId) return;
 
       const fetchSettings = async () => {
           try {
-              // 注意：路徑是 system/settings，跟上面的 users 不一樣
-              const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+              // ★★★ 修正點：在 db 後面加上 !，在 appId 後面也加上 ! ★★★
+              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
@@ -3175,6 +3178,7 @@ export default function GoldLandAutoDMS() {
                   }));
                   console.log("✅ 成功載入系統設定");
               } else {
+                  // 如果資料庫完全沒設定 (第一次使用)，則寫入預設值
                   await setDoc(docRef, defaultSettings);
                   console.log("⚠️ 無設定檔，已寫入預設值");
               }
