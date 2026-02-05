@@ -2851,7 +2851,7 @@ const SettingsManager = ({
 }: { 
     settings: SystemSettings, setSettings: any, db: any, staffId: string, appId: string, inventory: Vehicle[], 
     updateSettings: (k: keyof SystemSettings, v: any) => void,
-    addSystemLog: (action: string, detail: string) => void // ★ 新增日誌函數
+    addSystemLog: (action: string, detail: string) => void // ★ 新增日誌函數接收
 }) => {
     
     const [activeTab, setActiveTab] = useState('general');
@@ -2888,13 +2888,13 @@ const SettingsManager = ({
     const [selectedDbCat, setSelectedDbCat] = useState('Person');
     const [newDocType, setNewDocType] = useState('');
 
-    // ★★★ 7. System Logs State ★★★
+    // ★★★ 7. System Logs State (日誌狀態) ★★★
     const [logs, setLogs] = useState<any[]>([]);
 
-    // --- Logic: Logs ---
+    // --- Logic: Logs (讀取日誌) ---
     useEffect(() => {
         if (activeTab === 'logs' && db) {
-            const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), orderBy('timestamp', 'desc')); // limit(50)
+            const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), orderBy('timestamp', 'desc')); 
             const unsub = onSnapshot(q, (snap) => {
                 const list: any[] = [];
                 snap.forEach(d => list.push({ id: d.id, ...d.data() }));
@@ -2937,7 +2937,7 @@ const SettingsManager = ({
         const l = [...systemUsers, newUser]; 
         setSystemUsers(l); 
         updateUsersDb(l);
-        addSystemLog('User Created', `Created user: ${newUserEmail}`);
+        if(addSystemLog) addSystemLog('User Created', `Created user: ${newUserEmail}`);
         setNewUserEmail(''); 
         setNewUserPassword('');
         alert(`用戶 ${newUserEmail} 已新增`);
@@ -2948,7 +2948,7 @@ const SettingsManager = ({
             const l = systemUsers.filter(u => u.email !== email); 
             setSystemUsers(l); 
             updateUsersDb(l);
-            addSystemLog('User Deleted', `Deleted user: ${email}`);
+            if(addSystemLog) addSystemLog('User Deleted', `Deleted user: ${email}`);
         } 
     };
 
@@ -2958,15 +2958,14 @@ const SettingsManager = ({
             const l = systemUsers.map(u => u.email === email ? { ...u, password: newPw } : u);
             setSystemUsers(l);
             updateUsersDb(l);
-            addSystemLog('Password Reset', `Reset password for: ${email}`);
+            if(addSystemLog) addSystemLog('Password Reset', `Reset password for: ${email}`);
             alert("密碼已更新");
         }
     };
 
     const toggleUserPermission = (email: string, modKey: string) => { const l = systemUsers.map(u => u.email === email ? { ...u, modules: u.modules.includes(modKey) ? u.modules.filter(m => m !== modKey) : [...u.modules, modKey] } : u); setSystemUsers(l); updateUsersDb(l); };
 
-    // ... (其他 Logic 保持不變: General, Expenses, CB, Backup ...) ...
-    // 為節省篇幅，保留原有的: addItem, removeItem, addModel, removeModel, handleExpenseSubmit, handleCompanySubmit, handlePayTypeSubmit, handleCbSubmit, handleInstSubmit, handleAddDocType, handleRemoveDocType, handleSaveReminders, handleSaveBackupConfig, handleCloudBackup, handleExport, handleImport
+    // ... (保留原有的 Helper Functions) ...
     const addItem = (key: keyof SystemSettings, val: string) => { if(val) updateSettings(key, [...(settings[key] as string[] || []), val]); };
     const removeItem = (key: keyof SystemSettings, idx: number) => { const arr = [...(settings[key] as any[] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
     const addModel = () => { if (selectedMakeForModel && newModelName) { updateSettings('models', { ...settings.models, [selectedMakeForModel]: [...(settings.models[selectedMakeForModel] || []), newModelName] }); setNewModelName(''); } };
@@ -3014,10 +3013,9 @@ const SettingsManager = ({
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
 
-                {/* 其他 Tab (General, Database, Reminders, Vehicle, Expenses, CrossBorder, Backup) 保持不變，為節省篇幅省略，請保留原代碼 */}
                 {activeTab === 'general' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">顏色選項</h3><div className="flex gap-2 mt-2"><input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/><button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-3">{settings.colors.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>))}</div></div> )}
                 {activeTab === 'database_config' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">資料庫分類</h3><div className="bg-blue-50 p-4 rounded-lg mb-4 flex gap-2">{['Person', 'Company', 'Vehicle', 'CrossBorder'].map(cat => (<button key={cat} onClick={() => setSelectedDbCat(cat)} className={`px-4 py-2 rounded-lg text-sm font-bold border ${selectedDbCat === cat ? 'bg-blue-600 text-white' : 'bg-white'}`}>{cat}</button>))}</div><div className="flex gap-2 mb-4"><input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder="新類型" /><button onClick={handleAddDocType} className="bg-slate-800 text-white px-4 py-2 rounded text-sm">新增</button></div><div className="flex flex-wrap gap-2">{(settings.dbDocTypes?.[selectedDbCat] || []).map((type, idx) => (<span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border">{type}<button onClick={() => handleRemoveDocType(idx)} className="text-slate-400 hover:text-red-500"><X size={14}/></button></span>))}</div></div> )}
-                {activeTab === 'reminders' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">系統提醒</h3><div className="bg-amber-50 p-4 rounded-lg mb-4"><label className="flex items-center"><input type="checkbox" checked={reminders.isEnabled} onChange={e=>setReminders({...reminders,isEnabled:e.target.checked})} className="mr-2"/> 開啟提醒</label></div><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold">儲存</button></div> )}
+                {activeTab === 'reminders' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">系統提醒</h3><div className="bg-amber-50 p-4 rounded-lg mb-4"><label className="flex items-center"><input type="checkbox" checked={reminders.isEnabled} onChange={e=>setReminders({...reminders,isEnabled:e.target.checked})} className="mr-2"/> 開啟提醒</label></div><div className="grid grid-cols-2 gap-6 mb-6"><div><label className="block text-xs font-bold text-slate-500 mb-1">提前通知天數</label><input type="number" value={reminders.daysBefore} onChange={e => setReminders({...reminders, daysBefore: Number(e.target.value)})} className="w-full p-2 border rounded text-sm"/></div><div><label className="block text-xs font-bold text-slate-500 mb-1">每日檢查時間</label><input type="time" value={reminders.time} onChange={e => setReminders({...reminders, time: e.target.value})} className="w-full p-2 border rounded text-sm"/></div></div><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold">儲存</button></div> )}
                 {activeTab === 'vehicle' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Make</h3>{/* ... */}</div></div> )}
                 {activeTab === 'expenses' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Payment Types</h3><div className="flex gap-2"><input value={payTypeInput} onChange={e=>setPayTypeInput(e.target.value)} className="border p-1 text-sm"/><button onClick={handlePayTypeSubmit} className="bg-slate-800 text-white px-3 text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-2">{(settings.paymentTypes||[]).map((pt,i)=>(<span key={i} className="bg-slate-100 px-2 text-xs border rounded">{pt} <button onClick={()=>{const l=[...settings.paymentTypes];l.splice(i,1);updateSettings('paymentTypes',l)}} className="text-red-500">X</button></span>))}</div></div></div> )}
                 {activeTab === 'crossborder' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>中港業務設定</h3>{/* ... */}</div> )}
@@ -3110,6 +3108,18 @@ export default function GoldLandAutoDMS() {
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
+  const addSystemLog = async (action: string, detail: string) => {
+    if (!db || !appId) return;
+    try {
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
+            user: staffId || 'System',
+            action: action,
+            detail: detail,
+            timestamp: serverTimestamp()
+        });
+    } catch (e) { console.error("Log error:", e); }
+    };
+
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -3121,84 +3131,6 @@ export default function GoldLandAutoDMS() {
   // ★★★ 新增：將資料庫編輯狀態提升到這裡，讓 Dashboard 也能控制 ★★★
   const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
   const [isDbEditing, setIsDbEditing] = useState(false);
-
-  const [staffId, setStaffId] = useState<string | null>(null);
-
-  // ★★★ 1. 定義日誌寫入函數 ★★★
-  const addSystemLog = async (action: string, detail: string) => {
-      if (!db || !appId) return;
-      try {
-          // 寫入 CHARLES_data/system_logs
-          await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
-              user: staffId || 'System',
-              action: action,
-              detail: detail,
-              timestamp: serverTimestamp()
-          });
-      } catch (e) { console.error("Log error:", e); }
-  };
-
-  // ... (其他 useEffect) ...
-
-  // ★★★ 2. 登入時記錄日誌 ★★★
-  if (!staffId) {
-      return (
-          <StaffLoginScreen 
-              systemUsers={systemUsers}
-              onLogin={(userObj: any) => {
-                  const uid = userObj.email || userObj;
-                  setStaffId(uid);
-                  setCurrentUser(userObj);
-                  
-                  // 這裡呼叫日誌 (注意：此時 staffId 尚未更新，所以手動傳 uid)
-                  if (db) addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
-                      user: uid, action: 'Login', detail: 'User logged in successfully', timestamp: serverTimestamp()
-                  });
-
-                  // ... (原本的權限跳轉邏輯) ...
-              }} 
-          />
-      );
-  }
-
-  // ... (saveVehicle 函數修改) ...
-  const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
-      // ... (原本的邏輯) ...
-      // 在成功 alert 前加入：
-      addSystemLog(editingVehicle?.id ? 'Update Vehicle' : 'Create Vehicle', `RegMark: ${vData.regMark}`);
-      // ...
-  };
-
-  const deleteVehicle = async (id: string) => {
-      // ...
-      if (confirm('...')) {
-          await deleteDoc(...);
-          addSystemLog('Delete Vehicle', `Vehicle ID: ${id}`); // ★ 加入日誌
-      }
-  };
-
-  // ...
-
-  return (
-      // ...
-          {/* 傳遞 addSystemLog 給子組件 */}
-          {(activeTab === 'inventory_add' || editingVehicle) && (
-              <VehicleFormModal 
-                  // ... 其他 props ...
-                  addSystemLog={addSystemLog} // ★ 雖然 Modal 內部暫時沒用到，但為了擴充性可傳
-              />
-          )}
-
-          {activeTab === 'settings' && (
-              <SettingsManager 
-                  // ... 其他 props ...
-                  addSystemLog={addSystemLog} // ★ 務必傳入
-              />
-          )}
-      // ...
-  );
-}
-
 
   // Cross Border UI State
   const [activeCbVehicleId, setActiveCbVehicleId] = useState<string | null>(null);
@@ -3408,24 +3340,29 @@ useEffect(() => {
     }, [staffId]);
 
   if (!staffId) {
-      return (
-          <StaffLoginScreen 
-              systemUsers={systemUsers}
-              onLogin={(userObj: any) => {
-                  // userObj 是從 LoginScreen 驗證成功後傳回來的物件
-                  setStaffId(userObj.email);
-                  setCurrentUser(userObj); 
-                  
-                  // 權限跳轉邏輯：如果沒權限看儀表板，跳到他能看的第一個頁面
-                  if (userObj.modules && !userObj.modules.includes('all') && !userObj.modules.includes('dashboard') && userObj.modules.length > 0) {
-                      const firstModule = userObj.modules[0];
-                      const map: Record<string,any> = { 'inventory': 'inventory', 'business': 'business', 'database': 'database', 'settings': 'settings' };
-                      setActiveTab(map[firstModule] || 'inventory');
-                  }
-              }} 
-          />
-      );
-  }
+    return (
+        <StaffLoginScreen 
+            systemUsers={systemUsers}
+            onLogin={(userObj: any) => {
+                const uid = userObj.email || userObj; // 確保取得 ID
+                setStaffId(uid);
+                setCurrentUser(userObj); 
+
+                // ★★★ 2. 登入時記錄日誌 ★★★
+                if (db) addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
+                    user: uid, action: 'Login', detail: 'User logged in successfully', timestamp: serverTimestamp()
+                });
+
+                // (原本的權限跳轉邏輯保持不變)
+                if (userObj.modules && !userObj.modules.includes('all') && !userObj.modules.includes('dashboard') && userObj.modules.length > 0) {
+                    const firstModule = userObj.modules[0];
+                    const map: Record<string,any> = { 'inventory': 'inventory', 'business': 'business', 'database': 'database', 'settings': 'settings' };
+                    setActiveTab(map[firstModule] || 'inventory');
+                }
+            }} 
+        />
+    );
+}
 
 
 
@@ -3579,18 +3516,20 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     };
 
     try {
-      if (editingVehicle && editingVehicle.id) {
-        await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
-        alert('車輛資料已更新');
-      } else {
-        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
-          ...vData,
-          createdAt: serverTimestamp(),
-          expenses: [],
-          payments: []
-        });
-        alert('新車輛已入庫');
-      }
+        if (editingVehicle && editingVehicle.id) {
+            await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
+            addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`); // ★ 加入日誌
+            alert('車輛資料已更新');
+        } else {
+            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
+            ...vData,
+            createdAt: serverTimestamp(),
+            expenses: [],
+            payments: []
+            });
+            addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`); // ★ 加入日誌
+            alert('新車輛已入庫');
+        }
 
       // ★★★ 資料連動邏輯：自動建立客戶與司機檔案 ★★★
       
@@ -3627,6 +3566,7 @@ const deleteVehicle = async (id: string) => {
     if (confirm('確定刪除？資料將無法復原。')) {
       const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
       await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', id));
+      addSystemLog('Delete Vehicle', `Deleted Vehicle ID: ${id}`);
     }
   };
 
@@ -4063,7 +4003,7 @@ const DatabaseSelector = ({
 };
 
   // 1. Vehicle Form Modal (v9.9: 路徑修正為 CHARLES_data + 完整功能)
-const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense }: any) => {
+const VehicleFormModal = ({ db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense, addSystemLog }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
     const v = editingVehicle || {} as Partial<Vehicle>;
@@ -5585,6 +5525,7 @@ const CreateDocModule = ({
                   deletePayment={deletePayment}
                   addExpense={addExpense}
                   deleteExpense={deleteExpense}
+                  addSystemLog={addSystemLog}
               />
           )}
 
@@ -5972,6 +5913,7 @@ const CreateDocModule = ({
                       appId={appId}
                       inventory={inventory}
                       updateSettings={updateSettings}
+                      addSystemLog={addSystemLog}
                   />
               </div>
           )}
