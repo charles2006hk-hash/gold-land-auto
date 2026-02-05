@@ -3044,7 +3044,49 @@ export default function GoldLandAutoDMS() {
 
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
-  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+  // 1. 定義預設設定 (這是當資料庫沒資料時的備案，也是完整的預設結構)
+    const defaultSettings: SystemSettings = {
+        makes: ['Toyota', 'Honda', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Nissan', 'Mazda', 'Porsche', 'Tesla'],
+        models: { 
+            'Toyota': ['Alphard', 'Vellfire', 'Noah', 'Sienta', 'Corolla', 'Camry', 'Hiace'], 
+            'Honda': ['Stepwgn', 'Freed', 'Jazz', 'Odyssey', 'Civic'], 
+            'BMW': ['X5', 'X3', '520i', '320i', '118i'], 
+            'Mercedes-Benz': ['E200', 'C200', 'S500', 'V250', 'A200', 'GLC'],
+            'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7'],
+            'Lexus': ['RX', 'NX', 'UX', 'ES'],
+            'Porsche': ['Cayenne', 'Macan', 'Panamera', '911'],
+            'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X']
+        },
+        colors: ['White', 'Black', 'Silver', 'Grey', 'Blue', 'Red', 'Pearl White', 'Metallic Grey'],
+        expenseTypes: [
+            { name: '維修費', defaultCompany: '捷信車房', defaultAmount: 0, defaultDays: '0' },
+            { name: '美容費', defaultCompany: '3M美容中心', defaultAmount: 0, defaultDays: '0' },
+            { name: '驗車費', defaultCompany: '政府驗車中心', defaultAmount: 580, defaultDays: '0' },
+            { name: '牌費', defaultCompany: '運輸署', defaultAmount: 0, defaultDays: '0' },
+            { name: '保險費', defaultCompany: '安盛保險', defaultAmount: 0, defaultDays: '0' },
+            { name: '入油', defaultCompany: 'Shell', defaultAmount: 0, defaultDays: '0' },
+            { name: '泊車', defaultCompany: '領展', defaultAmount: 0, defaultDays: '0' }
+        ],
+        expenseCompanies: ['捷信車房', '3M美容中心', '政府驗車中心', '運輸署', '安盛保險', '中石化', 'Shell', 'Caltex', '領展'],
+        paymentTypes: ['Deposit', 'Balance', 'Full Payment', 'Installment', 'Service Fee', 'Commission'],
+        serviceItems: ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢'],
+        cbItems: [
+            { name: '代辦驗車', defaultInst: '中檢公司', defaultFee: 500, defaultDays: '7' },
+            { name: '批文延期', defaultInst: '廣東省公安廳', defaultFee: 0, defaultDays: '14' }
+        ],
+        cbInstitutions: ['中檢公司', '廣東省公安廳', '海關', '邊檢', '保險公司'],
+        dbDocTypes: {
+            'Person': ['身份證', '回鄉證', '駕駛執照', '住址證明'],
+            'Company': ['商業登記證 (BR)', '公司註冊證 (CI)', '周年申報表 (NAR1)'],
+            'Vehicle': ['牌簿 (VRD)', '行車證', '保險單', '驗車紙'],
+            'CrossBorder': ['批文卡', '禁區紙', '行駛證', '海關本']
+        },
+        reminders: { isEnabled: true, daysBefore: 30, time: '10:00', categories: { license: true, insurance: true, crossBorder: true, installments: true } },
+        backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
+    };
+
+    // 2. 初始化 State (使用上面的 defaultSettings 作為初始值)
+    const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
   const [dbEntries, setDbEntries] = useState<DatabaseEntry[]>([]);
   // UI States
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
@@ -3109,6 +3151,34 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
+  useEffect(() => {
+      if (!db || !appId) return;
+
+      const fetchSettings = async () => {
+          try {
+              // 注意：路徑是 system/settings，跟上面的 users 不一樣
+              const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+              const docSnap = await getDoc(docRef);
+
+              if (docSnap.exists()) {
+                  const savedSettings = docSnap.data() as SystemSettings;
+                  // 合併預設值與資料庫設定
+                  setSettings(prev => ({
+                      ...defaultSettings, 
+                      ...savedSettings    
+                  }));
+                  console.log("✅ 成功載入系統設定");
+              } else {
+                  await setDoc(docRef, defaultSettings);
+                  console.log("⚠️ 無設定檔，已寫入預設值");
+              }
+          } catch (error) {
+              console.error("❌ 讀取設定失敗:", error);
+          }
+      };
+
+      fetchSettings();
+  }, [db, appId]);
 
   // --- Auth & Data Loading ---
   useEffect(() => {
@@ -3621,21 +3691,19 @@ const deleteVehicle = async (id: string) => {
       }
   };
 
-  // 更新系統設定 (v2.0 通用版：直接儲存新值，支援物件與陣列)
+  // 更新設定並同步到資料庫
     const updateSettings = async (key: keyof SystemSettings, value: any) => {
-        // 1. 更新本地狀態 (讓畫面即時反應)
-        setSettings(prev => ({ ...prev, [key]: value }));
-
-        // 2. 寫入 Firebase
+        const newSettings = { ...settings, [key]: value };
+        setSettings(newSettings); // 更新畫面
+        
+        // ★ 寫入資料庫 ★
         if (db && appId) {
             try {
-                const docRef = doc(db, 'artifacts', appId, 'system', 'settings');
-                // 使用 merge: true 確保只更新變動的欄位，不會覆蓋其他設定
-                await setDoc(docRef, { [key]: value }, { merge: true }); 
-                console.log(`Settings updated: ${key}`, value);
+                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+                await setDoc(docRef, newSettings, { merge: true });
+                // console.log(`Setting [${key}] saved.`);
             } catch (err) {
-                console.error("Settings update failed:", err);
-                alert("儲存設定失敗，請檢查網路連線");
+                console.error("Save setting failed:", err);
             }
         }
     };
