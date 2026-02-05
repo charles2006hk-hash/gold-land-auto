@@ -5646,17 +5646,42 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 2. 提醒中心 (★ 修正：手機版隱藏 hidden md:grid ★) */}
+              {/* 2. 提醒中心 (v10.7: 修復「即將到期」數字顯示) */}
               {(() => {
-                  // ... (保留原本的 docAlerts, cbAlerts 邏輯) ...
+                  // --- A. 資料庫文件提醒 ---
                   const docAlerts: any[] = [];
-                  dbEntries.forEach(d => { if (d.reminderEnabled && d.expiryDate) { const days = getDaysRemaining(d.expiryDate); if (days !== null && days <= 30) docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); } });
+                  dbEntries.forEach(d => { 
+                      if (d.reminderEnabled && d.expiryDate) { 
+                          const days = getDaysRemaining(d.expiryDate); 
+                          if (days !== null && days <= 30) {
+                              docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); 
+                          }
+                      } 
+                  });
                   docAlerts.sort((a, b) => a.days - b.days);
 
+                  // --- B. 中港業務提醒 ---
                   const cbAlerts: any[] = [];
                   const cbDateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateClosedRoad: '禁區紙', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
-                  inventory.filter(v => v.crossBorder?.isEnabled).forEach(v => { Object.entries(cbDateFields).forEach(([field, label]) => { const dateStr = (v.crossBorder as any)?.[field]; if (dateStr) { const days = getDaysRemaining(dateStr); if (days !== null && days <= 30) cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); } }); });
+                  inventory.filter(v => v.crossBorder?.isEnabled).forEach(v => { 
+                      Object.entries(cbDateFields).forEach(([field, label]) => { 
+                          const dateStr = (v.crossBorder as any)?.[field]; 
+                          if (dateStr) { 
+                              const days = getDaysRemaining(dateStr); 
+                              if (days !== null && days <= 30) {
+                                  cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); 
+                              }
+                          } 
+                      }); 
+                  });
                   cbAlerts.sort((a, b) => a.days - b.days);
+
+                  // ★★★ 關鍵修復：分開計算「過期」與「即將到期」 ★★★
+                  const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
+                  const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
+                  
+                  const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
+                  const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
                   const AlertList = ({ items, onItemClick }: any) => (
                       <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
@@ -5674,8 +5699,43 @@ const CreateDocModule = ({
 
                   return (
                       <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2"><div className="font-bold mb-2 flex items-center text-xs"><Globe size={14} className="mr-1"/> 中港提醒</div><div className="text-2xl font-bold text-red-400">{cbAlerts.length}</div></div><AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} /></div>
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2"><div className="font-bold mb-2 flex items-center text-xs"><Database size={14} className="mr-1"/> 文件提醒</div><div className="text-2xl font-bold text-amber-400">{docAlerts.length}</div></div><AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} /></div>
+                          {/* 中港提醒卡片 */}
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
+                              <div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-3 flex items-center text-xs text-slate-300"><Globe size={14} className="mr-1"/> 中港提醒</div>
+                                  <div className="space-y-3">
+                                      {/* ★★★ 這裡補回了兩個分開的數字 ★★★ */}
+                                      <div>
+                                          <div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div>
+                                          <div className="text-[10px] text-red-200/70">已過期</div>
+                                      </div>
+                                      <div>
+                                          <div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div>
+                                          <div className="text-[10px] text-amber-200/70">即將到期</div>
+                                      </div>
+                                  </div>
+                              </div>
+                              <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
+                          </div>
+
+                          {/* 文件提醒卡片 */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
+                              <div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-3 flex items-center text-xs text-blue-200"><Database size={14} className="mr-1"/> 文件提醒</div>
+                                  <div className="space-y-3">
+                                      {/* ★★★ 這裡補回了兩個分開的數字 ★★★ */}
+                                      <div>
+                                          <div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div>
+                                          <div className="text-[10px] text-red-200/70">已過期</div>
+                                      </div>
+                                      <div>
+                                          <div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div>
+                                          <div className="text-[10px] text-amber-200/70">即將到期</div>
+                                      </div>
+                                  </div>
+                              </div>
+                              <AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} />
+                          </div>
                       </div>
                   );
               })()}
