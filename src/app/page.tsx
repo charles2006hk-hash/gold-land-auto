@@ -4366,10 +4366,24 @@ const VehicleFormModal = ({
                                 <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</select></div>
                                 <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist></div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/></div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <div className="col-span-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Year</label>
+                                    <input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/>
+                                </div>
+                                <div className="col-span-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label>
+                                    <input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/>
+                                </div>
+                                <div className="col-span-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label>
+                                    <input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/>
+                                </div>
+                                {/* ★★★ 這裡就是補回的輸入框 ★★★ */}
+                                <div className="col-span-1 bg-red-50/50 rounded px-1">
+                                    <label className="text-[9px] text-red-400 font-bold uppercase">Lic. Expiry (牌費)</label>
+                                    <input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent border-b border-red-200 p-1 text-xs font-mono text-right text-red-700 outline-none"/>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3 pt-2">
                                 <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs" placeholder="外觀"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
