@@ -2407,7 +2407,7 @@ const CrossBorderView = ({
                 </div>
             )}
 
-            {/* Top Cards (3 Sec Ticker) */}
+            {/* Top Cards (Scrollable) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
                 {/* 1. 已過期卡片 */}
                 <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-4 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col transition-all group">
@@ -2417,12 +2417,12 @@ const CrossBorderView = ({
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{expiredItems.length} <span className="text-sm font-normal text-red-300/50">項</span></div>
                         </div>
                         <div className="flex gap-1">
-                            {/* ★★★ 提醒詳情按鈕 ★★★ */}
                             {expiredItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '已過期項目報表 (Expired Items)', type: 'expired', items: expiredItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
                             {expiredItems.length > 0 && (<button onClick={() => setShowExpired(!showExpired)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showExpired ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
                         </div>
                     </div>
-                    {expiredItems.length > 0 && showExpired && <TickerList items={expiredItems} type="expired" />}
+                    {/* ★★★ 修正這裡：改成 ScrollableList ★★★ */}
+                    {expiredItems.length > 0 && showExpired && <ScrollableList items={expiredItems} type="expired" />}
                     <AlertCircle className="absolute -right-6 -bottom-6 text-red-500/10" size={100} />
                 </div>
                 
@@ -2434,12 +2434,12 @@ const CrossBorderView = ({
                             <div className="text-3xl font-bold font-mono tracking-tight mt-1">{soonItems.length} <span className="text-sm font-normal text-amber-300/50">項</span></div>
                         </div>
                         <div className="flex gap-1">
-                             {/* ★★★ 提醒詳情按鈕 ★★★ */}
                             {soonItems.length > 0 && (<button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '即將到期報表 (Upcoming Items)', type: 'soon', items: soonItems }); }} className="p-1.5 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white" title="查看與列印詳情"><FileText size={18}/></button>)}
                             {soonItems.length > 0 && (<button onClick={() => setShowSoon(!showSoon)} className="p-1.5 hover:bg-white/10 rounded transition-colors">{showSoon ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>)}
                         </div>
                     </div>
-                    {soonItems.length > 0 && showSoon && <TickerList items={soonItems} type="soon" />}
+                    {/* ★★★ 修正這裡：改成 ScrollableList ★★★ */}
+                    {soonItems.length > 0 && showSoon && <ScrollableList items={soonItems} type="soon" />}
                     <Bell className="absolute -right-6 -bottom-6 text-amber-500/10" size={100} />
                 </div>
             </div>
