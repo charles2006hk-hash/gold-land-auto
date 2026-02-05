@@ -2015,7 +2015,7 @@ const CrossBorderView = ({
     soonItems.sort((a, b) => a.days - b.days);
 
     const filteredVehicles = cbVehicles.filter((v:any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
-    const activeCar = inventory.find(v => v.id === activeCbVehicleId) || filteredVehicles[0];
+    const activeCar = inventory.find((v: any) => v.id === activeCbVehicleId) || filteredVehicles[0];
 
     // 功能函數：轉收費
     const convertDateToTask = (dateKey: string, dateLabel: string, dateVal: string) => {
