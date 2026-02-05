@@ -3043,7 +3043,81 @@ const SettingsManager = ({
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
 
-                {activeTab === 'general' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">顏色選項</h3><div className="flex gap-2 mt-2"><input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/><button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-3">{settings.colors.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>))}</div></div> )}
+                {activeTab === 'general' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">顏色選項</h3><div className="flex gap-2 mt-2"><input id="newColor" className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="例如: 香檳金"/><button onClick={() => { const el = document.getElementById('newColor') as HTMLInputElement; addItem('colors', el.value); el.value=''; }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button></div><div className="flex flex-wrap gap-2 mt-3">{settings.colors.map((c, i) => (<span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('colors', i)}/></span>))}</div>
+                {activeTab === 'general' && (
+                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        {/* ... (這裡保留原本的顏色選項代碼，不要動它) ... */}
+                        <h3 className="font-bold text-slate-700 mb-4">顏色選項</h3>
+                        {/* ... 原本的顏色代碼結束 ... */}
+
+                        {/* ★★★ 新增：數據透視鏡 (放在一般設定的最下方) ★★★ */}
+                        <div className="mt-10 p-6 bg-slate-900 rounded-xl border-4 border-yellow-500 overflow-hidden shadow-2xl">
+                            <h3 className="text-xl font-bold text-yellow-400 mb-2 flex items-center">
+                                <Search size={24} className="mr-2"/> 數據透視鏡 (Raw Data Inspector)
+                            </h3>
+                            <p className="text-slate-400 text-xs mb-4">
+                                這裡直接讀取資料庫的原始狀態，不經過任何過濾。如果在這裡看得到資料，就代表<span className="text-white font-bold">資料絕對安全</span>，只是介面顯示設定的問題。
+                            </p>
+                            
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs font-mono">
+                                    <thead>
+                                        <tr className="border-b border-slate-700 text-slate-500">
+                                            <th className="p-2">車牌 (Reg Mark)</th>
+                                            <th className="p-2">啟用開關 (isEnabled)</th>
+                                            <th className="p-2">內地牌 (Mainland)</th>
+                                            <th className="p-2">指標號 (Quota)</th>
+                                            <th className="p-2">關鍵日期 (Raw Dates)</th>
+                                            <th className="p-2">口岸 (Ports)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800">
+                                        {inventory.map(v => {
+                                            const cb = v.crossBorder;
+                                            // 只列出「有點像中港車」的資料 (有開關、或有牌、或有指標、或有日期)
+                                            const hasAnyCbData = cb && (
+                                                cb.isEnabled !== undefined || 
+                                                cb.mainlandPlate || 
+                                                cb.quotaNumber || 
+                                                cb.dateHkInsurance ||
+                                                (cb.ports && cb.ports.length > 0)
+                                            );
+
+                                            if (!hasAnyCbData) return null;
+
+                                            return (
+                                                <tr key={v.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="p-2 font-bold text-white">{v.regMark}</td>
+                                                    <td className="p-2">
+                                                        {cb?.isEnabled ? (
+                                                            <span className="text-green-400 bg-green-900/30 px-1 rounded">TRUE (顯示)</span>
+                                                        ) : (
+                                                            <span className="text-red-400 bg-red-900/30 px-1 rounded font-bold">FALSE (被隱藏)</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-2 text-blue-300">{cb?.mainlandPlate || '-'}</td>
+                                                    <td className="p-2 text-purple-300">{cb?.quotaNumber || '-'}</td>
+                                                    <td className="p-2 text-gray-400 max-w-[200px] truncate" title={`保險:${cb?.dateHkInsurance} 牌費:${cb?.dateLicenseFee}`}>
+                                                        {cb?.dateHkInsurance ? `保:${cb.dateHkInsurance} ` : ''}
+                                                        {cb?.dateLicenseFee ? `牌:${cb.dateLicenseFee}` : ''}
+                                                    </td>
+                                                    <td className="p-2 text-yellow-200">
+                                                        {cb?.ports && cb.ports.length > 0 ? cb.ports.join(', ') : '-'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="mt-4 text-center">
+                                <p className="text-[10px] text-slate-500">共掃描到 {inventory.filter(v => v.crossBorder && (v.crossBorder.isEnabled !== undefined || v.crossBorder.mainlandPlate)).length} 筆潛在中港車輛數據</p>
+                            </div>
+                        </div>
+                        {/* ★★★ 結束 ★★★ */}
+
+                    </div>
+                )}</div> )}
                 {activeTab === 'database_config' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">資料庫分類</h3><div className="bg-blue-50 p-4 rounded-lg mb-4 flex gap-2">{['Person', 'Company', 'Vehicle', 'CrossBorder'].map(cat => (<button key={cat} onClick={() => setSelectedDbCat(cat)} className={`px-4 py-2 rounded-lg text-sm font-bold border ${selectedDbCat === cat ? 'bg-blue-600 text-white' : 'bg-white'}`}>{cat}</button>))}</div><div className="flex gap-2 mb-4"><input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder="新類型" /><button onClick={handleAddDocType} className="bg-slate-800 text-white px-4 py-2 rounded text-sm">新增</button></div><div className="flex flex-wrap gap-2">{(settings.dbDocTypes?.[selectedDbCat] || []).map((type, idx) => (<span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border">{type}<button onClick={() => handleRemoveDocType(idx)} className="text-slate-400 hover:text-red-500"><X size={14}/></button></span>))}</div></div> )}
                 {activeTab === 'reminders' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">系統提醒</h3><div className="bg-amber-50 p-4 rounded-lg mb-4"><label className="flex items-center"><input type="checkbox" checked={reminders.isEnabled} onChange={e=>setReminders({...reminders,isEnabled:e.target.checked})} className="mr-2"/> 開啟提醒</label></div><button onClick={handleSaveReminders} className="bg-amber-500 text-white px-6 py-2 rounded-lg font-bold">儲存</button></div> )}
                 {activeTab === 'vehicle' && ( <div className="space-y-6"><div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3>Make</h3>{/* ... */}</div></div> )}
