@@ -1938,7 +1938,7 @@ type CrossBorderViewProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 6. Cross Border Module (v10.2: 終極完整版 - 含手機優化/捲動/轉收費) ★★★
+// ★★★ 6. Cross Border Module (v10.4: TypeScript 嚴格模式修復版) ★★★
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
@@ -2015,6 +2015,8 @@ const CrossBorderView = ({
     soonItems.sort((a, b) => a.days - b.days);
 
     const filteredVehicles = cbVehicles.filter((v:any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
+    
+    // ★★★ 修正點 1: 加上 (v: any) ★★★
     const activeCar = inventory.find((v: any) => v.id === activeCbVehicleId) || filteredVehicles[0];
 
     // 功能函數：轉收費
@@ -2107,10 +2109,10 @@ const CrossBorderView = ({
                 </div>
             </div>
 
-            {/* Main Content: 左右佈局 */}
+            {/* Main Content */}
             <div className="flex flex-1 gap-4 overflow-hidden min-h-0 relative">
                 
-                {/* 左側：車輛列表 (手機詳情模式下隱藏) */}
+                {/* Left List */}
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden ${isMobileDetail ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-3 border-b bg-slate-50"><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌..." className="w-full px-2 py-1.5 text-xs border rounded"/></div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -2130,20 +2132,19 @@ const CrossBorderView = ({
                     </div>
                 </div>
 
-                {/* 右側：詳情面板 (手機詳情模式下全螢幕) */}
+                {/* Right Detail */}
                 <div className={`flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col ${isMobileDetail ? 'fixed inset-0 z-40 m-0 rounded-none' : 'hidden md:flex'}`}>
                     {activeCar ? (
                         <>
                             <div className="p-4 border-b bg-slate-50 flex justify-between items-center flex-none">
                                 <div className="flex items-center gap-2">
-                                    {/* 手機版返回按鈕 */}
                                     <button onClick={handleBackToList} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800"><ChevronLeft size={24}/></button>
                                     <div><h3 className="text-2xl font-bold font-mono">{activeCar.regMark}</h3><p className="text-xs text-slate-500">{activeCar.crossBorder?.mainlandPlate}</p></div>
                                 </div>
                                 <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 border rounded text-xs hover:bg-slate-50 flex items-center"><Edit size={12} className="mr-1"/> 編輯資料</button>
                             </div>
 
-                            {/* 日期卡片 (可橫向捲動) */}
+                            {/* 日期卡片 */}
                             <div className="p-4 border-b overflow-x-auto whitespace-nowrap flex gap-3 bg-slate-50/30 flex-none pb-2 scrollbar-hide">
                                 {Object.entries(dateFields).map(([key, label]) => {
                                     const dateVal = (activeCar.crossBorder as any)?.[key];
@@ -2171,9 +2172,11 @@ const CrossBorderView = ({
                                 <table className="w-full text-sm border-collapse">
                                     <thead className="bg-slate-50 font-bold text-xs sticky top-0"><tr><th className="p-2 text-left">日期</th><th className="p-2 text-left">項目</th><th className="p-2 text-right">費用</th><th className="p-2 text-center">狀態</th><th className="p-2 text-center">操作</th></tr></thead>
                                     <tbody className="divide-y">
-                                        {(activeCar.crossBorder?.tasks || []).map(task => {
+                                        {/* ★★★ 修正點 2: 加上 (task: any) ★★★ */}
+                                        {(activeCar.crossBorder?.tasks || []).map((task: any) => {
                                             const isEditing = editingTaskId === task.id;
-                                            const paid = (activeCar.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s:any,p:any)=>s+p.amount,0);
+                                            {/* ★★★ 修正點 3: 加上 (s:any, p:any) ★★★ */}
+                                            const paid = (activeCar.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:any,p:any)=>s+p.amount,0);
                                             const isPaid = paid >= (task.fee || 0) && (task.fee||0) > 0;
                                             const remaining = (task.fee || 0) - paid;
                                             const isExpanded = expandedPaymentTaskId === task.id;
