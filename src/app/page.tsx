@@ -4636,7 +4636,7 @@ const VehicleFormModal = ({
     );
 };
 
-  // 2. Report View (Linked to Edit)
+  // 2. Report View (v9.92: 應收報表強制顯示所有欠款)
   const ReportView = () => {
     const handleReportItemClick = (vehicleId: string) => {
         const vehicle = inventory.find(v => v.id === vehicleId);
@@ -4644,6 +4644,69 @@ const VehicleFormModal = ({
             setEditingVehicle(vehicle);
         }
     };
+
+    // --- Report Logic ---
+    const generateReportData = () => {
+        let data: any[] = [];
+        
+        if (reportType === 'receivable') {
+            data = inventory.filter(v => {
+                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                const totalReceivable = (v.price || 0) + cbFees;
+                const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                const balance = totalReceivable - received;
+                // 只要有欠款就顯示
+                if (balance > 0) return true;
+                return false; 
+            }).map(v => {
+                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                const totalReceivable = (v.price || 0) + cbFees;
+                const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                const displayDate = v.stockOutDate || (v.crossBorder?.tasks?.[0]?.date) || v.stockInDate || '-';
+                
+                return {
+                    vehicleId: v.id,
+                    date: displayDate,
+                    title: `${v.year} ${v.make} ${v.model}`,
+                    regMark: v.regMark,
+                    amount: totalReceivable - received, 
+                    status: v.status
+                };
+            });
+            // ★ 移除日期過濾，確保所有欠款可見
+
+        } else if (reportType === 'payable') {
+            inventory.forEach(v => {
+                (v.expenses || []).forEach(exp => {
+                    if (exp.status === 'Unpaid') {
+                        data.push({
+                            vehicleId: v.id, id: exp.id, date: exp.date,
+                            title: `${v.regMark} - ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: 'Unpaid'
+                        });
+                    }
+                });
+            });
+            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+
+        } else if (reportType === 'sales') {
+            data = inventory.filter(v => v.status === 'Sold').map(v => {
+                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                const totalRevenue = (v.price || 0) + cbFees;
+                return {
+                    vehicleId: v.id, date: v.stockOutDate,
+                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
+                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost
+                };
+            });
+            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+        }
+        return data;
+    };
+
+    const reportData = generateReportData();
+    const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
 
     return (
         <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
@@ -4664,34 +4727,28 @@ const VehicleFormModal = ({
                         <option value="sales">銷售數據統計 (Sales Stats)</option>
                     </select>
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label>
-                    <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">結束日期</label>
-                    <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-2 rounded" />
-                </div>
+                {/* 只有非應收報表才顯示日期篩選，避免誤解 */}
+                {reportType !== 'receivable' && (
+                    <>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label><input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded" /></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">結束日期</label><input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-2 rounded" /></div>
+                    </>
+                )}
+                {reportType === 'receivable' && <div className="col-span-2 flex items-center text-sm text-blue-600 bg-blue-50 px-3 rounded border border-blue-100"><Info size={16} className="mr-2"/> 顯示所有未結清款項 (含中港業務)</div>}
+                
                 {reportType === 'payable' && (
                     <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1">負責公司 (供應商)</label>
-                        <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded">
-                            <option value="">全部公司</option>
-                            {settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded"><option value="">全部公司</option>{settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}</select>
                     </div>
                 )}
             </div>
 
             <div className="print:visible">
                 <div className="text-center mb-8 hidden print:block">
-                    <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</h1>
-                    <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">
-                        {reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : 
-                         reportType === 'payable' ? '應付未付報表 (Accounts Payable)' : 
-                         '銷售數據統計 (Sales Report)'}
-                    </h2>
-                    <p className="text-sm text-gray-600">Period: {reportStartDate} to {reportEndDate}</p>
+                    <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en}</h1>
+                    <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">{reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : reportType === 'payable' ? '應付未付報表 (Accounts Payable)' : '銷售數據統計 (Sales Report)'}</h2>
+                    <p className="text-sm text-gray-600">Generated: {new Date().toLocaleDateString()}</p>
                 </div>
 
                 <table className="w-full border-collapse text-sm">
@@ -4709,12 +4766,7 @@ const VehicleFormModal = ({
                     </thead>
                     <tbody>
                         {reportData.map((item, idx) => (
-                            <tr 
-                                key={idx} 
-                                className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent"
-                                onClick={() => handleReportItemClick(item.vehicleId)}
-                                title="點擊編輯此車輛費用"
-                            >
+                            <tr key={idx} className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent" onClick={() => handleReportItemClick(item.vehicleId)}>
                                 <td className="p-2 border">{item.date}</td>
                                 <td className="p-2 border font-bold flex items-center">{item.title} <ExternalLink size={10} className="ml-2 text-gray-400 print:hidden"/></td>
                                 <td className="p-2 border">{item.regMark}</td>
