@@ -5534,47 +5534,65 @@ const CreateDocModule = ({
           {/* Report Tab - 讓它內部也可以滾動 */}
           {activeTab === 'reports' && <div className="flex-1 overflow-y-auto"><ReportView /></div>}
 
-          {/* Cross Border Tab - 修正版：解決 Firebase function 錯誤 */}
+         {/* Cross Border Tab (v10.5: TypeScript 類型修復) */}
           {activeTab === 'cross_border' && (
-            <div className="flex-1 overflow-y-auto">
-              <CrossBorderView 
-                inventory={inventory}
-                settings={settings}
-                dbEntries={dbEntries}
-                activeCbVehicleId={activeCbVehicleId}
-                setActiveCbVehicleId={setActiveCbVehicleId}
-                setEditingVehicle={setEditingVehicle}
-                
-                // ★★★ 修正 1: 新增項目 (Add) ★★★
-                addCbTask={(vid, task) => {
-                    const v = inventory.find(i => i.id === vid);
-                    if (v) {
-                        const newTasks = [...(v.crossBorder?.tasks || []), task];
-                        updateSubItem(vid, 'crossBorder', newTasks);
-                    }
-                }}
-                
-                // ★★★ 修正 2: 更新項目 (Update) ★★★
-                updateCbTask={(vid, task) => {
-                    const v = inventory.find(i => i.id === vid);
-                    if (v) {
-                        const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === task.id ? task : t);
-                        updateSubItem(vid, 'crossBorder', newTasks);
-                    }
-                }}
-                
-                // ★★★ 修正 3: 刪除項目 (Delete) ★★★
-                deleteCbTask={(vid, taskId) => {
-                    const v = inventory.find(i => i.id === vid);
-                    if (v) {
-                        const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
-                        updateSubItem(vid, 'crossBorder', newTasks);
-                    }
-                }}
-                
-                addPayment={addPayment}
-                deletePayment={deletePayment}
-              />
+            <div className="h-full animate-fade-in">
+                <CrossBorderView 
+                    inventory={inventory}
+                    settings={settings}
+                    dbEntries={dbEntries}
+                    activeCbVehicleId={activeCbVehicleId}
+                    setActiveCbVehicleId={setActiveCbVehicleId}
+                    setEditingVehicle={setEditingVehicle}
+                    
+                    // ★★★ 修正 1: 加入類型標註 (vid: string, task: CrossBorderTask) ★★★
+                    addCbTask={(vid: string, task: CrossBorderTask) => {
+                        const v = inventory.find(i => i.id === vid);
+                        if (v) {
+                            const newTasks = [...(v.crossBorder?.tasks || []), task];
+                            updateVehicle(vid, { crossBorder: { ...v.crossBorder, tasks: newTasks } } as Partial<Vehicle>);
+                            if(addSystemLog) addSystemLog('CB Task', `Added task: ${task.item} to ${v.regMark}`);
+                        }
+                    }}
+                    
+                    // ★★★ 修正 2: 加入類型標註 ★★★
+                    updateCbTask={(vid: string, task: CrossBorderTask) => {
+                        const v = inventory.find(i => i.id === vid);
+                        if (v) {
+                            const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === task.id ? task : t);
+                            updateVehicle(vid, { crossBorder: { ...v.crossBorder, tasks: newTasks } } as Partial<Vehicle>);
+                        }
+                    }}
+                    
+                    // ★★★ 修正 3: 加入類型標註 (taskId: string) ★★★
+                    deleteCbTask={(vid: string, taskId: string) => {
+                        if(!confirm("確定刪除此項目？")) return;
+                        const v = inventory.find(i => i.id === vid);
+                        if (v) {
+                            const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
+                            updateVehicle(vid, { crossBorder: { ...v.crossBorder, tasks: newTasks } } as Partial<Vehicle>);
+                        }
+                    }}
+                    
+                    // ★★★ 修正 4: 加入類型標註 (p: Payment) ★★★
+                    addPayment={(vid: string, p: Payment) => {
+                        const v = inventory.find(i => i.id === vid);
+                        if (v) {
+                            const newPayments = [...(v.payments || []), p];
+                            updateVehicle(vid, { payments: newPayments });
+                            if(addSystemLog) addSystemLog('Payment', `Received ${p.amount} for ${v.regMark}`);
+                        }
+                    }}
+                    
+                    // ★★★ 修正 5: 加入類型標註 (pid: string) ★★★
+                    deletePayment={(vid: string, pid: string) => {
+                        const v = inventory.find(i => i.id === vid);
+                        if (v) {
+                            const newPayments = (v.payments || []).filter(p => p.id !== pid);
+                            updateVehicle(vid, { payments: newPayments });
+                        }
+                    }}
+                />
             </div>
           )}
 
