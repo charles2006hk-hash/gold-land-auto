@@ -24,7 +24,7 @@ import {
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
   orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
-  getDocs, where 
+  getDocs, where, limit 
 } from "firebase/firestore";
 import { 
   getStorage, 
