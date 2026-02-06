@@ -3153,8 +3153,8 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
-  // -------------------------------------------------------------
-  // ★★★ 系統設定讀取 (v14.3 修正版：修復 Boolean 類型衝突) ★★★
+  /// -------------------------------------------------------------
+  // ★★★ 系統設定讀取 (v14.4 修正版：全面修復 reminders/backup 類型錯誤) ★★★
   // -------------------------------------------------------------
   useEffect(() => {
       // 1. 第一層防護
@@ -3167,35 +3167,42 @@ export default function GoldLandAutoDMS() {
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
-                  const dbData = docSnap.data() as SystemSettings;
+                  // 強制轉型為 Partial，允許部分欄位缺失
+                  const dbData = docSnap.data() as Partial<SystemSettings>;
                   
-                  // ★ 關鍵修復：針對 Boolean 值使用 ?? 運算符確保類型正確
+                  // ★ 關鍵修復：針對所有 nested object 使用 ?? 運算符
+                  // 這樣保證每一個欄位都有值，不會出現 undefined
                   setSettings(prev => ({
                       ...defaultSettings, 
                       ...dbData,          
                       
-                      // 陣列保護 (防止被預設值洗掉)
+                      // 1. 陣列保護 (防止被預設值洗掉)
                       expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
                       expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
                       cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
                       
-                      // 物件保護 + Boolean 類型強制修正
+                      // 2. 物件保護
                       models: { ...defaultSettings.models, ...(dbData.models || {}) },
                       
+                      // 3. Reminders 全欄位保護 (徹底解決類型報錯)
                       reminders: { 
-                          ...defaultSettings.reminders, 
-                          ...(dbData.reminders || {}),
-                          // ★★★ 這裡修復了報錯 ★★★
-                          // 意思：如果 DB 有值就用 DB 的，否則用 Default 的，確保一定是 true/false
-                          isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders?.isEnabled ?? true
+                          isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders.isEnabled,
+                          daysBefore: dbData.reminders?.daysBefore ?? defaultSettings.reminders.daysBefore,
+                          time: dbData.reminders?.time ?? defaultSettings.reminders.time,
+                          categories: {
+                              license: dbData.reminders?.categories?.license ?? defaultSettings.reminders.categories.license,
+                              insurance: dbData.reminders?.categories?.insurance ?? defaultSettings.reminders.categories.insurance,
+                              crossBorder: dbData.reminders?.categories?.crossBorder ?? defaultSettings.reminders.categories.crossBorder,
+                              installments: dbData.reminders?.categories?.installments ?? defaultSettings.reminders.categories.installments
+                          }
                       },
                       
+                      // 4. Backup 全欄位保護
                       backup: { 
-                          ...defaultSettings.backup, 
-                          ...(dbData.backup || {}),
-                          // 同樣對 backup 的 boolean 做保護
-                          autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup?.autoCloud ?? true
+                          frequency: dbData.backup?.frequency ?? defaultSettings.backup.frequency,
+                          lastBackupDate: dbData.backup?.lastBackupDate ?? defaultSettings.backup.lastBackupDate,
+                          autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup.autoCloud
                       }
                   }));
                   
