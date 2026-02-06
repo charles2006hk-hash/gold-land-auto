@@ -2610,12 +2610,26 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 10. Settings Manager (v13.3: 修正 TypeScript 類型錯誤) ★★★
+// ★★★ 10. Settings Manager (v13.4: 變數位置修正 + 完整功能) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
 }: any) => {
     
+    // ★★★ 1. 將常數定義移到最上方，確保不會報錯 ★★★
+    const allModules = [
+        { key: 'dashboard', label: '儀表板' },
+        { key: 'inventory', label: '車輛管理' },
+        { key: 'sales', label: '開單系統' },
+        { key: 'reports', label: '統計報表' },
+        { key: 'cross_border', label: '中港業務' },
+        { key: 'workflow', label: '業務流程' },
+        { key: 'database', label: '資料庫' },
+        { key: 'media_center', label: '圖庫' },
+        { key: 'settings', label: '設置' },
+        { key: 'backup', label: '備份' }
+    ];
+
     const [activeTab, setActiveTab] = useState('general');
     
     // --- 內部狀態 ---
@@ -2832,7 +2846,6 @@ const SettingsManager = ({
                                             <td className="p-2"><input type="text" value={type.name} onChange={e => handleExpenseTypeChange(idx, 'name', e.target.value)} className="border rounded p-1 w-full bg-transparent"/></td>
                                             <td className="p-2"><input type="number" value={type.defaultAmount} onChange={e => handleExpenseTypeChange(idx, 'defaultAmount', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
                                             <td className="p-2">
-                                                {/* ★★★ 修正點 1: 加入 (c: string) ★★★ */}
                                                 <select value={type.defaultCompany} onChange={e => handleExpenseTypeChange(idx, 'defaultCompany', e.target.value)} className="border rounded p-1 w-full bg-transparent">
                                                     <option value="">-- 選擇 --</option>
                                                     {settings.expenseCompanies.map((c: string) => <option key={c} value={c}>{c}</option>)}
@@ -2874,7 +2887,6 @@ const SettingsManager = ({
                                             <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemChange(idx, 'defaultFee', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
                                             <td className="p-2"><input type="number" value={item.defaultDays} onChange={e => handleCbItemChange(idx, 'defaultDays', e.target.value)} className="border rounded p-1 w-16"/></td>
                                             <td className="p-2">
-                                                {/* ★★★ 修正點 2: 加入 (inst: string) ★★★ */}
                                                 <select value={item.defaultInst} onChange={e => handleCbItemChange(idx, 'defaultInst', e.target.value)} className="border rounded p-1 w-full bg-transparent">
                                                     <option value="">-- 選擇 --</option>
                                                     {settings.cbInstitutions.map((inst: string) => <option key={inst} value={inst}>{inst}</option>)}
@@ -2946,7 +2958,7 @@ const SettingsManager = ({
                             ))}
                         </div>
                         <div className="flex gap-2 mb-4">
-                            <input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder="新類型" />
+                            <input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder={`新增 ${selectedDbCat} 文件類型...`} />
                             <button onClick={() => {
                                 if(!newDocType) return;
                                 const current = settings.dbDocTypes[selectedDbCat] || [];
