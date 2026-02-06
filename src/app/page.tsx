@@ -3153,42 +3153,44 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
-  /// -------------------------------------------------------------
-  // ★★★ 系統設定讀取 (v14.1 修正版：防止資料被重置) ★★★
+  // -------------------------------------------------------------
+  // ★★★ 系統設定讀取 (v14.2 修正版：修復 TypeScript db 類型錯誤) ★★★
   // -------------------------------------------------------------
   useEffect(() => {
+      // 1. 第一層防護：如果沒有 db 或 appId，直接不執行
       if (!db || !appId) return;
 
       const fetchSettings = async () => {
           try {
-              // 1. 統一使用這個路徑，不要再改動
-              const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+              // ★★★ 修正點：在 db 後面加上 !，在 appId 後面也加上 ! ★★★
+              // 這告訴 TypeScript "我保證這些變數現在不是 null"
+              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
+              
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
                   const dbData = docSnap.data() as SystemSettings;
                   
-                  // ★ 關鍵邏輯：將資料庫的資料 (dbData) 覆蓋在預設值 (defaultSettings) 之上
-                  // 這樣即使 defaultSettings 裡有新加的功能，舊的資料也不會不見
+                  // 合併邏輯：資料庫優先
                   setSettings(prev => ({
-                      ...defaultSettings, // 先載入代碼中的預設結構 (保底)
-                      ...dbData,          // 再載入資料庫的真實資料 (覆蓋)
+                      ...defaultSettings, 
+                      ...dbData,          
                       
-                      // 強制確保陣列使用資料庫的 (防止被預設值洗掉)
+                      // 陣列保護
                       expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
                       expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
                       cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
                       
-                      // 確保物件類型的合併正確
+                      // 物件保護
                       models: { ...defaultSettings.models, ...(dbData.models || {}) },
                       reminders: { ...defaultSettings.reminders, ...(dbData.reminders || {}) },
                       backup: { ...defaultSettings.backup, ...(dbData.backup || {}) }
                   }));
                   
-                  console.log("✅ 系統設定已從資料庫同步 (User Settings Loaded)");
+                  console.log("✅ 系統設定已從資料庫同步");
               } else {
-                  // 只有在「完全沒有資料」的情況下，才寫入預設值
+                  // 首次寫入
                   console.log("⚠️ 首次運行：寫入預設設定到資料庫");
                   await setDoc(docRef, defaultSettings);
                   setSettings(defaultSettings);
@@ -3199,8 +3201,9 @@ export default function GoldLandAutoDMS() {
       };
 
       fetchSettings();
-  }, [db, appId]); // 這裡只依賴 db 和 appId，不依賴 staffId，確保一開啟就載入
+  }, [db, appId]);
 
+  
   // --- Auth & Data Loading ---
   useEffect(() => {
     // 修正：強化 PWA/App Icon 及瀏覽器 Favicon 更新邏輯
