@@ -1938,7 +1938,7 @@ type CrossBorderViewProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 6. Cross Border Module (v12.1: 修復變數名稱錯誤) ★★★
+// ★★★ 6. Cross Border Module (v12.2: 修復圖標引用錯誤) ★★★
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
@@ -2037,19 +2037,18 @@ const CrossBorderView = ({
         }
     };
 
-    // 批量新增任務 (核心修改)
+    // 批量新增任務
     const handleAddBatchTasks = () => {
         if (!activeCar) return;
         if (selectedServiceItems.length === 0) { alert("請至少選擇一個項目"); return; }
 
-        // 針對每一個勾選的項目，建立一筆獨立的任務
         selectedServiceItems.forEach(item => {
             const defaults = findItemDefaults(item);
             const newTask: CrossBorderTask = { 
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 5), // 確保 ID 唯一
-                date: newTaskDate, // ★★★ 修正點：這裡是 newTaskDate ★★★
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                date: newTaskDate, 
                 item: item, 
-                fee: Number(defaults.fee) || 0, // 自動帶入預設費用
+                fee: Number(defaults.fee) || 0,
                 days: defaults.days, 
                 institution: '公司', 
                 handler: '', 
@@ -2076,7 +2075,7 @@ const CrossBorderView = ({
             date: new Date().toISOString().split('T')[0], 
             amount: amount, 
             type: 'Service Fee', 
-            method: newPayMethod, // 支援付款方式
+            method: newPayMethod,
             relatedTaskId: task.id, 
             note: `Payment for: ${task.item}` 
         }); 
@@ -2124,11 +2123,12 @@ const CrossBorderView = ({
                 </div>
             )}
 
-            {/* Modal: 新增收費 (v12.1) */}
+            {/* Modal: 新增收費 (v12.2 修復圖標) */}
             {isAddModalOpen && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="bg-white w-96 p-5 rounded-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
-                        <h3 className="font-bold text-lg mb-4 flex items-center"><ListChecks size={20} className="mr-2 text-blue-600"/> 新增代辦項目</h3>
+                        {/* ★ 這裡將 ListChecks 替換為了 FileText，避免引用錯誤 ★ */}
+                        <h3 className="font-bold text-lg mb-4 flex items-center"><FileText size={20} className="mr-2 text-blue-600"/> 新增代辦項目</h3>
                         
                         <div className="space-y-4 flex-1 overflow-y-auto pr-2">
                             <div>
@@ -2274,7 +2274,6 @@ const CrossBorderView = ({
                                                         <td className="p-2 font-bold text-slate-700">{task.item}</td>
                                                         <td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
                                                         
-                                                        {/* 狀態欄位 (可點擊展開) */}
                                                         <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}>
                                                             <div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>
                                                                 {isPaid ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')}
@@ -2288,12 +2287,10 @@ const CrossBorderView = ({
                                                         </td>
                                                     </tr>
 
-                                                    {/* 展開區塊：收款紀錄與新增收款 */}
                                                     {isExpanded && (
                                                         <tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner">
                                                             <td colSpan={5} className="p-3 pl-8">
                                                                 <div className="flex gap-6 items-start">
-                                                                    {/* 左邊：新增收款 */}
                                                                     <div className="w-1/3 min-w-[200px] bg-white p-3 rounded border shadow-sm">
                                                                         <h5 className="text-xs font-bold text-gray-500 mb-2">新增收款 (入數)</h5>
                                                                         <div className="flex flex-col gap-2">
@@ -2308,7 +2305,6 @@ const CrossBorderView = ({
                                                                         </div>
                                                                     </div>
 
-                                                                    {/* 右邊：歷史紀錄 */}
                                                                     <div className="flex-1">
                                                                         <h5 className="text-xs font-bold text-gray-500 mb-2">收款紀錄 ({taskPayments.length})</h5>
                                                                         {taskPayments.length === 0 ? (
