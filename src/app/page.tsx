@@ -3153,30 +3153,25 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
-  /// -------------------------------------------------------------
-  // ★★★ 系統設定讀取 (v14.4 修正版：全面修復 reminders/backup 類型錯誤) ★★★
+  // -------------------------------------------------------------
+  // ★★★ 系統設定讀取 (v14.5 修正版：修復 defaultSettings 可選屬性報錯) ★★★
   // -------------------------------------------------------------
   useEffect(() => {
-      // 1. 第一層防護
       if (!db || !appId) return;
 
       const fetchSettings = async () => {
           try {
-              // 使用 ! 確保非空值
               const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
-                  // 強制轉型為 Partial，允許部分欄位缺失
                   const dbData = docSnap.data() as Partial<SystemSettings>;
                   
-                  // ★ 關鍵修復：針對所有 nested object 使用 ?? 運算符
-                  // 這樣保證每一個欄位都有值，不會出現 undefined
                   setSettings(prev => ({
                       ...defaultSettings, 
                       ...dbData,          
                       
-                      // 1. 陣列保護 (防止被預設值洗掉)
+                      // 1. 陣列保護
                       expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
                       expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
@@ -3185,30 +3180,29 @@ export default function GoldLandAutoDMS() {
                       // 2. 物件保護
                       models: { ...defaultSettings.models, ...(dbData.models || {}) },
                       
-                      // 3. Reminders 全欄位保護 (徹底解決類型報錯)
+                      // 3. Reminders 全欄位保護 (加上 ?. 和最終預設值)
                       reminders: { 
-                          isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders.isEnabled,
-                          daysBefore: dbData.reminders?.daysBefore ?? defaultSettings.reminders.daysBefore,
-                          time: dbData.reminders?.time ?? defaultSettings.reminders.time,
+                          isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders?.isEnabled ?? true,
+                          daysBefore: dbData.reminders?.daysBefore ?? defaultSettings.reminders?.daysBefore ?? 30,
+                          time: dbData.reminders?.time ?? defaultSettings.reminders?.time ?? '10:00',
                           categories: {
-                              license: dbData.reminders?.categories?.license ?? defaultSettings.reminders.categories.license,
-                              insurance: dbData.reminders?.categories?.insurance ?? defaultSettings.reminders.categories.insurance,
-                              crossBorder: dbData.reminders?.categories?.crossBorder ?? defaultSettings.reminders.categories.crossBorder,
-                              installments: dbData.reminders?.categories?.installments ?? defaultSettings.reminders.categories.installments
+                              license: dbData.reminders?.categories?.license ?? defaultSettings.reminders?.categories?.license ?? true,
+                              insurance: dbData.reminders?.categories?.insurance ?? defaultSettings.reminders?.categories?.insurance ?? true,
+                              crossBorder: dbData.reminders?.categories?.crossBorder ?? defaultSettings.reminders?.categories?.crossBorder ?? true,
+                              installments: dbData.reminders?.categories?.installments ?? defaultSettings.reminders?.categories?.installments ?? false
                           }
                       },
                       
                       // 4. Backup 全欄位保護
                       backup: { 
-                          frequency: dbData.backup?.frequency ?? defaultSettings.backup.frequency,
-                          lastBackupDate: dbData.backup?.lastBackupDate ?? defaultSettings.backup.lastBackupDate,
-                          autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup.autoCloud
+                          frequency: dbData.backup?.frequency ?? defaultSettings.backup?.frequency ?? 'monthly',
+                          lastBackupDate: dbData.backup?.lastBackupDate ?? defaultSettings.backup?.lastBackupDate ?? '',
+                          autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup?.autoCloud ?? true
                       }
                   }));
                   
                   console.log("✅ 系統設定已從資料庫同步");
               } else {
-                  // 首次寫入
                   console.log("⚠️ 首次運行：寫入預設設定到資料庫");
                   await setDoc(docRef, defaultSettings);
                   setSettings(defaultSettings);
