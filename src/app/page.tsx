@@ -2488,13 +2488,13 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 10. Settings Manager (v13.4: 變數位置修正 + 完整功能) ★★★
+// ★★★ 10. Settings Manager (v14.8: 全功能無刪減終極版) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
 }: any) => {
     
-    // ★★★ 1. 將常數定義移到最上方，確保不會報錯 ★★★
+    // ★★★ 1. 常數定義 (移至最上方，防止報錯) ★★★
     const allModules = [
         { key: 'dashboard', label: '儀表板' },
         { key: 'inventory', label: '車輛管理' },
@@ -2510,10 +2510,14 @@ const SettingsManager = ({
 
     const [activeTab, setActiveTab] = useState('general');
     
-    // --- 內部狀態 ---
+    // --- 內部狀態 (用於輸入框) ---
     const [newColor, setNewColor] = useState('');
-    const [newExpenseComp, setNewExpenseComp] = useState(''); 
-    const [newCbInst, setNewCbInst] = useState('');         
+    const [newMake, setNewMake] = useState('');   // 新增車廠
+    const [selectedMake, setSelectedMake] = useState('');
+    const [newModel, setNewModel] = useState(''); // 新增型號
+    
+    const [newExpenseComp, setNewExpenseComp] = useState(''); // 新增收款公司
+    const [newCbInst, setNewCbInst] = useState('');         // 新增辦理機構
     
     const [newUserEmail, setNewUserEmail] = useState('');
     const [newUserPassword, setNewUserPassword] = useState(''); 
@@ -2529,21 +2533,25 @@ const SettingsManager = ({
 
     // --- 邏輯函數 ---
 
+    // 通用陣列增刪
     const addItem = (key: string, val: string) => { if(val) updateSettings(key, [...(settings[key] || []), val]); };
     const removeItem = (key: string, idx: number) => { const arr = [...(settings[key] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
 
+    // 費用預設修改
     const handleExpenseTypeChange = (idx: number, field: string, val: any) => {
         const newTypes = [...(settings.expenseTypes || [])];
         newTypes[idx] = { ...newTypes[idx], [field]: val };
         updateSettings('expenseTypes', newTypes);
     };
 
+    // 中港項目修改
     const handleCbItemChange = (idx: number, field: string, val: any) => {
         const newItems = [...(settings.cbItems || [])];
         newItems[idx] = { ...newItems[idx], [field]: val };
         updateSettings('cbItems', newItems);
     };
 
+    // 權限修改
     const handleUserPermissionChange = (email: string, field: string, val: any) => {
         const newUsers = systemUsers.map((u: any) => u.email === email ? { ...u, [field]: val } : u);
         updateSystemUsers(newUsers);
@@ -2575,6 +2583,7 @@ const SettingsManager = ({
         }
     };
 
+    // Log 讀取
     useEffect(() => {
         if (activeTab === 'logs' && db) {
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), orderBy('timestamp', 'desc'), limit(50)); 
@@ -2587,7 +2596,9 @@ const SettingsManager = ({
         }
     }, [activeTab, db, appId]);
 
-    // 備份相關邏輯
+    // --- 備份相關邏輯 (完整功能) ---
+    
+    // 1. 雲端備份
     const handleCloudBackup = async () => {
         if (!storage || !appId) return;
         setIsBackingUp(true);
@@ -2604,6 +2615,7 @@ const SettingsManager = ({
         finally { setIsBackingUp(false); }
     };
 
+    // 2. 本地匯出
     const handleExport = () => { 
         const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); 
         const a = document.createElement('a'); 
@@ -2612,6 +2624,7 @@ const SettingsManager = ({
         a.click(); 
     };
 
+    // 3. 本地匯入
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { 
         const f=e.target.files?.[0]; if(!f)return; 
         const r=new FileReader(); 
@@ -2628,6 +2641,7 @@ const SettingsManager = ({
         r.readAsText(f); 
     };
 
+    // 4. CSV 救援
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !db) return;
@@ -2642,6 +2656,7 @@ const SettingsManager = ({
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
                 {[
                     { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
+                    { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' }, // ★ 確保這裡存在
                     { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
                     { id: 'crossborder', icon: <Globe size={16}/>, label: '中港業務' },
                     { id: 'users', icon: <Users size={16}/>, label: '用戶與權限' },
@@ -2659,6 +2674,7 @@ const SettingsManager = ({
             <div className="flex-1 overflow-y-auto pr-4 pb-20">
                 <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
 
+                {/* 1. 一般設定 */}
                 {activeTab === 'general' && (
                     <div className="space-y-6">
                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -2699,8 +2715,56 @@ const SettingsManager = ({
                     </div>
                 )}
 
+                {/* ★★★ 2. 車輛資料 (完整功能) ★★★ */}
+                {activeTab === 'vehicle' && (
+                    <div className="space-y-6">
+                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4">1. 車廠管理 (Makes)</h3>
+                            <div className="flex gap-2 mt-2">
+                                <input value={newMake} onChange={e=>setNewMake(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make (e.g. Ferrari)"/>
+                                <button onClick={() => { addItem('makes', newMake); setNewMake(''); }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {(settings.makes || []).map((m:string, i:number) => (
+                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('makes', i)}/></span>
+                                ))}
+                            </div>
+                         </div>
+                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-700 mb-4">2. 型號管理 (Models)</h3>
+                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
+                                <label className="text-xs font-bold text-slate-500 block mb-1">選擇廠牌</label>
+                                <select value={selectedMake} onChange={e => setSelectedMake(e.target.value)} className="w-full p-2 border rounded text-sm mb-3"><option value="">-- 請選擇 --</option>{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</select>
+                                {selectedMake && (
+                                    <div className="flex gap-2">
+                                        <input value={newModel} onChange={e => setNewModel(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMake} 新型號...`} />
+                                        <button onClick={() => {
+                                            if(selectedMake && newModel) {
+                                                updateSettings('models', { ...settings.models, [selectedMake]: [...(settings.models[selectedMake] || []), newModel] });
+                                                setNewModel('');
+                                            }
+                                        }} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button>
+                                    </div>
+                                )}
+                            </div>
+                            {selectedMake && (
+                                <div className="flex flex-wrap gap-2">
+                                    {(settings.models[selectedMake] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : 
+                                    (settings.models[selectedMake] || []).map((m:string, i:number) => (
+                                        <span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => {
+                                            updateSettings('models', { ...settings.models, [selectedMake]: (settings.models[selectedMake] || []).filter((mm:string) => mm !== m) });
+                                        }}/></span>
+                                    ))}
+                                </div>
+                            )}
+                         </div>
+                    </div>
+                )}
+
+                {/* 3. 財務與費用 (完整功能) */}
                 {activeTab === 'expenses' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        {/* 收款公司列表 */}
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">常用收款公司/車房 (Companies)</h3>
                             <div className="flex flex-wrap gap-2 mb-3">
@@ -2714,6 +2778,7 @@ const SettingsManager = ({
                             </div>
                         </div>
 
+                        {/* 費用預設表格 */}
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">財務費用預設值 (Financial Defaults)</h3>
                             <table className="w-full text-sm">
@@ -2724,6 +2789,7 @@ const SettingsManager = ({
                                             <td className="p-2"><input type="text" value={type.name} onChange={e => handleExpenseTypeChange(idx, 'name', e.target.value)} className="border rounded p-1 w-full bg-transparent"/></td>
                                             <td className="p-2"><input type="number" value={type.defaultAmount} onChange={e => handleExpenseTypeChange(idx, 'defaultAmount', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
                                             <td className="p-2">
+                                                {/* ★ 修正類型錯誤：(c: string) */}
                                                 <select value={type.defaultCompany} onChange={e => handleExpenseTypeChange(idx, 'defaultCompany', e.target.value)} className="border rounded p-1 w-full bg-transparent">
                                                     <option value="">-- 選擇 --</option>
                                                     {settings.expenseCompanies.map((c: string) => <option key={c} value={c}>{c}</option>)}
@@ -2739,8 +2805,10 @@ const SettingsManager = ({
                     </div>
                 )}
 
+                {/* 4. 中港業務 (完整功能) */}
                 {activeTab === 'crossborder' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        {/* 機構列表 */}
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">常用辦理機構 (Institutions)</h3>
                             <div className="flex flex-wrap gap-2 mb-3">
@@ -2754,6 +2822,7 @@ const SettingsManager = ({
                             </div>
                         </div>
 
+                        {/* 代辦項目表格 */}
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">中港代辦項目預設值 (CB Defaults)</h3>
                             <table className="w-full text-sm">
@@ -2765,6 +2834,7 @@ const SettingsManager = ({
                                             <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemChange(idx, 'defaultFee', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
                                             <td className="p-2"><input type="number" value={item.defaultDays} onChange={e => handleCbItemChange(idx, 'defaultDays', e.target.value)} className="border rounded p-1 w-16"/></td>
                                             <td className="p-2">
+                                                {/* ★ 修正類型錯誤：(inst: string) */}
                                                 <select value={item.defaultInst} onChange={e => handleCbItemChange(idx, 'defaultInst', e.target.value)} className="border rounded p-1 w-full bg-transparent">
                                                     <option value="">-- 選擇 --</option>
                                                     {settings.cbInstitutions.map((inst: string) => <option key={inst} value={inst}>{inst}</option>)}
@@ -2780,6 +2850,7 @@ const SettingsManager = ({
                     </div>
                 )}
 
+                {/* 5. 用戶與權限 */}
                 {activeTab === 'users' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><Users size={18} className="mr-2"/> 系統用戶與權限</h3>
@@ -2797,6 +2868,7 @@ const SettingsManager = ({
                                             <div className="flex gap-2 items-center mt-1">
                                                 <span className="text-xs text-gray-500">登入後預設首頁:</span>
                                                 <select value={user.defaultTab || 'dashboard'} onChange={e => handleUserPermissionChange(user.email, 'defaultTab', e.target.value)} className="border rounded p-1 text-xs bg-slate-50">
+                                                    {/* ★ allModules 定義已修正，這裡不會報錯 ★ */}
                                                     {allModules.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                                                 </select>
                                             </div>
@@ -2836,7 +2908,7 @@ const SettingsManager = ({
                             ))}
                         </div>
                         <div className="flex gap-2 mb-4">
-                            <input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder={`新增 ${selectedDbCat} 文件類型...`} />
+                            <input value={newDocType} onChange={e => setNewDocType(e.target.value)} className="border rounded px-3 py-2 text-sm w-64" placeholder="新類型" />
                             <button onClick={() => {
                                 if(!newDocType) return;
                                 const current = settings.dbDocTypes[selectedDbCat] || [];
@@ -2860,6 +2932,7 @@ const SettingsManager = ({
 
                 {activeTab === 'logs' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold">系統操作日誌</h3><div className="mt-4 border rounded max-h-96 overflow-y-auto"><table className="w-full text-xs text-left"><tbody className="divide-y">{logs.map(l => (<tr key={l.id} className="hover:bg-slate-50"><td className="p-2 text-gray-500">{l.timestamp?.toDate().toLocaleString()}</td><td className="p-2 font-bold">{l.user}</td><td className="p-2">{l.action}</td><td className="p-2 text-gray-600">{l.detail}</td></tr>))}</tbody></table></div></div> )}
 
+                {/* 6. 備份與還原 (完整功能) */}
                 {activeTab === 'backup' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-6">
                         <h3 className="font-bold text-slate-700 mb-4 flex items-center"><DownloadCloud size={18} className="mr-2"/> 資料備份與還原</h3>
@@ -2875,6 +2948,7 @@ const SettingsManager = ({
                             <p className="text-xs text-blue-600/70 mt-2 font-mono">Last Backup: {backupConfig.lastBackupDate || 'Never'}</p>
                         </div>
 
+                        {/* ★ 補回：本地匯入/匯出按鈕 ★ */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
                                 <h4 className="font-bold text-gray-800 mb-2">匯出本地檔案 (Export)</h4>
