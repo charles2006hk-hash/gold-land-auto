@@ -4465,70 +4465,100 @@ const VehicleFormModal = ({
     );
 };
 
-  // 2. Report View (v11.0: 應收搜尋 + 中港費用明細)
+  // 2. Report View (v11.3: 強效容錯版 - 車價與中港費用分拆 + 日期自動補全)
   const ReportView = () => {
-    // 新增狀態
     const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>('All');
-    const [reportSearchTerm, setReportSearchTerm] = useState(''); // ★ 搜尋關鍵字
+    const [reportSearchTerm, setReportSearchTerm] = useState('');
+    
+    // 預設日期範圍：本月
+    const [reportStartDate, setReportStartDate] = useState(() => {
+        const date = new Date();
+        return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [reportEndDate, setReportEndDate] = useState(() => {
+        const date = new Date();
+        return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+    });
 
     const handleReportItemClick = (vehicleId: string) => {
         const vehicle = inventory.find(v => v.id === vehicleId);
         if (vehicle) setEditingVehicle(vehicle);
     };
 
-    // --- Report Logic ---
+    // --- Report Logic (分拆顯示邏輯) ---
     const generateReportData = () => {
         let data: any[] = [];
         
         if (reportType === 'receivable') {
-            const rawData = inventory.map(v => {
-                // 計算中港費用
-                const cbTasks = v.crossBorder?.tasks || [];
-                const cbFees = cbTasks.reduce((sum, t) => sum + (t.fee || 0), 0);
-                const totalReceivable = (v.price || 0) + cbFees;
-                const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
-                const balance = totalReceivable - received;
+            inventory.forEach(v => {
+                // --- 1. 車價欠款 (Vehicle Price) ---
+                // 只計算沒有指定 relatedTaskId 的付款，視為車價付款
+                const generalPayments = (v.payments || []).filter(p => !p.relatedTaskId).reduce((s, p) => s + (p.amount || 0), 0);
+                const carBalance = (v.price || 0) - generalPayments;
                 
-                // ★ 關鍵：找出有哪些中港項目還沒付錢 (用於顯示在列表)
-                // 簡易判斷：總收款 < 總應收，且有中港任務
-                let extraInfo = '';
-                if (cbFees > 0 && balance > 0) {
-                    // 這裡做一個簡單的推斷，列出所有有費用的任務名稱
-                    const taskNames = cbTasks.filter(t => t.fee > 0).map(t => t.item).join(', ');
-                    if (taskNames) extraInfo = `[CB: ${taskNames}]`;
+                // 只有當車價有設定且還有欠款時，才顯示車價這一行
+                if ((v.price || 0) > 0 && carBalance > 0) {
+                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
+                    data.push({
+                        vehicleId: v.id,
+                        date: date, // 車價跟隨出庫日
+                        title: `${v.year} ${v.make} ${v.model}`,
+                        regMark: v.regMark,
+                        amount: carBalance,
+                        type: 'Vehicle',
+                        status: v.status,
+                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
+                    });
                 }
 
-                const displayDate = v.stockOutDate || (cbTasks[0]?.date) || v.stockInDate || '';
-                const type = (v.status === 'Sold' || v.status === 'Reserved') && (v.price && v.price > 0) ? 'Vehicle' : 'Service';
+                // --- 2. 中港業務欠款 (Cross Border) - 獨立顯示 ---
+                const cbTasks = v.crossBorder?.tasks || [];
+                cbTasks.forEach(task => {
+                    const fee = Number(task.fee) || 0;
+                    if (fee <= 0) return; // 沒費用的不顯示
 
-                return {
-                    vehicleId: v.id,
-                    date: displayDate,
-                    title: `${v.year} ${v.make} ${v.model} ${extraInfo}`, // ★ 將中港明細加到標題
-                    regMark: v.regMark,
-                    amount: balance, 
-                    status: v.status,
-                    type: type,
-                    rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}` // 用於搜尋
-                };
+                    // 計算這筆任務專屬的付款
+                    const taskPaid = (v.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s, p) => s + (p.amount || 0), 0);
+                    const taskBalance = fee - taskPaid;
+
+                    if (taskBalance > 0) {
+                        // ★★★ 關鍵修正：優先使用任務日期，保證本月新增的費用會顯示 ★★★
+                        // 如果任務沒填日期，才退而求其次用出庫日或今天
+                        let safeDate = task.date;
+                        if (!safeDate) safeDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+
+                        data.push({
+                            vehicleId: v.id,
+                            date: safeDate, 
+                            title: `[中港] ${task.item}`, // 清楚標示這是中港項目
+                            regMark: v.regMark,
+                            amount: taskBalance,
+                            type: 'Service',
+                            status: 'Pending',
+                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
+                        });
+                    }
+                });
             });
 
-            // 過濾
-            data = rawData.filter(item => {
-                if (item.amount <= 0) return false;
+            // 統一過濾
+            data = data.filter(item => {
                 const isDateMatch = (!reportStartDate || !reportEndDate) || (item.date >= reportStartDate && item.date <= reportEndDate);
                 const isCatMatch = reportCategory === 'All' || item.type === reportCategory;
-                // ★ 搜尋過濾
                 const isSearchMatch = !reportSearchTerm || item.rawTitle.toLowerCase().includes(reportSearchTerm.toLowerCase());
-
+                
                 return isDateMatch && isCatMatch && isSearchMatch;
             });
 
+            // 排序：日期新的在上面
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
         } else if (reportType === 'payable') {
+            // (應付帳款邏輯保持不變)
             inventory.forEach(v => {
                 (v.expenses || []).forEach(exp => {
                     if (exp.status === 'Unpaid') {
-                        const rowStr = `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`; // 用於搜尋
+                        const rowStr = `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`;
                         if (!reportSearchTerm || rowStr.toLowerCase().includes(reportSearchTerm.toLowerCase())) {
                             data.push({
                                 vehicleId: v.id, id: exp.id, date: exp.date,
@@ -4539,20 +4569,24 @@ const VehicleFormModal = ({
                 });
             });
             if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         } else if (reportType === 'sales') {
+            // (銷售報表邏輯保持不變)
             data = inventory.filter(v => v.status === 'Sold').map(v => {
                 const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
+                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
                 return {
-                    vehicleId: v.id, date: v.stockOutDate,
+                    vehicleId: v.id, date: safeSaleDate,
                     title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
                     amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost
                 };
             });
             if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
             if (reportSearchTerm) data = data.filter(d => (d.title+d.regMark).toLowerCase().includes(reportSearchTerm.toLowerCase()));
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         }
         return data;
     };
@@ -4581,7 +4615,7 @@ const VehicleFormModal = ({
                     {reportType === 'receivable' && (
                         <div className="col-span-1">
                             <label className="block text-xs font-bold text-gray-500 mb-1">業務類別</label>
-                            <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)} className="w-full border p-2 rounded text-sm"><option value="All">全部 (All)</option><option value="Vehicle">車輛銷售 (Sales)</option><option value="Service">代辦服務 (Services)</option></select>
+                            <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)} className="w-full border p-2 rounded text-sm"><option value="All">全部 (All)</option><option value="Vehicle">車輛銷售 (Sales)</option><option value="Service">中港/代辦服務 (Services)</option></select>
                         </div>
                     )}
                     <div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label><input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded text-sm" /></div>
@@ -4589,16 +4623,10 @@ const VehicleFormModal = ({
                     {reportType === 'payable' && (<div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">負責公司</label><select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded text-sm"><option value="">全部公司</option>{settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>)}
                 </div>
                 
-                {/* ★ 新增：搜尋框 ★ */}
+                {/* 搜尋框 */}
                 <div className="relative">
                     <Search size={16} className="absolute left-3 top-3 text-gray-400"/>
-                    <input 
-                        type="text" 
-                        value={reportSearchTerm} 
-                        onChange={e => setReportSearchTerm(e.target.value)} 
-                        placeholder="搜尋車牌、型號、項目名稱..." 
-                        className="w-full border p-2 pl-10 rounded text-sm shadow-sm focus:ring-2 ring-blue-100 outline-none"
-                    />
+                    <input type="text" value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} placeholder="搜尋車牌、型號、項目名稱..." className="w-full border p-2 pl-10 rounded text-sm shadow-sm focus:ring-2 ring-blue-100 outline-none"/>
                 </div>
             </div>
 
@@ -4613,13 +4641,13 @@ const VehicleFormModal = ({
                     <thead>
                         <tr className="bg-gray-100 border-b-2 border-black text-left">
                             <th className="p-2 border w-24">日期</th>
-                            <th className="p-2 border">項目 / 車輛 (含中港明細)</th>
-                            <th className="p-2 border w-32">詳情 / 車牌</th>
+                            <th className="p-2 border">項目 (車型 / 服務)</th>
+                            <th className="p-2 border w-32">車牌</th>
                             {reportType === 'receivable' && <th className="p-2 border w-20">類別</th>}
                             {reportType === 'payable' && <th className="p-2 border">負責公司</th>}
                             {reportType === 'payable' && <th className="p-2 border">單號</th>}
                             {reportType === 'sales' && <th className="p-2 border text-right">成本 (Cost)</th>}
-                            <th className="p-2 border text-right w-32">金額 (Amount)</th>
+                            <th className="p-2 border text-right w-32">應收/欠款</th>
                             {reportType === 'sales' && <th className="p-2 border text-right w-24">利潤</th>}
                         </tr>
                     </thead>
@@ -4628,11 +4656,10 @@ const VehicleFormModal = ({
                             <tr key={idx} className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent" onClick={() => handleReportItemClick(item.vehicleId)}>
                                 <td className="p-2 border font-mono text-gray-600">{item.date}</td>
                                 <td className="p-2 border font-bold">
-                                    {item.title} 
-                                    {/* 這裡的 item.title 已經包含了 [CB: ...] */}
+                                    <span className={item.type === 'Service' ? 'text-indigo-700' : 'text-slate-800'}>{item.title}</span>
                                 </td>
                                 <td className="p-2 border font-mono">{item.regMark}</td>
-                                {reportType === 'receivable' && <td className="p-2 border text-xs"><span className={`px-2 py-0.5 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-purple-50 text-purple-700 border-purple-100'}`}>{item.type === 'Vehicle' ? '銷售' : '服務'}</span></td>}
+                                {reportType === 'receivable' && <td className="p-2 border text-xs"><span className={`px-2 py-0.5 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
                                 {reportType === 'payable' && <td className="p-2 border">{item.company}</td>}
                                 {reportType === 'payable' && <td className="p-2 border">{item.invoiceNo || '-'}</td>}
                                 {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(item.cost)}</td>}
