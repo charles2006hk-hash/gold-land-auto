@@ -3153,38 +3153,53 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
-  // -------------------------------------------------------------
-  // 2. 讀取系統設定 (修正版：加入 db! 解決 TypeScript 報錯)
+  /// -------------------------------------------------------------
+  // ★★★ 系統設定讀取 (v14.1 修正版：防止資料被重置) ★★★
   // -------------------------------------------------------------
   useEffect(() => {
       if (!db || !appId) return;
 
       const fetchSettings = async () => {
           try {
-              // ★★★ 修正點：在 db 後面加上 !，在 appId 後面也加上 ! ★★★
-              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
+              // 1. 統一使用這個路徑，不要再改動
+              const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
-                  const savedSettings = docSnap.data() as SystemSettings;
-                  // 合併預設值與資料庫設定
+                  const dbData = docSnap.data() as SystemSettings;
+                  
+                  // ★ 關鍵邏輯：將資料庫的資料 (dbData) 覆蓋在預設值 (defaultSettings) 之上
+                  // 這樣即使 defaultSettings 裡有新加的功能，舊的資料也不會不見
                   setSettings(prev => ({
-                      ...defaultSettings, 
-                      ...savedSettings    
+                      ...defaultSettings, // 先載入代碼中的預設結構 (保底)
+                      ...dbData,          // 再載入資料庫的真實資料 (覆蓋)
+                      
+                      // 強制確保陣列使用資料庫的 (防止被預設值洗掉)
+                      expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
+                      expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
+                      cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
+                      cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
+                      
+                      // 確保物件類型的合併正確
+                      models: { ...defaultSettings.models, ...(dbData.models || {}) },
+                      reminders: { ...defaultSettings.reminders, ...(dbData.reminders || {}) },
+                      backup: { ...defaultSettings.backup, ...(dbData.backup || {}) }
                   }));
-                  console.log("✅ 成功載入系統設定");
+                  
+                  console.log("✅ 系統設定已從資料庫同步 (User Settings Loaded)");
               } else {
-                  // 如果資料庫完全沒設定 (第一次使用)，則寫入預設值
+                  // 只有在「完全沒有資料」的情況下，才寫入預設值
+                  console.log("⚠️ 首次運行：寫入預設設定到資料庫");
                   await setDoc(docRef, defaultSettings);
-                  console.log("⚠️ 無設定檔，已寫入預設值");
+                  setSettings(defaultSettings);
               }
           } catch (error) {
-              console.error("❌ 讀取設定失敗:", error);
+              console.error("❌ 設定讀取失敗:", error);
           }
       };
 
       fetchSettings();
-  }, [db, appId]);
+  }, [db, appId]); // 這裡只依賴 db 和 appId，不依賴 staffId，確保一開啟就載入
 
   // --- Auth & Data Loading ---
   useEffect(() => {
@@ -3279,22 +3294,7 @@ export default function GoldLandAutoDMS() {
       setInventory(list);
     }, (err) => console.error("Inv sync error", err));
 
-    const settingsDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_config', 'general_settings');
-    getDoc(settingsDocRef).then(docSnap => {
-      if (docSnap.exists()) {
-        const loadedSettings = docSnap.data() as SystemSettings;
-        setSettings({
-            ...DEFAULT_SETTINGS,
-            ...loadedSettings,
-            models: { ...DEFAULT_SETTINGS.models, ...loadedSettings.models },
-            expenseCompanies: loadedSettings.expenseCompanies || DEFAULT_SETTINGS.expenseCompanies,
-            cbItems: loadedSettings.cbItems || DEFAULT_SETTINGS.cbItems,
-            cbInstitutions: loadedSettings.cbInstitutions || DEFAULT_SETTINGS.cbInstitutions
-        });
-      } else {
-        setDoc(settingsDocRef, DEFAULT_SETTINGS);
-      }
-    });
+    
 
     return () => { unsubInv(); };
   }, [staffId]);
