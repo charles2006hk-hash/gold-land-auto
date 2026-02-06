@@ -3082,6 +3082,20 @@ export default function GoldLandAutoDMS() {
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
+  // --- User Management Helper (v13.1 新增) ---
+    const updateSystemUsers = async (newUsers: any[]) => {
+        setSystemUsers(newUsers); // 更新畫面
+        if (db && appId) {
+            try {
+                // 同步寫入 Firebase
+                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users');
+                await setDoc(docRef, { list: newUsers }, { merge: true });
+            } catch (err) {
+                console.error("Failed to update users:", err);
+            }
+        }
+    };
+
   const addSystemLog = async (action: string, detail: string) => {
     if (!db || !appId) return;
     try {
@@ -6122,6 +6136,8 @@ const CreateDocModule = ({
                       inventory={inventory}
                       updateSettings={updateSettings}
                       addSystemLog={addSystemLog}
+                      systemUsers={systemUsers}
+                      updateSystemUsers={updateSystemUsers}
                   />
               </div>
           )}
