@@ -1938,7 +1938,7 @@ type CrossBorderViewProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 6. Cross Border Module (v12.0: 多選新增 + 收款紀錄詳情) ★★★
+// ★★★ 6. Cross Border Module (v12.1: 修復變數名稱錯誤) ★★★
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment 
@@ -1953,7 +1953,7 @@ const CrossBorderView = ({
     // 編輯與新增表單狀態
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     
-    // ★ 修改：新增任務改為支援多選 (selectedItems)
+    // 多選新增狀態
     const [newTaskDate, setNewTaskDate] = useState('');
     const [selectedServiceItems, setSelectedServiceItems] = useState<string[]>([]); // 儲存勾選的項目
     const [newTaskNote, setNewTaskNote] = useState('');
@@ -2028,7 +2028,7 @@ const CrossBorderView = ({
         setIsAddModalOpen(true); 
     };
 
-    // ★ 處理多選勾選
+    // 處理多選勾選
     const toggleServiceItem = (item: string) => {
         if (selectedServiceItems.includes(item)) {
             setSelectedServiceItems(prev => prev.filter(i => i !== item));
@@ -2037,7 +2037,7 @@ const CrossBorderView = ({
         }
     };
 
-    // ★ 批量新增任務 (核心修改)
+    // 批量新增任務 (核心修改)
     const handleAddBatchTasks = () => {
         if (!activeCar) return;
         if (selectedServiceItems.length === 0) { alert("請至少選擇一個項目"); return; }
@@ -2047,7 +2047,7 @@ const CrossBorderView = ({
             const defaults = findItemDefaults(item);
             const newTask: CrossBorderTask = { 
                 id: Date.now().toString() + Math.random().toString(36).substr(2, 5), // 確保 ID 唯一
-                date: newTaskTaskDate, 
+                date: newTaskDate, // ★★★ 修正點：這裡是 newTaskDate ★★★
                 item: item, 
                 fee: Number(defaults.fee) || 0, // 自動帶入預設費用
                 days: defaults.days, 
@@ -2124,7 +2124,7 @@ const CrossBorderView = ({
                 </div>
             )}
 
-            {/* Modal: 新增收費 (v12.0 改良版 - 多選) */}
+            {/* Modal: 新增收費 (v12.1) */}
             {isAddModalOpen && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="bg-white w-96 p-5 rounded-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
@@ -2248,7 +2248,6 @@ const CrossBorderView = ({
                                     <tbody className="divide-y">
                                         {(activeCar.crossBorder?.tasks || []).map((task: any) => {
                                             const isEditing = editingTaskId === task.id;
-                                            // 計算該任務的已收款項
                                             const taskPayments = (activeCar.payments || []).filter((p:any) => p.relatedTaskId === task.id);
                                             const paid = taskPayments.reduce((s:any,p:any)=>s+p.amount,0);
                                             
@@ -2289,7 +2288,7 @@ const CrossBorderView = ({
                                                         </td>
                                                     </tr>
 
-                                                    {/* ★ 展開區塊：收款紀錄與新增收款 (v12.0) ★ */}
+                                                    {/* 展開區塊：收款紀錄與新增收款 */}
                                                     {isExpanded && (
                                                         <tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner">
                                                             <td colSpan={5} className="p-3 pl-8">
