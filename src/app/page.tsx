@@ -3154,38 +3154,49 @@ export default function GoldLandAutoDMS() {
   }, [db, appId]);
 
   // -------------------------------------------------------------
-  // ★★★ 系統設定讀取 (v14.2 修正版：修復 TypeScript db 類型錯誤) ★★★
+  // ★★★ 系統設定讀取 (v14.3 修正版：修復 Boolean 類型衝突) ★★★
   // -------------------------------------------------------------
   useEffect(() => {
-      // 1. 第一層防護：如果沒有 db 或 appId，直接不執行
+      // 1. 第一層防護
       if (!db || !appId) return;
 
       const fetchSettings = async () => {
           try {
-              // ★★★ 修正點：在 db 後面加上 !，在 appId 後面也加上 ! ★★★
-              // 這告訴 TypeScript "我保證這些變數現在不是 null"
+              // 使用 ! 確保非空值
               const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
-              
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
                   const dbData = docSnap.data() as SystemSettings;
                   
-                  // 合併邏輯：資料庫優先
+                  // ★ 關鍵修復：針對 Boolean 值使用 ?? 運算符確保類型正確
                   setSettings(prev => ({
                       ...defaultSettings, 
                       ...dbData,          
                       
-                      // 陣列保護
+                      // 陣列保護 (防止被預設值洗掉)
                       expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
                       expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
                       cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
                       
-                      // 物件保護
+                      // 物件保護 + Boolean 類型強制修正
                       models: { ...defaultSettings.models, ...(dbData.models || {}) },
-                      reminders: { ...defaultSettings.reminders, ...(dbData.reminders || {}) },
-                      backup: { ...defaultSettings.backup, ...(dbData.backup || {}) }
+                      
+                      reminders: { 
+                          ...defaultSettings.reminders, 
+                          ...(dbData.reminders || {}),
+                          // ★★★ 這裡修復了報錯 ★★★
+                          // 意思：如果 DB 有值就用 DB 的，否則用 Default 的，確保一定是 true/false
+                          isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders?.isEnabled ?? true
+                      },
+                      
+                      backup: { 
+                          ...defaultSettings.backup, 
+                          ...(dbData.backup || {}),
+                          // 同樣對 backup 的 boolean 做保護
+                          autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup?.autoCloud ?? true
+                      }
                   }));
                   
                   console.log("✅ 系統設定已從資料庫同步");
