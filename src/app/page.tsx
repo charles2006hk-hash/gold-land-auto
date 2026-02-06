@@ -5836,7 +5836,7 @@ const CreateDocModule = ({
                   );
               })()}
               
-              {/* 3. 庫存列表 (v11.0: 增加外觀、內飾、公里數顯示) */}
+              {/* 3. 庫存列表 (v11.1: 修正財務完成判定 - 納入中港費用) */}
               {(() => {
                   const sortedList = [...inventory].sort((a,b) => (a.status==='In Stock'?0:1) - (b.status==='In Stock'?0:1)); 
                   return (
@@ -5848,7 +5848,7 @@ const CreateDocModule = ({
                                     <th className="p-3 w-10 text-center">Act</th>
                                     <th className="p-3 w-20">狀態</th>
                                     <th className="p-3">車牌 / 車型</th>
-                                    <th className="p-3">規格 (外/內/里)</th> {/* ★ 新增欄位 */}
+                                    <th className="p-3">規格 (外/內/里)</th>
                                     <th className="p-3 hidden md:table-cell">手數/座位/排量</th>
                                     <th className="p-3 text-right">牌費</th>
                                     <th className="p-3 text-right">財務狀況</th>
@@ -5856,8 +5856,19 @@ const CreateDocModule = ({
                             </thead>
                             <tbody>
                               {sortedList.map(car => {
+                                  // ★★★ 修正財務邏輯：納入中港業務費用 ★★★
+                                  // 1. 計算已收總額
                                   const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
-                                  const balance = (car.price || 0) - received;
+                                  
+                                  // 2. 計算中港業務總費用 (只計算有金額的任務)
+                                  const cbFees = (car.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                                  
+                                  // 3. 真正的總應收 = 車價 + 中港費用
+                                  const totalReceivable = (car.price || 0) + cbFees;
+                                  
+                                  // 4. 真正的餘額 (欠款)
+                                  const balance = totalReceivable - received;
+                                  
                                   const unpaidExps = (car.expenses || []).filter(e => e.status === 'Unpaid').length || 0;
                                   
                                   let statusText = '在庫';
@@ -5876,7 +5887,7 @@ const CreateDocModule = ({
                                           <div className="text-slate-500">{car.year} {car.make} {car.model}</div>
                                       </td>
 
-                                      {/* ★ 新增：外觀/內飾/公里數 */}
+                                      {/* 規格：外觀/內飾/公里數 */}
                                       <td className="p-3">
                                           <div className="flex flex-col gap-0.5 text-xs text-gray-600">
                                               <div className="flex items-center gap-1"><span className="text-[10px] text-gray-400 w-6">Ext:</span><span className="font-bold">{car.colorExt || '-'}</span></div>
@@ -5895,7 +5906,18 @@ const CreateDocModule = ({
                                       </td>
 
                                       <td className="p-3 text-right"><div className="font-bold text-slate-700">{formatCurrency(car.price)}</div><div className="text-[10px] text-gray-400 mt-1">牌: {car.licenseExpiry || '-'}</div></td>
-                                      <td className="p-3 text-right">{balance > 0 && car.status !== 'In Stock' ? (<span className="text-blue-600 font-bold block">欠 {formatCurrency(balance)}</span>) : ((car.status === 'Sold' && unpaidExps === 0) ? <span className="text-green-500 font-bold">完成</span> : <span className="text-gray-300">-</span>)}{unpaidExps > 0 && <span className="text-red-500 text-[10px] block mt-0.5">{unpaidExps} 筆未付</span>}</td>
+                                      
+                                      {/* 財務狀況 (已更新邏輯) */}
+                                      <td className="p-3 text-right">
+                                          {balance > 0 ? (
+                                              <span className="text-blue-600 font-bold block">欠 {formatCurrency(balance)}</span>
+                                          ) : (
+                                              (car.status === 'Sold' && unpaidExps === 0) ? 
+                                              <span className="text-green-500 font-bold">完成</span> : 
+                                              (car.status === 'In Stock' ? <span className="text-gray-300">-</span> : <span className="text-green-600 font-bold text-xs">已結清</span>)
+                                          )}
+                                          {unpaidExps > 0 && <span className="text-red-500 text-[10px] block mt-0.5">{unpaidExps} 筆未付</span>}
+                                      </td>
                                     </tr>
                                   );
                               })}
