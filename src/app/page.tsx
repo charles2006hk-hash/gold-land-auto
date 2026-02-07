@@ -2053,9 +2053,17 @@ const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => 
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：業務辦理流程模組 (Business Process Module) ★★★
+// ★★★ 新增：業務辦理流程模組 (Business Process Module) - v17.1 修復版 ★★★
 // ------------------------------------------------------------------
-const BusinessProcessModule = ({ db, staffId, appId, inventory, updateVehicle }: any) => {
+const BusinessProcessModule = ({ 
+    db, staffId, appId, inventory, updateVehicle 
+}: { 
+    db: any, 
+    staffId: string, 
+    appId: string, 
+    inventory: Vehicle[], // ★ 修復：明確定義這是 Vehicle 陣列
+    updateVehicle: any 
+}) => {
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -2120,9 +2128,9 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, updateVehicle }:
         return val;
     };
 
-    // 篩選列表
+    // 篩選列表 (現在 v 會自動被識別為 Vehicle 類型，不會報錯了)
     const activeCases = inventory.filter(v => v.activeWorkflow);
-    const filteredCases = activeCases.filter(v => v.regMark.includes(searchTerm.toUpperCase()));
+    const filteredCases = activeCases.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()));
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-slate-50 animate-fade-in">
@@ -2133,7 +2141,7 @@ const BusinessProcessModule = ({ db, staffId, appId, inventory, updateVehicle }:
                     <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Briefcase size={24} className="mr-2 text-blue-600"/> 業務辦理中心</h2>
                     <p className="text-xs text-slate-500">集中處理港車北上、兩地牌新辦及維護流程</p>
                 </div>
-                {/* 簡單的選車按鈕，實際應用可做成 Modal */}
+                {/* 簡單的選車按鈕 */}
                 <div className="relative">
                     <select 
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 font-bold text-sm outline-none cursor-pointer appearance-none pr-8"
