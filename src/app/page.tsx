@@ -14,6 +14,7 @@ import {
   Minimize2, Maximize2, Eye, Star
 } from 'lucide-react';
 
+import { compressImage } from '@/utils/imageHelpers';
 
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
@@ -105,10 +106,12 @@ const COMPANY_INFO = {
   name_ch: "金田汽車",
   address_en: "Rm 11, 22/F, Blk B, New Trade Plaza, 6 On Ping St, Shek Mun, Shatin, N.T., HK",
   address_ch: "香港沙田石門安平街6號新貿中心B座22樓11室",
-  phone: "+852 3490 6112",
+  phone: "+852 3996 9796",
   email: "marketing@goldlandhk.com",
   logo_url: "/GL_APPLOGO.png" 
 };
+
+
 
 type DatabaseEntry = {
     id: string;
@@ -1741,7 +1744,7 @@ const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 重構版 v7.1：智能圖庫模組 (響應式優化) ★★★
+// ★★★ Media Library Module (v16.1: 使用標準壓縮工具 + 130KB 限制) ★★★
 // ------------------------------------------------------------------
 const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }: any) => {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
@@ -1799,6 +1802,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         return Object.values(groups).sort((a, b) => b.timestamp - a.timestamp);
     }, [mediaItems, inventory, searchQuery]);
 
+    // ★★★ 修改點：使用標準壓縮工具 compressImage (目標 130KB) ★★★
     const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || !storage) return;
@@ -1806,11 +1810,17 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
-                const compressedBlob = await compressImageSmart(file);
+                // 1. 調用 utils 中的壓縮工具，設定目標為 130KB
+                const compressedBase64 = await compressImage(file, 130);
+                
+                // 2. 上傳到 Firebase Storage (使用 uploadString 上傳 Base64)
                 const filePath = `media/${appId}/${Date.now()}_${file.name}`;
                 const storageRef = ref(storage, filePath);
-                const uploadTask = await uploadBytes(storageRef, compressedBlob, { contentType: 'image/jpeg' }); 
-                const downloadURL = await getDownloadURL(uploadTask.ref);
+                
+                // 注意：uploadBytes 改為 uploadString，因為 compressImage 回傳的是 data_url 字串
+                await uploadString(storageRef, compressedBase64, 'data_url');
+                
+                const downloadURL = await getDownloadURL(storageRef);
                 await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), { url: downloadURL, path: filePath, fileName: file.name, tags: ["Inbox"], status: 'unassigned', aiData: {}, createdAt: serverTimestamp() });
             } catch (err) { console.error(err); }
         }
@@ -1851,7 +1861,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             <div className="w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px]">
                 <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
                     <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 待處理 ({inboxItems.length})</h3>
-                    <label className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm">
+                    <label className={`bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
                         {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>} 匯入
                         <input type="file" multiple accept="image/*" className="hidden" onChange={handleSmartUpload} disabled={uploading}/>
                     </label>
@@ -1954,12 +1964,19 @@ type CrossBorderViewProps = {
 // ------------------------------------------------------------------
 // ★★★ Document Custody Modal (v14.0: 文件交收打卡視窗 - 保持不變) ★★★
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// ★★★ Document Custody Modal (v16.1: 壓縮<100KB + 放大預覽) ★★★
+// ------------------------------------------------------------------
 const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => {
     const [action, setAction] = useState<'CheckIn' | 'CheckOut'>('CheckIn');
     const [docName, setDocName] = useState('牌簿 (VRD)');
     const [target, setTarget] = useState(action === 'CheckIn' ? (vehicle.customerName || '客戶') : '客戶');
     const [photo, setPhoto] = useState<string | null>(null);
     const [note, setNote] = useState('');
+    
+    // ★ 新增狀態
+    const [isCompressing, setIsCompressing] = useState(false);
+    const [previewZoom, setPreviewZoom] = useState<string | null>(null);
 
     const commonDocs = ['牌簿 (VRD)', '行車證', '香港身份證', '回鄉證', '公司註冊證 (CI)', '商業登記 (BR)', '批文卡', '禁區紙', '驗車紙'];
 
@@ -1973,12 +1990,21 @@ const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => 
     };
     const currentStatus = getCurrentStatus();
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // ★ 圖片處理邏輯 (壓縮至 100KB)
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => setPhoto(ev.target?.result as string);
-            reader.readAsDataURL(file);
+            setIsCompressing(true);
+            try {
+                // 使用工具函數，強制壓到 100KB 以下 (更適合文件傳輸)
+                const compressedDataUrl = await compressImage(file, 100);
+                setPhoto(compressedDataUrl);
+            } catch (err) {
+                console.error(err);
+                alert("圖片處理失敗，請重試");
+            } finally {
+                setIsCompressing(false);
+            }
         }
     };
 
@@ -2012,11 +2038,57 @@ const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => 
                         </div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">文件</label><div className="flex flex-wrap gap-2 mb-2">{commonDocs.map(d => (<button key={d} onClick={() => setDocName(d)} className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${docName===d ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-gray-50'}`}>{d}</button>))}</div><input value={docName} onChange={e=>setDocName(e.target.value)} className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold outline-none bg-transparent" placeholder="輸入文件名稱..."/></div>
                         <div><label className="block text-xs font-bold text-gray-500 mb-1">{action === 'CheckIn' ? '來自' : '交給'}</label><input value={target} onChange={e=>setTarget(e.target.value)} className="w-full bg-gray-50 p-3 rounded-lg text-sm outline-none font-bold" /><div className="flex gap-2 mt-1">{['客戶', '運輸署', '中檢', '快遞'].map(t => <button key={t} onClick={() => setTarget(t)} className="text-[10px] bg-gray-100 px-2 py-1 rounded text-gray-600">{t}</button>)}</div></div>
-                        <div className="flex items-center gap-4"><label className="w-16 h-16 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-gray-400 cursor-pointer border border-dashed hover:bg-gray-200"><ImageIcon size={20}/><span className="text-[9px]">相機</span><input type="file" accept="image/*" className="hidden" onChange={handleFileChange} /></label>{photo && (<div className="relative w-16 h-16 rounded-lg overflow-hidden border"><img src={photo} className="w-full h-full object-cover"/><button onClick={() => setPhoto(null)} className="absolute top-0 right-0 bg-red-500 text-white p-0.5"><X size={10}/></button></div>)}<input value={note} onChange={e=>setNote(e.target.value)} placeholder="備註..." className="flex-1 text-xs border-b p-2 outline-none h-16 align-top"/></div>
+                        
+                        <div className="flex items-center gap-4">
+                            <label className={`w-16 h-16 rounded-lg flex flex-col items-center justify-center text-gray-400 cursor-pointer border border-dashed transition-colors ${isCompressing ? 'bg-gray-200 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200'}`}>
+                                {isCompressing ? <Loader2 size={20} className="animate-spin text-blue-600"/> : <ImageIcon size={20}/>}
+                                <span className="text-[9px]">{isCompressing ? '壓縮中' : '相機'}</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isCompressing}/>
+                            </label>
+                            
+                            {photo && (
+                                <div className="relative w-16 h-16 rounded-lg overflow-hidden border cursor-zoom-in" onClick={() => setPreviewZoom(photo)}>
+                                    <img src={photo} className="w-full h-full object-cover"/>
+                                    <button onClick={(e) => { e.stopPropagation(); setPhoto(null); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5"><X size={10}/></button>
+                                </div>
+                            )}
+                            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="備註..." className="flex-1 text-xs border-b p-2 outline-none h-16 align-top"/>
+                        </div>
+                    </div>
+
+                    {/* ★ 歷史紀錄顯示區 (含放大功能) */}
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-bold text-slate-500 mb-2">最近紀錄</h4>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {[...(vehicle.crossBorder?.documentLogs || [])].reverse().slice(0, 10).map((log:any, idx:number) => (
+                                <div key={idx} className="flex justify-between items-start text-xs p-2 bg-gray-50 rounded border">
+                                    <div>
+                                        <div className="font-bold">{log.docName} <span className={log.action==='CheckIn'?'text-green-600':'text-red-500'}>{log.action==='CheckIn'?'收':'交'}</span></div>
+                                        <div className="text-gray-400 scale-90 origin-left">{log.timestamp.split(' ')[0]} - {log.handler}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-500">{log.direction}</span>
+                                        {log.photoUrl && (
+                                            <button onClick={() => setPreviewZoom(log.photoUrl)} className="text-blue-600 flex items-center bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                                <ImageIcon size={10} className="mr-1"/> 查看
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
-                <div className="p-4 border-t bg-slate-50"><button onClick={handleSubmit} className={`w-full py-3 rounded-xl text-white font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center ${action==='CheckIn'?'bg-green-600 hover:bg-green-700':'bg-red-500 hover:bg-red-600'}`}>{action==='CheckIn' ? <DownloadCloud size={18} className="mr-2"/> : <Upload size={18} className="mr-2"/>} 確認紀錄</button></div>
+                <div className="p-4 border-t bg-slate-50"><button onClick={handleSubmit} disabled={isCompressing} className={`w-full py-3 rounded-xl text-white font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center ${action==='CheckIn'?'bg-green-600 hover:bg-green-700':'bg-red-500 hover:bg-red-600'} ${isCompressing ? 'opacity-50' : ''}`}>{isCompressing ? '處理中...' : (action==='CheckIn' ? <><DownloadCloud size={18} className="mr-2"/> 確認紀錄</> : <><Upload size={18} className="mr-2"/> 確認紀錄</>)}</button></div>
             </div>
+
+            {/* ★ 圖片放大 Lightbox */}
+            {previewZoom && (
+                <div className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center p-2 animate-in fade-in" onClick={() => setPreviewZoom(null)}>
+                    <img src={previewZoom} className="max-w-full max-h-full object-contain" />
+                    <button className="absolute top-4 right-4 p-2 bg-white/20 text-white rounded-full"><X size={24}/></button>
+                </div>
+            )}
         </div>
     );
 };
@@ -4214,7 +4286,7 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v15.8: 功能全保留 + 擬真車牌樣式) ★★★
+// ★★★ 1. Vehicle Form Modal (v16.1: 擬真車牌 + 手機返回按鈕) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
@@ -4225,10 +4297,9 @@ const VehicleFormModal = ({
     const v = editingVehicle || {} as Partial<Vehicle>;
     const isNew = !v.id; 
     
-    // --- 狀態定義 (保持不變) ---
+    // --- 狀態定義 ---
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [isCbExpanded, setIsCbExpanded] = useState(false); 
-    // ★ 保留 Withdrawn 狀態
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
 
@@ -4246,7 +4317,6 @@ const VehicleFormModal = ({
 
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-    // const [isCompressing, setIsCompressing] = useState(false); // 舊代碼可能有此變數，保留定義以免報錯
 
     // VRD 搜尋狀態
     const [vrdSearch, setVrdSearch] = useState('');
@@ -4263,7 +4333,7 @@ const VehicleFormModal = ({
     const HK_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
     const MO_PORTS = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
 
-    // 計算邏輯 (保持原有)
+    // 計算邏輯
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
     const totalRevenue = (v.price || 0) + cbFees;
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
@@ -4287,7 +4357,6 @@ const VehicleFormModal = ({
         return formatNumberInput(String(a1 + tax));
     };
 
-    // 圖片同步邏輯 (保持原有)
     useEffect(() => {
         if (!v.id || !db || !staffId) return;
         const mediaRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library');
@@ -4322,7 +4391,6 @@ const VehicleFormModal = ({
 
     const autoFetchCustomer = () => { /* 保留 */ }; 
 
-    // VRD 模糊搜尋
     const handleSearchVRD = async () => {
         if (!vrdSearch || !db) return;
         setSearching(true); setVrdResults([]); 
@@ -4344,8 +4412,7 @@ const VehicleFormModal = ({
 
     const applyVrdData = (vrdData: any) => {
         if (!vrdData) return;
-        const regMark = vrdData.plateNoHK || vrdData.regNo || '';
-        setFieldValue('regMark', regMark);
+        setFieldValue('regMark', vrdData.plateNoHK || vrdData.regNo || '');
         const rawMake = vrdData.make || vrdData.brand || ''; 
         if (rawMake) {
             let matchedMake = settings.makes.find((m: string) => m.toLowerCase() === rawMake.toLowerCase());
@@ -4384,55 +4451,60 @@ const VehicleFormModal = ({
         try { if(editingVehicle) editingVehicle.photos = carPhotos; await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
     };
 
+    // 關閉函數
+    const handleClose = () => {
+        setEditingVehicle(null); 
+        if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} 
+    };
+
     return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-hidden">
-        <div className="bg-slate-100 rounded-2xl shadow-2xl w-full max-w-[95vw] h-[90vh] flex flex-col overflow-hidden border border-slate-600">
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden">
+        <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[95vw] h-full md:h-[90vh] flex flex-col overflow-hidden border border-slate-600">
           
-          <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20">
+          <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20 safe-area-top">
             <div className="flex items-center gap-3">
+                {/* ★★★ 手機版專用返回按鈕 ★★★ */}
+                <button type="button" onClick={handleClose} className="md:hidden p-2 -ml-2 mr-1 text-slate-300 hover:text-white active:scale-95 transition-transform">
+                    <ChevronLeft size={28} />
+                </button>
+
                 {isNew ? (
                     <div className="flex items-center gap-2">
                         <div className="p-2 bg-yellow-500 rounded-lg text-black"><Car size={24} /></div>
-                        <h2 className="text-xl font-bold">車輛入庫 (New Entry)</h2>
+                        <h2 className="text-xl font-bold">車輛入庫</h2>
                     </div>
                 ) : (
                     <div className="flex items-center gap-4">
-                        {/* ★★★ 修改 1: 頂部 Header 改為擬真車牌顯示 ★★★ */}
-                        
-                        {/* 香港車牌 */}
+                        {/* 擬真車牌標題 */}
                         <div className="flex flex-col items-start">
-                            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-0.5">Registration</span>
-                            <span className="bg-[#FFD600] text-black border-[3px] border-black font-black font-mono text-2xl px-3 py-0.5 rounded-[4px] shadow-[0_2px_4px_rgba(0,0,0,0.3)] leading-none transform -skew-x-3">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-0.5 hidden md:block">Registration</span>
+                            <span className="bg-[#FFD600] text-black border-[3px] border-black font-black font-mono text-xl md:text-2xl px-3 py-0.5 rounded-[4px] shadow-[0_2px_4px_rgba(0,0,0,0.3)] leading-none transform -skew-x-3">
                                 {v.regMark || '未出牌'}
                             </span>
                         </div>
-
-                        {/* 國內車牌 (黑底白字 或 藍底白字) */}
+                        {/* 內地車牌 */}
                         {v.crossBorder?.mainlandPlate && (
                             <div className="flex flex-col items-start">
-                                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-0.5">Mainland</span>
-                                <span className={`${
-                                    v.crossBorder.mainlandPlate.startsWith('粵Z') 
-                                    ? 'bg-black text-white border-white' 
-                                    : 'bg-[#003399] text-white border-white'
-                                } border-2 font-bold font-mono text-lg px-2 py-1 rounded-[3px] shadow-[0_2px_4px_rgba(0,0,0,0.3)] leading-none tracking-wide`}>
+                                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-0.5 hidden md:block">Mainland</span>
+                                <span className={`${v.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border-2 font-bold font-mono text-sm md:text-lg px-2 py-1 rounded-[3px] shadow-[0_2px_4px_rgba(0,0,0,0.3)] leading-none tracking-wide`}>
                                     {v.crossBorder.mainlandPlate}
                                 </span>
                             </div>
                         )}
-                        
-                        <div className="h-10 w-[1px] bg-slate-700 mx-2"></div>
-                        <div><p className="text-xs text-slate-400 font-mono">ID: {v.id}</p></div>
                     </div>
                 )}
             </div>
-            <div className="flex gap-3"><button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button></div>
+            
+            {/* 電腦版關閉按鈕 */}
+            <div className="flex gap-3 hidden md:block">
+                <button type="button" onClick={handleClose} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
+            </div>
           </div>
 
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
             
-            {/* 左側欄 */}
-            <div className="w-full md:w-[35%] bg-slate-200/50 border-r border-slate-300 flex flex-col h-full overflow-hidden relative">
+            {/* 左側欄 (VRD & Photos) */}
+            <div className="w-full md:w-[35%] bg-slate-200/50 border-r border-slate-300 flex flex-col h-auto md:h-full overflow-hidden relative order-2 md:order-1">
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫中心</h3><button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button></div>
@@ -4450,16 +4522,10 @@ const VehicleFormModal = ({
                         <div className="p-4 space-y-3">
                             <div className="flex justify-between items-center"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)</h3><button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm transition-transform active:scale-95"><Link size={10} className="mr-1"/> 連結資料庫</button></div>
                             
-                            {/* ★★★ 修改 2: 輸入框改為擬真黃色樣式 ★★★ */}
                             <div className="space-y-1 relative">
                                 <label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label>
                                 <div className="flex relative">
-                                    <input 
-                                        name="regMark" 
-                                        defaultValue={v.regMark} 
-                                        placeholder="未出牌" 
-                                        className="w-full bg-[#FFD600] border-[3px] border-black p-2 text-3xl font-black font-mono text-center text-black focus:outline-none focus:ring-4 focus:ring-yellow-200 rounded-md uppercase placeholder:text-yellow-700/50"
-                                    />
+                                    <input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-[#FFD600] border-[3px] border-black p-2 text-3xl font-black font-mono text-center text-black focus:outline-none focus:ring-4 focus:ring-yellow-200 rounded-md uppercase placeholder:text-yellow-700/50"/>
                                 </div>
                             </div>
 
@@ -4503,10 +4569,9 @@ const VehicleFormModal = ({
             </div>
             
             {/* 右側欄 (Sales & Finance) */}
-            <div className="flex-1 flex flex-col h-full bg-white overflow-hidden">
+            <div className="flex-1 flex flex-col h-full bg-white overflow-hidden order-1 md:order-2">
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-thin pb-24">
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                        {/* Status Buttons including Withdrawn */}
                         <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><input type="hidden" name="status" value={currentStatus} />{['In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(status => (<button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-3 py-1.5 rounded-md text-[10px] md:text-xs font-bold transition-all border ${currentStatus === status ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>{status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}</button>))}</div>
                         <div className="flex gap-3 text-xs"><div className="flex items-center gap-1"><span className="text-gray-400">入庫:</span><input name="stockInDate" type="date" defaultValue={v.stockInDate || new Date().toISOString().split('T')[0]} className="bg-transparent font-mono font-bold text-slate-700 outline-none"/></div><div className="flex items-center gap-1"><span className="text-gray-400">出庫:</span><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="bg-transparent font-mono font-bold text-green-600 outline-none"/></div></div>
                     </div>
@@ -4592,7 +4657,7 @@ const VehicleFormModal = ({
                         </div>
                     </div>
 
-                    <div className="p-4 border-t border-slate-200 bg-white sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-end gap-3 items-start">
+                    <div className="p-4 border-t border-slate-200 bg-white sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-end gap-3 items-start safe-area-bottom">
                         <div className="flex-1 mr-4">
                             <textarea name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2 border rounded h-16 resize-none outline-none focus:ring-1 ring-blue-200"></textarea>
                         </div>
@@ -4602,7 +4667,7 @@ const VehicleFormModal = ({
                                 <button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印發票"><Printer size={18}/></button>
                             </div>
                         )}
-                        <button type="button" onClick={() => {setEditingVehicle(null); if(activeTab !== 'inventory_add') {} else {setActiveTab('inventory');} }} className="px-5 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
+                        <button type="button" onClick={handleClose} className="px-5 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
                         <button type="submit" className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center"><Save size={16} className="mr-2"/> 儲存變更</button>
                     </div>
                 </div>
