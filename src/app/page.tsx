@@ -11,7 +11,7 @@ import {
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
   Check, AlertCircle, Link, Share2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
-  Minimize2, Maximize2, Eye, Star
+  Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History
 } from 'lucide-react';
 
 import { compressImage } from '@/utils/imageHelpers';
