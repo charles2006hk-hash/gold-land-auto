@@ -3161,8 +3161,9 @@ export default function GoldLandAutoDMS() {
         backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
     };
 
+  const [primaryImages, setPrimaryImages] = useState<Record<string, string>>({});
     // 2. 初始化 State (使用上面的 defaultSettings 作為初始值)
-    const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
+  const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
   const [dbEntries, setDbEntries] = useState<DatabaseEntry[]>([]);
   // UI States
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
@@ -3227,6 +3228,32 @@ export default function GoldLandAutoDMS() {
     return () => unsub();
   }, [db, appId]);
 
+
+  // ★★★ 2. 新增：監聽智能圖庫的封面圖 (只讀取有標記 isPrimary 的圖) ★★★
+  useEffect(() => {
+      if (!db || !appId) return;
+      
+      // 查詢條件：狀態是已連結 (linked) 且 是封面 (isPrimary)
+      const q = query(
+          collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'),
+          where('status', '==', 'linked'),
+          where('isPrimary', '==', true)
+      );
+
+      const unsub = onSnapshot(q, (snapshot) => {
+          const map: Record<string, string> = {};
+          snapshot.forEach(doc => {
+              const data = doc.data();
+              if (data.relatedVehicleId && data.url) {
+                  map[data.relatedVehicleId] = data.url;
+              }
+          });
+          setPrimaryImages(map);
+      });
+
+      return () => unsub();
+  }, [db, appId]);
+  
   // -------------------------------------------------------------
   // ★★★ 系統設定讀取 (v14.5 修正版：修復 defaultSettings 可選屬性報錯) ★★★
   // -------------------------------------------------------------
@@ -6082,7 +6109,8 @@ const CreateDocModule = ({
                         const cbTags = getCbTags(car.crossBorder?.ports);
                         
                         // ★ 獲取首圖 (如果沒有則顯示 Placeholder)
-                        const thumbUrl = car.photos && car.photos.length > 0 ? car.photos[0] : null;
+                        // ★★★ 修改：優先使用智能圖庫的封面圖，如果沒有才用舊的 photos ★★★
+                        const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
 
                         return (
                         <div key={car.id} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative overflow-hidden">
