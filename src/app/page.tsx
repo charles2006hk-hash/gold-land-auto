@@ -268,51 +268,7 @@ type CrossBorderData = {
     tasks?: CrossBorderTask[];
 };
 
-// --- 新增：業務辦理模組類型定義 ---
 
-// 1. 流程模板 (配置用，存於 Settings)
-type WorkflowTemplate = {
-  id: string;
-  name: string; // e.g., "港車北上 (2026)"
-  description: string;
-  steps: WorkflowStepTemplate[];
-};
-
-// 2. 流程步驟定義
-type WorkflowStepTemplate = {
-  id: string;
-  stepName: string; // e.g., "網上抽籤"
-  description: string; // 操作指引
-  externalLink?: string; // 政府網址
-  requiredDocs: string[]; // 需收集的文件名稱 (對應資料庫)
-  defaultFee: number; // 標準收費
-  estimatedDays: number; // 預計耗時
-};
-
-// 3. 實際辦理案件 (存於 Database/Inventory 或獨立 Collection)
-type ServiceCase = {
-  id: string;
-  vehicleId: string; // 關聯車輛
-  templateId: string; // 使用哪個模板
-  status: 'Active' | 'Completed' | 'Suspended';
-  currentStepIndex: number; // 當前走到第幾步
-  startDate: string;
-  
-  // 每個步驟的執行狀況
-  stepsData: {
-    stepId: string;
-    status: 'Pending' | 'In Progress' | 'Done' | 'Skipped';
-    startDate?: string;
-    completedDate?: string;
-    collectedDocs: string[]; // 已收集的文件 ID (關聯 dbEntries)
-    fee: number; // 實際收費
-    isPaid: boolean;
-    notes?: string;
-  }[];
-  
-  createdAd: any;
-  updatedAt: any;
-};
 
 type Vehicle = {
   id: string;
@@ -365,6 +321,21 @@ type Vehicle = {
 
   createdAt?: any;
   updatedAt?: any;
+
+  activeWorkflow?: {
+      type: string;        // 流程類型 (例如 'HK_NORTH')
+      currentStep: number; // 當前步驟索引 (0, 1, 2...)
+      startDate: string;   // 開案日期
+      logs: {              // 辦理紀錄
+          id: string;
+          action: string;
+          stage: string;
+          details: string;
+          timestamp: string;
+          attachments: string[];
+          user: string;
+      }[];
+  };
 };
 
 type SystemSettings = {
@@ -480,58 +451,46 @@ const DEFAULT_SETTINGS: SystemSettings = {
   }
 };
 
-const HZMB_WORKFLOW: WorkflowTemplate = {
-  id: 'hzmb_northbound_2026',
-  name: '港車北上 (HZMB Northbound 2026)',
-  description: '適用於 8 座以下非營運私家車，需每年續期',
-  steps: [
-    {
-      id: 'step_1',
-      stepName: '1. 登記與抽籤 (Lottery)',
-      description: '於官網登記電腦抽籤。中籤後 72 小時內需遞交正式申請。',
-      externalLink: 'https://www.hzmbqfs.gov.hk/', // 官方指定網站
-      requiredDocs: ['香港身份證', '回鄉證', '車輛牌簿(VRD)'],
-      defaultFee: 0,
-      estimatedDays: 14 
+// ------------------------------------------------------------------
+// ★★★ 新增：業務流程範本定義 (Workflow Templates) ★★★
+// ------------------------------------------------------------------
+const WORKFLOW_TEMPLATES = {
+    'HK_NORTH': { 
+        name: '港車北上 (New Application)', 
+        color: 'bg-blue-600',
+        steps: [
+            { name: '官網抽籤', url: 'https://www.hzmbqfs.gov.hk/', fields: ['regMark', 'chassisNo'] },
+            { name: '預約驗車 (中檢)', url: 'https://www.cic.com.hk/', fields: ['regMark', 'chassisNo', 'engineNo'] },
+            { name: '內地系統備案', url: 'https://gcbs.gdzwfw.gov.cn/', fields: ['regMark', 'driver1'] }, // driver1_id 需確保 Vehicle 有此欄位或從 crossBorder 讀取
+            { name: '購買內地保險', url: '', fields: [] },
+            { name: '上傳驗車報告', url: 'https://gcbs.gdzwfw.gov.cn/', fields: [] },
+            { name: '獲取電子牌證', url: '', fields: [] }
+        ]
     },
-    {
-      id: 'step_2',
-      stepName: '2. 內地審核與驗車 (Vetting & Inspection)',
-      description: '待運輸署初步審核後，預約並前往香港指定地點(中檢)驗車。',
-      externalLink: 'https://www.cic.com.hk/', // 中檢預約
-      requiredDocs: ['驗車合格紙(中檢)', '審核通知書'],
-      defaultFee: 800, // 假設代辦費
-      estimatedDays: 10
+    'Z_LICENSE_NEW': { 
+        name: '粵Z新辦 (New License)', 
+        color: 'bg-purple-600',
+        steps: [
+            { name: '省廳批文申請', url: 'http://gdga.gd.gov.cn/', fields: ['hkCompany', 'mainlandCompany'] },
+            { name: '商務廳核准', url: '', fields: [] },
+            { name: '海關備案', url: 'https://www.singlewindow.cn/', fields: ['chassisNo', 'colorExt'] },
+            { name: '司機體檢', url: '', fields: ['driver1'] },
+            { name: '驗車 (中檢)', url: 'https://www.cic.com.hk/', fields: ['regMark'] },
+            { name: '領取行駛證', url: '', fields: [] }
+        ]
     },
-    {
-      id: 'step_3',
-      stepName: '3. 購買保險 (Insurance)',
-      description: '購買「等效先認」保險或內地「交強險」，並上傳至內地系統。',
-      externalLink: '', 
-      requiredDocs: ['內地交強險單', '內地商業險單(選購)'],
-      defaultFee: 3000, // 假設保費+手續費
-      estimatedDays: 3
-    },
-    {
-      id: 'step_4',
-      stepName: '4. 獲發牌證 (Permit Issuance)',
-      description: '內地審核通過發出「電子牌證」，運輸署發出「封閉道路通行許可證」。',
-      externalLink: '',
-      requiredDocs: ['電子牌證', '封閉道路通行許可證', '電子批准信'],
-      defaultFee: 540, // 港府許可證費用
-      estimatedDays: 5
-    },
-    {
-      id: 'step_5',
-      stepName: '5. 預約出行 (Booking)',
-      description: '透過系統預約日子，需留意每年停留不超過 180 天限制。',
-      externalLink: 'https://www.hzmbqfs.gov.hk/tc/booking/',
-      requiredDocs: ['出行預約單'],
-      defaultFee: 0,
-      estimatedDays: 1
+    'DRIVER_CHANGE': {
+        name: '更換司機 (Change Driver)',
+        color: 'bg-orange-500',
+        steps: [
+            { name: '省廳批文變更', url: 'http://gdga.gd.gov.cn/', fields: ['hkCompany', 'driver1'] },
+            { name: '海關變更', url: 'https://www.singlewindow.cn/', fields: [] },
+            { name: '預約禁區紙', url: 'https://www.td.gov.hk/', fields: ['regMark'] }
+        ]
     }
-  ]
 };
+
+
 
 // ★★★ 修改：重新定義口岸分類 ★★★
 const PORTS_HK_GD = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
@@ -2089,6 +2048,303 @@ const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => 
                     <button className="absolute top-4 right-4 p-2 bg-white/20 text-white rounded-full"><X size={24}/></button>
                 </div>
             )}
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
+// ★★★ 新增：業務辦理流程模組 (Business Process Module) ★★★
+// ------------------------------------------------------------------
+const BusinessProcessModule = ({ db, staffId, appId, inventory, updateVehicle }: any) => {
+    const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // 內部狀態：記錄輸入框
+    const [note, setNote] = useState('');
+    const [photo, setPhoto] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // 處理日誌保存與下一步
+    const handleSaveLog = async (currentStepName: string, nextStepIndex: number) => {
+        if (!editingVehicle || !editingVehicle.id) return;
+        setIsSaving(true);
+
+        const newLog = {
+            id: Date.now().toString(),
+            action: 'Step Completed',
+            stage: currentStepName,
+            details: note || '完成步驟',
+            timestamp: new Date().toLocaleString(),
+            attachments: photo ? [photo] : [],
+            user: staffId || 'System'
+        };
+
+        const currentWf = editingVehicle.activeWorkflow!;
+        const updatedWf = { 
+            ...currentWf, 
+            currentStep: nextStepIndex, 
+            logs: [...(currentWf.logs || []), newLog] 
+        };
+
+        await updateVehicle(editingVehicle.id, { activeWorkflow: updatedWf });
+        
+        // 更新本地狀態
+        setEditingVehicle(prev => prev ? { ...prev, activeWorkflow: updatedWf } : null);
+        setNote('');
+        setPhoto(null);
+        setIsSaving(false);
+    };
+
+    // 處理新開案件
+    const handleStartWorkflow = async (typeKey: string) => {
+        if (!editingVehicle || !editingVehicle.id) return;
+        if (!confirm("確定為此車輛開啟新案件？")) return;
+
+        const newWf = { 
+            type: typeKey, 
+            currentStep: 0, 
+            startDate: new Date().toISOString().split('T')[0], 
+            logs: [] 
+        };
+        await updateVehicle(editingVehicle.id, { activeWorkflow: newWf });
+        setEditingVehicle(prev => prev ? { ...prev, activeWorkflow: newWf } : null);
+    };
+
+    // 讀取欄位資料 (包含 CrossBorder 內的資料)
+    const getFieldValue = (field: string) => {
+        if (!editingVehicle) return '';
+        // 優先找根目錄，再找 crossBorder
+        const val = (editingVehicle as any)[field] || 
+                    editingVehicle.crossBorder?.[field as keyof CrossBorderData] || 
+                    (editingVehicle.crossBorder as any)?.[`cb_${field}`] || '';
+        return val;
+    };
+
+    // 篩選列表
+    const activeCases = inventory.filter(v => v.activeWorkflow);
+    const filteredCases = activeCases.filter(v => v.regMark.includes(searchTerm.toUpperCase()));
+
+    return (
+        <div className="flex flex-col h-full overflow-hidden bg-slate-50 animate-fade-in">
+            
+            {/* 1. 頂部工具列 */}
+            <div className="flex justify-between items-center p-4 bg-white border-b border-slate-200 flex-none shadow-sm z-10">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Briefcase size={24} className="mr-2 text-blue-600"/> 業務辦理中心</h2>
+                    <p className="text-xs text-slate-500">集中處理港車北上、兩地牌新辦及維護流程</p>
+                </div>
+                {/* 簡單的選車按鈕，實際應用可做成 Modal */}
+                <div className="relative">
+                    <select 
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 font-bold text-sm outline-none cursor-pointer appearance-none pr-8"
+                        onChange={(e) => {
+                            const v = inventory.find(i => i.id === e.target.value);
+                            if(v) setEditingVehicle(v);
+                            e.target.value = ""; // 重置
+                        }}
+                    >
+                        <option value="">+ 開啟新案件 (選擇車輛)</option>
+                        {inventory.filter(v => !v.activeWorkflow).map(v => (
+                            <option key={v.id} value={v.id}>{v.regMark} - {v.make} {v.model}</option>
+                        ))}
+                    </select>
+                    <Plus size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none"/>
+                </div>
+            </div>
+
+            {/* 2. 主工作區 (左右分割) */}
+            <div className="flex flex-1 overflow-hidden">
+                
+                {/* 左側：案件列表 (Case List) */}
+                <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-none">
+                    <div className="p-3 border-b bg-slate-50 relative">
+                        <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400"/>
+                        <input 
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            placeholder="搜尋案件 / 車牌..." 
+                            className="w-full pl-8 pr-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 ring-blue-100"
+                        />
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {filteredCases.map(car => {
+                            const wf = car.activeWorkflow!;
+                            const template = (WORKFLOW_TEMPLATES as any)[wf.type] || { name: '未知流程', steps: [], color: 'bg-gray-500' };
+                            const progress = Math.round(((wf.currentStep + 1) / template.steps.length) * 100);
+                            
+                            return (
+                                <div key={car.id} onClick={() => setEditingVehicle(car)} className={`p-3 rounded-xl border cursor-pointer transition-all hover:shadow-md ${editingVehicle?.id === car.id ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white border-slate-200'}`}>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className="font-bold font-mono text-sm bg-yellow-400 px-1 rounded text-black">{car.regMark}</span>
+                                        <span className="text-[10px] text-gray-400">{wf.startDate}</span>
+                                    </div>
+                                    <div className="font-bold text-slate-700 text-sm mb-1">{template.name}</div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className={`h-full ${template.color}`} style={{width: `${progress}%`}}></div></div>
+                                        <span className="text-[10px] font-bold text-blue-600">{wf.currentStep + 1}/{template.steps.length}</span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 truncate">當前: {template.steps[wf.currentStep]?.name}</div>
+                                </div>
+                            );
+                        })}
+                        
+                        {filteredCases.length === 0 && (
+                            <div className="text-center py-10 text-slate-400 text-xs">
+                                <p>尚無進行中的案件</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 右側：智能辦事助手 (The Action Window) */}
+                <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden relative">
+                    {editingVehicle ? (
+                        editingVehicle.activeWorkflow ? (() => {
+                            const wf = editingVehicle.activeWorkflow;
+                            const template = (WORKFLOW_TEMPLATES as any)[wf.type];
+                            const stepIndex = wf.currentStep;
+                            const stepData = template.steps[stepIndex];
+                            
+                            if (!template || !stepData) return <div className="p-10">流程數據錯誤</div>;
+
+                            return (
+                                <div className="flex flex-col h-full">
+                                    {/* A. 流程進度條 */}
+                                    <div className="bg-white border-b border-slate-200 p-4 shadow-sm flex-none">
+                                        <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide pb-2">
+                                            {template.steps.map((s:any, i:number) => (
+                                                <div key={i} className={`flex-none flex flex-col items-center min-w-[80px] relative ${i <= stepIndex ? 'opacity-100' : 'opacity-40 grayscale'}`}>
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs mb-1 transition-all ${i < stepIndex ? 'bg-green-500 text-white' : (i === stepIndex ? 'bg-blue-600 text-white scale-110 shadow-lg ring-4 ring-blue-100' : 'bg-slate-200 text-slate-500')}`}>
+                                                        {i < stepIndex ? <Check size={14}/> : i + 1}
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold whitespace-nowrap ${i === stepIndex ? 'text-blue-700' : 'text-slate-500'}`}>{s.name}</span>
+                                                    {i < template.steps.length - 1 && <div className="absolute top-4 left-[50%] w-full h-[2px] bg-slate-200 -z-10"></div>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* B. 辦事工作區 */}
+                                    <div className="flex-1 overflow-y-auto p-6">
+                                        <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            
+                                            {/* 左：資料準備 (Source) */}
+                                            <div className="space-y-6">
+                                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                    <h4 className="font-bold text-slate-700 mb-4 flex items-center"><Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備 (點擊複製)</h4>
+                                                    <div className="space-y-3">
+                                                        {(stepData.fields || []).map((field: string) => {
+                                                            const val = getFieldValue(field);
+                                                            const labels: any = { regMark: '香港車牌', chassisNo: '車架號', engineNo: '引擎號', driver1: '主司機', driver1_id: '證件號', hkCompany: '香港公司', mainlandCompany: '內地公司', colorExt: '顏色' };
+                                                            return (
+                                                                <div key={field} onClick={() => {navigator.clipboard.writeText(val); alert("已複製: "+val)}} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer group transition-all">
+                                                                    <div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{labels[field] || field}</div><div className="font-mono font-bold text-slate-800 text-lg">{val || '-'}</div></div>
+                                                                    <div className="p-2 bg-white rounded-lg text-slate-300 group-hover:text-blue-500 shadow-sm"><Copy size={16}/></div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {(!stepData.fields || stepData.fields.length === 0) && <div className="text-slate-400 text-sm italic text-center py-4 bg-slate-50 rounded-xl">此步驟無需複製特定資料</div>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
+                                                    <h4 className="font-bold text-indigo-800 mb-3 flex items-center"><Globe size={18} className="mr-2"/> 外部辦事傳送門</h4>
+                                                    {stepData.url ? (
+                                                        <button onClick={() => window.open(stepData.url, 'GovWindow', 'width=1280,height=800')} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-700 hover:shadow-xl transition-all flex items-center justify-center">
+                                                            <ExternalLink size={18} className="mr-2"/> 開啟: {stepData.name} 官網
+                                                        </button>
+                                                    ) : (
+                                                        <div className="text-indigo-400 text-center text-sm border-2 border-dashed border-indigo-200 rounded-xl py-3">需線下辦理 (如驗車) 或無固定網址</div>
+                                                    )}
+                                                    <p className="text-[10px] text-indigo-500 mt-3 text-center">提示：點擊後將彈出政府網站，請在該視窗完成操作後，回來記錄結果。</p>
+                                                </div>
+                                            </div>
+
+                                            {/* 右：結果紀錄 (Result) */}
+                                            <div className="flex flex-col bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-full">
+                                                <h4 className="font-bold text-slate-700 mb-4 flex items-center"><FileCheck size={18} className="mr-2 text-green-600"/> 辦理結果紀錄</h4>
+                                                
+                                                {/* 歷史紀錄預覽 */}
+                                                <div className="flex-1 bg-slate-50 rounded-xl p-3 mb-4 overflow-y-auto max-h-60 border border-slate-100 space-y-3">
+                                                    {(wf.logs || []).slice().reverse().map((log:any, idx:number) => (
+                                                        <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-xs">
+                                                            <div className="flex justify-between mb-1"><span className="font-bold text-blue-600">{log.stage}</span><span className="text-gray-400">{log.timestamp?.split(' ')[0]}</span></div>
+                                                            <p className="text-slate-600">{log.details}</p>
+                                                            {log.attachments?.[0] && <div className="mt-2 text-blue-500 flex items-center gap-1 cursor-pointer" onClick={() => window.open(log.attachments[0])}><ImageIcon size={12}/> 查看截圖</div>}
+                                                        </div>
+                                                    ))}
+                                                    {(wf.logs || []).length === 0 && <div className="text-center text-slate-400 text-xs py-10">尚無紀錄</div>}
+                                                </div>
+
+                                                {/* 輸入區 */}
+                                                <div className="mt-auto space-y-3">
+                                                    <textarea 
+                                                        value={note} 
+                                                        onChange={e => setNote(e.target.value)} 
+                                                        className="w-full border p-3 rounded-xl text-sm focus:ring-2 ring-blue-100 outline-none resize-none bg-slate-50" 
+                                                        rows={3} 
+                                                        placeholder={`請記錄「${stepData.name}」的辦理結果... (例如：預約成功，編號 8888)`}
+                                                    ></textarea>
+                                                    <div className="flex gap-3">
+                                                        <label className={`flex-1 hover:bg-gray-200 text-slate-600 py-3 rounded-xl cursor-pointer flex items-center justify-center text-xs font-bold transition-colors border border-dashed border-gray-300 ${photo ? 'bg-green-100 text-green-700 border-green-300' : 'bg-gray-100'}`}>
+                                                            <Camera size={16} className="mr-2"/> {photo ? '已選取截圖' : '上傳截圖'}
+                                                            <input 
+                                                                type="file" 
+                                                                accept="image/*" 
+                                                                className="hidden" 
+                                                                onChange={async (e) => {
+                                                                    if(e.target.files?.[0]) {
+                                                                        try {
+                                                                            const compressed = await compressImage(e.target.files[0], 100);
+                                                                            setPhoto(compressed);
+                                                                        } catch(err) { alert("圖片處理失敗"); }
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </label>
+                                                        <button 
+                                                            onClick={() => handleSaveLog(stepData.name, Math.min(stepIndex + 1, template.steps.length - 1))} 
+                                                            disabled={isSaving}
+                                                            className="flex-[2] bg-slate-900 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-all flex items-center justify-center disabled:opacity-50"
+                                                        >
+                                                            {isSaving ? <Loader2 className="animate-spin mr-2"/> : <Save size={16} className="mr-2"/>}
+                                                            {stepIndex >= template.steps.length - 1 ? '完成所有流程' : '保存並下一步'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })() : (
+                            // 未開案狀態：顯示開案按鈕
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10">
+                                <GitMerge size={64} className="mb-4 opacity-20"/>
+                                <h3 className="text-xl font-bold text-slate-600 mb-2">{editingVehicle.regMark} 尚未開啟流程</h3>
+                                <p className="text-sm mb-8">請選擇一個業務類型以開始辦理</p>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-4xl">
+                                    {Object.entries(WORKFLOW_TEMPLATES).map(([key, tpl]: any) => (
+                                        <button key={key} onClick={() => handleStartWorkflow(key)} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-300 transition-all text-left group">
+                                            <div className={`w-10 h-10 rounded-lg ${tpl.color} text-white flex items-center justify-center mb-3 shadow-md group-hover:scale-110 transition-transform`}><ArrowRight size={20}/></div>
+                                            <h4 className="font-bold text-slate-800">{tpl.name}</h4>
+                                            <div className="text-xs text-slate-500 mt-1">{tpl.steps.length} 個步驟</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )
+                    ) : (
+                        // 未選車狀態
+                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                            <Briefcase size={64} className="mb-4 opacity-20"/>
+                            <p>請選擇左側案件，或點擊上方「開啟新案件」</p>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };
@@ -6324,11 +6580,11 @@ const CreateDocModule = ({
 
         {activeTab === 'business' && (
              <BusinessProcessModule 
-             db={db} 
-            staffId={staffId} 
-            appId={appId} 
-            inventory={inventory} 
-            dbEntries={dbEntries} 
+                db={db} 
+                staffId={staffId} 
+                appId={appId} 
+                inventory={inventory} 
+                updateVehicle={updateVehicle} // ★ 關鍵：必須傳入此函數以更新流程狀態
             />
         )}
 
