@@ -6064,7 +6064,7 @@ const CreateDocModule = ({
             </div>
           )}
 
-         {/* Inventory Tab (v15.0: 圖文並茂版 + 按更新時間排序) */}
+         {/* Inventory Tab (v15.3: 擬真車牌 + 粵港澳標籤 + 智能縮圖 + 排序優化) */}
           {activeTab === 'inventory' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
               {/* Header Controls */}
@@ -6085,7 +6085,7 @@ const CreateDocModule = ({
                   </div>
               </div>
               
-              {/* Filter Bar (加入 Withdrawn) */}
+              {/* Filter Bar */}
               <div className="flex gap-2 overflow-x-auto pb-1 flex-none scrollbar-hide">
                   {['All', 'In Stock', 'Sold', 'Reserved', 'Withdrawn'].map(s => (
                       <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>
@@ -6097,35 +6097,53 @@ const CreateDocModule = ({
               {/* Grid Container */}
               <div className="flex-1 overflow-y-auto min-h-0 pr-1">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 pb-20">
-                    {/* ★ 修改排序：預設按 updatedAt 倒序 (最新的在最上面) ★ */}
                     {getSortedInventory()
                         .sort((a, b) => {
-                            if (sortConfig) return 0; // 如果有點擊表頭排序，則尊重 sortConfig
+                            if (sortConfig) return 0;
                             return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
                         })
                         .map((car) => { 
                         const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
                         const balance = (car.price || 0) - received; 
-                        const cbTags = getCbTags(car.crossBorder?.ports);
                         
-                        // ★ 獲取首圖 (如果沒有則顯示 Placeholder)
-                        // ★★★ 修改：優先使用智能圖庫的封面圖，如果沒有才用舊的 photos ★★★
+                        // ★★★ 1. 修復標籤邏輯 ★★★
+                        const getRefinedTags = () => {
+                            const tags = [];
+                            const ports = car.crossBorder?.ports || [];
+                            // 檢查是否啟用或有相關資料
+                            const isCbActive = car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate || car.crossBorder?.quotaNumber;
+                            
+                            if (isCbActive) {
+                                // 判斷口岸分類
+                                const isHk = ports.some(p => PORTS_HK_GD.includes(p));
+                                const isMo = ports.some(p => PORTS_MO_GD.includes(p));
+                                
+                                if (isHk) tags.push({ label: '粵港', color: 'bg-indigo-600 border-indigo-800 text-white' });
+                                if (isMo) tags.push({ label: '粵澳', color: 'bg-emerald-600 border-emerald-800 text-white' });
+                                // 如果沒選口岸但有資料，顯示通用標籤
+                                if (!isHk && !isMo) tags.push({ label: '中港', color: 'bg-slate-600 border-slate-800 text-white' });
+                            }
+                            return tags;
+                        };
+                        const cbTags = getRefinedTags();
+                        
+                        // ★★★ 智能讀取封面圖 ★★★
                         const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
 
                         return (
                         <div key={car.id} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative overflow-hidden">
-                            <div className="flex h-32">
-                                {/* ★★★ 左側：縮圖區域 (佔 35%) ★★★ */}
+                            <div className="flex h-36"> {/* 稍微加高一點以容納雙車牌 */}
+                                {/* 左側：縮圖區域 (佔 35%) */}
                                 <div className="w-[35%] bg-gray-100 relative overflow-hidden cursor-pointer" onClick={() => setEditingVehicle(car)}>
                                     {thumbUrl ? (
-                                        <img src={thumbUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Car" />
+                                        <img src={thumbUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Car" loading="lazy" />
                                     ) : (
                                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                                             <Car size={32} />
                                             <span className="text-[10px] mt-1">No Image</span>
                                         </div>
                                     )}
-                                    {/* 狀態標籤浮在圖片上 */}
+                                    {/* 狀態標籤 (左上) */}
                                     <div className="absolute top-1 left-1">
                                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm ${car.status==='In Stock'?'bg-green-500 text-white':(car.status==='Sold'?'bg-blue-600 text-white':(car.status==='Reserved'?'bg-yellow-500 text-white':'bg-gray-500 text-white'))}`}>
                                             {car.status === 'In Stock' ? '在庫' : (car.status === 'Sold' ? '已售' : (car.status === 'Reserved' ? '已訂' : '撤回'))}
@@ -6133,15 +6151,47 @@ const CreateDocModule = ({
                                     </div>
                                 </div>
 
-                                {/* ★★★ 右側：詳細資料 (佔 65%) ★★★ */}
+                                {/* 右側：詳細資料 (佔 65%) */}
                                 <div className="flex-1 p-3 flex flex-col justify-between" onClick={() => setEditingVehicle(car)}>
                                     <div>
                                         <div className="flex justify-between items-start">
-                                            <div>
-                                                <div className="font-bold text-base text-slate-800 leading-tight">{car.make} {car.model}</div>
-                                                <div className="text-xs text-slate-500 font-mono mt-0.5">{car.year} | {car.regMark || '未出牌'}</div>
+                                            <div className="flex flex-col gap-1.5 items-start">
+                                                {/* ★★★ 2. 擬真車牌顯示區 ★★★ */}
+                                                
+                                                {/* 香港車牌 (黃底黑字) */}
+                                                <div className="bg-[#FFD600] text-black border-2 border-black font-black font-mono text-sm leading-none px-2 py-0.5 rounded-[2px] shadow-sm tracking-wide">
+                                                    {car.regMark || '未出牌'}
+                                                </div>
+
+                                                {/* 國內車牌 (黑底白字 或 藍底白字) */}
+                                                {car.crossBorder?.mainlandPlate && (
+                                                    <div className={`${
+                                                        (car.crossBorder.mainlandPlate.startsWith('粵Z')) 
+                                                        ? 'bg-black text-white border-white'  // 港車北上/Z牌 -> 黑底
+                                                        : 'bg-[#003399] text-white border-white' // 內地車掛HK牌 -> 藍底
+                                                    } border font-bold font-mono text-[10px] leading-none px-1.5 py-0.5 rounded-[2px] shadow-sm tracking-wide`}>
+                                                        {car.crossBorder.mainlandPlate}
+                                                    </div>
+                                                )}
+                                                
+                                                {/* 車型標題 */}
+                                                <div className="text-xs text-slate-500 font-bold mt-0.5">
+                                                    {car.year} {car.make} {car.model}
+                                                </div>
                                             </div>
-                                            <span className="text-sm font-bold text-yellow-600">{formatCurrency(car.price)}</span>
+                                            
+                                            {/* 價格與標籤 */}
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-sm font-bold text-yellow-600">{formatCurrency(car.price)}</span>
+                                                {/* ★★★ 3. 粵港/粵澳 標籤顯示區 ★★★ */}
+                                                <div className="flex flex-col gap-1 mt-1 items-end">
+                                                    {cbTags.map((tag, i) => (
+                                                        <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded shadow-sm font-bold ${tag.color}`}>
+                                                            {tag.label}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div className="flex flex-wrap gap-1 mt-2">
@@ -6157,16 +6207,12 @@ const CreateDocModule = ({
                                         </div>
                                     </div>
 
-                                    {/* 底部：標籤與操作 */}
+                                    {/* 底部：操作按鈕 */}
                                     <div className="flex justify-between items-end mt-1">
-                                        <div className="flex gap-1 flex-wrap">
-                                            {car.crossBorder?.isEnabled && cbTags.map(tag => (
-                                                <span key={tag.label} className={`text-[9px] px-1 rounded border ${tag.color}`}>{tag.label}</span>
-                                            ))}
-                                            {car.crossBorder?.isEnabled && cbTags.length === 0 && <span className="text-[9px] px-1 rounded border bg-blue-50 text-blue-600">中港</span>}
+                                        <div className="text-[10px] text-gray-400">
+                                            {car.licenseExpiry ? `牌費: ${car.licenseExpiry}` : ''}
                                         </div>
                                         
-                                        {/* 操作按鈕 (只在 hover 時顯示，或手機常駐) */}
                                         <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button onClick={(e) => { e.stopPropagation(); setEditingVehicle(car); }} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded text-slate-600"><Edit size={14}/></button>
                                             <button onClick={(e) => { e.stopPropagation(); deleteVehicle(car.id); }} className="p-1.5 bg-red-50 hover:bg-red-100 rounded text-red-500"><Trash2 size={14}/></button>
