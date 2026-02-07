@@ -1952,8 +1952,7 @@ type CrossBorderViewProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ Document Custody Modal (v14.0: 文件交收打卡視窗) ★★★
-// 放在 CrossBorderView 外部或同一個檔案上方
+// ★★★ Document Custody Modal (v14.0: 文件交收打卡視窗 - 保持不變) ★★★
 // ------------------------------------------------------------------
 const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => {
     const [action, setAction] = useState<'CheckIn' | 'CheckOut'>('CheckIn');
@@ -2023,11 +2022,11 @@ const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => 
 };
 
 // ------------------------------------------------------------------
-// ★★★ 6. Cross Border Module (v14.0 完整版) ★★★
+// ★★★ 6. Cross Border Module (v15.5: 功能保留 + 樣式同步升級) ★★★
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment,
-    updateVehicle // ★ 必須傳入此函數以支援文件交收
+    updateVehicle // 必須傳入此函數以支援文件交收
 }: any) => {
     
     // --- 1. 狀態管理 ---
@@ -2038,7 +2037,7 @@ const CrossBorderView = ({
 
     // Modal 狀態
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [showDocModal, setShowDocModal] = useState(false); // ★ v14.0 新增
+    const [showDocModal, setShowDocModal] = useState(false); // v14.0 新增
     
     // 新增任務 (v13.0)
     const [newTaskDate, setNewTaskDate] = useState('');
@@ -2115,7 +2114,7 @@ const CrossBorderView = ({
         }
     };
 
-    // ★ v14.0: 儲存交收紀錄
+    // 儲存交收紀錄
     const handleSaveDocLog = (logData: any) => {
         if (!activeCar || !updateVehicle) return;
         const newLog = { id: Date.now().toString(), timestamp: new Date().toLocaleString(), ...logData };
@@ -2142,10 +2141,10 @@ const CrossBorderView = ({
         <div className="flex flex-col h-full gap-4 relative">
             {reportModalData && (<div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setReportModalData(null)}><div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl flex flex-col max-h-[90%]" onClick={e => e.stopPropagation()}><div className={`p-4 text-white flex justify-between items-center ${reportModalData.type === 'expired' ? 'bg-red-800' : 'bg-amber-700'}`}><h3 className="font-bold text-lg">{reportModalData.title}</h3><button onClick={() => setReportModalData(null)}><X/></button></div><div className="flex-1 overflow-y-auto p-6 bg-slate-50"><table className="w-full text-sm border-collapse bg-white shadow-sm"><thead><tr className="bg-slate-100"><th className="p-2 text-left">車牌</th><th className="p-2">項目</th><th className="p-2">日期</th><th className="p-2 text-right">狀態</th></tr></thead><tbody>{reportModalData.items.map((it, i) => (<tr key={i} className="border-b"><td className="p-2 font-bold">{it.plate}</td><td className="p-2">{it.item}</td><td className="p-2">{it.date}</td><td className="p-2 text-right font-bold">{it.days < 0 ? '過期' : '剩餘'} {Math.abs(it.days)}天</td></tr>))}</tbody></table></div></div></div>)}
 
-            {/* ★ v14.0: 文件交收 Modal */}
+            {/* 文件交收 Modal */}
             {showDocModal && activeCar && <DocumentCustodyModal vehicle={activeCar} staffId={"Staff"} onClose={() => setShowDocModal(false)} onSaveLog={handleSaveDocLog} />}
 
-            {/* v13.0: Add Modal */}
+            {/* 新增項目 Modal */}
             {isAddModalOpen && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="bg-white w-[500px] p-5 rounded-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
@@ -2172,9 +2171,71 @@ const CrossBorderView = ({
             </div>
 
             <div className="flex flex-1 gap-4 overflow-hidden min-h-0 relative">
+                
+                {/* ★★★ 左側列表：整合 v15.4 擬真車牌樣式 ★★★ */}
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden ${isMobileDetail ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-3 border-b bg-slate-50"><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌..." className="w-full px-2 py-1.5 text-xs border rounded"/></div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2">{filteredVehicles.map((car:any) => { let expiredCount = 0; Object.keys(dateFields).forEach(k => { const d = (car.crossBorder as any)?.[k]; if(d && getDaysRemaining(d)! < 0) expiredCount++; }); return (<div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-3 rounded-lg cursor-pointer border transition-all ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300' : 'bg-white hover:border-blue-100'}`}><div className="flex justify-between font-bold text-sm"><span>{car.regMark}</span><ChevronRight size={14} className="text-gray-300 md:hidden"/></div><div className="flex flex-col gap-0.5 mt-1"><div className="flex justify-between items-center text-xs text-gray-500"><span>{car.crossBorder?.mainlandPlate || '無內地牌'}</span>{car.crossBorder?.quotaNumber && (<span className="text-[10px] font-mono bg-slate-100 px-1 rounded text-slate-500 border border-slate-200">指標: {car.crossBorder.quotaNumber}</span>)}</div>{expiredCount > 0 && <span className="self-end bg-red-100 text-red-600 px-1.5 rounded font-bold text-[10px]">{expiredCount}過期</span>}</div></div>); })}</div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {filteredVehicles.map((car:any) => {
+                            let expiredCount = 0;
+                            Object.keys(dateFields).forEach(k => { const d = (car.crossBorder as any)?.[k]; if(d && getDaysRemaining(d)! < 0) expiredCount++; });
+                            
+                            // 標籤邏輯
+                            const getTags = () => {
+                                const tags = [];
+                                const ports = car.crossBorder?.ports || [];
+                                const isHk = ports.some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p));
+                                const isMo = ports.some((p:string) => ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'].includes(p));
+                                if (isHk) tags.push({ label: '粵港', color: 'bg-indigo-600 border-indigo-800 text-white' });
+                                if (isMo) tags.push({ label: '粵澳', color: 'bg-emerald-600 border-emerald-800 text-white' });
+                                if (!isHk && !isMo) tags.push({ label: '中港', color: 'bg-slate-600 border-slate-800 text-white' });
+                                return tags;
+                            };
+                            const cbTags = getTags();
+
+                            return (
+                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-3 rounded-lg cursor-pointer border transition-all ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`}>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex flex-col gap-1 items-start">
+                                            {/* 香港車牌 - 黃底黑字 */}
+                                            <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 rounded-[2px] leading-tight shadow-sm">
+                                                {car.regMark || '未出牌'}
+                                            </span>
+                                            {/* 內地車牌 - 黑底白字 (粵Z) 或 藍底白字 */}
+                                            {car.crossBorder?.mainlandPlate && (
+                                                <span className={`${
+                                                    car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'
+                                                } border font-bold font-mono text-[10px] px-1.5 rounded-[2px] leading-tight shadow-sm`}>
+                                                    {car.crossBorder.mainlandPlate}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {/* 狀態燈號 */}
+                                        <div className="text-right">
+                                            {expiredCount > 0 ? (
+                                                <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold text-[10px] animate-pulse block mb-1">{expiredCount} 過期</span>
+                                            ) : (
+                                                <div className="w-2 h-2 rounded-full bg-green-500 ml-auto mb-1"></div>
+                                            )}
+                                            <ChevronRight size={14} className="text-gray-300 ml-auto"/>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* 標籤區 */}
+                                    <div className="flex flex-wrap gap-1 items-center justify-between mt-1">
+                                        <div className="flex gap-1">
+                                            {cbTags.map((tag, i) => (
+                                                <span key={i} className={`text-[9px] px-1 py-0.5 rounded font-bold ${tag.color}`}>{tag.label}</span>
+                                            ))}
+                                        </div>
+                                        {car.crossBorder?.quotaNumber && (
+                                            <span className="text-[9px] font-mono text-gray-400">#{car.crossBorder.quotaNumber}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 <div className={`flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col ${isMobileDetail ? 'fixed inset-0 z-40 m-0 rounded-none' : 'hidden md:flex'}`}>
@@ -2183,7 +2244,6 @@ const CrossBorderView = ({
                             <div className="p-4 border-b bg-slate-50 flex justify-between items-center flex-none">
                                 <div className="flex items-center gap-2"><button onClick={handleBackToList} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800"><ChevronLeft size={24}/></button><div><h3 className="text-2xl font-bold font-mono">{activeCar.regMark}</h3><p className="text-xs text-slate-500">{activeCar.crossBorder?.mainlandPlate}</p></div></div>
                                 <div className="flex gap-2">
-                                    {/* ★ v14.0: 文件交收按鈕 */}
                                     <button onClick={() => setShowDocModal(true)} className="px-3 py-2 bg-slate-800 text-white rounded text-xs hover:bg-slate-700 flex items-center shadow-md"><FileText size={14} className="mr-1"/> 文件交收</button>
                                     <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 border rounded text-xs hover:bg-slate-50 flex items-center"><Edit size={12} className="mr-1"/> 編輯資料</button>
                                 </div>
@@ -2198,7 +2258,7 @@ const CrossBorderView = ({
                                 })}
                             </div>
 
-                            {/* ★ v14.0: 最新文件狀態條 */}
+                            {/* 最新文件狀態條 */}
                             {(activeCar.crossBorder?.documentLogs?.length || 0) > 0 && (
                                 <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100 flex items-center gap-3 overflow-x-auto whitespace-nowrap scrollbar-hide">
                                     <span className="text-[10px] font-bold text-yellow-800 uppercase">文件狀態:</span>
