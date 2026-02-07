@@ -5880,7 +5880,7 @@ const CreateDocModule = ({
           )}
 
           
-          {/* Dashboard Tab (v15.0: 智能排序 - 在庫 > 已訂 > 已售未完 > 已售完成 > 撤回) */}
+          {/* Dashboard Tab (v15.9: 擬真車牌 + 智能縮圖 + 完整排序) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
                 
@@ -5899,42 +5899,17 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 提醒中心 (保持不變 - 此處省略提醒代碼以節省篇幅，請保留您原有的提醒代碼) */}
-              {/* ... 請保留原本的 AlertList 代碼 ... */}
+              {/* 提醒中心 (保持不變) */}
               {(() => {
-                  // --- A. 資料庫文件提醒 ---
                   const docAlerts: any[] = [];
-                  dbEntries.forEach(d => { 
-                      if (d.reminderEnabled && d.expiryDate) { 
-                          const days = getDaysRemaining(d.expiryDate); 
-                          if (days !== null && days <= 30) {
-                              docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); 
-                          }
-                      } 
-                  });
+                  dbEntries.forEach(d => { if (d.reminderEnabled && d.expiryDate) { const days = getDaysRemaining(d.expiryDate); if (days !== null && days <= 30) { docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); } } });
                   docAlerts.sort((a, b) => a.days - b.days);
 
-                  // --- B. 中港業務提醒 ---
                   const cbAlerts: any[] = [];
-                  const cbDateFields = { 
-                      dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記 (BR)', dateLicenseFee: '香港牌費', 
-                      dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', 
-                      dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' 
-                  };
-                  inventory.forEach(v => { 
-                      const cb = v.crossBorder;
-                      if (!cb) return;
-                      Object.entries(cbDateFields).forEach(([field, label]) => { 
-                          const dateStr = (cb as any)?.[field]; 
-                          if (dateStr) { 
-                              const days = getDaysRemaining(dateStr); 
-                              if (days !== null && days <= 30) {
-                                  cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); 
-                              }
-                          } 
-                      }); 
-                  });
+                  const cbDateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記 (BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
+                  inventory.forEach(v => { const cb = v.crossBorder; if (!cb) return; Object.entries(cbDateFields).forEach(([field, label]) => { const dateStr = (cb as any)?.[field]; if (dateStr) { const days = getDaysRemaining(dateStr); if (days !== null && days <= 30) { cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); } } }); });
                   cbAlerts.sort((a, b) => a.days - b.days);
+                  
                   const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
                   const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
                   const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
@@ -5943,12 +5918,7 @@ const CreateDocModule = ({
                   const AlertList = ({ items, onItemClick }: any) => (
                       <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
-                              {items.map((item:any, idx:number) => (
-                                  <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
-                                      <div className="flex-1 min-w-0 mr-2"><div className="font-bold truncate text-white">{item.title}</div><div className="text-white/60 truncate">{item.desc}</div></div>
-                                      <div className="text-right whitespace-nowrap"><div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `已過期 ${Math.abs(item.days)} 天` : `還有 ${item.days} 天就過期`}</div><div className="text-white/40 scale-90">{item.date}</div></div>
-                                  </div>
-                              ))}
+                              {items.map((item:any, idx:number) => (<div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}><div className="flex-1 min-w-0 mr-2"><div className="font-bold truncate text-white">{item.title}</div><div className="text-white/60 truncate">{item.desc}</div></div><div className="text-right whitespace-nowrap"><div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `已過期 ${Math.abs(item.days)} 天` : `還有 ${item.days} 天就過期`}</div><div className="text-white/40 scale-90">{item.date}</div></div></div>))}
                               {items.length === 0 && <div className="text-white/30 text-xs text-center mt-4">無提醒事項</div>}
                           </div>
                       </div>
@@ -5956,57 +5926,34 @@ const CreateDocModule = ({
 
                   return (
                       <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
-                              <div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center"><div className="font-bold mb-3 flex items-center text-xs text-slate-300"><Globe size={14} className="mr-1"/> 中港提醒</div><div className="space-y-3"><div><div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div><div><div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div></div></div>
-                              <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
-                          </div>
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden">
-                              <div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center"><div className="font-bold mb-3 flex items-center text-xs text-blue-200"><Database size={14} className="mr-1"/> 文件提醒</div><div className="space-y-3"><div><div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div><div><div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div></div></div>
-                              <AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} />
-                          </div>
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center"><div className="font-bold mb-3 flex items-center text-xs text-slate-300"><Globe size={14} className="mr-1"/> 中港提醒</div><div className="space-y-3"><div><div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div><div><div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div></div></div><AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} /></div>
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center"><div className="font-bold mb-3 flex items-center text-xs text-blue-200"><Database size={14} className="mr-1"/> 文件提醒</div><div className="space-y-3"><div><div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div><div><div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div></div></div><AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} /></div>
                       </div>
                   );
               })()}
               
-              {/* 3. 庫存列表 (v15.0 核心修改：排序邏輯) */}
+              {/* 3. 庫存列表 (排序 + 擬真車牌 + 縮圖) */}
               {(() => {
                   const sortedList = [...inventory].sort((a,b) => {
-                      // 定義分數函數：分數越小排越前
                       const getScore = (v: Vehicle) => {
-                          // 1. 在庫 (最優先)
                           if (v.status === 'In Stock') return 1;
-                          
-                          // 2. 已訂
                           if (v.status === 'Reserved') return 2;
-                          
-                          // 3. 已售 (區分完成度)
                           if (v.status === 'Sold') {
-                              // 計算財務與中港是否完成
                               const received = (v.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                               const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
                               const totalReceivable = (v.price || 0) + cbFees;
                               const balance = totalReceivable - received;
                               const unpaidExps = (v.expenses || []).filter(e => e.status === 'Unpaid').length;
-                              const pendingCb = (v.crossBorder?.tasks || []).filter(t => !t.isPaid).length; // 簡單判斷任務付款
-
-                              // 如果還有欠款、未付費用、或中港任務未結，視為「未完成」
+                              const pendingCb = (v.crossBorder?.tasks || []).filter(t => !t.isPaid).length;
                               if (balance > 0 || unpaidExps > 0 || pendingCb > 0) return 3; 
-                              
-                              // 全部搞定
                               return 4;
                           }
-                          
-                          // 4. 撤回 (排最後)
                           if (v.status === 'Withdrawn') return 5;
-                          
                           return 6;
                       };
-                      
                       const scoreA = getScore(a);
                       const scoreB = getScore(b);
-                      
                       if (scoreA !== scoreB) return scoreA - scoreB;
-                      // 同分則按更新時間 (新的在前)
                       return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
                   });
 
@@ -6018,9 +5965,9 @@ const CreateDocModule = ({
                                 <tr className="border-b">
                                     <th className="p-3 w-10 text-center">Act</th>
                                     <th className="p-3 w-20">狀態</th>
-                                    <th className="p-3">車牌 / 車型</th>
-                                    <th className="p-3">規格 (外/內/里)</th>
-                                    <th className="p-3 hidden md:table-cell">手數/座位/排量</th>
+                                    <th className="p-3">車輛資料 (Vehicle)</th>
+                                    <th className="p-3">規格 (Spec)</th>
+                                    <th className="p-3 hidden md:table-cell">詳情</th>
                                     <th className="p-3 text-right">牌費</th>
                                     <th className="p-3 text-right">財務狀況</th>
                                 </tr>
@@ -6035,19 +5982,65 @@ const CreateDocModule = ({
                                   
                                   let statusText = '在庫';
                                   let statusClass = "bg-green-100 text-green-700 border-green-200";
-                                  
                                   if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-100 text-yellow-700 border-yellow-200"; }
                                   else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
                                   else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
+
+                                  // ★ 智能縮圖
+                                  const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+
+                                  // ★ 標籤邏輯
+                                  const getTags = () => {
+                                      const tags = [];
+                                      const ports = car.crossBorder?.ports || [];
+                                      const isHk = ports.some((p:string) => PORTS_HK_GD.includes(p));
+                                      const isMo = ports.some((p:string) => PORTS_MO_GD.includes(p));
+                                      if (isHk) tags.push({ label: '粵港', color: 'bg-indigo-600 border-indigo-800 text-white' });
+                                      if (isMo) tags.push({ label: '粵澳', color: 'bg-emerald-600 border-emerald-800 text-white' });
+                                      if (!isHk && !isMo && (car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate)) tags.push({ label: '中港', color: 'bg-slate-600 border-slate-800 text-white' });
+                                      return tags;
+                                  };
+                                  const cbTags = getTags();
 
                                   return (
                                     <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group text-xs md:text-sm" onClick={() => setEditingVehicle(car)}>
                                       <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button></td>
                                       <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span></td>
+                                      
+                                      {/* ★★★ 車輛資料 (圖 + 擬真車牌) ★★★ */}
                                       <td className="p-3">
-                                          <div className="font-bold text-slate-800 text-sm">{car.regMark || '未出牌'}</div>
-                                          <div className="text-slate-500">{car.year} {car.make} {car.model}</div>
+                                          <div className="flex items-center gap-3">
+                                              {/* 1. 縮圖 Icon (Avatar Mask) */}
+                                              <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-gray-100 shadow-sm">
+                                                  {thumbUrl ? (
+                                                      <img src={thumbUrl} className="w-full h-full object-cover" alt="Car" />
+                                                  ) : (
+                                                      <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>
+                                                  )}
+                                              </div>
+                                              
+                                              {/* 2. 車牌與型號 */}
+                                              <div className="flex flex-col gap-1 items-start">
+                                                  <div className="flex gap-1">
+                                                      {/* HK Plate */}
+                                                      <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1 rounded-[2px] leading-tight shadow-sm">
+                                                          {car.regMark || '未出牌'}
+                                                      </span>
+                                                      {/* CN Plate */}
+                                                      {car.crossBorder?.mainlandPlate && (
+                                                          <span className={`${
+                                                              car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'
+                                                          } border font-bold font-mono text-[10px] px-1 rounded-[2px] leading-tight shadow-sm`}>
+                                                              {car.crossBorder.mainlandPlate}
+                                                          </span>
+                                                      )}
+                                                  </div>
+                                                  <div className="text-xs text-slate-600 font-bold">{car.make} {car.model}</div>
+                                                  <div className="flex gap-1">{cbTags.map((t,i)=><span key={i} className={`text-[8px] px-1 rounded ${t.color}`}>{t.label}</span>)}</div>
+                                              </div>
+                                          </div>
                                       </td>
+
                                       <td className="p-3">
                                           <div className="flex flex-col gap-0.5 text-xs text-gray-600">
                                               <div className="flex items-center gap-1"><span className="text-[10px] text-gray-400 w-6">Ext:</span><span className="font-bold">{car.colorExt || '-'}</span></div>
