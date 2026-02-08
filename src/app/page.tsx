@@ -11,7 +11,7 @@ import {
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
   Check, AlertCircle, Link, Share2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
-  Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History
+  Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing
 } from 'lucide-react';
 
 import { compressImage } from '@/utils/imageHelpers';
@@ -371,6 +371,18 @@ type SystemSettings = {
       autoCloud: boolean;     // 是否開啟雲端自動備份
   };
 
+  // ★★★ 新增：推送通知設定 ★★★
+  pushConfig?: {
+      isEnabled: boolean;       // 是否開啟全域推送
+      vapidKey: string;         // FCM 公鑰 (Public Key)
+      events: {                 // 訂閱哪些事件
+          newCar: boolean;      // 新車入庫
+          sold: boolean;        // 車輛售出
+          expiry: boolean;      // 到期提醒
+          workflow: boolean;    // 流程進度更新
+      };
+  };
+
 };
 
 type Customer = {
@@ -449,6 +461,20 @@ const DEFAULT_SETTINGS: SystemSettings = {
       lastBackupDate: '',
       autoCloud: true
   }
+
+  // ★★★ 新增：推送預設值 ★★★
+  pushConfig: {
+      isEnabled: false,
+      vapidKey: 'BIpAVoyM6C6CodEmmKnsykyuQkX0g0VBBXDUWikIRhKtnCVUVCuO86EqlEgf5zuxz8nGA3DCdbEr1yKynCXFJKA', // 稍後需填入 Firebase Console 的 Key
+      events: {
+          newCar: true,
+          sold: true,
+          expiry: true,
+          workflow: true
+      }
+  },
+  
+  backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
 };
 
 // ------------------------------------------------------------------
@@ -2884,36 +2910,36 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 10. Settings Manager (v14.8: 全功能無刪減終極版) ★★★
+// ★★★ 10. Settings Manager (v17.2: 含 iPhone 推送通知設定) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
 }: any) => {
     
-    // ★★★ 1. 常數定義 (移至最上方，防止報錯) ★★★
+    // ★★★ 1. 選單定義 (新增 Notifications) ★★★
     const allModules = [
-        { key: 'dashboard', label: '儀表板' },
-        { key: 'inventory', label: '車輛管理' },
-        { key: 'sales', label: '開單系統' },
-        { key: 'reports', label: '統計報表' },
-        { key: 'cross_border', label: '中港業務' },
-        { key: 'workflow', label: '業務流程' },
-        { key: 'database', label: '資料庫' },
-        { key: 'media_center', label: '圖庫' },
-        { key: 'settings', label: '設置' },
-        { key: 'backup', label: '備份' }
+        { key: 'general', label: '一般設定', icon: <LayoutDashboard size={16}/> },
+        { key: 'notifications', label: '推送通知', icon: <BellRing size={16}/> }, // ★ 新增
+        { key: 'inventory', label: '車輛管理', icon: <Car size={16}/> }, // 對應原本的 vehicle
+        { key: 'expenses', label: '財務與費用', icon: <DollarSign size={16}/> },
+        { key: 'crossborder', label: '中港業務', icon: <Globe size={16}/> },
+        { key: 'users', label: '用戶與權限', icon: <Users size={16}/> },
+        { key: 'database_config', label: '資料庫分類', icon: <Database size={16}/> },
+        { key: 'reminders', label: '系統提醒', icon: <Bell size={16}/> },
+        { key: 'logs', label: '系統日誌', icon: <FileText size={16}/> },
+        { key: 'backup', label: '備份', icon: <DownloadCloud size={16}/> }
     ];
 
     const [activeTab, setActiveTab] = useState('general');
     
     // --- 內部狀態 (用於輸入框) ---
     const [newColor, setNewColor] = useState('');
-    const [newMake, setNewMake] = useState('');   // 新增車廠
+    const [newMake, setNewMake] = useState('');
     const [selectedMake, setSelectedMake] = useState('');
-    const [newModel, setNewModel] = useState(''); // 新增型號
+    const [newModel, setNewModel] = useState('');
     
-    const [newExpenseComp, setNewExpenseComp] = useState(''); // 新增收款公司
-    const [newCbInst, setNewCbInst] = useState('');         // 新增辦理機構
+    const [newExpenseComp, setNewExpenseComp] = useState('');
+    const [newCbInst, setNewCbInst] = useState('');
     
     const [newUserEmail, setNewUserEmail] = useState('');
     const [newUserPassword, setNewUserPassword] = useState(''); 
@@ -2927,27 +2953,46 @@ const SettingsManager = ({
     const [showInspector, setShowInspector] = useState(false);
     const [logs, setLogs] = useState<any[]>([]);
 
-    // --- 邏輯函數 ---
+    // ★★★ 新增：推送通知權限狀態 ★★★
+    const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
 
-    // 通用陣列增刪
+    useEffect(() => {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+            setPermissionStatus(Notification.permission);
+        }
+    }, []);
+
+    const requestNotificationPermission = async () => {
+        if (!('Notification' in window)) {
+            alert("您的瀏覽器不支援通知功能");
+            return;
+        }
+        const permission = await Notification.requestPermission();
+        setPermissionStatus(permission);
+        if (permission === 'granted') {
+            alert("✅ 已授權！您現在可以接收通知。");
+            // 注意：實際部署時，這裡需要獲取 FCM Token 並存入資料庫
+        } else {
+            alert("❌ 授權失敗或被拒絕。請在瀏覽器設定中開啟。");
+        }
+    };
+
+    // --- 邏輯函數 (完全保留) ---
     const addItem = (key: string, val: string) => { if(val) updateSettings(key, [...(settings[key] || []), val]); };
     const removeItem = (key: string, idx: number) => { const arr = [...(settings[key] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
 
-    // 費用預設修改
     const handleExpenseTypeChange = (idx: number, field: string, val: any) => {
         const newTypes = [...(settings.expenseTypes || [])];
         newTypes[idx] = { ...newTypes[idx], [field]: val };
         updateSettings('expenseTypes', newTypes);
     };
 
-    // 中港項目修改
     const handleCbItemChange = (idx: number, field: string, val: any) => {
         const newItems = [...(settings.cbItems || [])];
         newItems[idx] = { ...newItems[idx], [field]: val };
         updateSettings('cbItems', newItems);
     };
 
-    // 權限修改
     const handleUserPermissionChange = (email: string, field: string, val: any) => {
         const newUsers = systemUsers.map((u: any) => u.email === email ? { ...u, [field]: val } : u);
         updateSystemUsers(newUsers);
@@ -2979,7 +3024,6 @@ const SettingsManager = ({
         }
     };
 
-    // Log 讀取
     useEffect(() => {
         if (activeTab === 'logs' && db) {
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), orderBy('timestamp', 'desc'), limit(50)); 
@@ -2992,9 +3036,7 @@ const SettingsManager = ({
         }
     }, [activeTab, db, appId]);
 
-    // --- 備份相關邏輯 (完整功能) ---
-    
-    // 1. 雲端備份
+    // 備份邏輯
     const handleCloudBackup = async () => {
         if (!storage || !appId) return;
         setIsBackingUp(true);
@@ -3011,7 +3053,6 @@ const SettingsManager = ({
         finally { setIsBackingUp(false); }
     };
 
-    // 2. 本地匯出
     const handleExport = () => { 
         const b = new Blob([JSON.stringify({version:"2.0", timestamp:new Date().toISOString(), settings, inventory},null,2)], {type:"application/json"}); 
         const a = document.createElement('a'); 
@@ -3020,7 +3061,6 @@ const SettingsManager = ({
         a.click(); 
     };
 
-    // 3. 本地匯入
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => { 
         const f=e.target.files?.[0]; if(!f)return; 
         const r=new FileReader(); 
@@ -3037,7 +3077,6 @@ const SettingsManager = ({
         r.readAsText(f); 
     };
 
-    // 4. CSV 救援
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !db) return;
@@ -3050,18 +3089,8 @@ const SettingsManager = ({
         <div className="flex h-full gap-6">
             <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
-                {[
-                    { id: 'general', icon: <LayoutDashboard size={16}/>, label: '一般設定' },
-                    { id: 'vehicle', icon: <Car size={16}/>, label: '車輛資料' }, // ★ 確保這裡存在
-                    { id: 'expenses', icon: <DollarSign size={16}/>, label: '財務與費用' },
-                    { id: 'crossborder', icon: <Globe size={16}/>, label: '中港業務' },
-                    { id: 'users', icon: <Users size={16}/>, label: '用戶與權限' },
-                    { id: 'database_config', icon: <Database size={16}/>, label: '資料庫分類' },
-                    { id: 'reminders', icon: <Bell size={16}/>, label: '系統提醒' },
-                    { id: 'logs', icon: <FileText size={16}/>, label: '系統日誌' },
-                    { id: 'backup', icon: <DownloadCloud size={16}/>, label: '備份與還原' }
-                ].map(tab => (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
+                {allModules.map(tab => (
+                    <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.key ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
                         {tab.icon} {tab.label}
                     </button>
                 ))}
@@ -3111,8 +3140,81 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* ★★★ 2. 車輛資料 (完整功能) ★★★ */}
-                {activeTab === 'vehicle' && (
+                {/* ★★★ 新增：推送通知設定 (Notifications) ★★★ */}
+                {activeTab === 'notifications' && (
+                    <div className="space-y-6 animate-fade-in">
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center"><BellRing size={20} className="mr-2 text-blue-600"/> 推送通知設定 (Push Notifications)</h3>
+                            
+                            {/* 權限狀態卡片 */}
+                            <div className={`p-4 rounded-xl border mb-6 flex justify-between items-center ${permissionStatus === 'granted' ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                                <div>
+                                    <div className="font-bold text-sm flex items-center mb-1">
+                                        {permissionStatus === 'granted' ? <CheckCircle size={16} className="mr-1 text-green-600"/> : <AlertTriangle size={16} className="mr-1 text-amber-600"/>}
+                                        裝置權限狀態: {permissionStatus === 'granted' ? '已授權 (Active)' : permissionStatus === 'denied' ? '已封鎖 (Blocked)' : '未設定 (Default)'}
+                                    </div>
+                                    <p className="text-xs text-slate-500">
+                                        {permissionStatus === 'granted' 
+                                            ? '您的裝置已準備好接收通知。' 
+                                            : '請點擊右側按鈕以允許瀏覽器傳送通知。'}
+                                    </p>
+                                </div>
+                                {permissionStatus !== 'granted' && (
+                                    <button onClick={requestNotificationPermission} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm">
+                                        請求權限
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* 開關設定 */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                    <span className="text-sm font-bold text-slate-700">啟用系統推送 (Master Switch)</span>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" className="sr-only peer" checked={settings.pushConfig?.isEnabled || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, isEnabled: e.target.checked })} />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                        <input type="checkbox" checked={settings.pushConfig?.events?.newCar || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, newCar: e.target.checked } })} className="mr-3 rounded accent-blue-600" />
+                                        <span className="text-xs font-bold text-slate-600">新車入庫通知</span>
+                                    </label>
+                                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                        <input type="checkbox" checked={settings.pushConfig?.events?.sold || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, sold: e.target.checked } })} className="mr-3 rounded accent-blue-600" />
+                                        <span className="text-xs font-bold text-slate-600">車輛售出通知</span>
+                                    </label>
+                                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                        <input type="checkbox" checked={settings.pushConfig?.events?.expiry || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, expiry: e.target.checked } })} className="mr-3 rounded accent-blue-600" />
+                                        <span className="text-xs font-bold text-slate-600">證件到期提醒</span>
+                                    </label>
+                                    <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                        <input type="checkbox" checked={settings.pushConfig?.events?.workflow || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, workflow: e.target.checked } })} className="mr-3 rounded accent-blue-600" />
+                                        <span className="text-xs font-bold text-slate-600">流程進度更新</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* iPhone 特別說明 (PWA Guide) */}
+                        <div className="p-5 bg-slate-900 rounded-xl text-white shadow-lg border border-slate-700">
+                            <h3 className="font-bold text-yellow-400 mb-2 flex items-center"><Info size={18} className="mr-2"/> iPhone / iPad 用戶必讀</h3>
+                            <div className="text-xs text-slate-300 space-y-2 leading-relaxed">
+                                <p>受 Apple iOS 系統限制，若要在 iPhone 上接收通知，您必須執行以下步驟：</p>
+                                <ol className="list-decimal pl-4 space-y-1">
+                                    <li>在 Safari 瀏覽器中開啟本系統。</li>
+                                    <li>點擊底部的 <span className="font-bold text-white">「分享 (Share)」</span> 按鈕。</li>
+                                    <li>選擇 <span className="font-bold text-white">「加入主畫面 (Add to Home Screen)」</span>。</li>
+                                    <li>從主畫面開啟 App，然後回到此頁面點擊「請求權限」。</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* 2. 車輛資料 (完整功能) */}
+                {activeTab === 'inventory' && (
                     <div className="space-y-6">
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">1. 車廠管理 (Makes)</h3>
@@ -3185,7 +3287,6 @@ const SettingsManager = ({
                                             <td className="p-2"><input type="text" value={type.name} onChange={e => handleExpenseTypeChange(idx, 'name', e.target.value)} className="border rounded p-1 w-full bg-transparent"/></td>
                                             <td className="p-2"><input type="number" value={type.defaultAmount} onChange={e => handleExpenseTypeChange(idx, 'defaultAmount', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
                                             <td className="p-2">
-                                                {/* ★ 修正類型錯誤：(c: string) */}
                                                 <select value={type.defaultCompany} onChange={e => handleExpenseTypeChange(idx, 'defaultCompany', e.target.value)} className="border rounded p-1 w-full bg-transparent">
                                                     <option value="">-- 選擇 --</option>
                                                     {settings.expenseCompanies.map((c: string) => <option key={c} value={c}>{c}</option>)}
@@ -3230,7 +3331,6 @@ const SettingsManager = ({
                                             <td className="p-2"><input type="number" value={item.defaultFee} onChange={e => handleCbItemChange(idx, 'defaultFee', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
                                             <td className="p-2"><input type="number" value={item.defaultDays} onChange={e => handleCbItemChange(idx, 'defaultDays', e.target.value)} className="border rounded p-1 w-16"/></td>
                                             <td className="p-2">
-                                                {/* ★ 修正類型錯誤：(inst: string) */}
                                                 <select value={item.defaultInst} onChange={e => handleCbItemChange(idx, 'defaultInst', e.target.value)} className="border rounded p-1 w-full bg-transparent">
                                                     <option value="">-- 選擇 --</option>
                                                     {settings.cbInstitutions.map((inst: string) => <option key={inst} value={inst}>{inst}</option>)}
@@ -3264,7 +3364,7 @@ const SettingsManager = ({
                                             <div className="flex gap-2 items-center mt-1">
                                                 <span className="text-xs text-gray-500">登入後預設首頁:</span>
                                                 <select value={user.defaultTab || 'dashboard'} onChange={e => handleUserPermissionChange(user.email, 'defaultTab', e.target.value)} className="border rounded p-1 text-xs bg-slate-50">
-                                                    {/* ★ allModules 定義已修正，這裡不會報錯 ★ */}
+                                                    {/* allModules 定義已修正，這裡不會報錯 */}
                                                     {allModules.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                                                 </select>
                                             </div>
@@ -3344,7 +3444,7 @@ const SettingsManager = ({
                             <p className="text-xs text-blue-600/70 mt-2 font-mono">Last Backup: {backupConfig.lastBackupDate || 'Never'}</p>
                         </div>
 
-                        {/* ★ 補回：本地匯入/匯出按鈕 ★ */}
+                        {/* 本地匯入/匯出按鈕 */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
                                 <h4 className="font-bold text-gray-800 mb-2">匯出本地檔案 (Export)</h4>
