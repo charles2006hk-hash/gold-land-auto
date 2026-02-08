@@ -460,7 +460,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
       frequency: 'monthly',
       lastBackupDate: '',
       autoCloud: true
-  }
+  },
 
   // ★★★ 新增：推送預設值 ★★★
   pushConfig: {
