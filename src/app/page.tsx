@@ -474,7 +474,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
       }
   },
   
-  backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
 };
 
 // ------------------------------------------------------------------
