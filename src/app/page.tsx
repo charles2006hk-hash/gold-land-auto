@@ -2916,17 +2916,40 @@ const SettingsManager = ({
 }: any) => {
     
     // ★★★ 1. 選單定義 (新增 Notifications) ★★★
-    const allModules = [
+    const systemMainModules = [
+        { key: 'dashboard', label: '業務儀表板' },
+        { key: 'inventory', label: '車輛管理' },
+        { key: 'create_doc', label: '開單系統' },
+        { key: 'reports', label: '統計報表' },
+        { key: 'cross_border', label: '中港業務' },
+        { key: 'business', label: '業務辦理流程' }, // ★ 這是您新加的模組
+        { key: 'database', label: '資料庫中心' },
+        { key: 'media_center', label: '智能圖庫' },
+        { key: 'settings', label: '系統設置' }
+    ];
+
+    // 2. 【設定頁面內部選單】 (用於：切換設定頁左側的分頁)
+    const settingsInternalMenu = [
         { key: 'general', label: '一般設定', icon: <LayoutDashboard size={16}/> },
-        { key: 'notifications', label: '推送通知', icon: <BellRing size={16}/> }, // ★ 新增
-        { key: 'inventory', label: '車輛管理', icon: <Car size={16}/> }, // 對應原本的 vehicle
-        { key: 'expenses', label: '財務與費用', icon: <DollarSign size={16}/> },
-        { key: 'crossborder', label: '中港業務', icon: <Globe size={16}/> },
+        { key: 'notifications', label: '推送通知', icon: <BellRing size={16}/> },
+        { key: 'vehicle_setup', label: '車輛參數', icon: <Car size={16}/> },     // 舊稱 vehicle
+        { key: 'expenses_setup', label: '財務參數', icon: <DollarSign size={16}/> }, // 舊稱 expenses
+        { key: 'crossborder_setup', label: '中港參數', icon: <Globe size={16}/> }, // 舊稱 crossborder
         { key: 'users', label: '用戶與權限', icon: <Users size={16}/> },
         { key: 'database_config', label: '資料庫分類', icon: <Database size={16}/> },
         { key: 'reminders', label: '系統提醒', icon: <Bell size={16}/> },
         { key: 'logs', label: '系統日誌', icon: <FileText size={16}/> },
         { key: 'backup', label: '備份', icon: <DownloadCloud size={16}/> }
+    ];
+
+    // 3. 【權限群組】 (用於：簡化權限勾選框)
+    const permissionGroups = [
+        { key: 'dashboard', label: '儀表板 (Dashboard)' },
+        { key: 'inventory', label: '車輛/庫存/圖庫 (Inventory)' },
+        { key: 'business', label: '中港/流程業務 (Business)' },
+        { key: 'reports', label: '財務報表 (Reports)' },
+        { key: 'database', label: '資料庫/客戶 (Database)' },
+        { key: 'settings', label: '系統設置 (Admin)' }
     ];
 
     const [activeTab, setActiveTab] = useState('general');
@@ -3088,7 +3111,7 @@ const SettingsManager = ({
         <div className="flex h-full gap-6">
             <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
                 <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
-                {allModules.map(tab => (
+                {settingsInternalMenu.map(tab => (
                     <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.key ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
                         {tab.icon} {tab.label}
                     </button>
@@ -3362,25 +3385,29 @@ const SettingsManager = ({
                                             <h4 className="font-bold text-lg text-slate-800">{user.email}</h4>
                                             <div className="flex gap-2 items-center mt-1">
                                                 <span className="text-xs text-gray-500">登入後預設首頁:</span>
-                                                <select value={user.defaultTab || 'dashboard'} onChange={e => handleUserPermissionChange(user.email, 'defaultTab', e.target.value)} className="border rounded p-1 text-xs bg-slate-50">
-                                                    {/* allModules 定義已修正，這裡不會報錯 */}
-                                                    {allModules.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                                                <select value={user.defaultTab || 'dashboard'} onChange={e => handleUserPermissionChange(user.email, 'defaultTab', e.target.value)} className="border rounded p-1 text-xs bg-slate-50 font-bold text-blue-700">
+                                                    {/* ★ 改成 systemMainModules ★ */}
+                                                    {systemMainModules.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                                                 </select>
                                             </div>
                                         </div>
                                         <button onClick={() => handleRemoveUser(user.email)} className="text-red-400 hover:text-red-600 text-xs px-2 py-1 border border-red-200 rounded">移除用戶</button>
                                     </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                        {allModules.map(mod => {
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                        {/* ★ 改成 permissionGroups ★ */}
+                                        {permissionGroups.map(mod => {
                                             const hasAccess = (user.modules || []).includes('all') || (user.modules || []).includes(mod.key);
                                             const isBoss = user.email === 'BOSS';
                                             return (
-                                                <label key={mod.key} className={`flex items-center text-xs p-1.5 rounded ${hasAccess ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-400'} ${isBoss ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-100'}`}>
+                                                <label key={mod.key} className={`flex items-center text-xs p-2 rounded ... (略) ...`}>
                                                     <input type="checkbox" checked={hasAccess} disabled={isBoss} onChange={(e) => {
                                                             let newMods = user.modules || [];
-                                                            if (newMods.includes('all')) newMods = allModules.map(m => m.key);
+                                                            // 如果之前是全選，先展開成個別項目
+                                                            if (newMods.includes('all')) newMods = permissionGroups.map(m => m.key);
+                                                            
                                                             if (e.target.checked) newMods.push(mod.key);
                                                             else newMods = newMods.filter((m:string) => m !== mod.key);
+                                                            
                                                             handleUserPermissionChange(user.email, 'modules', newMods);
                                                         }} className="mr-2" />
                                                     {mod.label}
