@@ -5291,7 +5291,7 @@ const VehicleFormModal = ({
 // ★★★ Document Template (v6.0 完整版：修復編譯錯誤 + 完整功能) ★★★
 // ------------------------------------------------------------------
 
-/ 1. 橢圓形公司印章 (修正版：縮小行距，避免出界)
+// 1. 橢圓形公司印章 (修正版：縮小行距，避免出界)
 const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
     <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
         {/* 橢圓外框 */}
