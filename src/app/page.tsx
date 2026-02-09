@@ -5335,8 +5335,12 @@ const DocumentTemplate = () => {
     if (!activeVehicle) return null;
 
     const itemsToRender = (activeVehicle as any).selectedItems || [];
+    
+    // ★★★ 讀取新資料 ★★★
+    const depositItems = (activeVehicle as any).depositItems || []; // 收款列表
+    const showTerms = (activeVehicle as any).showTerms !== false;   // 預設為 true
+    
     const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
-
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
     const today = new Date().toLocaleDateString('en-GB'); 
     
@@ -5354,9 +5358,14 @@ const DocumentTemplate = () => {
     };
 
     const price = Number(activeVehicle.price) || 0;
-    const deposit = Number(activeVehicle.deposit) || (activeVehicle.payments || []).reduce((s:any,p:any)=>s+(p.amount||0),0);
+    
+    // ★★★ 新的計算邏輯 ★★★
+    // 總雜費
     const extrasTotal = itemsToRender.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-    const balance = price + extrasTotal - deposit;
+    // 總已收 (所有訂金欄位加總)
+    const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+    // 餘額 = 車價 + 雜費 - 總已收
+    const balance = price + extrasTotal - totalPaid;
 
     const soldDate = (activeVehicle as any).soldDate || today; 
     const handoverTime = (activeVehicle as any).handoverTime || '';
@@ -5376,38 +5385,14 @@ const DocumentTemplate = () => {
         docTitleEn = "OFFICIAL RECEIPT"; docTitleCh = "正式收據";
     }
 
-    // ★★★ CSS 修正 (解決列印空白頁 + 去除頭尾) ★★★
     const PrintStyle = () => (
         <style>{`
             @media print {
-                @page { 
-                    margin: 0; /* 移除瀏覽器預設頁眉頁腳 (時間/網址) */
-                    size: A4;
-                }
-                body {
-                    margin: 0;
-                    padding: 0;
-                    background: white;
-                }
-                /* 關鍵修復：使用 visibility 代替 display:none，避免 React 根容器被隱藏 */
-                body * {
-                    visibility: hidden;
-                }
-                /* 只顯示 print-root 及其子元素 */
-                #print-root, #print-root * {
-                    visibility: visible;
-                }
-                /* 將 print-root 移到頁面最上方，覆蓋所有內容 */
-                #print-root {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                    margin: 0;
-                    padding: 10mm; /* 自定義列印邊距 */
-                }
-                
-                /* 強制背景色打印 (Chrome/Safari) */
+                @page { margin: 0; size: A4; }
+                body { margin: 0; padding: 0; background: white; }
+                body * { visibility: hidden; }
+                #print-root, #print-root * { visibility: visible; }
+                #print-root { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 10mm; }
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
         `}</style>
@@ -5494,14 +5479,26 @@ const DocumentTemplate = () => {
                     <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Payment Details</div>
                     <table className="w-full text-[10px] border-collapse border border-slate-300">
                         <tbody>
+                            {/* 車價 */}
                             <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
+                            
+                            {/* 雜費 Add-ons */}
                             {itemsToRender.length > 0 && itemsToRender.map((item: any, idx: number) => (
-                                <tr key={idx}>
+                                <tr key={`add-${idx}`}>
                                     <td className="border p-1.5 text-slate-600 pl-4">+ {item.desc}</td>
                                     <td className="border p-1.5 text-right font-mono">{formatCurrency(item.amount)}</td>
                                 </tr>
                             ))}
-                            <tr><td className="border p-1.5 font-bold">Less: Deposit (已付訂金)</td><td className="border p-1.5 text-right font-mono text-blue-600">{formatCurrency(deposit)}</td></tr>
+
+                            {/* ★★★ 動態顯示多筆訂金 (減項) ★★★ */}
+                            {depositItems.length > 0 && depositItems.map((item: any, idx: number) => (
+                                <tr key={`dep-${idx}`}>
+                                    <td className="border p-1.5 font-bold text-slate-600">Less: {item.label}</td>
+                                    <td className="border p-1.5 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
+                                </tr>
+                            ))}
+
+                            {/* 總餘額 */}
                             <tr className="bg-slate-50"><td className="border p-1.5 font-black uppercase">Balance (餘額)</td><td className="border p-1.5 text-right font-mono font-black text-sm text-red-600">{formatCurrency(balance)}</td></tr>
                         </tbody>
                     </table>
@@ -5509,14 +5506,17 @@ const DocumentTemplate = () => {
 
                 <AttachmentsSection />
                 
-                <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif break-inside-avoid">
-                    <p className="mb-1">
-                        I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, {(isPurchase||isConsignment) ? 'the registered owner,' : ''} agree to {(isPurchase||isConsignment)?(isConsignment?'consign':'sell'):'purchase'} the vehicle to/from <span className="font-bold uppercase">{companyEn}</span> at HKD <span className="font-bold underline">{formatCurrency(balance + deposit)}</span> on <span className="font-bold underline mx-1">{soldDate}</span> at <span className="font-bold underline mx-1">{handoverTime}</span>. Responsibilities for traffic contraventions/liabilities transfer at this time.
-                    </p>
-                    <p>
-                        本人 <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span> 同意{(isPurchase||isConsignment)?(isConsignment?'寄賣':'出售'):'購買'}該車輛，日期 <span className="font-bold underline mx-1">{soldDate}</span> 時間 <span className="font-bold underline mx-1">{handoverTime}</span>。成交價港幣 <span className="font-bold underline">{formatCurrency(balance + deposit)}</span>。此時間點前後之交通違例及法律責任由相應方負責。
-                    </p>
-                </div>
+                {/* ★★★ 法律條款 (根據 showTerms 顯示/隱藏) ★★★ */}
+                {showTerms && (
+                    <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif break-inside-avoid">
+                        <p className="mb-1">
+                            I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, {(isPurchase||isConsignment) ? 'the registered owner,' : ''} agree to {(isPurchase||isConsignment)?(isConsignment?'consign':'sell'):'purchase'} the vehicle to/from <span className="font-bold uppercase">{companyEn}</span> at HKD <span className="font-bold underline">{formatCurrency(price + extrasTotal)}</span> (Total) on <span className="font-bold underline mx-1">{soldDate}</span> at <span className="font-bold underline mx-1">{handoverTime}</span>. Responsibilities for traffic contraventions/liabilities transfer at this time.
+                        </p>
+                        <p>
+                            本人 <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span> 同意{(isPurchase||isConsignment)?(isConsignment?'寄賣':'出售'):'購買'}該車輛，日期 <span className="font-bold underline mx-1">{soldDate}</span> 時間 <span className="font-bold underline mx-1">{handoverTime}</span>。成交總價港幣 <span className="font-bold underline">{formatCurrency(price + extrasTotal)}</span>。此時間點前後之交通違例及法律責任由相應方負責。
+                        </p>
+                    </div>
+                )}
 
                 {activeVehicle.remarks && (
                     <div className="mb-3 border border-dashed border-slate-300 p-2 bg-slate-50 rounded break-inside-avoid">
@@ -5553,6 +5553,7 @@ const DocumentTemplate = () => {
                     <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
                 </thead>
                 <tbody>
+                    {/* 發票模式下，顯示項目列表 */}
                     {itemsToRender.length > 0 ? itemsToRender.map((item: any, i: number) => (
                         <tr key={i} className="border-b">
                             <td className="p-2 font-medium">{item.desc}</td>
@@ -5561,7 +5562,7 @@ const DocumentTemplate = () => {
                     )) : (
                         <tr className="border-b">
                             <td className="p-2 font-medium">{activeType==='invoice'?'Vehicle Sales':'Deposit / Payment'} - {activeVehicle.regMark}</td>
-                            <td className="p-2 text-right font-mono">{formatCurrency(activeType==='invoice'?price:deposit)}</td>
+                            <td className="p-2 text-right font-mono">{formatCurrency(activeType==='invoice'?price:totalPaid)}</td>
                         </tr>
                     )}
                 </tbody>
@@ -5569,9 +5570,10 @@ const DocumentTemplate = () => {
                     <tr className="bg-slate-50 font-bold text-xs border-t-2 border-slate-800">
                         <td className="p-2 text-right">Total</td>
                         <td className="p-2 text-right font-mono text-sm">
+                            {/* 發票顯示項目總和，收據顯示已付總額 */}
                             {formatCurrency(itemsToRender.length > 0 
                                 ? itemsToRender.reduce((s:number,i:any)=>s+i.amount,0) 
-                                : (activeType==='invoice'?price:deposit))}
+                                : (activeType==='invoice'?price:totalPaid))}
                         </td>
                     </tr>
                 </tfoot>
@@ -5635,6 +5637,13 @@ const CreateDocModule = ({
     const [docItems, setDocItems] = useState<{ id: string, desc: string, amount: number, isSelected: boolean }[]>([]);
     const [newItemDesc, setNewItemDesc] = useState('');
     const [newItemAmount, setNewItemAmount] = useState('');
+    // ★★★ 新增：收款項目列表 (可改名、多筆訂金) ★★★
+    const [depositItems, setDepositItems] = useState<{ id: string, label: string, amount: number }[]>([
+        { id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }
+    ]);
+
+    // ★★★ 新增：控制條款顯示 ★★★
+    const [showTerms, setShowTerms] = useState(true);
 
     // 放在 CreateDocModule 組件外部或內部皆可
     const DEFAULT_REMARKS = `匯豐銀行香港賬戶：747-057347-838
@@ -5729,6 +5738,8 @@ const CreateDocModule = ({
 
     const handleSelectCar = (car: Vehicle) => {
         setSelectedCarId(car.id);
+        
+        // 1. 重置表單基本資料 (含日期時間)
         setFormData(prev => ({
             ...prev,
             regMark: car.regMark || '', make: car.make || '', model: car.model || '',
@@ -5737,18 +5748,28 @@ const CreateDocModule = ({
             price: car.price ? car.price.toString() : '',
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
             customerId: car.customerID || '', customerAddress: car.customerAddress || '',
-            // ★★★ 新增：選擇車輛時，自動重置為當前日期與時間 ★★★
+            
+            // 重置為當前時間
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         }));
 
-        // ★★★ 自動帶入應收項目 ★★★
+        // ★★★ 2. 補回這段：自動帶入車輛訂金到「收款列表」 ★★★
+        // 如果車輛資料有 deposit，就帶入；否則預設為 0
+        setDepositItems([
+            { id: 'dep_1', label: 'Deposit (訂金)', amount: Number(car.deposit) || 0 }
+        ]);
+        
+        // 3. 重置條款顯示
+        setShowTerms(true);
+
+        // 4. 自動帶入應收項目 (給發票用)
         const items = [];
-        // 1. 車價
+        // 車價
         if (car.price) items.push({ id: 'car_price', desc: `Vehicle Price (${car.make} ${car.model})`, amount: car.price, isSelected: true });
-        // 2. 中港代辦費
+        // 中港代辦費
         if (car.crossBorder?.tasks) {
-            car.crossBorder.tasks.forEach((t, i) => {
+            car.crossBorder.tasks.forEach((t: any, i: number) => {
                 if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `Service: ${t.item}`, amount: t.fee, isSelected: false });
             });
         }
@@ -5757,13 +5778,18 @@ const CreateDocModule = ({
 
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
-        setFormData(prev => ({ ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '',
-            // ★★★ 新增：選擇車輛時，自動重置為當前日期與時間 ★★★
+        setFormData(prev => ({ 
+            ...prev, 
+            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             deliveryDate: new Date().toISOString().split('T')[0],
-            handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+            handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
         }));
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]);
+        
+        // 重置收款與條款
+        setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
+        setShowTerms(true);
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -5775,16 +5801,25 @@ const CreateDocModule = ({
         saveDocRecord();
         const dummyVehicle: any = {
             ...formData,
-            price: Number(formData.price), deposit: Number(formData.deposit),
-            customerID: formData.customerId,
-            // ★★★ 確保傳遞日期與時間 ★★★
+            price: Number(formData.price), 
+            // deposit 欄位保留給舊邏輯兼容，但主要計算會用下面的 depositItems
+            deposit: depositItems.reduce((sum, item) => sum + item.amount, 0),
+            
+            customerID: formData.customerId, 
             soldDate: formData.deliveryDate,
             handoverTime: formData.handoverTime,
+            
             checklist: checklist,
-            // 傳遞選中的項目
             selectedItems: docItems.filter(i => i.isSelected),
-            companyNameEn: formData.companyNameEn, companyNameCh: formData.companyNameCh,
-            companyEmail: formData.companyEmail, companyPhone: formData.companyPhone
+            
+            // ★★★ 傳遞新資料 ★★★
+            depositItems: depositItems, // 收款列表
+            showTerms: showTerms,       // 是否顯示條款
+            
+            companyNameEn: formData.companyNameEn, 
+            companyNameCh: formData.companyNameCh,
+            companyEmail: formData.companyEmail, 
+            companyPhone: formData.companyPhone
         };
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
@@ -5887,17 +5922,67 @@ const CreateDocModule = ({
                             <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent"/>
                         </div>
                         
-                        {/* 1. 基本款項 (只在合約模式顯示，方便修改主車價) */}
+                        {/* 1. 基本款項與收款 (只在合約模式顯示) */}
                         {!['invoice', 'receipt'].includes(selectedDocType) && (
                             <div className="p-3 bg-yellow-50 rounded border border-yellow-200 mb-3">
-                                <div className="text-[10px] font-bold text-yellow-600 mb-2">基本款項 (Base Price)</div>
-                                <div className="flex justify-between mb-1">
-                                    <span className="text-xs">成交價 $</span>
-                                    <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 border-b bg-transparent text-right font-bold"/>
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="text-[10px] font-bold text-yellow-600">交易金額與收款 (Payment)</div>
+                                    {/* ★★★ 條款隱藏開關 ★★★ */}
+                                    <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
+                                        <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
+                                        列印法律條款
+                                    </label>
                                 </div>
-                                <div className="flex justify-between mb-1">
-                                    <span className="text-xs">訂金 $</span>
-                                    <input type="number" name="deposit" value={formData.deposit} onChange={handleChange} className="w-24 border-b bg-transparent text-right text-blue-600"/>
+
+                                {/* A. 車價 (固定) */}
+                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-yellow-100">
+                                    <span className="text-xs font-bold text-slate-700">成交價 (Vehicle Price)</span>
+                                    <div className="flex items-center">
+                                        <span className="text-xs mr-1">$</span>
+                                        <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 bg-white border border-yellow-300 rounded px-1 text-right font-bold text-sm"/>
+                                    </div>
+                                </div>
+
+                                {/* B. 動態收款列表 (訂金/大訂等) */}
+                                <div className="space-y-1 mb-2">
+                                    {depositItems.map((item, idx) => (
+                                        <div key={item.id} className="flex items-center gap-1">
+                                            {/* 名稱可改 */}
+                                            <input 
+                                                value={item.label}
+                                                onChange={(e) => {
+                                                    const newArr = [...depositItems];
+                                                    newArr[idx].label = e.target.value;
+                                                    setDepositItems(newArr);
+                                                }}
+                                                className="flex-1 text-[10px] bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-600"
+                                            />
+                                            <span className="text-xs">$</span>
+                                            {/* 金額可改 */}
+                                            <input 
+                                                type="number" 
+                                                value={item.amount}
+                                                onChange={(e) => {
+                                                    const newArr = [...depositItems];
+                                                    newArr[idx].amount = Number(e.target.value);
+                                                    setDepositItems(newArr);
+                                                }}
+                                                className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-xs text-blue-600 font-bold"
+                                            />
+                                            {/* 刪除按鈕 (至少保留一個時不顯示，或者允許全刪) */}
+                                            <button onClick={() => setDepositItems(prev => prev.filter(i => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={12}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 新增收款按鈕 */}
+                                <div className="text-right">
+                                    <button 
+                                        onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: 'Second Deposit (加訂)', amount: 0 }])}
+                                        className="text-[9px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
+                                    >
+                                        + 新增收款欄位
+                                    </button>
                                 </div>
                             </div>
                         )}
