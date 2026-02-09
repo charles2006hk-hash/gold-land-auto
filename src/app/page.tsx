@@ -5291,22 +5291,29 @@ const VehicleFormModal = ({
 // ★★★ Document Template (v6.0 完整版：修復編譯錯誤 + 完整功能) ★★★
 // ------------------------------------------------------------------
 
-// 1. 橢圓形公司印章 (修正版：縮小行距，避免出界)
+// 1. 橢圓形公司印章 (修正版 v2：文字大幅往中間集中，避免出界)
 const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
     <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
         {/* 橢圓外框 */}
         <div className="absolute w-full h-full rounded-[50%] border-[3px] border-[#1e3a8a]"></div>
         <div className="absolute w-[92%] h-[88%] rounded-[50%] border-[1px] border-[#1e3a8a]"></div>
+        
         {/* 內圈文字 */}
         <div className="absolute w-full h-full flex flex-col items-center justify-center z-10">
-            {/* 第一行：英文名 (往下移 top-2.5) */}
-            <div className="text-[9px] font-black tracking-widest absolute top-2.5 uppercase text-center w-[90%] leading-none">{nameEn}</div>
+            {/* 第一行：英文名 (改為 top-4，更往中間靠) */}
+            <div className="text-[9px] font-black tracking-widest absolute top-4 uppercase text-center w-[85%] leading-none break-words">
+                {nameEn}
+            </div>
             
-            {/* 第二行：中文名 (移除 margin-top) */}
-            <div className="text-[14px] font-black tracking-[0.3em] leading-none">{nameCh}</div>
+            {/* 第二行：中文名 (保持置中) */}
+            <div className="text-[14px] font-black tracking-[0.3em] leading-none">
+                {nameCh}
+            </div>
             
-            {/* 第三行：簽名欄 (往上移 bottom-2.5) */}
-            <div className="text-[5px] font-bold tracking-widest absolute bottom-2.5 uppercase leading-none">AUTHORIZED SIGNATURE</div>
+            {/* 第三行：簽名欄 (改為 bottom-3.5，更往中間靠) */}
+            <div className="text-[5px] font-bold tracking-widest absolute bottom-3.5 uppercase leading-none">
+                AUTHORIZED SIGNATURE
+            </div>
         </div>
     </div>
 );
