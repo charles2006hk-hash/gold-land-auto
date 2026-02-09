@@ -5706,20 +5706,30 @@ const CreateDocModule = ({
     const saveDocRecord = async () => {
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        // ★★★ 修改：摘要格式為「聯絡人 - 車牌 - 車輛資料」 ★★★
+        const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.make} ${formData.model}`;
+
         const docData = {
             type: selectedDocType,
             formData,
             checklist,
-            docItems,     // 收費項目
-            depositItems, // ★★★ 修正：必須儲存這個「收款項目列表」 ★★★
-            showTerms,    // ★★★ 修正：儲存條款顯示狀態 ★★★
+            docItems,
+            depositItems, 
+            showTerms,    
             updatedAt: serverTimestamp(),
-            summary: `${formData.regMark} - ${formData.customerName}`
+            summary: summaryStr // 使用新的摘要格式
         };
+
         try {
-            if (docId) { await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', docId), docData); } 
-            else { const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); setDocId(ref.id); }
+            if (docId) { 
+                await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', docId), docData); 
+            } else { 
+                const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); 
+                setDocId(ref.id); 
+            }
             alert("單據已儲存");
+            // 重新讀取列表 (如果您有獨立的 fetch 函數，這裡可以呼叫)
         } catch (e) { console.error(e); alert("儲存失敗"); }
     };
 
@@ -5899,7 +5909,47 @@ const CreateDocModule = ({
                 <div className="flex-1 overflow-y-auto p-4">
                     {docHistory.length === 0 ? <div className="text-center text-slate-400 py-10">暫無紀錄</div> : (
                         <table className="w-full text-sm text-left border-collapse"><thead className="bg-slate-100 text-slate-600 border-b"><tr><th className="p-3">日期</th><th className="p-3">類型</th><th className="p-3">摘要</th><th className="p-3 text-right">操作</th></tr></thead>
-                            <tbody className="divide-y">{docHistory.map(doc => (<tr key={doc.id} className="hover:bg-slate-50"><td className="p-3 text-slate-500">{doc.updatedAt?.toDate?.().toLocaleDateString()||'-'}</td><td className="p-3 font-bold text-blue-600 capitalize">{doc.type.replace('_contract','')}</td><td className="p-3">{doc.summary}</td><td className="p-3 text-right flex justify-end gap-2"><button onClick={() => editDoc(doc)} className="px-3 py-1 bg-white border rounded flex items-center"><Edit size={14} className="mr-1"/> 編輯</button><button onClick={() => deleteDocRecord(doc.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded"><Trash2 size={16}/></button></td></tr>))}</tbody>
+                            {/* ★★★ 修改列表渲染：顯示中文類型 + 新摘要格式 ★★★ */}
+                        <tbody className="divide-y divide-slate-100">
+                            {savedDocs.map((doc: any) => {
+                                // 1. 定義中文類型對照表
+                                const typeMap: Record<string, string> = {
+                                    'sales_contract': '買賣合約',
+                                    'purchase_contract': '收車合約',
+                                    'consignment_contract': '寄賣合約',
+                                    'invoice': '發票',
+                                    'receipt': '收據'
+                                };
+                                
+                                // 2. 獲取中文名稱 (如果找不到就顯示原文)
+                                const typeName = typeMap[doc.type] || doc.type;
+
+                                // 3. 組合摘要 (優先使用即時資料，舊資料則用 saved summary)
+                                const summaryText = doc.formData 
+                                    ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.make || ''} ${doc.formData.model || ''}`
+                                    : doc.summary;
+
+                                return (
+                                    <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer text-xs" onClick={() => editDoc(doc)}>
+                                        <td className="p-3 font-mono text-slate-500">{doc.updatedAt?.toDate().toLocaleDateString()}</td>
+                                        
+                                        {/* 顯示中文類型 */}
+                                        <td className="p-3 font-bold text-blue-600">
+                                            {typeName}
+                                        </td>
+
+                                        {/* 顯示摘要 */}
+                                        <td className="p-3 text-slate-700">
+                                            {summaryText}
+                                        </td>
+
+                                        <td className="p-3 text-right">
+                                            <button onClick={(e) => { e.stopPropagation(); if(confirm('刪除此單據?')) deleteDocRecord(doc.id); }} className="text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
                         </table>
                     )}
                 </div>
