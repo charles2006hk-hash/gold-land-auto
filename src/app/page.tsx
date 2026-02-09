@@ -5291,7 +5291,7 @@ const VehicleFormModal = ({
 // ★★★ Document Template (v6.0 完整版：修復編譯錯誤 + 完整功能) ★★★
 // ------------------------------------------------------------------
 
-// 1. 橢圓形公司印章 (修正版 v2：文字大幅往中間集中，避免出界)
+// 1. 橢圓形公司印章 (修正版 v3：文字進一步往內縮，遠離邊框)
 const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
     <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
         {/* 橢圓外框 */}
@@ -5300,8 +5300,8 @@ const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) =>
         
         {/* 內圈文字 */}
         <div className="absolute w-full h-full flex flex-col items-center justify-center z-10">
-            {/* 第一行：英文名 (改為 top-4，更往中間靠) */}
-            <div className="text-[9px] font-black tracking-widest absolute top-4 uppercase text-center w-[85%] leading-none break-words">
+            {/* 第一行：英文名 (改為 top-5，大幅往內縮) */}
+            <div className="text-[9px] font-black tracking-widest absolute top-5 uppercase text-center w-[85%] leading-none break-words">
                 {nameEn}
             </div>
             
@@ -5310,8 +5310,8 @@ const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) =>
                 {nameCh}
             </div>
             
-            {/* 第三行：簽名欄 (改為 bottom-3.5，更往中間靠) */}
-            <div className="text-[5px] font-bold tracking-widest absolute bottom-3.5 uppercase leading-none">
+            {/* 第三行：簽名欄 (改為 bottom-5，大幅往內縮) */}
+            <div className="text-[5px] font-bold tracking-widest absolute bottom-5 uppercase leading-none">
                 AUTHORIZED SIGNATURE
             </div>
         </div>
@@ -5686,7 +5686,13 @@ const CreateDocModule = ({
         setSelectedDocType(doc.type);
         setFormData(doc.formData);
         setChecklist(doc.checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' });
-        setDocItems(doc.docItems || []); // 載入儲存的項目
+        setDocItems(doc.docItems || []);
+        
+        // ★★★ 修正：從資料庫讀回收款列表，如果沒有則使用預設值 ★★★
+        setDepositItems(doc.depositItems || [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
+        // ★★★ 修正：讀回條款顯示狀態 ★★★
+        setShowTerms(doc.showTerms !== false); // 預設為 true
+        
         setViewMode('edit');
     };
 
@@ -5704,7 +5710,9 @@ const CreateDocModule = ({
             type: selectedDocType,
             formData,
             checklist,
-            docItems, // 儲存項目清單
+            docItems,     // 收費項目
+            depositItems, // ★★★ 修正：必須儲存這個「收款項目列表」 ★★★
+            showTerms,    // ★★★ 修正：儲存條款顯示狀態 ★★★
             updatedAt: serverTimestamp(),
             summary: `${formData.regMark} - ${formData.customerName}`
         };
@@ -5739,7 +5747,7 @@ const CreateDocModule = ({
     const handleSelectCar = (car: Vehicle) => {
         setSelectedCarId(car.id);
         
-        // 1. 重置表單基本資料 (含日期時間)
+        // 1. 重置表單基本資料
         setFormData(prev => ({
             ...prev,
             regMark: car.regMark || '', make: car.make || '', model: car.model || '',
@@ -5754,8 +5762,7 @@ const CreateDocModule = ({
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         }));
 
-        // ★★★ 2. 補回這段：自動帶入車輛訂金到「收款列表」 ★★★
-        // 如果車輛資料有 deposit，就帶入；否則預設為 0
+        // 2. 自動帶入車輛訂金到「收款列表」
         setDepositItems([
             { id: 'dep_1', label: 'Deposit (訂金)', amount: Number(car.deposit) || 0 }
         ]);
@@ -5763,11 +5770,11 @@ const CreateDocModule = ({
         // 3. 重置條款顯示
         setShowTerms(true);
 
-        // 4. 自動帶入應收項目 (給發票用)
-        const items = [];
-        // 車價
-        if (car.price) items.push({ id: 'car_price', desc: `Vehicle Price (${car.make} ${car.model})`, amount: car.price, isSelected: true });
-        // 中港代辦費
+        // 4. 自動帶入額外收費 (★ 修改：不再加入車價，只加入中港代辦費 ★)
+        const items: any[] = [];
+        // 移除舊的 car_price 推送邏輯
+        
+        // 只加入中港代辦費
         if (car.crossBorder?.tasks) {
             car.crossBorder.tasks.forEach((t: any, i: number) => {
                 if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `Service: ${t.item}`, amount: t.fee, isSelected: false });
