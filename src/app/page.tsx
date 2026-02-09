@@ -5706,7 +5706,7 @@ const CreateDocModule = ({
 
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
-        setFormData(prev => ({ ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', handoverTime: '', 
+        setFormData(prev => ({ ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '',
             // ★★★ 新增：選擇車輛時，自動重置為當前日期與時間 ★★★
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
