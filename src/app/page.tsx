@@ -5468,9 +5468,28 @@ const DocumentTemplate = () => {
                     <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part B: Vehicle Details</div>
                     <table className="w-full text-[10px] border-collapse border border-slate-300">
                         <tbody>
-                            <tr><td className="border p-1.5 bg-slate-50 font-bold w-[15%]">Reg. No.</td><td className="border p-1.5 font-mono font-bold w-[35%]">{activeVehicle.regMark}</td><td className="border p-1.5 bg-slate-50 font-bold w-[15%]">Make/Model</td><td className="border p-1.5 w-[35%]">{activeVehicle.make} {activeVehicle.model}</td></tr>
-                            <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No.</td><td className="border p-1.5 font-mono">{activeVehicle.chassisNo}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine No.</td><td className="border p-1.5 font-mono">{activeVehicle.engineNo}</td></tr>
-                            <tr><td className="border p-1.5 bg-slate-50 font-bold">Year</td><td className="border p-1.5">{activeVehicle.year}</td><td className="border p-1.5 bg-slate-50 font-bold">Color</td><td className="border p-1.5">{activeVehicle.colorExt}</td></tr>
+                            <tr>
+                                <td className="border p-1.5 bg-slate-50 font-bold w-[15%]">Reg. No.</td>
+                                <td className="border p-1.5 font-mono font-bold w-[35%]">{activeVehicle.regMark}</td>
+                                <td className="border p-1.5 bg-slate-50 font-bold w-[15%]">Make/Model</td>
+                                <td className="border p-1.5 w-[35%]">{activeVehicle.make} {activeVehicle.model}</td>
+                            </tr>
+                            <tr>
+                                <td className="border p-1.5 bg-slate-50 font-bold">Chassis No.</td>
+                                <td className="border p-1.5 font-mono">{activeVehicle.chassisNo}</td>
+                                <td className="border p-1.5 bg-slate-50 font-bold">Engine No.</td>
+                                <td className="border p-1.5 font-mono">{activeVehicle.engineNo}</td>
+                            </tr>
+                            <tr>
+                                <td className="border p-1.5 bg-slate-50 font-bold">Year</td>
+                                <td className="border p-1.5">{activeVehicle.year}</td>
+                                
+                                {/* ★★★ 修改：顏色欄位顯示 外觀 / 內飾 ★★★ */}
+                                <td className="border p-1.5 bg-slate-50 font-bold">Color (Ext/Int)</td>
+                                <td className="border p-1.5">
+                                    {activeVehicle.color || '-'} / {activeVehicle.colorInterior || '-'}
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -5626,7 +5645,7 @@ const CreateDocModule = ({
         companyEmail: COMPANY_INFO.email, // ★★★ 自動讀取系統設定 ★★★
         
         customerName: '', customerId: '', customerAddress: '', customerPhone: '',
-        regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', seat: '',
+        regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '',
         price: '', deposit: '', balance: '', deliveryDate: new Date().toISOString().split('T')[0], 
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), remarks: ''
     });
@@ -5731,8 +5750,9 @@ const CreateDocModule = ({
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         
-        // ★★★ 修改：摘要格式為「聯絡人 - 車牌 - 車輛資料」 ★★★
-        const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.make} ${formData.model}`;
+        // ★★★ 修改：摘要格式加入年份 ★★★
+        // 格式：聯絡人 - 車牌 - 年份 廠牌 型號
+        const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
 
         const docData = {
             type: selectedDocType,
@@ -5742,7 +5762,7 @@ const CreateDocModule = ({
             depositItems, 
             showTerms,    
             updatedAt: serverTimestamp(),
-            summary: summaryStr // 使用新的摘要格式
+            summary: summaryStr 
         };
 
         try {
@@ -5786,7 +5806,10 @@ const CreateDocModule = ({
             ...prev,
             regMark: car.regMark || '', make: car.make || '', model: car.model || '',
             chassisNo: car.chassisNo || '', engineNo: car.engineNo || '', year: car.year || '',
-            color: car.colorExt || '', seat: car.seating ? car.seating.toString() : '',
+            // ★★★ 修改：導入外觀與內飾顏色 ★★★
+            color: car.colorExt || '',           // 外觀
+            colorInterior: car.colorInt || '',   // 內飾 (假設資料庫欄位是 colorInt，如果沒有則留空)
+            seat: car.seating ? car.seating.toString() : '',
             price: car.price ? car.price.toString() : '',
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
             customerId: car.customerID || '', customerAddress: car.customerAddress || '',
@@ -5950,8 +5973,8 @@ const CreateDocModule = ({
 
                                 // 3. 組合摘要 (優先使用即時資料，舊資料則用 saved summary)
                                 const summaryText = doc.formData 
-                                    ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.make || ''} ${doc.formData.model || ''}`
-                                    : doc.summary;
+                                ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.year || ''} ${doc.formData.make || ''} ${doc.formData.model || ''}`
+                                : doc.summary;
 
                                 return (
                                     <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer text-xs" onClick={() => editDoc(doc)}>
@@ -6118,10 +6141,29 @@ const CreateDocModule = ({
 
                         {/* 車輛資料 */}
                         <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                            <div className="text-[10px] font-bold text-gray-500 mb-2">車輛資料</div>
-                            <div className="grid grid-cols-2 gap-2 mb-2"><input name="regMark" value={formData.regMark} onChange={handleChange} placeholder="車牌" className="border-b bg-transparent text-sm font-bold"/><input name="year" value={formData.year} onChange={handleChange} placeholder="年份" className="border-b bg-transparent text-sm"/></div>
-                            <input name="make" value={formData.make} onChange={handleChange} placeholder="廠牌" className="w-full border-b mb-2 bg-transparent text-xs"/><input name="model" value={formData.model} onChange={handleChange} placeholder="型號" className="w-full border-b mb-2 bg-transparent text-xs"/>
-                            <div className="grid grid-cols-2 gap-2"><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} placeholder="底盤號" className="border-b bg-transparent text-[10px] font-mono"/><input name="engineNo" value={formData.engineNo} onChange={handleChange} placeholder="引擎號" className="border-b bg-transparent text-[10px] font-mono"/></div>
+                            <div className="text-[10px] font-bold text-gray-500 mb-2">車輛資料 (Vehicle Details)</div>
+                            
+                            {/* 第一行：車牌、年份 */}
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                                <input name="regMark" value={formData.regMark} onChange={handleChange} placeholder="車牌" className="border-b bg-transparent text-sm font-bold"/>
+                                <input name="year" value={formData.year} onChange={handleChange} placeholder="年份" className="border-b bg-transparent text-sm"/>
+                            </div>
+                            
+                            {/* 第二、三行：廠牌、型號 */}
+                            <input name="make" value={formData.make} onChange={handleChange} placeholder="廠牌" className="w-full border-b mb-2 bg-transparent text-xs"/>
+                            <input name="model" value={formData.model} onChange={handleChange} placeholder="型號" className="w-full border-b mb-2 bg-transparent text-xs"/>
+                            
+                            {/* ★★★ 新增第四行：外觀顏色、內飾顏色 ★★★ */}
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                                <input name="color" value={formData.color} onChange={handleChange} placeholder="外觀顏色 (Ext)" className="border-b bg-transparent text-xs"/>
+                                <input name="colorInterior" value={formData.colorInterior || ''} onChange={handleChange} placeholder="內飾顏色 (Int)" className="border-b bg-transparent text-xs"/>
+                            </div>
+
+                            {/* 第五行：底盤號、引擎號 */}
+                            <div className="grid grid-cols-2 gap-2">
+                                <input name="chassisNo" value={formData.chassisNo} onChange={handleChange} placeholder="底盤號" className="border-b bg-transparent text-[10px] font-mono"/>
+                                <input name="engineNo" value={formData.engineNo} onChange={handleChange} placeholder="引擎號" className="border-b bg-transparent text-[10px] font-mono"/>
+                            </div>
                         </div>
 
                         {/* ★★★ 新增：交易條款設定 (日期與時間) ★★★ */}
