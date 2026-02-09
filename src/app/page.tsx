@@ -5808,8 +5808,9 @@ const CreateDocModule = ({
             regMark: car.regMark || '', make: car.make || '', model: car.model || '',
             chassisNo: car.chassisNo || '', engineNo: car.engineNo || '', year: car.year || '',
             // ★★★ 修改：導入外觀與內飾顏色 ★★★
-            color: car.colorExt || '',           // 外觀
-            colorInterior: car.colorInt || '',   // 內飾 (假設資料庫欄位是 colorInt，如果沒有則留空)
+            // 車輛庫是 colorInt，合約表單是 colorInterior，這裡做了轉換
+            color: (car as any).colorExt || (car as any).color || '',
+            colorInterior: (car as any).colorInt || (car as any).colorInterior || (car as any).innerColor || '',
             seat: car.seating ? car.seating.toString() : '',
             price: car.price ? car.price.toString() : '',
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
