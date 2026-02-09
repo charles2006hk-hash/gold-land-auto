@@ -3236,7 +3236,7 @@ const SettingsManager = ({
                 )}
 
                 {/* 2. 車輛資料 (完整功能) */}
-                {activeTab === 'inventory' && (
+                {activeTab === 'vehicle_setup' && (
                     <div className="space-y-6">
                          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                             <h3 className="font-bold text-slate-700 mb-4">1. 車廠管理 (Makes)</h3>
@@ -3282,7 +3282,7 @@ const SettingsManager = ({
                 )}
 
                 {/* 3. 財務與費用 (完整功能) */}
-                {activeTab === 'expenses' && (
+                {activeTab === 'expenses_setup' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         {/* 收款公司列表 */}
                         <div>
@@ -3325,7 +3325,7 @@ const SettingsManager = ({
                 )}
 
                 {/* 4. 中港業務 (完整功能) */}
-                {activeTab === 'crossborder' && (
+                {activeTab === 'crossborder_setup' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         {/* 機構列表 */}
                         <div>
