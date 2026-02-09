@@ -5591,7 +5591,7 @@ const CreateDocModule = ({
         customerName: '', customerId: '', customerAddress: '', customerPhone: '',
         regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', seat: '',
         price: '', deposit: '', balance: '', deliveryDate: new Date().toISOString().split('T')[0], 
-        handoverTime: '', remarks: ''
+        handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), remarks: ''
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -5685,7 +5685,10 @@ const CreateDocModule = ({
             color: car.colorExt || '', seat: car.seating ? car.seating.toString() : '',
             price: car.price ? car.price.toString() : '',
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
-            customerId: car.customerID || '', customerAddress: car.customerAddress || ''
+            customerId: car.customerID || '', customerAddress: car.customerAddress || '',
+            // ★★★ 新增：選擇車輛時，自動重置為當前日期與時間 ★★★
+            deliveryDate: new Date().toISOString().split('T')[0],
+            handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         }));
 
         // ★★★ 自動帶入應收項目 ★★★
@@ -5703,7 +5706,11 @@ const CreateDocModule = ({
 
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
-        setFormData(prev => ({ ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', handoverTime: '' }));
+        setFormData(prev => ({ ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', handoverTime: '', 
+            // ★★★ 新增：選擇車輛時，自動重置為當前日期與時間 ★★★
+            deliveryDate: new Date().toISOString().split('T')[0],
+            handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        }));
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]);
     };
@@ -5719,6 +5726,9 @@ const CreateDocModule = ({
             ...formData,
             price: Number(formData.price), deposit: Number(formData.deposit),
             customerID: formData.customerId, soldDate: formData.deliveryDate,
+            // ★★★ 確保傳遞日期與時間 ★★★
+            soldDate: formData.deliveryDate,
+            handoverTime: formData.handoverTime,
             checklist: checklist,
             // 傳遞選中的項目
             selectedItems: docItems.filter(i => i.isSelected),
@@ -5865,6 +5875,21 @@ const CreateDocModule = ({
                             <div className="grid grid-cols-2 gap-2 mb-2"><input name="regMark" value={formData.regMark} onChange={handleChange} placeholder="車牌" className="border-b bg-transparent text-sm font-bold"/><input name="year" value={formData.year} onChange={handleChange} placeholder="年份" className="border-b bg-transparent text-sm"/></div>
                             <input name="make" value={formData.make} onChange={handleChange} placeholder="廠牌" className="w-full border-b mb-2 bg-transparent text-xs"/><input name="model" value={formData.model} onChange={handleChange} placeholder="型號" className="w-full border-b mb-2 bg-transparent text-xs"/>
                             <div className="grid grid-cols-2 gap-2"><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} placeholder="底盤號" className="border-b bg-transparent text-[10px] font-mono"/><input name="engineNo" value={formData.engineNo} onChange={handleChange} placeholder="引擎號" className="border-b bg-transparent text-[10px] font-mono"/></div>
+                        </div>
+
+                        {/* ★★★ 新增：交易條款設定 (日期與時間) ★★★ */}
+                        <div className="p-3 bg-indigo-50 rounded border border-indigo-200">
+                            <div className="text-[10px] font-bold text-indigo-700 mb-2">交易條款 (Terms)</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-[10px] text-indigo-500 mb-1">交收日期 (Date)</label>
+                                    <input type="date" name="deliveryDate" value={formData.deliveryDate} onChange={handleChange} className="w-full text-xs border rounded p-1 bg-white"/>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] text-indigo-500 mb-1">交收時間 (Time)</label>
+                                    <input type="time" name="handoverTime" value={formData.handoverTime} onChange={handleChange} className="w-full text-xs border rounded p-1 bg-white"/>
+                                </div>
+                            </div>
                         </div>
 
                         {/* 附件與備註 */}
