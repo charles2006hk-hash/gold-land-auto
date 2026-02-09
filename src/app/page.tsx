@@ -5487,7 +5487,8 @@ const DocumentTemplate = () => {
                                 {/* ★★★ 修改：顏色欄位顯示 外觀 / 內飾 ★★★ */}
                                 <td className="border p-1.5 bg-slate-50 font-bold">Color (Ext/Int)</td>
                                 <td className="border p-1.5">
-                                    {activeVehicle.color || '-'} / {activeVehicle.colorInterior || '-'}
+                                    {/* 使用 (activeVehicle as any) 來略過類型檢查，並同時支援 color 和 colorExt */}
+                                    {(activeVehicle as any).color || (activeVehicle as any).colorExt || '-'} / {(activeVehicle as any).colorInterior || (activeVehicle as any).colorInt || '-'}
                                 </td>
                             </tr>
                         </tbody>
