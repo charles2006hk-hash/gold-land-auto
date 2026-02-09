@@ -5291,7 +5291,7 @@ const VehicleFormModal = ({
 // ★★★ Document Template (v6.0 完整版：修復編譯錯誤 + 完整功能) ★★★
 // ------------------------------------------------------------------
 
-// 1. 橢圓形公司印章 (GOLD LAND AUTO 樣式)
+/ 1. 橢圓形公司印章 (修正版：縮小行距，避免出界)
 const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
     <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
         {/* 橢圓外框 */}
@@ -5299,9 +5299,14 @@ const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) =>
         <div className="absolute w-[92%] h-[88%] rounded-[50%] border-[1px] border-[#1e3a8a]"></div>
         {/* 內圈文字 */}
         <div className="absolute w-full h-full flex flex-col items-center justify-center z-10">
-            <div className="text-[9px] font-black tracking-widest absolute top-1.5 uppercase text-center w-[90%]">{nameEn}</div>
-            <div className="text-[14px] font-black tracking-[0.3em] mt-1">{nameCh}</div>
-            <div className="text-[5px] font-bold tracking-widest absolute bottom-2 uppercase">AUTHORIZED SIGNATURE</div>
+            {/* 第一行：英文名 (往下移 top-2.5) */}
+            <div className="text-[9px] font-black tracking-widest absolute top-2.5 uppercase text-center w-[90%] leading-none">{nameEn}</div>
+            
+            {/* 第二行：中文名 (移除 margin-top) */}
+            <div className="text-[14px] font-black tracking-[0.3em] leading-none">{nameCh}</div>
+            
+            {/* 第三行：簽名欄 (往上移 bottom-2.5) */}
+            <div className="text-[5px] font-bold tracking-widest absolute bottom-2.5 uppercase leading-none">AUTHORIZED SIGNATURE</div>
         </div>
     </div>
 );
@@ -5343,10 +5348,7 @@ const DocumentTemplate = () => {
 
     const price = Number(activeVehicle.price) || 0;
     const deposit = Number(activeVehicle.deposit) || (activeVehicle.payments || []).reduce((s:any,p:any)=>s+(p.amount||0),0);
-    
-    // ★★★ 修改：計算額外收費總額 ★★★
     const extrasTotal = itemsToRender.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-    // 新的餘額公式：車價 + 額外收費 - 訂金
     const balance = price + extrasTotal - deposit;
 
     const soldDate = (activeVehicle as any).soldDate || today; 
@@ -5367,42 +5369,50 @@ const DocumentTemplate = () => {
         docTitleEn = "OFFICIAL RECEIPT"; docTitleCh = "正式收據";
     }
 
-    // ★★★ CSS 樣式修正 (解決列印 Cut 尾與頁眉頁腳) ★★★
+    // ★★★ CSS 修正 (解決列印空白頁 + 去除頭尾) ★★★
     const PrintStyle = () => (
         <style>{`
             @media print {
                 @page { 
-                    margin: 10mm; /* 設定邊距，瀏覽器會自動隱藏預設頁眉頁腳 */
-                    size: A4; 
+                    margin: 0; /* 移除瀏覽器預設頁眉頁腳 (時間/網址) */
+                    size: A4;
                 }
-                body { 
-                    margin: 0; 
-                    padding: 0; 
-                    background: white; 
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: white;
                 }
-                /* 隱藏所有非列印區域 */
-                body > *:not(#print-root) { display: none !important; }
-                /* 確保列印內容可見且不被截斷 */
-                #print-root { 
-                    display: block !important; 
-                    width: 100%; 
-                    height: auto !important; 
-                    overflow: visible !important; 
-                    position: static !important;
+                /* 關鍵修復：使用 visibility 代替 display:none，避免 React 根容器被隱藏 */
+                body * {
+                    visibility: hidden;
                 }
-                /* 強制背景色打印 */
+                /* 只顯示 print-root 及其子元素 */
+                #print-root, #print-root * {
+                    visibility: visible;
+                }
+                /* 將 print-root 移到頁面最上方，覆蓋所有內容 */
+                #print-root {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    margin: 0;
+                    padding: 10mm; /* 自定義列印邊距 */
+                }
+                
+                /* 強制背景色打印 (Chrome/Safari) */
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
         `}</style>
     );
 
     const HeaderSection = () => (
-        <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
-            <div className="flex items-center gap-4">
-                <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-20 h-20 object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
+        <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
+            <div className="flex items-center gap-3">
+                <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
                 <div>
-                    <h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{companyEn}</h1>
-                    <h2 className="text-lg font-bold text-slate-700 tracking-widest">{companyCh}</h2>
+                    <h1 className="text-xl font-black text-slate-900 tracking-wide uppercase leading-none">{companyEn}</h1>
+                    <h2 className="text-lg font-bold text-slate-700 tracking-widest leading-tight mt-1">{companyCh}</h2>
                     <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif">
                         <p>{companyAddr}</p>
                         <p>Tel: {companyTel} | Email: {companyEmail}</p>
@@ -5412,14 +5422,14 @@ const DocumentTemplate = () => {
             <div className="text-right">
                 <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{docTitleEn}</div>
                 <div className="text-xs font-bold text-slate-600 tracking-[0.5em] text-center">{docTitleCh}</div>
-                <div className="mt-2 text-[10px] font-mono">NO: {activeType.slice(0,3).toUpperCase()}-{today.replace(/\//g,'')}-{displayId}</div>
+                <div className="mt-1 text-[10px] font-mono">NO: {activeType.slice(0,3).toUpperCase()}-{today.replace(/\//g,'')}-{displayId}</div>
                 <div className="text-[10px] font-mono">DATE: {today}</div>
             </div>
         </div>
     );
 
     const AttachmentsSection = () => (
-        <div className="mb-4 border border-slate-300 p-2 text-[10px] bg-slate-50 break-inside-avoid">
+        <div className="mb-3 border border-slate-300 p-2 text-[10px] bg-slate-50 break-inside-avoid">
             <div className="font-bold mb-1 uppercase border-b border-slate-300 pb-1">Attachments (隨車附件):</div>
             <div className="flex flex-wrap gap-4">
                 <div className="flex items-center"><div className={`w-3 h-3 border border-black mr-1 flex items-center justify-center`}>{checklist.vrd && <Check size={10}/>}</div> VRD (牌薄)</div>
@@ -5432,7 +5442,7 @@ const DocumentTemplate = () => {
     );
 
     const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-8 grid grid-cols-2 gap-12 break-inside-avoid">
+        <div className="mt-6 grid grid-cols-2 gap-12 break-inside-avoid">
             <div className="relative pt-8 border-t border-slate-800 text-center">
                 <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
                 <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
@@ -5452,7 +5462,7 @@ const DocumentTemplate = () => {
                 <PrintStyle />
                 <HeaderSection />
                 
-                <div className="mb-4">
+                <div className="mb-3">
                     <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part A: {(isPurchase||isConsignment) ? 'Vendor (賣方)' : 'Purchaser (買方)'} Details</div>
                     <div className="border border-slate-300 p-2 grid grid-cols-2 gap-2 text-[10px]">
                         <div><span className="text-slate-500 block">Name:</span><span className="font-bold text-xs">{curCustomer.name}</span></div>
@@ -5462,7 +5472,7 @@ const DocumentTemplate = () => {
                     </div>
                 </div>
 
-                <div className="mb-4">
+                <div className="mb-3">
                     <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part B: Vehicle Details</div>
                     <table className="w-full text-[10px] border-collapse border border-slate-300">
                         <tbody>
@@ -5473,20 +5483,17 @@ const DocumentTemplate = () => {
                     </table>
                 </div>
 
-                <div className="mb-4">
+                <div className="mb-3">
                     <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Payment Details</div>
                     <table className="w-full text-[10px] border-collapse border border-slate-300">
                         <tbody>
                             <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
-                            
-                            {/* ★★★ 顯示額外收費項目 ★★★ */}
                             {itemsToRender.length > 0 && itemsToRender.map((item: any, idx: number) => (
                                 <tr key={idx}>
                                     <td className="border p-1.5 text-slate-600 pl-4">+ {item.desc}</td>
                                     <td className="border p-1.5 text-right font-mono">{formatCurrency(item.amount)}</td>
                                 </tr>
                             ))}
-
                             <tr><td className="border p-1.5 font-bold">Less: Deposit (已付訂金)</td><td className="border p-1.5 text-right font-mono text-blue-600">{formatCurrency(deposit)}</td></tr>
                             <tr className="bg-slate-50"><td className="border p-1.5 font-black uppercase">Balance (餘額)</td><td className="border p-1.5 text-right font-mono font-black text-sm text-red-600">{formatCurrency(balance)}</td></tr>
                         </tbody>
@@ -5495,8 +5502,7 @@ const DocumentTemplate = () => {
 
                 <AttachmentsSection />
                 
-                {/* 法律條款 (精簡邊距以防被 Cut) */}
-                <div className="mb-4 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif break-inside-avoid">
+                <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif break-inside-avoid">
                     <p className="mb-1">
                         I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, {(isPurchase||isConsignment) ? 'the registered owner,' : ''} agree to {(isPurchase||isConsignment)?(isConsignment?'consign':'sell'):'purchase'} the vehicle to/from <span className="font-bold uppercase">{companyEn}</span> at HKD <span className="font-bold underline">{formatCurrency(balance + deposit)}</span> on <span className="font-bold underline mx-1">{soldDate}</span> at <span className="font-bold underline mx-1">{handoverTime}</span>. Responsibilities for traffic contraventions/liabilities transfer at this time.
                     </p>
@@ -5505,9 +5511,8 @@ const DocumentTemplate = () => {
                     </p>
                 </div>
 
-                {/* 備註欄 (支援換行) */}
                 {activeVehicle.remarks && (
-                    <div className="mb-4 border border-dashed border-slate-300 p-2 bg-slate-50 rounded break-inside-avoid">
+                    <div className="mb-3 border border-dashed border-slate-300 p-2 bg-slate-50 rounded break-inside-avoid">
                         <p className="text-[9px] font-bold text-slate-500 mb-1">Remarks / Bank Info:</p>
                         <p className="text-[10px] whitespace-pre-wrap font-mono leading-tight">{activeVehicle.remarks}</p>
                     </div>
@@ -5565,7 +5570,6 @@ const DocumentTemplate = () => {
                 </tfoot>
             </table>
 
-            {/* 備註區 (發票也加上) */}
             {activeVehicle.remarks && (
                 <div className="mb-6 border-t border-slate-200 pt-2">
                     <p className="text-[9px] font-bold text-slate-500 mb-1">Remarks:</p>
