@@ -5633,6 +5633,8 @@ const CreateDocModule = ({
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
 
+    const [savedDocs, setSavedDocs] = useState<any[]>([]);
+
     // ★★★ 新增：收費項目清單 (Invoice Items) ★★★
     const [docItems, setDocItems] = useState<{ id: string, desc: string, amount: number, isSelected: boolean }[]>([]);
     const [newItemDesc, setNewItemDesc] = useState('');
@@ -5651,6 +5653,24 @@ const CreateDocModule = ({
     「轉數快」識別碼 6134530`;
 
     // --- 1. 歷史紀錄 ---
+
+    useEffect(() => {
+        if (!db || !appId) return;
+        // 指向正確的資料庫路徑
+        const q = query(
+            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), 
+            orderBy('updatedAt', 'desc')
+        );
+        
+        // 監聽資料庫變化
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setSavedDocs(list);
+        });
+        
+        return () => unsubscribe();
+    }, [db, appId]);
+
     useEffect(() => {
         if (!db || !staffId) return;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
@@ -5697,11 +5717,15 @@ const CreateDocModule = ({
     };
 
     const deleteDocRecord = async (id: string) => {
-        if(!confirm("確定刪除此單據紀錄？")) return;
-        if (!db || !staffId) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', id));
+        if (!confirm("確定刪除此單據記錄？")) return;
+        try {
+            await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', id));
+        } catch (e) {
+            console.error("刪除失敗", e);
+            alert("刪除失敗");
+        }
     };
+
 
     const saveDocRecord = async () => {
         if (!db || !staffId) return;
