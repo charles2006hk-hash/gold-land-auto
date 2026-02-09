@@ -5725,7 +5725,7 @@ const CreateDocModule = ({
         const dummyVehicle: any = {
             ...formData,
             price: Number(formData.price), deposit: Number(formData.deposit),
-            customerID: formData.customerId, soldDate: formData.deliveryDate,
+            customerID: formData.customerId,
             // ★★★ 確保傳遞日期與時間 ★★★
             soldDate: formData.deliveryDate,
             handoverTime: formData.handoverTime,
