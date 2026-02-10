@@ -5890,8 +5890,22 @@ const CreateDocModule = ({
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
 
-    // --- 5. 即時預覽 (LivePreview v6.0) ---
+    // --- 5. 即時預覽 (LivePreview v7.0: 高象真 A4 縮放版) ---
     const LivePreview = () => {
+        // 1. 準備預覽資料 (將表單資料轉換為文件格式)
+        const isTradeIn = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
+        const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
+        
+        // 計算金額
+        const price = Number(formData.price) || 0;
+        const deposit = depositItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+        const extrasTotal = docItems.filter(i => i.isSelected).reduce((sum, i) => sum + i.amount, 0);
+        
+        // 根據類型決定總額顯示
+        const balance = price + extrasTotal - deposit;
+        const totalAmount = isBill ? (selectedDocType==='invoice' ? price+extrasTotal : deposit) : (price + extrasTotal);
+
+        // 標題對照
         const titleMap: any = {
             'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' },
             'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' },
@@ -5900,48 +5914,135 @@ const CreateDocModule = ({
             'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' }
         };
         const t = titleMap[selectedDocType] || titleMap['sales_contract'];
-        const isTradeIn = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
-        const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
-        const displayTotal = isBill ? selectedTotal : (Number(formData.price) - Number(formData.deposit));
 
+        // 今天的日期 (如果表單沒填日期，就用今天)
+        const displayDate = formData.deliveryDate || new Date().toLocaleDateString('en-GB');
+
+        // A4 尺寸 (210mm x 297mm)
+        // 使用 transform: scale() 來適應容器，不影響排版
         return (
-            <div className="bg-white shadow-lg border border-gray-200 w-full h-full p-8 text-[10px] overflow-hidden flex flex-col relative font-serif select-none pointer-events-none transform scale-90 origin-top">
-                <div className="flex justify-between items-start border-b-2 border-black pb-2 mb-4">
-                    <div className="flex gap-2 items-center">
-                        <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
-                        <div>
-                            <h1 className="text-xl font-bold uppercase">{formData.companyNameEn}</h1>
-                            <h2 className="text-sm font-bold">{formData.companyNameCh}</h2>
-                            <p className="text-[8px] text-gray-500">{formData.companyEmail} | {formData.companyPhone}</p>
+            <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
+                {/* 縮放容器：將 A4 縮小以適應側邊欄 */}
+                <div 
+                    className="bg-white shadow-2xl origin-top"
+                    style={{ 
+                        width: '210mm', 
+                        height: '297mm', 
+                        transform: 'scale(0.42)', // ★ 調整這個數值可改變縮放大小
+                        marginBottom: '-50%' // 修正縮放後的底部留白
+                    }}
+                >
+                    {/* --- 這裡開始是與列印版完全一致的排版 --- */}
+                    <div className="p-10 font-sans text-slate-900 h-full flex flex-col relative">
+                        
+                        {/* Header */}
+                        <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
+                            <div className="flex items-center gap-4">
+                                <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-20 h-20 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
+                                <div>
+                                    <h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1>
+                                    <h2 className="text-lg font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2>
+                                    <div className="text-[10px] text-slate-500 mt-1 leading-tight font-serif">
+                                        <p>{formData.companyAddress}</p>
+                                        <p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
+                                <div className="text-xs font-bold text-slate-600 tracking-[0.5em] text-center">{t.ch}</div>
+                                <div className="mt-2 text-[10px] font-mono">NO: PREVIEW-DRAFT</div>
+                                <div className="text-[10px] font-mono">DATE: {displayDate}</div>
+                            </div>
                         </div>
-                    </div>
-                    <div className="text-right"><h2 className="text-lg font-bold uppercase">{t.en}</h2><h3 className="text-xs font-bold tracking-widest">{t.ch}</h3></div>
-                </div>
-                <div className="space-y-3 flex-1 overflow-hidden">
-                    <div className="border p-2"><b>CUSTOMER:</b> {formData.customerName}</div>
-                    <div className="border p-2"><b>VEHICLE:</b> {formData.regMark} {formData.make}</div>
-                    
-                    {/* 預覽收費項目 */}
-                    {isBill ? (
-                        <div className="border p-2">
-                            <div className="font-bold border-b mb-1">ITEMS:</div>
-                            {docItems.filter(i => i.isSelected).map((i,idx) => (
-                                <div key={idx} className="flex justify-between"><span>{i.desc}</span><span>${i.amount}</span></div>
-                            ))}
-                            <div className="border-t mt-1 pt-1 flex justify-between font-bold"><span>TOTAL:</span><span>${selectedTotal}</span></div>
-                        </div>
-                    ) : (
-                        <div className="border p-2 flex justify-between">
-                            <div>Price: <b>${formData.price}</b></div>
-                            <div>Bal: <b className="text-red-600">${displayTotal}</b></div>
-                        </div>
-                    )}
 
-                    {!isBill && isTradeIn && (
-                        <div className="p-2 bg-gray-50 text-[8px] leading-tight text-justify border border-slate-300 mt-2">
-                            <p>I, <b>{formData.customerName||'___'}</b> ... agree to {selectedDocType==='consignment_contract'?'consign':'sell'}...</p>
+                        {/* Customer Info */}
+                        <div className="mb-4 border p-3 rounded bg-slate-50 flex justify-between">
+                            <div className="text-[10px]">
+                                <p className="text-slate-500 font-bold uppercase mb-1">Customer / Bill To:</p>
+                                <p className="text-sm font-bold">{formData.customerName || '(Client Name)'}</p>
+                                <p>{formData.customerAddress}</p>
+                                <p className="mt-1 font-mono">{formData.customerPhone}</p>
+                            </div>
+                            <div className="text-[10px] text-right">
+                                <p>Reg No: <span className="font-bold text-sm">{formData.regMark || 'Untitled'}</span></p>
+                                <p>{formData.make} {formData.model}</p>
+                            </div>
                         </div>
-                    )}
+
+                        {/* Content Table */}
+                        <div className="flex-1">
+                            <table className="w-full text-[10px] border-collapse mb-6">
+                                <thead>
+                                    <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
+                                </thead>
+                                <tbody>
+                                    {/* 1. 車價 */}
+                                    {(!isBill || selectedDocType === 'invoice') && (
+                                        <tr className="border-b">
+                                            <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
+                                            <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
+                                        </tr>
+                                    )}
+
+                                    {/* 2. 額外項目 */}
+                                    {docItems.filter(i=>i.isSelected).map((item, i) => (
+                                        <tr key={i} className="border-b">
+                                            <td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc}</td>
+                                            <td className="p-2 text-right font-mono">{formatCurrency(item.amount)}</td>
+                                        </tr>
+                                    ))}
+
+                                    {/* 3. 訂金 (只在合約顯示為減項) */}
+                                    {!isBill && depositItems.map((item, idx) => (
+                                        <tr key={`dep-${idx}`} className="border-b">
+                                            <td className="p-2 font-bold text-slate-600">Less: {item.label}</td>
+                                            <td className="p-2 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="bg-slate-50 font-bold text-xs border-t-2 border-slate-800">
+                                        <td className="p-2 text-right">{isBill ? 'Total' : 'Balance'}</td>
+                                        <td className="p-2 text-right font-mono text-sm text-red-600">
+                                            {formatCurrency(isBill ? totalAmount : balance)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            {/* 條款預覽 (僅合約) */}
+                            {!isBill && showTerms && (
+                                <div className="mb-4 p-2 border border-slate-300 bg-gray-50 text-[8px] leading-relaxed text-justify font-serif">
+                                    <p>
+                                        I, <b>{formData.customerName || '___________'}</b>, agree to {isTradeIn?'consign/sell':'purchase'} the vehicle at HKD <b>{formatCurrency(balance + deposit)}</b> on <b>{displayDate}</b>. Responsibilities transfer at this time.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* 備註 */}
+                            {formData.remarks && (
+                                <div className="mb-4 border border-dashed border-slate-300 p-2 bg-slate-50 rounded">
+                                    <p className="text-[9px] font-bold text-slate-500 mb-1">Remarks:</p>
+                                    <p className="text-[9px] whitespace-pre-wrap font-mono leading-tight">{formData.remarks}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer / Signature */}
+                        <div className="mt-auto">
+                            <div className="grid grid-cols-2 gap-12 mt-8">
+                                <div className="pt-8 border-t border-slate-800 text-center relative">
+                                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 scale-75 opacity-50"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
+                                    <p className="font-bold text-[8px] uppercase">For {formData.companyNameEn}</p>
+                                </div>
+                                <div className="pt-8 border-t border-slate-800 text-center">
+                                    <p className="font-bold text-[8px] uppercase">Customer Signature</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
             </div>
         );
