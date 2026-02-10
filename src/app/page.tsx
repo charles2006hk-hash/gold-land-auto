@@ -5928,8 +5928,8 @@ const CreateDocModule = ({
                     style={{ 
                         width: '210mm', 
                         height: '297mm', 
-                        transform: 'scale(0.42)', // ★ 調整這個數值可改變縮放大小
-                        marginBottom: '-50%' // 修正縮放後的底部留白
+                        transform: 'scale(0.65)', // ★ 調整這個數值可改變縮放大小
+                        marginBottom: '-40%' // 修正縮放後的底部留白
                     }}
                 >
                     {/* --- 這裡開始是與列印版完全一致的排版 --- */}
