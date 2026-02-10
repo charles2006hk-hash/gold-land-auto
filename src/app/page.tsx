@@ -6413,14 +6413,109 @@ const CreateDocModule = ({
                   return (
                       <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
                         <div className="flex-1 overflow-y-auto border rounded-lg">
-                          <table className="w-full text-left text-sm whitespace-nowrap relative">
+                          {/* 3. 庫存列表 (排序 + 擬真車牌 + 縮圖) - 響應式修復版 */}
+              {(() => {
+                  const sortedList = [...inventory].sort((a,b) => {
+                      // ... (排序邏輯保持不變，為節省篇幅省略，請保留您原本的排序代碼) ...
+                      const getScore = (v: Vehicle) => {
+                          if (v.status === 'In Stock') return 1;
+                          if (v.status === 'Reserved') return 2;
+                          if (v.status === 'Sold') {
+                              // ... (保留原本邏輯)
+                              const received = (v.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
+                              const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                              const totalReceivable = (v.price || 0) + cbFees;
+                              const balance = totalReceivable - received;
+                              const unpaidExps = (v.expenses || []).filter(e => e.status === 'Unpaid').length;
+                              const pendingCb = (v.crossBorder?.tasks || []).filter(t => !t.isPaid).length;
+                              if (balance > 0 || unpaidExps > 0 || pendingCb > 0) return 3; 
+                              return 4;
+                          }
+                          if (v.status === 'Withdrawn') return 5;
+                          return 6;
+                      };
+                      const scoreA = getScore(a);
+                      const scoreB = getScore(b);
+                      if (scoreA !== scoreB) return scoreA - scoreB;
+                      return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
+                  });
+
+                  return (
+                      <div className="bg-white rounded-lg shadow-sm p-0 md:p-4 flex-1 flex flex-col overflow-hidden min-h-0">
+                        <div className="flex-1 overflow-y-auto md:border md:rounded-lg">
+                          
+                          {/* --- 手機版視圖 (Mobile Card View) --- */}
+                          <div className="md:hidden">
+                              {sortedList.map(car => {
+                                  const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
+                                  const cbFees = (car.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                                  const totalReceivable = (car.price || 0) + cbFees;
+                                  const balance = totalReceivable - received;
+                                  
+                                  let statusText = '在庫';
+                                  let statusClass = "bg-green-100 text-green-700 border-green-200";
+                                  if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-100 text-yellow-700 border-yellow-200"; }
+                                  else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
+                                  else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
+
+                                  const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+
+                                  return (
+                                      <div key={car.id} onClick={() => setEditingVehicle(car)} className="p-3 border-b border-slate-100 active:bg-slate-50 transition-colors relative">
+                                          {/* 上排：狀態 + 車牌 */}
+                                          <div className="flex justify-between items-start mb-2">
+                                              <div className="flex items-center gap-2">
+                                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}`}>{statusText}</span>
+                                                  <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 rounded-[2px] leading-tight shadow-sm">
+                                                      {car.regMark || '未出牌'}
+                                                  </span>
+                                                  {car.crossBorder?.mainlandPlate && (
+                                                      <span className="bg-blue-800 text-white border border-white font-bold font-mono text-[10px] px-1 rounded-[2px]">
+                                                          {car.crossBorder.mainlandPlate}
+                                                      </span>
+                                                  )}
+                                              </div>
+                                              <div className="font-bold text-slate-800 text-sm">{formatCurrency(car.price)}</div>
+                                          </div>
+
+                                          {/* 中排：圖片 + 資料 */}
+                                          <div className="flex gap-3">
+                                              <div className="w-20 h-14 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 border border-slate-200">
+                                                  {thumbUrl ? <img src={thumbUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>}
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                  {/* ★★★ 這裡補回了年份 car.year ★★★ */}
+                                                  <div className="font-bold text-sm text-slate-700 truncate">
+                                                      {car.year} {car.make} {car.model}
+                                                  </div>
+                                                  <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-2">
+                                                      <span>{car.colorExt}</span>
+                                                      <span>{car.mileage ? `${Number(car.mileage).toLocaleString()}km` : '-'}</span>
+                                                      <span>{car.seating}座</span>
+                                                  </div>
+                                                  {/* 財務狀態 (如有欠款) */}
+                                                  {balance > 0 && <div className="text-blue-600 font-bold text-xs mt-1">欠款: {formatCurrency(balance)}</div>}
+                                              </div>
+                                          </div>
+                                          
+                                          {/* 分享按鈕 */}
+                                          <button onClick={(e)=>{e.stopPropagation(); setShareVehicle(car);}} className="absolute bottom-3 right-3 p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-full border border-slate-200">
+                                              <Share2 size={16}/>
+                                          </button>
+                                      </div>
+                                  );
+                              })}
+                          </div>
+
+                          {/* --- 電腦版視圖 (Desktop Table View) - 保持原本表格，但預設 hidden --- */}
+                          <table className="hidden md:table w-full text-left text-sm whitespace-nowrap relative">
                             <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm text-slate-600 font-bold text-xs uppercase">
                                 <tr className="border-b">
                                     <th className="p-3 w-10 text-center">Act</th>
                                     <th className="p-3 w-20">狀態</th>
                                     <th className="p-3">車輛資料 (Vehicle)</th>
                                     <th className="p-3">規格 (Spec)</th>
-                                    <th className="p-3 hidden md:table-cell">詳情</th>
+                                    <th className="p-3 hidden lg:table-cell">詳情</th>
                                     <th className="p-3 text-right">牌費</th>
                                     <th className="p-3 text-right">財務狀況</th>
                                 </tr>
@@ -6439,10 +6534,9 @@ const CreateDocModule = ({
                                   else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
                                   else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
 
-                                  // ★ 智能縮圖
                                   const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
 
-                                  // ★ 標籤邏輯
+                                  // 標籤邏輯
                                   const getTags = () => {
                                       const tags = [];
                                       const ports = car.crossBorder?.ports || [];
@@ -6460,10 +6554,8 @@ const CreateDocModule = ({
                                       <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button></td>
                                       <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span></td>
                                       
-                                      {/* ★★★ 車輛資料 (圖 + 擬真車牌) ★★★ */}
                                       <td className="p-3">
                                           <div className="flex items-center gap-3">
-                                              {/* 1. 縮圖 Icon (Avatar Mask) */}
                                               <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-gray-100 shadow-sm">
                                                   {thumbUrl ? (
                                                       <img src={thumbUrl} className="w-full h-full object-cover" alt="Car" />
@@ -6472,14 +6564,11 @@ const CreateDocModule = ({
                                                   )}
                                               </div>
                                               
-                                              {/* 2. 車牌與型號 */}
                                               <div className="flex flex-col gap-1 items-start">
                                                   <div className="flex gap-1">
-                                                      {/* HK Plate */}
                                                       <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1 rounded-[2px] leading-tight shadow-sm">
                                                           {car.regMark || '未出牌'}
                                                       </span>
-                                                      {/* CN Plate */}
                                                       {car.crossBorder?.mainlandPlate && (
                                                           <span className={`${
                                                               car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'
@@ -6488,7 +6577,8 @@ const CreateDocModule = ({
                                                           </span>
                                                       )}
                                                   </div>
-                                                  <div className="text-xs text-slate-600 font-bold">{car.make} {car.model}</div>
+                                                  {/* ★★★ 這裡補回了年份 car.year ★★★ */}
+                                                  <div className="text-xs text-slate-600 font-bold">{car.year} {car.make} {car.model}</div>
                                                   <div className="flex gap-1">{cbTags.map((t,i)=><span key={i} className={`text-[8px] px-1 rounded ${t.color}`}>{t.label}</span>)}</div>
                                               </div>
                                           </div>
@@ -6501,7 +6591,7 @@ const CreateDocModule = ({
                                               <div className="flex items-center gap-1"><span className="text-[10px] text-gray-400 w-6">Km:</span><span className="font-mono">{car.mileage ? Number(car.mileage).toLocaleString() : '-'}</span></div>
                                           </div>
                                       </td>
-                                      <td className="p-3 hidden md:table-cell">
+                                      <td className="p-3 hidden lg:table-cell">
                                           <div className="flex gap-1 text-xs text-gray-600 flex-wrap">
                                               <span className="bg-slate-50 px-1 border rounded">{car.previousOwners || 0}手</span>
                                               <span className="bg-slate-50 px-1 border rounded">{car.seating || 5}座</span>
@@ -6521,6 +6611,10 @@ const CreateDocModule = ({
                               })}
                             </tbody>
                           </table>
+                        </div>
+                      </div>
+                  );
+              })()}
                         </div>
                       </div>
                   );
