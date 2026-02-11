@@ -6285,7 +6285,7 @@ const CreateDocModule = ({
           {activeTab === 'cross_border' && (
             <div className="h-full animate-fade-in">
                 <CrossBorderView 
-                    inventory={inventory}
+                    inventory={visibleInventory}
                     settings={settings}
                     dbEntries={dbEntries}
                     activeCbVehicleId={activeCbVehicleId}
