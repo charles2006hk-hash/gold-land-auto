@@ -1122,8 +1122,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') {
                     return true;
                 }
-                // 2. 普通員工 -> 只看自己負責的 OR 公用資料(無負責人)
-                return entry.managedBy === staffId || !entry.managedBy;
+                // 2. 普通員工 -> ★ 嚴格模式：只看明確指派給自己的資料
+                return entry.managedBy === staffId;
             });
 
             setEntries(filteredList); 
@@ -1608,9 +1608,23 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         return onSnapshot(q, (snap) => {
             const list: MediaLibraryItem[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
-            setMediaItems(list);
+            
+            // ★★★ 新增：過濾邏輯 ★★★
+            const myImages = list.filter(img => {
+                // 1. 管理員看全部
+                if (staffId === 'BOSS' || (inventory.length > 0 && inventory.some(v => v.managedBy && v.managedBy !== staffId))) {
+                     return true; 
+                }
+                // 2. 員工只看：圖片已連結 (linked) 且 該車輛在我的 visibleInventory 裡面
+                if (img.status === 'linked' && img.relatedVehicleId) {
+                    return inventory.some(v => v.id === img.relatedVehicleId);
+                }
+                return false; // 其他(Inbox/未分類)隱藏
+            });
+
+            setMediaItems(myImages);
         });
-    }, [db, staffId, appId]);
+    }, [db, staffId, appId, inventory]); // ★ 依賴 inventory
 
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
@@ -3849,14 +3863,28 @@ useEffect(() => {
                     chassisNo: data.chassisNo || '',
                     engineNo: data.engineNo || '',
                     attachments: data.attachments || [],
-                    roles: data.roles || []
+                    roles: data.roles || [],
+                    
+                    // ★ 讀取負責人欄位 (過濾關鍵)
+                    managedBy: data.managedBy || ''
                 } as DatabaseEntry);
             });
-            setDbEntries(list);
+
+            // ★★★ 核心新增：全域資料快取過濾 ★★★
+            const filteredDbList = list.filter(entry => {
+                // 1. 管理員 (BOSS / all 權限 / 資料視角=all) -> 看全部
+                if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') {
+                    return true;
+                }
+                // 2. 普通員工 -> ★ 嚴格模式：只看負責人是自己的資料 ★
+                return entry.managedBy === staffId;
+            });
+
+            setDbEntries(filteredDbList); // ★ 改存過濾後的清單
         }, (err) => console.error("Db sync error", err));
 
         return () => unsubDb();
-    }, [staffId]);
+    }, [staffId, db, appId, currentUser]); // ★ 必須加入 currentUser 依賴
 
   if (!staffId) {
     return (
@@ -5583,20 +5611,28 @@ const CreateDocModule = ({
 
     useEffect(() => {
         if (!db || !appId) return;
-        // 指向正確的資料庫路徑
         const q = query(
             collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), 
             orderBy('updatedAt', 'desc')
         );
         
-        // 監聽資料庫變化
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setSavedDocs(list);
+            
+            // ★★★ 新增：過濾歷史單據 ★★★
+            // 邏輯：單據上的車牌，必須存在於「我能看到的車輛列表 (inventory)」中
+            const myDocs = list.filter((doc: any) => {
+                if (staffId === 'BOSS') return true;
+                const docRegMark = doc.formData?.regMark;
+                if (!docRegMark) return false;
+                return inventory.some(v => v.regMark === docRegMark);
+            });
+
+            setSavedDocs(myDocs);
         });
         
         return () => unsubscribe();
-    }, [db, appId]);
+    }, [db, appId, inventory, staffId]); // ★ 確保加入 inventory 依賴
 
     useEffect(() => {
         if (!db || !staffId) return;
