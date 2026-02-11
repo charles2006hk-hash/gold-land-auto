@@ -1612,7 +1612,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             // ★★★ 新增：過濾邏輯 ★★★
             const myImages = list.filter(img => {
                 // 1. 管理員看全部
-                if (staffId === 'BOSS' || (inventory.length > 0 && inventory.some(v => v.managedBy && v.managedBy !== staffId))) {
+                if (staffId === 'BOSS' || (inventory.length > 0 && inventory.some((v: Vehicle) => v.managedBy && v.managedBy !== staffId))) {
                      return true; 
                 }
                 // 2. 員工只看：圖片已連結 (linked) 且 該車輛在我的 visibleInventory 裡面
