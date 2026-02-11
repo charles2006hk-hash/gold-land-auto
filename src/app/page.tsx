@@ -1609,22 +1609,26 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             const list: MediaLibraryItem[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
             
-            // ★★★ 新增：過濾邏輯 ★★★
+            // ★★★ 核心修復：只顯示「我的車」的圖片 ★★★
             const myImages = list.filter(img => {
-                // 1. 管理員看全部
+                // 1. 如果是管理員 (BOSS)，看全部
+                // (inventory 是從主程式傳進來的 visibleInventory)
                 if (staffId === 'BOSS' || (inventory.length > 0 && inventory.some((v: Vehicle) => v.managedBy && v.managedBy !== staffId))) {
                      return true; 
                 }
-                // 2. 員工只看：圖片已連結 (linked) 且 該車輛在我的 visibleInventory 裡面
+
+                // 2. 如果是員工，只看已連結到「我的車」的圖片
                 if (img.status === 'linked' && img.relatedVehicleId) {
                     return inventory.some((v: Vehicle) => v.id === img.relatedVehicleId);
                 }
-                return false; // 其他(Inbox/未分類)隱藏
+                
+                // 3. 未連結的 (Inbox) 圖片不給看，避免看到別人的隱私
+                return false; 
             });
 
             setMediaItems(myImages);
         });
-    }, [db, staffId, appId, inventory]); // ★ 依賴 inventory
+    }, [db, staffId, appId, inventory]); // ★ 記得加入 inventory 依賴
 
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
@@ -5607,10 +5611,11 @@ const CreateDocModule = ({
     賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO
     「轉數快」識別碼 6134530`;
 
-    // --- 1. 歷史紀錄 ---
-
+   // --- 1. 歷史紀錄 (合併修正版) ---
     useEffect(() => {
         if (!db || !appId) return;
+        
+        // 監聽 sales_documents 集合
         const q = query(
             collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), 
             orderBy('updatedAt', 'desc')
@@ -5619,32 +5624,27 @@ const CreateDocModule = ({
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             
-            // ★★★ 新增：過濾歷史單據 ★★★
-            // 邏輯：單據上的車牌，必須存在於「我能看到的車輛列表 (inventory)」中
+            // ★★★ 過濾邏輯：只顯示屬於我的車的單據 ★★★
             const myDocs = list.filter((doc: any) => {
-                if (staffId === 'BOSS') return true;
+                // 1. 老闆或擁有全部權限者看全部
+                if (staffId === 'BOSS' || (currentUser?.modules?.includes('all'))) return true;
+                
+                // 2. 員工只看自己車輛的單
+                // (inventory 是從主程式傳進來的 visibleInventory，已經過濾過了)
                 const docRegMark = doc.formData?.regMark;
                 if (!docRegMark) return false;
+                
+                // 檢查這張單的車牌，是否在「我能看到的車庫」裡
                 return inventory.some(v => v.regMark === docRegMark);
             });
 
-            setSavedDocs(myDocs);
+            // ★★★ 關鍵修正：同時更新兩個狀態變數，並都使用「過濾後」的資料 ★★★
+            setSavedDocs(myDocs);   // 用於內部邏輯
+            setDocHistory(myDocs);  // 用於列表顯示 (UI)
         });
         
         return () => unsubscribe();
-    }, [db, appId, inventory, staffId]); // ★ 確保加入 inventory 依賴
-
-    useEffect(() => {
-        if (!db || !staffId) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
-        const unsub = onSnapshot(q, (snap) => {
-            const list: any[] = [];
-            snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-            setDocHistory(list);
-        });
-        return () => unsub();
-    }, [db, staffId]);
+    }, [db, appId, inventory, staffId, currentUser]); // ★ 確保依賴完整
 
     // 在 CreateDocModule 內部加入此 useEffect
     useEffect(() => {
@@ -6451,7 +6451,7 @@ const CreateDocModule = ({
               
               {/* 3. 庫存列表 (排序 + 擬真車牌 + 縮圖) */}
               {(() => {
-                  const sortedList = [...inventory].sort((a,b) => {
+                  const sortedList = [...visibleInventory].sort((a,b) => {
                       const getScore = (v: Vehicle) => {
                           if (v.status === 'In Stock') return 1;
                           if (v.status === 'Reserved') return 2;
@@ -6479,7 +6479,7 @@ const CreateDocModule = ({
                         <div className="flex-1 overflow-y-auto border rounded-lg">
                           {/* 3. 庫存列表 (排序 + 擬真車牌 + 縮圖) - 響應式修復版 */}
               {(() => {
-                  const sortedList = [...inventory].sort((a,b) => {
+                  const sortedList = [...visibleInventory].sort((a,b) => {
                       // ... (排序邏輯保持不變，為節省篇幅省略，請保留您原本的排序代碼) ...
                       const getScore = (v: Vehicle) => {
                           if (v.status === 'In Stock') return 1;
