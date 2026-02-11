@@ -29,7 +29,7 @@ import {
   getDocs, where, limit 
 } from "firebase/firestore";
 import { 
-  getStorage, 
+  getStorage, deleteObject, 
   ref, 
   uploadString, 
   uploadBytes,      // 新增：處理 Blob/File 上傳
@@ -1692,6 +1692,32 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         await batch.commit();
     };
 
+    // ★★★ 新增：刪除圖片函數 ★★★
+    const handleDeleteImage = async (item: MediaLibraryItem) => {
+        // 1. 跳出確認對話框，防止誤刪
+        const confirmDelete = window.confirm(
+            `確定要永久刪除這張圖片嗎？\n\n如果此圖片已連結到車輛，車輛資料中的連結也會失效。此操作無法復原。`
+        );
+        if (!confirmDelete) return;
+
+        try {
+            // 2. 先刪除 Firebase Storage 中的實體檔案
+            // (假設 item.storagePath 儲存了完整的路徑，例如 "uploads/car123/image.jpg")
+            const storageRef = ref(storage, item.storagePath);
+            await deleteObject(storageRef);
+
+            // 3. 再刪除 Firestore 中的資料庫文檔
+            await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id));
+            
+            // 可選：這裡可以加一個簡單的提示，例如 console.log 或 toast 通知
+            console.log('圖片刪除成功');
+
+        } catch (error) {
+            console.error("Error deleting image:", error);
+            alert("刪除失敗，可能是權限不足或檔案不存在。請查看控制台紀錄。");
+        }
+    };
+
     const handleClassify = async () => {
         if (!db || selectedInboxIds.length === 0) return;
         const batch = writeBatch(db);
@@ -1725,9 +1751,38 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1 content-start">
                     {inboxItems.map(item => (
-                        <div key={item.id} onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} className={`relative aspect-square rounded overflow-hidden cursor-pointer transition-all ${selectedInboxIds.includes(item.id) ? 'ring-2 ring-blue-500 opacity-100' : 'opacity-80 hover:opacity-100'}`}>
+                        <div 
+                            key={item.id} 
+                            // 1. 加入 'group' class 以便讓懸停效果生效
+                            // 2. 點擊圖片本體仍然是「選取/取消選取」
+                            onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} 
+                            className={`relative aspect-square rounded overflow-hidden cursor-pointer transition-all group ${selectedInboxIds.includes(item.id) ? 'ring-2 ring-blue-500 opacity-100' : 'opacity-80 hover:opacity-100'}`}
+                        >
                             <img src={item.url} className="w-full h-full object-cover"/>
-                            {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5"><Check size={10}/></div>}
+                            
+                            {/* 原有的：選取勾勾 */}
+                            {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10"><Check size={10}/></div>}
+
+                            {/* ★★★ 新增：懸停操作按鈕 (放大 & 刪除) ★★★ */}
+                            <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                {/* 放大預覽按鈕 (防止冒泡，以免觸發選取) */}
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} 
+                                    className="p-1 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm"
+                                    title="預覽"
+                                > 
+                                    <Maximize2 size={12} /> 
+                                </button>
+                                
+                                {/* 刪除按鈕 */}
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} 
+                                    className="p-1 rounded-full bg-red-600/70 hover:bg-red-600 text-white backdrop-blur-sm" 
+                                    title="刪除"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
                         </div>
                     ))}
                     {inboxItems.length === 0 && <div className="col-span-3 py-10 text-center text-slate-300 text-xs">暫無新圖片</div>}
@@ -1760,34 +1815,88 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 <div className="p-3 border-t bg-slate-50"><button onClick={handleClassify} disabled={selectedInboxIds.length === 0} className="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-50">歸檔</button></div>
             </div>
 
-            {/* --- 右欄：車輛圖庫 --- */}
+            {/* --- 右欄：車輛圖庫 (已更新：含說明、實心星星、刪除功能) --- */}
             <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-                <div className="p-3 border-b bg-slate-50 flex justify-between items-center gap-2"><h3 className="font-bold text-slate-700 flex items-center"><ImageIcon size={18} className="mr-2"/> 圖庫</h3><input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋..." className="w-32 md:w-48 px-2 py-1 text-xs border rounded-full"/></div>
+                <div className="p-3 border-b bg-slate-50 flex justify-between items-center gap-2">
+                    <h3 className="font-bold text-slate-700 flex items-center"><ImageIcon size={18} className="mr-2"/> 圖庫</h3>
+                    <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋..." className="w-32 md:w-48 px-2 py-1 text-xs border rounded-full"/>
+                </div>
+                
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4">
+                    
+                    {/* ★★★ 新增：操作小說明 ★★★ */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-3 text-xs text-amber-800">
+                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0 mt-0.5"/>
+                        <div>
+                            <p className="font-bold">圖庫管理說明：</p>
+                            <ul className="list-disc pl-4 mt-1 space-y-0.5 text-amber-700">
+                                <li>點擊圖片左上角的 <span className="font-bold text-yellow-600">星星</span> 可設為該車輛的首圖 (封面)。</li>
+                                <li>點擊右上角的 <span className="font-bold text-red-600">垃圾桶</span> 可永久刪除圖片。</li>
+                                <li>點擊圖片本身可放大預覽。</li>
+                            </ul>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {libraryGroups.map(group => {
                             const isExpanded = expandedGroupKey === group.key;
-                            const primaryImage = group.items[0];
+                            const primaryImage = group.items[0]; // 分組後的第一張通常是首圖(已排序)
                             return (
-                                <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden ${isExpanded ? 'col-span-full ring-2 ring-blue-200' : ''}`}>
+                                <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all ${isExpanded ? 'col-span-full ring-2 ring-blue-200' : 'hover:border-blue-300'}`}>
                                     <div className="p-3 flex justify-between items-center cursor-pointer bg-white border-b border-slate-100" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
                                         <div className="flex items-center gap-3 overflow-hidden">
-                                            <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden"><img src={primaryImage?.url} className="w-full h-full object-cover"/></div>
-                                            <div className="min-w-0"><h4 className="font-bold text-sm truncate">{group.title}</h4><div className="text-[10px] text-slate-500">{group.items.length}張</div></div>
+                                            <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden relative">
+                                                {primaryImage ? (
+                                                     <img src={primaryImage.url} className="w-full h-full object-cover"/>
+                                                ) : (
+                                                     <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-bold text-sm truncate">{group.title}</h4>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[10px] text-slate-500">{group.items.length} 張圖片</span>
+                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded border ${group.status==='In Stock'?'bg-green-100 text-green-700 border-green-200':'bg-gray-100 text-gray-500'}`}>{group.status}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        {isExpanded ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}
+                                        {isExpanded ? <Minimize2 size={16} className="text-slate-400"/> : <Maximize2 size={16} className="text-slate-400"/>}
                                     </div>
+                                    
                                     {isExpanded && (
                                         <div>
-                                            <div className="w-full h-64 bg-gray-100 relative" onClick={() => setPreviewImage(primaryImage?.url)}><img src={primaryImage?.url} className="w-full h-full object-cover" /></div>
-                                            <div className="p-3 grid grid-cols-4 gap-2">
-                                                {group.items.map(img => (
-                                                    <div key={img.id} className={`relative aspect-square rounded overflow-hidden cursor-zoom-in border ${img.isPrimary ? 'ring-2 ring-yellow-400' : ''}`}>
-                                                        <img src={img.url} className="w-full h-full object-cover" onClick={() => setPreviewImage(img.url)}/>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} className="absolute top-1 left-1 p-1 bg-black/40 text-white rounded-full hover:bg-yellow-400"><Star size={10}/></button>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full"><X size={10}/></button>
-                                                    </div>
-                                                ))}
+                                            <div className="w-full h-64 bg-gray-100 relative cursor-zoom-in group" onClick={() => setPreviewImage(primaryImage?.url)}>
+                                                {primaryImage ? <img src={primaryImage.url} className="w-full h-full object-contain bg-slate-900" /> : <div className="p-10 text-center text-slate-400">無圖片</div>}
+                                                <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">點擊放大</div>
+                                            </div>
+                                            
+                                            {/* 縮圖列表區 */}
+                                            <div className="p-3 bg-slate-50 border-t border-slate-100">
+                                                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                                                    {group.items.map(img => (
+                                                        <div key={img.id} className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${img.isPrimary ? 'border-yellow-400 shadow-md' : 'border-transparent hover:border-slate-300'}`}>
+                                                            <img src={img.url} className="w-full h-full object-cover" onClick={() => setPreviewImage(img.url)}/>
+                                                            
+                                                            {/* ★ 星星按鈕 (樣式優化) */}
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} 
+                                                                className={`absolute top-1 left-1 p-1 rounded-full shadow-sm backdrop-blur-sm transition-all ${img.isPrimary ? 'bg-yellow-400 text-white' : 'bg-black/30 text-white/70 hover:bg-yellow-400 hover:text-white'}`}
+                                                                title="設為封面"
+                                                            >
+                                                                <Star size={10} className={img.isPrimary ? 'fill-white' : ''}/>
+                                                            </button>
+
+                                                            {/* ★ 刪除按鈕 (樣式優化) */}
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} // 注意：這裡傳入整個 img 物件
+                                                                className="absolute top-1 right-1 p-1 bg-black/30 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors"
+                                                                title="刪除圖片"
+                                                            >
+                                                                <Trash2 size={10}/>
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
