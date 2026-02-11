@@ -4967,7 +4967,7 @@ const VehicleFormModal = ({
 };
 
   // 2. Report View (v11.3: 強效容錯版 - 車價與中港費用分拆 + 日期自動補全)
-  const ReportView = () => {
+  const ReportView = ({ inventory }: { inventory: Vehicle[] }) => {
     const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>('All');
     const [reportSearchTerm, setReportSearchTerm] = useState('');
     
