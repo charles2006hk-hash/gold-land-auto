@@ -1394,7 +1394,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 <div className="space-y-4">
                                      {/* ★★★ 負責人指派欄位 (新增/編輯時顯示) ★★★ */}
                                     <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex items-center">
-                                        <label className="text-xs font-bold text-yellow-800 mr-2 flex-none flex items-center"><User size={14} className="mr-1"/>文件負責人:</label>
+                                        <label className="text-xs font-bold text-yellow-800 mr-2 flex-none flex items-center"><UserIcon size={14} className="mr-1"/>文件負責人:</label>
                                         <select 
                                             // 只有管理員能改
                                             disabled={!(staffId === 'BOSS' || currentUser?.modules?.includes('all'))} 
