@@ -1396,13 +1396,15 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                     <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 flex items-center">
                                         <label className="text-xs font-bold text-yellow-800 mr-2 flex-none flex items-center"><UserIcon size={14} className="mr-1"/>文件負責人:</label>
                                         <select 
-                                            // 只有管理員能改
                                             disabled={!(staffId === 'BOSS' || currentUser?.modules?.includes('all'))} 
-                                            value={editingEntry.managedBy || staffId || ''}
+                                            // ★ 修改：如果是編輯舊資料(editingEntry.id 存在)，且原本沒負責人，就保持空白
+                                            value={editingEntry.id ? (editingEntry.managedBy || '') : (editingEntry.managedBy || staffId || '')}
                                             onChange={e => setEditingEntry({...editingEntry, managedBy: e.target.value})}
-                                            className="flex-1 text-xs p-1.5 border rounded bg-white outline-none font-bold text-slate-700 disabled:opacity-70 disabled:bg-gray-100"
+                                            className="..."
                                         >
-                                            <option value={editingEntry.managedBy || staffId || ''}>{editingEntry.managedBy || staffId || ''}</option>
+                                            {/* ★ 新增未指派選項 ★ */}
+                                            <option value="">-- 未指派 (Unassigned) --</option>
+                                            
                                             {systemUsers && systemUsers.map((u:any) => (
                                                 <option key={u.email} value={u.email}>{u.email}</option>
                                             ))}
@@ -3550,12 +3552,14 @@ export default function GoldLandAutoDMS() {
 
   // 1. ★★★ 定義資料權限過濾器 ★★★
   const getVisibleInventory = () => {
-      // 如果是 BOSS 或擁有 'all' 權限，或資料視角設為 'all' -> 看全部
+      // 1. 管理員看全部
       if (staffId === 'BOSS' || (currentUser?.modules?.includes('all')) || (currentUser as any)?.dataAccess === 'all') {
           return inventory;
       }
-      // 否則只回傳：沒有設定負責人 (視為公用) OR 負責人是自己
-      return inventory.filter(v => !v.managedBy || v.managedBy === staffId);
+
+      // 2. ★ 嚴格模式：只看「負責人是自己」的車
+      // 移除了 !v.managedBy 的判斷
+      return inventory.filter(v => v.managedBy === staffId);
   };
 
   // 2. ★★★ 產生過濾後的清單 (這就是員工能看到的所有車) ★★★
@@ -4849,16 +4853,17 @@ const VehicleFormModal = ({
                         <span className="text-[10px] text-slate-400 font-bold mr-2">負責人:</span>
                         <select 
                             name="managedBy" 
-                            defaultValue={v.managedBy || staffId || ''} 
-                            className="text-xs font-bold text-slate-700 outline-none bg-transparent cursor-pointer disabled:cursor-not-allowed"
-                            disabled={!(staffId === 'BOSS' || (currentUser as any)?.modules?.includes('all'))}
+                            defaultValue={v.id ? (v.managedBy || '') : (staffId || '')} // ★ 修改這裡
+                            className="..."
+                            disabled={...}
                         >
-                            {/* 顯示選項：如果 systemUsers 沒傳入，至少顯示當前值 */}
-                            {!systemUsers || systemUsers.length === 0 ? (
-                                <option value={v.managedBy || staffId}>{v.managedBy || staffId}</option>
-                            ) : (
-                                systemUsers.map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)
-                            )}
+                            {/* ★ 新增這個選項 ★ */}
+                            <option value="">-- 未指派 (Unassigned) --</option> 
+
+                            {/* 原本的選項 */}
+                            {systemUsers && systemUsers.map((u:any) => (
+                                <option key={u.email} value={u.email}>{u.email}</option>
+                            ))}
                         </select>
                     </div>
                         <div className="flex gap-3 text-xs"><div className="flex items-center gap-1"><span className="text-gray-400">入庫:</span><input name="stockInDate" type="date" defaultValue={v.stockInDate || new Date().toISOString().split('T')[0]} className="bg-transparent font-mono font-bold text-slate-700 outline-none"/></div><div className="flex items-center gap-1"><span className="text-gray-400">出庫:</span><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="bg-transparent font-mono font-bold text-green-600 outline-none"/></div></div>
