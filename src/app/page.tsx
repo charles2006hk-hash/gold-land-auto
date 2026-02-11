@@ -4849,21 +4849,25 @@ const VehicleFormModal = ({
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                         <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><input type="hidden" name="status" value={currentStatus} />{['In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(status => (<button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-3 py-1.5 rounded-md text-[10px] md:text-xs font-bold transition-all border ${currentStatus === status ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>{status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}</button>))}</div>
                         {/* ★★★ 2. 在這裡插入「負責人選單」 ★★★ */}
-                    <div className="bg-white rounded-lg p-1 border border-slate-200 shadow-sm flex items-center px-2">
+                    <div className="bg-white rounded-lg p-1 border border-slate-200 shadow-sm flex items-center px-2 ml-2">
                         <span className="text-[10px] text-slate-400 font-bold mr-2">負責人:</span>
                         <select 
                             name="managedBy" 
-                            defaultValue={v.id ? (v.managedBy || '') : (staffId || '')} // ★ 修改這裡
-                            className="..."
-                            disabled={...}
+                            // ★ 邏輯修正：如果是舊車(有ID)且沒負責人->顯示空白；如果是新車->預設自己
+                            defaultValue={v.id ? (v.managedBy || '') : (staffId || '')}
+                            className="text-xs font-bold text-slate-700 outline-none bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                            // 只有管理員 (BOSS 或 all 權限) 可以修改負責人
+                            disabled={!(staffId === 'BOSS' || (currentUser as any)?.modules?.includes('all'))}
                         >
-                            {/* ★ 新增這個選項 ★ */}
-                            <option value="">-- 未指派 (Unassigned) --</option> 
-
-                            {/* 原本的選項 */}
-                            {systemUsers && systemUsers.map((u:any) => (
-                                <option key={u.email} value={u.email}>{u.email}</option>
-                            ))}
+                            {/* ★ 新增：未指派選項 (讓舊車可以顯示為空白) */}
+                            <option value="">-- 未指派 --</option>
+                            
+                            {/* 顯示系統用戶列表 */}
+                            {!systemUsers || systemUsers.length === 0 ? (
+                                <option value={staffId || ''}>{staffId}</option>
+                            ) : (
+                                systemUsers.map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)
+                            )}
                         </select>
                     </div>
                         <div className="flex gap-3 text-xs"><div className="flex items-center gap-1"><span className="text-gray-400">入庫:</span><input name="stockInDate" type="date" defaultValue={v.stockInDate || new Date().toISOString().split('T')[0]} className="bg-transparent font-mono font-bold text-slate-700 outline-none"/></div><div className="flex items-center gap-1"><span className="text-gray-400">出庫:</span><input name="stockOutDate" type="date" defaultValue={v.stockOutDate} className="bg-transparent font-mono font-bold text-green-600 outline-none"/></div></div>
