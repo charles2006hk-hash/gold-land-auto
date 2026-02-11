@@ -1617,7 +1617,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 }
                 // 2. 員工只看：圖片已連結 (linked) 且 該車輛在我的 visibleInventory 裡面
                 if (img.status === 'linked' && img.relatedVehicleId) {
-                    return inventory.some(v => v.id === img.relatedVehicleId);
+                    return inventory.some((v: Vehicle) => v.id === img.relatedVehicleId);
                 }
                 return false; // 其他(Inbox/未分類)隱藏
             });
