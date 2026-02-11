@@ -6400,15 +6400,30 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 提醒中心 (保持不變) */}
+              {/* 提醒中心 (修復版：使用 visibleInventory) */}
               {(() => {
                   const docAlerts: any[] = [];
+                  // dbEntries 已經在上面的 useEffect 被我們過濾過了，所以這裡是安全的
                   dbEntries.forEach(d => { if (d.reminderEnabled && d.expiryDate) { const days = getDaysRemaining(d.expiryDate); if (days !== null && days <= 30) { docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); } } });
                   docAlerts.sort((a, b) => a.days - b.days);
 
                   const cbAlerts: any[] = [];
                   const cbDateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記 (BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
-                  inventory.forEach(v => { const cb = v.crossBorder; if (!cb) return; Object.entries(cbDateFields).forEach(([field, label]) => { const dateStr = (cb as any)?.[field]; if (dateStr) { const days = getDaysRemaining(dateStr); if (days !== null && days <= 30) { cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); } } }); });
+                  
+                  // ★★★ 關鍵修改：這裡必須用 visibleInventory ★★★
+                  visibleInventory.forEach(v => { 
+                      const cb = v.crossBorder; 
+                      if (!cb) return; 
+                      Object.entries(cbDateFields).forEach(([field, label]) => { 
+                          const dateStr = (cb as any)?.[field]; 
+                          if (dateStr) { 
+                              const days = getDaysRemaining(dateStr); 
+                              if (days !== null && days <= 30) { 
+                                  cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); 
+                              } 
+                          } 
+                      }); 
+                  });
                   cbAlerts.sort((a, b) => a.days - b.days);
                   
                   const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
@@ -6416,6 +6431,7 @@ const CreateDocModule = ({
                   const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
                   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
+                  // ... (下方的 return 渲染部分保持不變) ...
                   const AlertList = ({ items, onItemClick }: any) => (
                       <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
