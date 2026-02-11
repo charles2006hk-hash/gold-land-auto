@@ -3485,7 +3485,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
   const [staffId, setStaffId] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[] } | null>(null); // 存權限物件
+  const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[], dataAccess?: string } | null>(null);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   
