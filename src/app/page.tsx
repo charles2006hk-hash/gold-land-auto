@@ -20,8 +20,9 @@ import { compressImage } from '@/utils/imageHelpers';
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { 
   getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, 
-  User, initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth 
+  initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth 
 } from "firebase/auth";
+import type { User } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
   orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
