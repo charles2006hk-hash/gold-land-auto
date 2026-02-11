@@ -1734,7 +1734,6 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         setSelectedInboxIds([]); setTargetVehicleId('');
     };
 
-    const handleDeleteImage = async (id: string) => { if(!confirm("確定刪除此圖片？")) return; if (!db) return; await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', id)); };
     const inboxItems = mediaItems.filter(i => i.status !== 'linked');
 
     return (
