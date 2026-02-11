@@ -1692,29 +1692,29 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         await batch.commit();
     };
 
-    // ★★★ 新增：刪除圖片函數 ★★★
+    // ★★★ 修正版：使用正確的屬性名稱 item.path ★★★
     const handleDeleteImage = async (item: MediaLibraryItem) => {
-        // 1. 跳出確認對話框，防止誤刪
-        const confirmDelete = window.confirm(
-            `確定要永久刪除這張圖片嗎？\n\n如果此圖片已連結到車輛，車輛資料中的連結也會失效。此操作無法復原。`
-        );
+        // 1. 跳出確認對話框
+        const confirmDelete = window.confirm("確定要永久刪除這張圖片嗎？\n此操作無法復原。");
         if (!confirmDelete) return;
 
         try {
             // 2. 先刪除 Firebase Storage 中的實體檔案
-            // (假設 item.storagePath 儲存了完整的路徑，例如 "uploads/car123/image.jpg")
-            const storageRef = ref(storage, item.storagePath);
-            await deleteObject(storageRef);
+            // 修正：這裡要用 item.path，因為您的類型定義是 path
+            if (item.path) {
+                const storageRef = ref(storage, item.path);
+                await deleteObject(storageRef);
+            }
 
             // 3. 再刪除 Firestore 中的資料庫文檔
             await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id));
             
-            // 可選：這裡可以加一個簡單的提示，例如 console.log 或 toast 通知
-            console.log('圖片刪除成功');
+            // 簡單提示
+            // alert("刪除成功"); // 可選，如果不想要彈窗干擾可拿掉
 
         } catch (error) {
             console.error("Error deleting image:", error);
-            alert("刪除失敗，可能是權限不足或檔案不存在。請查看控制台紀錄。");
+            alert("刪除失敗，可能是權限不足或檔案不存在。");
         }
     };
 
