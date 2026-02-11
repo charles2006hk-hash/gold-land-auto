@@ -1402,7 +1402,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             onChange={e => setEditingEntry({...editingEntry, managedBy: e.target.value})}
                                             className="flex-1 text-xs p-1.5 border rounded bg-white outline-none font-bold text-slate-700 disabled:opacity-70 disabled:bg-gray-100"
                                         >
-                                            <option value={editingEntry.managedBy || staffId}>{editingEntry.managedBy || staffId}</option>
+                                            <option value={editingEntry.managedBy || staffId}>{editingEntry.managedBy || staffId || ''}</option>
                                             {systemUsers && systemUsers.map((u:any) => (
                                                 <option key={u.email} value={u.email}>{u.email}</option>
                                             ))}
