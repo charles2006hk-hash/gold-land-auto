@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
-  Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, 
+  Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, User as UserIcon,
   Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
   Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
@@ -1349,7 +1349,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
                                       {entry.reminderEnabled && (<Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />)}
                                       {/* 顯示負責人標籤 (如果不是自己) */}
-                                      {isAssignedToOther && <span className="text-[9px] bg-gray-200 text-gray-600 px-1 rounded flex items-center"><User size={8} className="mr-0.5"/> {entry.managedBy}</span>}
+                                      {isAssignedToOther && <span className="text-[9px] bg-gray-200 text-gray-600 px-1 rounded flex items-center"><UserIcon size={8} className="mr-0.5"/> {entry.managedBy}</span>}
                                   </div>
                                     <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
                                         <span className="bg-slate-100 px-1.5 py-0.5 rounded border">{entry.category}</span>
