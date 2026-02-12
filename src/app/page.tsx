@@ -618,30 +618,33 @@ const getDaysRemaining = (targetDate?: string) => {
     return diffDays;
 };
 
-// 狀態標籤組件 (日期)
+// ★★★ 修改：全域日期狀態組件 (綠=正常, 紅=過期, 黃=30天內) ★★★
 const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
     if (!date) return <div className="text-gray-300 text-xs text-center">-</div>;
-    const days = getDaysRemaining(date);
-    let colorClass = "text-green-600 bg-green-50 border-green-200";
-    let statusText = "正常";
+    
+    // 計算天數差異
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const target = new Date(date);
+    const diffTime = target.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (days === null) return null;
+    let colorClass = "text-green-700 bg-green-100 border-green-200"; // 預設綠色 (正常)
+    let statusText = "有效";
 
-    if (days < 0) {
-        colorClass = "text-red-600 bg-red-50 border-red-200 font-bold";
-        statusText = `過期 ${Math.abs(days)}天`;
-    } else if (days <= 30) {
-        colorClass = "text-amber-600 bg-amber-50 border-amber-200 font-bold";
-        statusText = `剩 ${days}天`;
-    } else {
-        statusText = "正常";
+    if (diffDays < 0) {
+        colorClass = "text-red-700 bg-red-100 border-red-200 font-bold"; // 過期 (紅色)
+        statusText = `過期 ${Math.abs(diffDays)}天`;
+    } else if (diffDays <= 30) {
+        colorClass = "text-amber-700 bg-amber-100 border-amber-200 font-bold"; // 30天內 (黃色)
+        statusText = `剩 ${diffDays}天`;
     }
 
     return (
-        <div className={`border rounded px-1 py-1 text-[10px] inline-flex flex-col items-center justify-center w-20 text-center leading-tight ${colorClass}`} title={`${label}: ${date}`}>
-            <div className="font-bold mb-0.5 scale-90">{label}</div>
-            <div className="scale-90">{date}</div>
-            <div className="scale-90">{statusText}</div>
+        <div className={`border rounded px-2 py-1 text-[10px] inline-flex flex-col items-center justify-center min-w-[80px] text-center leading-tight ${colorClass}`} title={`${label}: ${date}`}>
+            <div className="font-bold mb-0.5 scale-95 opacity-80">{label}</div>
+            <div className="font-mono font-bold text-sm">{date}</div>
+            <div className="scale-90 opacity-90">{statusText}</div>
         </div>
     );
 };
@@ -6765,6 +6768,17 @@ const CreateDocModule = ({
                                           <div className="flex justify-between items-start mb-2">
                                               <div className="flex items-center gap-2">
                                                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}`}>{statusText}</span>
+                                                  {/* ★★★ 新增：牌費狀態顯示 (儀表板手機版) ★★★ */}
+                                                  {car.licenseExpiry && (() => {
+                                                      const today = new Date(); today.setHours(0,0,0,0);
+                                                      const expDate = new Date(car.licenseExpiry);
+                                                      const isExpired = expDate < today;
+                                                      return (
+                                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${isExpired ? 'bg-red-100 text-red-700 border-red-200' : 'bg-green-100 text-green-700 border-green-200'}`}>
+                                                              {isExpired ? '牌費過期' : '牌費正常'}
+                                                          </span>
+                                                      );
+                                                  })()}
                                                   <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 rounded-[2px] leading-tight shadow-sm">
                                                       {car.regMark || '未出牌'}
                                                   </span>
@@ -7066,8 +7080,20 @@ const CreateDocModule = ({
 
                                     {/* 底部：操作按鈕 */}
                                     <div className="flex justify-between items-end mt-1">
-                                        <div className="text-[10px] text-gray-400">
-                                            {car.licenseExpiry ? `牌費: ${car.licenseExpiry}` : ''}
+                                        {/* ★★★ 修改：牌費顯示 (紅/綠) ★★★ */}
+                                        <div className="text-[10px]">
+                                            {car.licenseExpiry ? (() => {
+                                                const today = new Date(); today.setHours(0,0,0,0);
+                                                const expDate = new Date(car.licenseExpiry);
+                                                const isExpired = expDate < today;
+                                                return (
+                                                    <span className={`font-bold px-1.5 py-0.5 rounded ${isExpired ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                                        牌費: {car.licenseExpiry} {isExpired && '!'}
+                                                    </span>
+                                                );
+                                            })() : (
+                                                <span className="text-gray-300">-</span>
+                                            )}
                                         </div>
                                         
                                         <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
