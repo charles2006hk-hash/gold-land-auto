@@ -5729,6 +5729,7 @@ const CreateDocModule = ({
     // 視圖模式
     const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
     const [docHistory, setDocHistory] = useState<any[]>([]);
+    const [mobileStep, setMobileStep] = useState<'list' | 'edit' | 'preview'>('list');
     
     // 編輯器狀態
     const [docId, setDocId] = useState<string | null>(null);
@@ -5942,6 +5943,7 @@ const CreateDocModule = ({
             });
         }
         setDocItems(items);
+        setMobileStep('edit');
     };
 
     const handleSelectBlank = () => {
@@ -5958,6 +5960,7 @@ const CreateDocModule = ({
         // 重置收款與條款
         setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
         setShowTerms(true);
+        setMobileStep('edit');
     };
 
     // ★★★ 修正版：加入 HTMLSelectElement 以支援下拉選單 ★★★
@@ -6224,219 +6227,224 @@ const CreateDocModule = ({
         );
     }
 
+    // ... (歷史列表的 return 保持不變) ...
+
+    // ★★★ 編輯模式的 Return (手機版分步優化) ★★★
     return (
-        <div className="flex h-full gap-4 relative overflow-hidden">
-            {/* Left: Inventory */}
-            <div className="w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-                <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2"><button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded border"><ChevronLeft size={16}/></button><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋庫存..." className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none"/></div>
-                <div className="p-2 border-b bg-slate-50"><button onClick={handleSelectBlank} className="w-full py-1 text-xs font-bold rounded border bg-white text-slate-600 hover:bg-slate-100">空白單據</button></div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">{filteredInventory.map(car => (<div key={car.id} onClick={() => handleSelectCar(car)} className={`p-3 rounded border cursor-pointer ${selectedCarId === car.id ? 'bg-blue-50 border-blue-300' : 'bg-white hover:border-blue-200'}`}><div className="flex justify-between font-bold text-sm"><span>{car.regMark}</span><span className="text-[10px] bg-gray-100 px-1 rounded">{car.status}</span></div><div className="text-xs text-gray-500">{car.make} {car.model}</div></div>))}</div>
+        <div className="flex flex-col h-full bg-slate-100 md:bg-transparent overflow-hidden relative">
+            
+            {/* ★★★ 手機版頂部導航條 (桌面隱藏) ★★★ */}
+            <div className="md:hidden bg-white p-2 border-b border-slate-200 flex gap-2 shrink-0">
+                <button 
+                    onClick={() => setMobileStep('list')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='list' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}
+                >
+                    <Car size={14} className="mr-1"/> 1. 選車
+                </button>
+                <button 
+                    onClick={() => setMobileStep('edit')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='edit' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}
+                >
+                    <Edit size={14} className="mr-1"/> 2. 編輯
+                </button>
+                <button 
+                    onClick={() => setMobileStep('preview')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='preview' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}
+                >
+                    <Eye size={14} className="mr-1"/> 3. 預覽
+                </button>
             </div>
 
-            {/* Middle: Editor */}
-            <div className="w-[40%] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-                <div className="p-3 border-b bg-slate-50 flex justify-between items-center"><span className="font-bold text-slate-700 text-sm">編輯單據 {docId?'(修改)':'(新增)'}</span><div className="flex gap-2"><button onClick={saveDocRecord} className="px-3 py-1.5 bg-white border text-slate-600 rounded text-xs font-bold flex items-center"><Save size={14} className="mr-1"/> 儲存</button><button onClick={handlePrint} className="px-4 py-1.5 bg-slate-800 text-white rounded text-xs font-bold flex items-center"><Printer size={14} className="mr-1"/> 列印</button></div></div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded">{[{id:'sales_contract',l:'賣車'}, {id:'purchase_contract',l:'收車'}, {id:'consignment_contract',l:'寄賣'}, {id:'invoice',l:'發票'}, {id:'receipt',l:'收據'}].map(t=>(<button key={t.id} onClick={()=>setSelectedDocType(t.id as any)} className={`flex-1 py-1.5 rounded text-[10px] font-bold ${selectedDocType===t.id?'bg-white shadow text-blue-600':'text-gray-500'}`}>{t.l}</button>))}</div>
-                    <div className="space-y-3">
-                        <div className="p-3 bg-blue-50 rounded border border-blue-100">
-                            <div className="text-[10px] font-bold text-blue-500 mb-2">客戶資料</div>
-                            <input name="customerName" value={formData.customerName} onChange={handleChange} placeholder="姓名" className="w-full text-sm border-b mb-2 bg-transparent font-bold"/>
-                            <div className="flex gap-2"><input name="customerPhone" value={formData.customerPhone} onChange={handleChange} placeholder="電話" className="flex-1 text-xs border-b bg-transparent"/><input name="customerId" value={formData.customerId} onChange={handleChange} placeholder="ID" className="flex-1 text-xs border-b bg-transparent"/></div>
-                            <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent"/>
-                        </div>
-                        
-                        {/* 1. 基本款項與收款 (★ 修改：所有單據都顯示，不再隱藏 ★) */}
-                        <div className="p-3 bg-yellow-50 rounded border border-yellow-200 mb-3">
-                            <div className="flex justify-between items-center mb-2">
-                                <div className="text-[10px] font-bold text-yellow-600">交易金額與收款 (Payment)</div>
-                                <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
-                                    <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
-                                    列印法律條款
-                                </label>
-                            </div>
-
-                            {/* A. 車價 */}
-                            <div className="flex justify-between items-center mb-2 pb-2 border-b border-yellow-100">
-                                <span className="text-xs font-bold text-slate-700">成交價 (Vehicle Price)</span>
-                                <div className="flex items-center">
-                                    <span className="text-xs mr-1">$</span>
-                                    <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 bg-white border border-yellow-300 rounded px-1 text-right font-bold text-sm"/>
+            <div className="flex flex-1 md:flex-row h-full gap-4 relative overflow-hidden md:p-0 p-2">
+                
+                {/* --- 左欄：車輛庫存 (Inventory) --- */}
+                {/* 手機邏輯：只在 step='list' 時顯示 */}
+                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex-col overflow-hidden ${mobileStep === 'list' ? 'flex' : 'hidden md:flex'}`}>
+                    <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+                        <button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded border"><ChevronLeft size={16}/></button>
+                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋庫存..." className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none"/>
+                    </div>
+                    <div className="p-2 border-b bg-slate-50">
+                        <button onClick={handleSelectBlank} className="w-full py-2 text-xs font-bold rounded border bg-white text-slate-600 hover:bg-slate-100 shadow-sm">
+                            + 空白單據 (Blank)
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {filteredInventory.map(car => (
+                            <div key={car.id} onClick={() => handleSelectCar(car)} className={`p-3 rounded border cursor-pointer transition-all ${selectedCarId === car.id ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-200' : 'bg-white hover:border-blue-200 shadow-sm'}`}>
+                                <div className="flex justify-between font-bold text-sm mb-1">
+                                    <span className="bg-yellow-100 text-yellow-800 px-1 rounded">{car.regMark}</span>
+                                    <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-500">{car.status}</span>
                                 </div>
+                                <div className="text-xs text-gray-500">{car.year} {car.make} {car.model}</div>
                             </div>
+                        ))}
+                    </div>
+                </div>
 
-                            {/* B. 動態收款列表 */}
-                            <div className="space-y-1 mb-2">
-                                {depositItems.map((item, idx) => (
-                                    <div key={item.id} className="flex items-center gap-1">
-                                        <input 
-                                            value={item.label}
-                                            onChange={(e) => {
-                                                const newArr = [...depositItems];
-                                                newArr[idx].label = e.target.value;
-                                                setDepositItems(newArr);
-                                            }}
-                                            className="flex-1 text-[10px] bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-600"
-                                        />
-                                        <span className="text-xs">$</span>
-                                        <input 
-                                            type="number" 
-                                            value={item.amount}
-                                            onChange={(e) => {
-                                                const newArr = [...depositItems];
-                                                newArr[idx].amount = Number(e.target.value);
-                                                setDepositItems(newArr);
-                                            }}
-                                            className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-xs text-blue-600 font-bold"
-                                        />
-                                        <button onClick={() => setDepositItems(prev => prev.filter(i => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={12}/></button>
+                {/* --- 中欄：編輯器 (Editor) --- */}
+                {/* 手機邏輯：只在 step='edit' 時顯示 */}
+                <div className={`w-full md:w-[40%] bg-white rounded-xl shadow-sm border border-slate-200 flex-col overflow-hidden ${mobileStep === 'edit' ? 'flex' : 'hidden md:flex'}`}>
+                    <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
+                        <span className="font-bold text-slate-700 text-sm">編輯單據 {docId?'(修改)':'(新增)'}</span>
+                        <div className="flex gap-2">
+                            <button onClick={saveDocRecord} className="px-3 py-1.5 bg-white border text-slate-600 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform"><Save size={14} className="mr-1"/> 儲存</button>
+                            <button onClick={handlePrint} className="px-4 py-1.5 bg-slate-800 text-white rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform"><Printer size={14} className="mr-1"/> 列印</button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {/* 單據類型選擇 */}
+                        <div className="grid grid-cols-3 gap-1 bg-gray-100 p-1 rounded-lg">
+                            {[{id:'sales_contract',l:'賣車'}, {id:'purchase_contract',l:'收車'}, {id:'consignment_contract',l:'寄賣'}, {id:'invoice',l:'發票'}, {id:'receipt',l:'收據'}].map(t=>(
+                                <button key={t.id} onClick={()=>setSelectedDocType(t.id as any)} className={`py-1.5 rounded text-[10px] font-bold transition-all ${selectedDocType===t.id?'bg-white shadow text-blue-600':'text-gray-500 hover:bg-gray-200'}`}>{t.l}</button>
+                            ))}
+                        </div>
+
+                        {/* 以下為表單內容 (保持不變) */}
+                        <div className="space-y-3">
+                            <div className="p-3 bg-blue-50 rounded border border-blue-100">
+                                <div className="text-[10px] font-bold text-blue-500 mb-2">客戶資料</div>
+                                <input name="customerName" value={formData.customerName} onChange={handleChange} placeholder="姓名" className="w-full text-sm border-b mb-2 bg-transparent font-bold"/>
+                                <div className="flex gap-2"><input name="customerPhone" value={formData.customerPhone} onChange={handleChange} placeholder="電話" className="flex-1 text-xs border-b bg-transparent"/><input name="customerId" value={formData.customerId} onChange={handleChange} placeholder="ID" className="flex-1 text-xs border-b bg-transparent"/></div>
+                                <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent"/>
+                            </div>
+                            
+                            {/* 1. 基本款項與收款 (所有單據都顯示) */}
+                            <div className="p-3 bg-yellow-50 rounded border border-yellow-200 mb-3">
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="text-[10px] font-bold text-yellow-600">交易金額與收款 (Payment)</div>
+                                    <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
+                                        <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
+                                        列印法律條款
+                                    </label>
+                                </div>
+
+                                {/* A. 車價 */}
+                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-yellow-100">
+                                    <span className="text-xs font-bold text-slate-700">成交價 (Vehicle Price)</span>
+                                    <div className="flex items-center">
+                                        <span className="text-xs mr-1">$</span>
+                                        <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 bg-white border border-yellow-300 rounded px-1 text-right font-bold text-sm"/>
                                     </div>
-                                ))}
-                            </div>
-
-                            {/* 新增收款按鈕 */}
-                            <div className="text-right mb-2">
-                                <button 
-                                    onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: selectedDocType === 'receipt' ? 'Payment (本次收款)' : 'Deposit (訂金)', amount: 0 }])}
-                                    className="text-[9px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
-                                >
-                                    + 新增收款欄位
-                                </button>
-                            </div>
-
-                            {/* ★★★ 新增：收款方式 (只在收據 Receipt 顯示) ★★★ */}
-                            {selectedDocType === 'receipt' && (
-                                <div className="pt-2 border-t border-yellow-200 flex items-center justify-between">
-                                    <span className="text-[10px] font-bold text-yellow-800">收款方式 (Payment Method):</span>
-                                    <select 
-                                        name="paymentMethod" 
-                                        value={formData.paymentMethod} 
-                                        onChange={handleChange}
-                                        className="text-xs p-1 rounded border border-yellow-300 bg-white font-bold text-slate-700 outline-none"
-                                    >
-                                        <option value="Cheque">支票 (Cheque)</option>
-                                        <option value="Transfer">銀行轉帳 (Transfer)</option>
-                                        <option value="Cash">現金 (Cash)</option>
-                                        <option value="USDT">USDT (泰達幣)</option>
-                                    </select>
                                 </div>
-                            )}
-                        </div>
 
-                        {/* 2. 額外收費項目 (所有單據都顯示，並支援直接修改文字/金額) */}
-                        <div className="p-3 bg-green-50 rounded border border-green-200">
-                            <div className="text-[10px] font-bold text-green-700 mb-2 flex justify-between">
-                                <span>額外收費項目 (Add-ons)</span>
-                                <span className="text-gray-400">請勾選</span>
-                            </div>
-                            <div className="space-y-1 mb-3">
-                                {docItems.map((item) => (
-                                    <div key={item.id} className="flex items-center text-xs bg-white p-1.5 rounded border">
-                                        <input type="checkbox" checked={item.isSelected} onChange={() => toggleItem(item.id)} className="mr-2 accent-green-600"/>
-                                        
-                                        {/* 修改: 項目名稱可編輯 */}
-                                        <input 
-                                            value={item.desc} 
-                                            onChange={(e) => {
-                                                const newDesc = e.target.value;
-                                                setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, desc: newDesc } : i));
-                                            }}
-                                            className="flex-1 bg-transparent outline-none border-b border-transparent focus:border-blue-300 mr-2"
-                                        />
-                                        
-                                        <span className="font-mono font-bold mx-1">$</span>
-                                        
-                                        {/* 修改: 金額可編輯 */}
-                                        <input 
-                                            type="number"
-                                            value={item.amount}
-                                            onChange={(e) => {
-                                                const newAmt = Number(e.target.value);
-                                                setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, amount: newAmt } : i));
-                                            }}
-                                            className="w-16 bg-transparent outline-none border-b border-transparent focus:border-blue-300 text-right font-bold"
-                                        />
-                                        
-                                        <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-500 ml-2"><X size={12}/></button>
+                                {/* B. 動態收款列表 */}
+                                <div className="space-y-1 mb-2">
+                                    {depositItems.map((item, idx) => (
+                                        <div key={item.id} className="flex items-center gap-1">
+                                            <input value={item.label} onChange={(e) => { const newArr = [...depositItems]; newArr[idx].label = e.target.value; setDepositItems(newArr); }} className="flex-1 text-[10px] bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-600" />
+                                            <span className="text-xs">$</span>
+                                            <input type="number" value={item.amount} onChange={(e) => { const newArr = [...depositItems]; newArr[idx].amount = Number(e.target.value); setDepositItems(newArr); }} className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-xs text-blue-600 font-bold" />
+                                            <button onClick={() => setDepositItems(prev => prev.filter(i => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={12}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* 新增收款按鈕 */}
+                                <div className="text-right mb-2">
+                                    <button onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: selectedDocType === 'receipt' ? 'Payment (本次收款)' : 'Deposit (訂金)', amount: 0 }])} className="text-[9px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"> + 新增收款欄位 </button>
+                                </div>
+
+                                {/* 收款方式 (只在收據 Receipt 顯示) */}
+                                {selectedDocType === 'receipt' && (
+                                    <div className="pt-2 border-t border-yellow-200 flex items-center justify-between">
+                                        <span className="text-[10px] font-bold text-yellow-800">收款方式:</span>
+                                        <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange} className="text-xs p-1 rounded border border-yellow-300 bg-white font-bold text-slate-700 outline-none">
+                                            <option value="Cheque">支票 (Cheque)</option>
+                                            <option value="Transfer">銀行轉帳 (Transfer)</option>
+                                            <option value="Cash">現金 (Cash)</option>
+                                            <option value="USDT">USDT (泰達幣)</option>
+                                        </select>
                                     </div>
-                                ))}
-                                {docItems.length === 0 && <div className="text-gray-400 text-xs text-center italic">無額外項目</div>}
-                            </div>
-                            
-                            {/* 新增按鈕區 */}
-                            <div className="flex gap-1 pt-2 border-t border-green-200">
-                                <input value={newItemDesc} onChange={e=>setNewItemDesc(e.target.value)} placeholder="新增項目 (如: 代辦費)..." className="flex-1 text-xs border rounded px-1"/>
-                                <input type="number" value={newItemAmount} onChange={e=>setNewItemAmount(e.target.value)} placeholder="$" className="w-16 text-xs border rounded px-1"/>
-                                <button onClick={addItem} className="bg-green-600 text-white px-2 rounded text-xs"><Plus size={12}/></button>
-                            </div>
-                        </div>
-
-                        {/* 車輛資料 */}
-                        <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                            <div className="text-[10px] font-bold text-gray-500 mb-2">車輛資料 (Vehicle Details)</div>
-                            
-                            {/* 第一行：車牌、年份 */}
-                            <div className="grid grid-cols-2 gap-2 mb-2">
-                                <input name="regMark" value={formData.regMark} onChange={handleChange} placeholder="車牌" className="border-b bg-transparent text-sm font-bold"/>
-                                <input name="year" value={formData.year} onChange={handleChange} placeholder="年份" className="border-b bg-transparent text-sm"/>
-                            </div>
-                            
-                            {/* 第二、三行：廠牌、型號 */}
-                            <input name="make" value={formData.make} onChange={handleChange} placeholder="廠牌" className="w-full border-b mb-2 bg-transparent text-xs"/>
-                            <input name="model" value={formData.model} onChange={handleChange} placeholder="型號" className="w-full border-b mb-2 bg-transparent text-xs"/>
-                            
-                            {/* ★★★ 新增第四行：外觀顏色、內飾顏色 ★★★ */}
-                            <div className="grid grid-cols-2 gap-2 mb-2">
-                                <input name="color" value={formData.color} onChange={handleChange} placeholder="外觀顏色 (Ext)" className="border-b bg-transparent text-xs"/>
-                                <input name="colorInterior" value={formData.colorInterior || ''} onChange={handleChange} placeholder="內飾顏色 (Int)" className="border-b bg-transparent text-xs"/>
+                                )}
                             </div>
 
-                            {/* 第五行：底盤號、引擎號 */}
-                            <div className="grid grid-cols-2 gap-2">
-                                <input name="chassisNo" value={formData.chassisNo} onChange={handleChange} placeholder="底盤號" className="border-b bg-transparent text-[10px] font-mono"/>
-                                <input name="engineNo" value={formData.engineNo} onChange={handleChange} placeholder="引擎號" className="border-b bg-transparent text-[10px] font-mono"/>
-                            </div>
-                        </div>
-
-                        {/* ★★★ 新增：交易條款設定 (日期與時間) ★★★ */}
-                        <div className="p-3 bg-indigo-50 rounded border border-indigo-200">
-                            <div className="text-[10px] font-bold text-indigo-700 mb-2">交易條款 (Terms)</div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label className="block text-[10px] text-indigo-500 mb-1">交收日期 (Date)</label>
-                                    <input type="date" name="deliveryDate" value={formData.deliveryDate} onChange={handleChange} className="w-full text-xs border rounded p-1 bg-white"/>
+                            {/* 2. 額外收費項目 */}
+                            <div className="p-3 bg-green-50 rounded border border-green-200">
+                                <div className="text-[10px] font-bold text-green-700 mb-2 flex justify-between">
+                                    <span>額外收費項目 (Add-ons)</span><span className="text-gray-400">請勾選</span>
                                 </div>
-                                <div>
-                                    <label className="block text-[10px] text-indigo-500 mb-1">交收時間 (Time)</label>
-                                    <input type="time" name="handoverTime" value={formData.handoverTime} onChange={handleChange} className="w-full text-xs border rounded p-1 bg-white"/>
+                                <div className="space-y-1 mb-3">
+                                    {docItems.map((item) => (
+                                        <div key={item.id} className="flex items-center text-xs bg-white p-1.5 rounded border">
+                                            <input type="checkbox" checked={item.isSelected} onChange={() => toggleItem(item.id)} className="mr-2 accent-green-600"/>
+                                            <input value={item.desc} onChange={(e) => { const newDesc = e.target.value; setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, desc: newDesc } : i)); }} className="flex-1 bg-transparent outline-none border-b border-transparent focus:border-blue-300 mr-2" />
+                                            <span className="font-mono font-bold mx-1">$</span>
+                                            <input type="number" value={item.amount} onChange={(e) => { const newAmt = Number(e.target.value); setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, amount: newAmt } : i)); }} className="w-16 bg-transparent outline-none border-b border-transparent focus:border-blue-300 text-right font-bold" />
+                                            <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-500 ml-2"><X size={12}/></button>
+                                        </div>
+                                    ))}
+                                    {docItems.length === 0 && <div className="text-gray-400 text-xs text-center italic">無額外項目</div>}
+                                </div>
+                                <div className="flex gap-1 pt-2 border-t border-green-200">
+                                    <input value={newItemDesc} onChange={e=>setNewItemDesc(e.target.value)} placeholder="新增項目 (如: 代辦費)..." className="flex-1 text-xs border rounded px-1"/>
+                                    <input type="number" value={newItemAmount} onChange={e=>setNewItemAmount(e.target.value)} placeholder="$" className="w-16 text-xs border rounded px-1"/>
+                                    <button onClick={addItem} className="bg-green-600 text-white px-2 rounded text-xs"><Plus size={12}/></button>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* 附件與備註 */}
-                        <div className="p-3 bg-white rounded border border-slate-300">
-                            <div className="text-[10px] font-bold text-slate-600 mb-2">隨車附件</div>
-                            <div className="grid grid-cols-2 gap-2 mb-2">
-                                <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.vrd} onChange={e=>setChecklist({...checklist, vrd: e.target.checked})} className="mr-1"/> 牌薄</label>
-                                <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.keys} onChange={e=>setChecklist({...checklist, keys: e.target.checked})} className="mr-1"/> 後備匙</label>
-                                <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.tools} onChange={e=>setChecklist({...checklist, tools: e.target.checked})} className="mr-1"/> 工具</label>
-                                <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.manual} onChange={e=>setChecklist({...checklist, manual: e.target.checked})} className="mr-1"/> 說明書</label>
+                            {/* 車輛資料 */}
+                            <div className="p-3 bg-gray-50 rounded border border-gray-200">
+                                <div className="text-[10px] font-bold text-gray-500 mb-2">車輛資料 (Vehicle Details)</div>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <input name="regMark" value={formData.regMark} onChange={handleChange} placeholder="車牌" className="border-b bg-transparent text-sm font-bold"/>
+                                    <input name="year" value={formData.year} onChange={handleChange} placeholder="年份" className="border-b bg-transparent text-sm"/>
+                                </div>
+                                <input name="make" value={formData.make} onChange={handleChange} placeholder="廠牌" className="w-full border-b mb-2 bg-transparent text-xs"/>
+                                <input name="model" value={formData.model} onChange={handleChange} placeholder="型號" className="w-full border-b mb-2 bg-transparent text-xs"/>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <input name="color" value={formData.color} onChange={handleChange} placeholder="外觀顏色 (Ext)" className="border-b bg-transparent text-xs"/>
+                                    <input name="colorInterior" value={formData.colorInterior || ''} onChange={handleChange} placeholder="內飾顏色 (Int)" className="border-b bg-transparent text-xs"/>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input name="chassisNo" value={formData.chassisNo} onChange={handleChange} placeholder="底盤號" className="border-b bg-transparent text-[10px] font-mono"/>
+                                    <input name="engineNo" value={formData.engineNo} onChange={handleChange} placeholder="引擎號" className="border-b bg-transparent text-[10px] font-mono"/>
+                                </div>
                             </div>
-                            <input value={checklist.other} onChange={e=>setChecklist({...checklist, other: e.target.value})} placeholder="其他附件..." className="w-full text-xs border-b outline-none"/>
-                        </div>
-                        <div className="p-3 bg-white rounded border border-slate-200">
-                            <div className="text-[10px] font-bold text-slate-400 mb-1">備註</div>
-                            <textarea name="remarks" value={formData.remarks} onChange={handleChange} className="w-full h-12 text-xs border p-1 rounded resize-none"/>
+
+                            {/* 交易條款 */}
+                            <div className="p-3 bg-indigo-50 rounded border border-indigo-200">
+                                <div className="text-[10px] font-bold text-indigo-700 mb-2">交易條款 (Terms)</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-[10px] text-indigo-500 mb-1">交收日期 (Date)</label>
+                                        <input type="date" name="deliveryDate" value={formData.deliveryDate} onChange={handleChange} className="w-full text-xs border rounded p-1 bg-white"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] text-indigo-500 mb-1">交收時間 (Time)</label>
+                                        <input type="time" name="handoverTime" value={formData.handoverTime} onChange={handleChange} className="w-full text-xs border rounded p-1 bg-white"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 附件與備註 */}
+                            <div className="p-3 bg-white rounded border border-slate-300">
+                                <div className="text-[10px] font-bold text-slate-600 mb-2">隨車附件</div>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.vrd} onChange={e=>setChecklist({...checklist, vrd: e.target.checked})} className="mr-1"/> 牌薄</label>
+                                    <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.keys} onChange={e=>setChecklist({...checklist, keys: e.target.checked})} className="mr-1"/> 後備匙</label>
+                                    <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.tools} onChange={e=>setChecklist({...checklist, tools: e.target.checked})} className="mr-1"/> 工具</label>
+                                    <label className="flex items-center text-xs"><input type="checkbox" checked={checklist.manual} onChange={e=>setChecklist({...checklist, manual: e.target.checked})} className="mr-1"/> 說明書</label>
+                                </div>
+                                <input value={checklist.other} onChange={e=>setChecklist({...checklist, other: e.target.value})} placeholder="其他附件..." className="w-full text-xs border-b outline-none"/>
+                            </div>
+                            <div className="p-3 bg-white rounded border border-slate-200">
+                                <div className="text-[10px] font-bold text-slate-400 mb-1">備註</div>
+                                <textarea name="remarks" value={formData.remarks} onChange={handleChange} className="w-full h-12 text-xs border p-1 rounded resize-none"/>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Right: Live Preview */}
-            <div className="flex-1 bg-gray-200/50 rounded-xl border border-slate-200 flex flex-col overflow-hidden items-center justify-center p-4">
-                <div className="mb-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Live Preview</div>
-                <div className="w-full h-full flex justify-center overflow-hidden">
-                    <LivePreview />
+                {/* --- 右欄：即時預覽 (Live Preview) --- */}
+                {/* 手機邏輯：只在 step='preview' 時顯示 */}
+                <div className={`flex-1 bg-gray-200/50 rounded-xl border border-slate-200 flex flex-col overflow-hidden items-center justify-center p-4 ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
+                    <div className="mb-2 text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center">
+                        <Eye size={12} className="mr-1"/> Live Preview
+                    </div>
+                    <div className="w-full h-full flex justify-center overflow-hidden">
+                        <LivePreview />
+                    </div>
                 </div>
             </div>
         </div>
