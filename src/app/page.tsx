@@ -5960,7 +5960,8 @@ const CreateDocModule = ({
         setShowTerms(true);
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    // ★★★ 修正版：加入 HTMLSelectElement 以支援下拉選單 ★★★
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
