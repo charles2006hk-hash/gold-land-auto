@@ -1319,8 +1319,10 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
    return (
         <div className="flex h-full bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden relative">
-            {/* 左側列表區塊 */}
-            <div className="w-1/3 border-r border-slate-100 flex flex-col bg-slate-50">
+            
+            {/* --- 左側：列表區塊 --- */}
+            {/* 手機邏輯：如果有正在編輯的項目 (editingEntry 為真)，則隱藏列表，專心顯示右側詳情 */}
+            <div className={`w-full md:w-1/3 border-r border-slate-100 flex-col bg-slate-50 ${editingEntry ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-slate-200">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
@@ -1338,7 +1340,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     {filteredEntries.map(entry => {
                         const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
                         const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
-                        // 判斷是否為「他人負責的資料」（僅供標示用，實際上列表已經過濾過了）
                         const isAssignedToOther = entry.managedBy && entry.managedBy !== staffId;
 
                         return (
@@ -1348,7 +1349,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                   <div className="flex items-center gap-2">
                                       <div className="font-bold text-slate-800 truncate">{entry.name || '(未命名)'}</div>
                                       {entry.reminderEnabled && (<Bell size={12} className={isExpired ? "text-red-500 fill-red-500" : (isSoon ? "text-amber-500 fill-amber-500" : "text-green-500")} />)}
-                                      {/* 顯示負責人標籤 (如果不是自己) */}
                                       {isAssignedToOther && <span className="text-[9px] bg-gray-200 text-gray-600 px-1 rounded flex items-center"><UserIcon size={8} className="mr-0.5"/> {entry.managedBy}</span>}
                                   </div>
                                     <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
@@ -1366,14 +1366,22 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 </div>
             </div>
 
-            {/* 右側編輯區 */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden bg-white">
+            {/* --- 右側：編輯/詳情區塊 --- */}
+            {/* 手機邏輯：如果沒有正在編輯的項目 (!editingEntry)，則隱藏右側，顯示列表 */}
+            <div className={`flex-1 flex-col h-full overflow-hidden bg-white ${!editingEntry ? 'hidden md:flex' : 'flex'}`}>
                 {editingEntry ? (
                     <form onSubmit={handleSave} className="flex flex-col h-full">
                         <div className="flex-none p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div className="font-bold text-slate-700 text-lg flex items-center">
-                                {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
-                                {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
+                            <div className="flex items-center gap-2">
+                                {/* ★★★ 新增：手機版返回列表按鈕 ★★★ */}
+                                <button type="button" onClick={() => setEditingEntry(null)} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800 active:bg-slate-200 rounded-full transition-colors">
+                                    <ArrowLeft size={20}/>
+                                </button>
+
+                                <div className="font-bold text-slate-700 text-lg flex items-center">
+                                    {isDbEditing || !editingEntry.id ? (editingEntry.id ? '編輯資料' : '新增資料') : editingEntry.name}
+                                    {!isDbEditing && <span className="ml-2 text-xs font-normal text-gray-500 px-2 py-1 bg-white rounded border">{DB_CATEGORIES.find(c => c.id === editingEntry.category)?.label}</span>}
+                                </div>
                             </div>
                             <div className="flex gap-2">
                                 {isDbEditing || !editingEntry.id ? (
@@ -1602,6 +1610,8 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
 
+    const [mobileTab, setMobileTab] = useState<'inbox' | 'classify' | 'gallery'>('inbox');
+
     useEffect(() => {
         if (!db || !staffId) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), orderBy('createdAt', 'desc'));
@@ -1737,171 +1747,162 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     const inboxItems = mediaItems.filter(i => i.status !== 'linked');
 
     return (
-        <div className="flex flex-col md:flex-row h-full gap-4 bg-slate-100 p-2 overflow-hidden relative">
+        <div className="flex flex-col h-full bg-slate-100 p-2 overflow-hidden relative">
             
-            {/* --- 左欄：來源 (Inbox) --- */}
-            <div className="w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px]">
-                <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 待處理 ({inboxItems.length})</h3>
-                    <label className={`bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                        {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>} 匯入
-                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleSmartUpload} disabled={uploading}/>
-                    </label>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1 content-start">
-                    {inboxItems.map(item => (
-                        <div 
-                            key={item.id} 
-                            // 1. 加入 'group' class 以便讓懸停效果生效
-                            // 2. 點擊圖片本體仍然是「選取/取消選取」
-                            onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} 
-                            className={`relative aspect-square rounded overflow-hidden cursor-pointer transition-all group ${selectedInboxIds.includes(item.id) ? 'ring-2 ring-blue-500 opacity-100' : 'opacity-80 hover:opacity-100'}`}
-                        >
-                            <img src={item.url} className="w-full h-full object-cover"/>
-                            
-                            {/* 原有的：選取勾勾 */}
-                            {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10"><Check size={10}/></div>}
-
-                            {/* ★★★ 新增：懸停操作按鈕 (放大 & 刪除) ★★★ */}
-                            <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                {/* 放大預覽按鈕 (防止冒泡，以免觸發選取) */}
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} 
-                                    className="p-1 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm"
-                                    title="預覽"
-                                > 
-                                    <Maximize2 size={12} /> 
-                                </button>
-                                
-                                {/* 刪除按鈕 */}
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} 
-                                    className="p-1 rounded-full bg-red-600/70 hover:bg-red-600 text-white backdrop-blur-sm" 
-                                    title="刪除"
-                                >
-                                    <Trash2 size={12} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                    {inboxItems.length === 0 && <div className="col-span-3 py-10 text-center text-slate-300 text-xs">暫無新圖片</div>}
-                </div>
+            {/* ★★★ 新增：手機版頂部 Tab 切換 (僅手機顯示 md:hidden) ★★★ */}
+            <div className="flex md:hidden bg-white rounded-lg p-1 mb-2 shadow-sm shrink-0 gap-1">
+                <button 
+                    onClick={() => setMobileTab('inbox')} 
+                    className={`flex-1 py-2 text-xs font-bold rounded-md flex items-center justify-center transition-colors ${mobileTab==='inbox' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                    <Upload size={14} className="mr-1.5"/> 1. 來源
+                    {inboxItems.length > 0 && <span className="ml-1 bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded-full min-w-[1.2rem] text-center">{inboxItems.length}</span>}
+                </button>
+                <button 
+                    onClick={() => setMobileTab('classify')} 
+                    className={`flex-1 py-2 text-xs font-bold rounded-md flex items-center justify-center transition-colors ${mobileTab==='classify' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                    <Settings size={14} className="mr-1.5"/> 2. 歸類
+                    {selectedInboxIds.length > 0 && <span className="ml-1 bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full min-w-[1.2rem] text-center">{selectedInboxIds.length}</span>}
+                </button>
+                <button 
+                    onClick={() => setMobileTab('gallery')} 
+                    className={`flex-1 py-2 text-xs font-bold rounded-md flex items-center justify-center transition-colors ${mobileTab==='gallery' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                >
+                    <ImageIcon size={14} className="mr-1.5"/> 3. 圖庫
+                </button>
             </div>
 
-            {/* --- 中欄：歸類工作台 --- */}
-            <div className="w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[250px]">
-                <div className="p-3 border-b bg-slate-50 flex items-center"><h3 className="font-bold text-slate-700 flex items-center"><Settings size={16} className="mr-2"/> 歸類</h3><span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">已選: {selectedInboxIds.length}</span></div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                    <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
-                        <label className="text-[10px] font-bold text-blue-800 mb-1 block">配對庫存</label>
-                        <select value={targetVehicleId} onChange={(e) => { const vId = e.target.value; setTargetVehicleId(vId); const v = inventory.find((i:any) => i.id === vId); if (v) setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' })); }} className="w-full p-1 text-xs border rounded"><option value="">-- 手動 / 不關聯 --</option>{inventory.map((v: Vehicle) => <option key={v.id} value={v.id}>{v.regMark || '(未出牌)'} - {v.make} {v.model}</option>)}</select>
-                    </div>
-                    <div className="space-y-2">
-                        <div><label className="text-[10px] font-bold text-slate-500">Year</label><input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-1 border rounded text-xs"/></div>
-                        <div><label className="text-[10px] font-bold text-slate-500">Make</label><input list="makeList" value={classifyForm.make} onChange={e => setClassifyForm({...classifyForm, make: e.target.value})} className="w-full p-1 border rounded text-xs"/><datalist id="makeList">{settings?.makes?.map((m:string) => <option key={m} value={m}/>)}</datalist></div>
-                        <div><label className="text-[10px] font-bold text-slate-500">Model</label><input list="modelList" value={classifyForm.model} onChange={e => setClassifyForm({...classifyForm, model: e.target.value})} className="w-full p-1 border rounded text-xs"/><datalist id="modelList">{(settings?.models?.[classifyForm.make] || []).map((m:string) => <option key={m} value={m}/>)}</datalist></div>
-                        <div><label className="text-[10px] font-bold text-slate-500">Color</label><input list="colorList" value={classifyForm.color} onChange={e => setClassifyForm({...classifyForm, color: e.target.value})} className="w-full p-1 border rounded text-xs"/><datalist id="colorList">{settings?.colors?.map((c:string) => <option key={c} value={c}/>)}</datalist></div>
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-500 mb-1 block">Type</label>
-                            <div className="flex gap-1">
-                                {['外觀', '內飾', '細節'].map(t => (
-                                    <button key={t} onClick={() => setClassifyForm({...classifyForm, type: t as any})} className={`text-[10px] py-1 px-2 rounded border ${classifyForm.type.includes(t) ? 'bg-blue-600 text-white' : 'bg-white'}`}>{t}</button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="p-3 border-t bg-slate-50"><button onClick={handleClassify} disabled={selectedInboxIds.length === 0} className="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-50">歸檔</button></div>
-            </div>
-
-            {/* --- 右欄：車輛圖庫 (已更新：含說明、實心星星、刪除功能) --- */}
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-                <div className="p-3 border-b bg-slate-50 flex justify-between items-center gap-2">
-                    <h3 className="font-bold text-slate-700 flex items-center"><ImageIcon size={18} className="mr-2"/> 圖庫</h3>
-                    <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋..." className="w-32 md:w-48 px-2 py-1 text-xs border rounded-full"/>
-                </div>
+            <div className="flex flex-1 md:flex-row h-full gap-4 overflow-hidden">
                 
-                <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4">
-                    
-                    {/* ★★★ 新增：操作小說明 ★★★ */}
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-3 text-xs text-amber-800">
-                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0 mt-0.5"/>
-                        <div>
-                            <p className="font-bold">圖庫管理說明：</p>
-                            <ul className="list-disc pl-4 mt-1 space-y-0.5 text-amber-700">
-                                <li>點擊圖片左上角的 <span className="font-bold text-yellow-600">星星</span> 可設為該車輛的首圖 (封面)。</li>
-                                <li>點擊右上角的 <span className="font-bold text-red-600">垃圾桶</span> 可永久刪除圖片。</li>
-                                <li>點擊圖片本身可放大預覽。</li>
-                            </ul>
+                {/* --- 左欄：來源 (Inbox) --- */}
+                {/* 邏輯：手機上只在 mobileTab === 'inbox' 時顯示，電腦上永遠顯示 */}
+                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px] ${mobileTab === 'inbox' ? 'flex' : 'hidden md:flex'}`}>
+                    <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
+                        <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 待處理 ({inboxItems.length})</h3>
+                        <label className={`bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>} 匯入
+                            <input type="file" multiple accept="image/*" className="hidden" onChange={handleSmartUpload} disabled={uploading}/>
+                        </label>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1 content-start">
+                        {inboxItems.map(item => (
+                            <div 
+                                key={item.id} 
+                                onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} 
+                                className={`relative aspect-square rounded overflow-hidden cursor-pointer transition-all group ${selectedInboxIds.includes(item.id) ? 'ring-2 ring-blue-500 opacity-100' : 'opacity-80 hover:opacity-100'}`}
+                            >
+                                <img src={item.url} className="w-full h-full object-cover"/>
+                                {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10"><Check size={10}/></div>}
+                                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                    <button onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} className="p-1 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm" title="預覽"><Maximize2 size={12} /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} className="p-1 rounded-full bg-red-600/70 hover:bg-red-600 text-white backdrop-blur-sm" title="刪除"><Trash2 size={12} /></button>
+                                </div>
+                            </div>
+                        ))}
+                        {inboxItems.length === 0 && <div className="col-span-3 py-10 text-center text-slate-300 text-xs">暫無新圖片</div>}
+                    </div>
+                </div>
+
+                {/* --- 中欄：歸類工作台 --- */}
+                {/* 邏輯：手機上只在 mobileTab === 'classify' 時顯示 */}
+                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[250px] ${mobileTab === 'classify' ? 'flex' : 'hidden md:flex'}`}>
+                    <div className="p-3 border-b bg-slate-50 flex items-center"><h3 className="font-bold text-slate-700 flex items-center"><Settings size={16} className="mr-2"/> 歸類</h3><span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">已選: {selectedInboxIds.length}</span></div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
+                            <label className="text-[10px] font-bold text-blue-800 mb-1 block">配對庫存</label>
+                            <select value={targetVehicleId} onChange={(e) => { const vId = e.target.value; setTargetVehicleId(vId); const v = inventory.find((i:any) => i.id === vId); if (v) setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' })); }} className="w-full p-1 text-xs border rounded"><option value="">-- 手動 / 不關聯 --</option>{inventory.map((v: Vehicle) => <option key={v.id} value={v.id}>{v.regMark || '(未出牌)'} - {v.make} {v.model}</option>)}</select>
+                        </div>
+                        <div className="space-y-2">
+                            <div><label className="text-[10px] font-bold text-slate-500">Year</label><input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-1 border rounded text-xs"/></div>
+                            <div><label className="text-[10px] font-bold text-slate-500">Make</label><input list="makeList" value={classifyForm.make} onChange={e => setClassifyForm({...classifyForm, make: e.target.value})} className="w-full p-1 border rounded text-xs"/><datalist id="makeList">{settings?.makes?.map((m:string) => <option key={m} value={m}/>)}</datalist></div>
+                            <div><label className="text-[10px] font-bold text-slate-500">Model</label><input list="modelList" value={classifyForm.model} onChange={e => setClassifyForm({...classifyForm, model: e.target.value})} className="w-full p-1 border rounded text-xs"/><datalist id="modelList">{(settings?.models?.[classifyForm.make] || []).map((m:string) => <option key={m} value={m}/>)}</datalist></div>
+                            <div><label className="text-[10px] font-bold text-slate-500">Color</label><input list="colorList" value={classifyForm.color} onChange={e => setClassifyForm({...classifyForm, color: e.target.value})} className="w-full p-1 border rounded text-xs"/><datalist id="colorList">{settings?.colors?.map((c:string) => <option key={c} value={c}/>)}</datalist></div>
+                            <div>
+                                <label className="text-[10px] font-bold text-slate-500 mb-1 block">Type</label>
+                                <div className="flex gap-1">
+                                    {['外觀', '內飾', '細節'].map(t => (
+                                        <button key={t} onClick={() => setClassifyForm({...classifyForm, type: t as any})} className={`text-[10px] py-1 px-2 rounded border ${classifyForm.type.includes(t) ? 'bg-blue-600 text-white' : 'bg-white'}`}>{t}</button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    {/* 點擊歸檔後，自動跳轉到圖庫 Tab */}
+                    <div className="p-3 border-t bg-slate-50"><button onClick={() => { handleClassify(); setMobileTab('gallery'); }} disabled={selectedInboxIds.length === 0} className="w-full bg-slate-800 text-white py-2 rounded-lg text-xs font-bold disabled:opacity-50">歸檔</button></div>
+                </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {libraryGroups.map(group => {
-                            const isExpanded = expandedGroupKey === group.key;
-                            const primaryImage = group.items[0]; // 分組後的第一張通常是首圖(已排序)
-                            return (
-                                <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all ${isExpanded ? 'col-span-full ring-2 ring-blue-200' : 'hover:border-blue-300'}`}>
-                                    <div className="p-3 flex justify-between items-center cursor-pointer bg-white border-b border-slate-100" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
-                                        <div className="flex items-center gap-3 overflow-hidden">
-                                            <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden relative">
-                                                {primaryImage ? (
-                                                     <img src={primaryImage.url} className="w-full h-full object-cover"/>
-                                                ) : (
-                                                     <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
-                                                )}
-                                            </div>
-                                            <div className="min-w-0">
-                                                <h4 className="font-bold text-sm truncate">{group.title}</h4>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-[10px] text-slate-500">{group.items.length} 張圖片</span>
-                                                    <span className={`text-[9px] px-1.5 py-0.5 rounded border ${group.status==='In Stock'?'bg-green-100 text-green-700 border-green-200':'bg-gray-100 text-gray-500'}`}>{group.status}</span>
+                {/* --- 右欄：車輛圖庫 --- */}
+                {/* 邏輯：手機上只在 mobileTab === 'gallery' 時顯示 */}
+                <div className={`flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden ${mobileTab === 'gallery' ? 'flex' : 'hidden md:flex'}`}>
+                    <div className="p-3 border-b bg-slate-50 flex justify-between items-center gap-2">
+                        <h3 className="font-bold text-slate-700 flex items-center"><ImageIcon size={18} className="mr-2"/> 圖庫</h3>
+                        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜尋..." className="w-32 md:w-48 px-2 py-1 text-xs border rounded-full"/>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50 space-y-4">
+                        {/* 操作小說明 */}
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-3 text-xs text-amber-800">
+                            <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 flex-shrink-0 mt-0.5"/>
+                            <div>
+                                <p className="font-bold">圖庫管理說明：</p>
+                                <ul className="list-disc pl-4 mt-1 space-y-0.5 text-amber-700">
+                                    <li>點擊圖片左上角的 <span className="font-bold text-yellow-600">星星</span> 可設為該車輛的首圖 (封面)。</li>
+                                    <li>點擊右上角的 <span className="font-bold text-red-600">垃圾桶</span> 可永久刪除圖片。</li>
+                                    <li>點擊圖片本身可放大預覽。</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {libraryGroups.map(group => {
+                                const isExpanded = expandedGroupKey === group.key;
+                                const primaryImage = group.items[0]; 
+                                return (
+                                    <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all ${isExpanded ? 'col-span-full ring-2 ring-blue-200' : 'hover:border-blue-300'}`}>
+                                        <div className="p-3 flex justify-between items-center cursor-pointer bg-white border-b border-slate-100" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
+                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden relative">
+                                                    {primaryImage ? (
+                                                         <img src={primaryImage.url} className="w-full h-full object-cover"/>
+                                                    ) : (
+                                                         <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h4 className="font-bold text-sm truncate">{group.title}</h4>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[10px] text-slate-500">{group.items.length} 張圖片</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded border ${group.status==='In Stock'?'bg-green-100 text-green-700 border-green-200':'bg-gray-100 text-gray-500'}`}>{group.status}</span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            {isExpanded ? <Minimize2 size={16} className="text-slate-400"/> : <Maximize2 size={16} className="text-slate-400"/>}
                                         </div>
-                                        {isExpanded ? <Minimize2 size={16} className="text-slate-400"/> : <Maximize2 size={16} className="text-slate-400"/>}
+                                        
+                                        {isExpanded && (
+                                            <div>
+                                                <div className="w-full h-64 bg-gray-100 relative cursor-zoom-in group" onClick={() => setPreviewImage(primaryImage?.url)}>
+                                                    {primaryImage ? <img src={primaryImage.url} className="w-full h-full object-contain bg-slate-900" /> : <div className="p-10 text-center text-slate-400">無圖片</div>}
+                                                    <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">點擊放大</div>
+                                                </div>
+                                                <div className="p-3 bg-slate-50 border-t border-slate-100">
+                                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                                                        {group.items.map(img => (
+                                                            <div key={img.id} className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${img.isPrimary ? 'border-yellow-400 shadow-md' : 'border-transparent hover:border-slate-300'}`}>
+                                                                <img src={img.url} className="w-full h-full object-cover" onClick={() => setPreviewImage(img.url)}/>
+                                                                <button onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} className={`absolute top-1 left-1 p-1 rounded-full shadow-sm backdrop-blur-sm transition-all ${img.isPrimary ? 'bg-yellow-400 text-white' : 'bg-black/30 text-white/70 hover:bg-yellow-400 hover:text-white'}`} title="設為封面"><Star size={10} className={img.isPrimary ? 'fill-white' : ''}/></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} className="absolute top-1 right-1 p-1 bg-black/30 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors" title="刪除圖片"><Trash2 size={10}/></button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    
-                                    {isExpanded && (
-                                        <div>
-                                            <div className="w-full h-64 bg-gray-100 relative cursor-zoom-in group" onClick={() => setPreviewImage(primaryImage?.url)}>
-                                                {primaryImage ? <img src={primaryImage.url} className="w-full h-full object-contain bg-slate-900" /> : <div className="p-10 text-center text-slate-400">無圖片</div>}
-                                                <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">點擊放大</div>
-                                            </div>
-                                            
-                                            {/* 縮圖列表區 */}
-                                            <div className="p-3 bg-slate-50 border-t border-slate-100">
-                                                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                                                    {group.items.map(img => (
-                                                        <div key={img.id} className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${img.isPrimary ? 'border-yellow-400 shadow-md' : 'border-transparent hover:border-slate-300'}`}>
-                                                            <img src={img.url} className="w-full h-full object-cover" onClick={() => setPreviewImage(img.url)}/>
-                                                            
-                                                            {/* ★ 星星按鈕 (樣式優化) */}
-                                                            <button 
-                                                                onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} 
-                                                                className={`absolute top-1 left-1 p-1 rounded-full shadow-sm backdrop-blur-sm transition-all ${img.isPrimary ? 'bg-yellow-400 text-white' : 'bg-black/30 text-white/70 hover:bg-yellow-400 hover:text-white'}`}
-                                                                title="設為封面"
-                                                            >
-                                                                <Star size={10} className={img.isPrimary ? 'fill-white' : ''}/>
-                                                            </button>
-
-                                                            {/* ★ 刪除按鈕 (樣式優化) */}
-                                                            <button 
-                                                                onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} // 注意：這裡傳入整個 img 物件
-                                                                className="absolute top-1 right-1 p-1 bg-black/30 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors"
-                                                                title="刪除圖片"
-                                                            >
-                                                                <Trash2 size={10}/>
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2896,6 +2897,7 @@ const SettingsManager = ({
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
 }: any) => {
     
+    
     // ★★★ 1. 選單定義 (新增 Notifications) ★★★
     const systemMainModules = [
         { key: 'dashboard', label: '業務儀表板' },
@@ -2933,6 +2935,7 @@ const SettingsManager = ({
         { key: 'settings', label: '系統設置 (Admin)' }
     ];
 
+    const [showMobileMenu, setShowMobileMenu] = useState(true); // 控制手機版選單顯示
     const [activeTab, setActiveTab] = useState('general');
     
     // --- 內部狀態 (用於輸入框) ---
@@ -3090,17 +3093,29 @@ const SettingsManager = ({
     // --- Render ---
     return (
         <div className="flex h-full gap-6">
-            <div className="w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full">
-                <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
-                {settingsInternalMenu.map(tab => (
-                    <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.key ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
-                        {tab.icon} {tab.label}
-                    </button>
-                ))}
-            </div>
+        {/* 左側選單：手機上根據 showMobileMenu 顯示/隱藏 */}
+        <div className={`w-full md:w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full ${showMobileMenu ? 'block' : 'hidden md:block'}`}>
+            <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
+            {settingsInternalMenu.map(tab => (
+                <button key={tab.key} onClick={() => { 
+                    setActiveTab(tab.key); 
+                    setShowMobileMenu(false); // 手機點擊後隱藏選單
+                }} className={`w-full flex items-center gap-3 px-3 py-3 md:py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab.key ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>
+                    {tab.icon} {tab.label}
+                </button>
+            ))}
+        </div>
 
-            <div className="flex-1 overflow-y-auto pr-4 pb-20">
-                <h2 className="text-xl font-bold text-slate-800 mb-6 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
+        {/* 右側內容：手機上根據 showMobileMenu 顯示/隱藏 */}
+        <div className={`flex-1 overflow-y-auto pr-4 pb-20 ${!showMobileMenu ? 'block' : 'hidden md:block'}`}>
+
+            {/* 手機版標題列 + 返回按鈕 */}
+            <div className="flex items-center gap-2 mb-6 pt-2 md:pt-0">
+                <button onClick={() => setShowMobileMenu(true)} className="md:hidden p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full">
+                    <ArrowLeft size={20}/>
+                </button>
+                <h2 className="text-xl font-bold text-slate-800 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
+            </div>
 
                 {/* 1. 一般設定 */}
                 {activeTab === 'general' && (
@@ -5246,88 +5261,109 @@ const VehicleFormModal = ({
     const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
 
     return (
-        <div className="p-6 bg-white rounded-lg shadow-sm min-h-screen">
-            <div className="flex justify-between items-center mb-6 print:hidden">
-                <h2 className="text-xl font-bold flex items-center"><FileBarChart className="mr-2"/> 統計報表中心</h2>
+        <div className="p-2 md:p-6 bg-white rounded-lg shadow-sm min-h-screen flex flex-col">
+            <div className="flex justify-between items-center mb-4 flex-none">
+                <h2 className="text-lg md:text-xl font-bold flex items-center text-slate-800"><FileBarChart className="mr-2" size={20}/> 統計報表</h2>
                 <div className="flex space-x-2">
-                    <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 rounded flex items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
-                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-200 text-gray-700 px-4 py-2 rounded hover:bg-gray-300">返回</button>
+                    {/* 手機隱藏列印按鈕，節省空間 */}
+                    <button onClick={handlePrint} className="hidden md:flex bg-slate-900 text-white px-4 py-2 rounded text-sm items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
+                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-100 text-gray-600 px-3 py-1.5 text-xs md:text-sm rounded hover:bg-gray-200">返回</button>
                 </div>
             </div>
 
-            {/* 控制面板 */}
-            <div className="bg-gray-50 p-4 rounded border mb-6 print:hidden space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div className="col-span-1">
-                        <label className="block text-xs font-bold text-gray-500 mb-1">報表類型</label>
-                        <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-2 rounded text-sm"><option value="receivable">應收未收報表 (Receivables)</option><option value="payable">應付未付報表 (Payables)</option><option value="sales">銷售數據統計 (Sales Stats)</option></select>
+            {/* 控制面板：手機版緊湊網格 (改用 grid-cols-2) */}
+            <div className="bg-gray-50 p-3 rounded-xl border mb-4 flex-none">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    
+                    {/* 1. 報表類型 */}
+                    <div className="col-span-2 md:col-span-1">
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">報表類型</label>
+                        <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-1.5 rounded text-xs font-bold text-slate-700 h-8">
+                            <option value="receivable">應收未收 (Receivables)</option>
+                            <option value="payable">應付未付 (Payables)</option>
+                            <option value="sales">銷售統計 (Sales)</option>
+                        </select>
                     </div>
+
+                    {/* 2. 業務類別 (僅在 receivable 顯示) */}
                     {reportType === 'receivable' && (
-                        <div className="col-span-1">
-                            <label className="block text-xs font-bold text-gray-500 mb-1">業務類別</label>
-                            <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)} className="w-full border p-2 rounded text-sm"><option value="All">全部 (All)</option><option value="Vehicle">車輛銷售 (Sales)</option><option value="Service">中港/代辦服務 (Services)</option></select>
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1">業務類別</label>
+                            <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)} className="w-full border p-1.5 rounded text-xs font-bold text-slate-700 h-8">
+                                <option value="All">全部 (All)</option>
+                                <option value="Vehicle">車輛銷售 (Sales)</option>
+                                <option value="Service">中港/代辦服務 (Services)</option>
+                            </select>
                         </div>
                     )}
-                    <div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">開始日期</label><input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-2 rounded text-sm" /></div>
-                    <div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">結束日期</label><input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-2 rounded text-sm" /></div>
-                    {reportType === 'payable' && (<div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">負責公司</label><select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-2 rounded text-sm"><option value="">全部公司</option>{settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>)}
-                </div>
-                
-                {/* 搜尋框 */}
-                <div className="relative">
-                    <Search size={16} className="absolute left-3 top-3 text-gray-400"/>
-                    <input type="text" value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} placeholder="搜尋車牌、型號、項目名稱..." className="w-full border p-2 pl-10 rounded text-sm shadow-sm focus:ring-2 ring-blue-100 outline-none"/>
+
+                    {/* 3. 搜尋框 (佔滿剩餘寬度或獨立一行) */}
+                    <div className="col-span-2 md:col-span-1 relative">
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">關鍵字搜尋</label>
+                        <Search size={14} className="absolute left-2 top-7 text-gray-400"/>
+                        <input type="text" value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} placeholder="車牌/型號..." className="w-full border p-1.5 pl-7 rounded text-xs focus:ring-1 ring-blue-500 outline-none h-8"/>
+                    </div>
+
+                    {/* 4. 日期選擇 (並排) */}
+                    <div className="col-span-1"><label className="block text-[10px] font-bold text-gray-500 mb-1">開始</label><input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border p-1.5 rounded text-xs h-8" /></div>
+                    <div className="col-span-1"><label className="block text-[10px] font-bold text-gray-500 mb-1">結束</label><input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border p-1.5 rounded text-xs h-8" /></div>
+                    
+                    {/* 5. 負責公司 (僅在 payable 顯示) */}
+                    {reportType === 'payable' && (<div className="col-span-2 md:col-span-1"><label className="block text-[10px] font-bold text-gray-500 mb-1">負責公司</label><select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-1.5 rounded text-xs h-8"><option value="">全部公司</option>{settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}</select></div>)}
                 </div>
             </div>
 
-            <div className="print:visible">
-                <div className="text-center mb-8 hidden print:block">
-                    <h1 className="text-2xl font-bold mb-2">{COMPANY_INFO.name_en}</h1>
-                    <h2 className="text-xl font-bold border-b-2 border-black inline-block pb-1 mb-2">{reportType === 'receivable' ? '應收未收報表 (Accounts Receivable)' : reportType === 'payable' ? '應付未付報表 (Accounts Payable)' : '銷售數據統計 (Sales Report)'}</h2>
-                    <p className="text-sm text-gray-600">Generated: {new Date().toLocaleDateString()}</p>
-                </div>
-
-                <table className="w-full border-collapse text-sm">
-                    <thead>
-                        <tr className="bg-gray-100 border-b-2 border-black text-left">
-                            <th className="p-2 border w-24">日期</th>
-                            <th className="p-2 border">項目 (車型 / 服務)</th>
-                            <th className="p-2 border w-32">車牌</th>
-                            {reportType === 'receivable' && <th className="p-2 border w-20">類別</th>}
-                            {reportType === 'payable' && <th className="p-2 border">負責公司</th>}
-                            {reportType === 'payable' && <th className="p-2 border">單號</th>}
-                            {reportType === 'sales' && <th className="p-2 border text-right">成本 (Cost)</th>}
-                            <th className="p-2 border text-right w-32">應收/欠款</th>
-                            {reportType === 'sales' && <th className="p-2 border text-right w-24">利潤</th>}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {reportData.map((item, idx) => (
-                            <tr key={idx} className="border-b hover:bg-yellow-50 cursor-pointer print:cursor-auto print:hover:bg-transparent" onClick={() => handleReportItemClick(item.vehicleId)}>
-                                <td className="p-2 border font-mono text-gray-600">{item.date}</td>
-                                <td className="p-2 border font-bold">
-                                    <span className={item.type === 'Service' ? 'text-indigo-700' : 'text-slate-800'}>{item.title}</span>
-                                </td>
-                                <td className="p-2 border font-mono">{item.regMark}</td>
-                                {reportType === 'receivable' && <td className="p-2 border text-xs"><span className={`px-2 py-0.5 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
-                                {reportType === 'payable' && <td className="p-2 border">{item.company}</td>}
-                                {reportType === 'payable' && <td className="p-2 border">{item.invoiceNo || '-'}</td>}
-                                {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(item.cost)}</td>}
-                                <td className="p-2 border text-right font-mono font-bold text-slate-800">{formatCurrency(item.amount)}</td>
-                                {reportType === 'sales' && <td className={`p-2 border text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
+            {/* 表格區域：手機版支援橫向滾動 (overflow-auto) */}
+            <div className="flex-1 overflow-hidden relative border rounded-lg">
+                <div className="absolute inset-0 overflow-auto scrollbar-thin">
+                    <table className="w-full border-collapse text-xs whitespace-nowrap">
+                        <thead className="sticky top-0 bg-slate-100 z-10 text-slate-600 shadow-sm">
+                            <tr className="border-b-2 border-slate-200 text-left">
+                                <th className="p-2 w-20">日期</th>
+                                <th className="p-2">項目</th>
+                                <th className="p-2 w-24">車牌</th>
+                                {/* 動態欄位 */}
+                                {reportType === 'receivable' && <th className="p-2 w-20">類別</th>}
+                                {reportType === 'payable' && <th className="p-2">負責公司</th>}
+                                {reportType === 'payable' && <th className="p-2">單號</th>}
+                                {reportType === 'sales' && <th className="p-2 text-right">成本</th>}
+                                
+                                <th className="p-2 text-right w-24">金額</th>
+                                {reportType === 'sales' && <th className="p-2 text-right w-20">利潤</th>}
                             </tr>
-                        ))}
-                        {reportData.length === 0 && <tr><td colSpan={10} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
-                    </tbody>
-                    <tfoot>
-                        <tr className="bg-gray-200 font-bold">
-                            <td colSpan={reportType === 'payable' ? 5 : (reportType === 'receivable' ? 4 : 3)} className="p-2 border text-right">Total:</td>
-                            {reportType === 'sales' && <td className="p-2 border"></td>}
-                            <td className="p-2 border text-right">{formatCurrency(totalReportAmount)}</td>
-                            {reportType === 'sales' && <td className="p-2 border text-right">{formatCurrency(totalReportProfit)}</td>}
-                        </tr>
-                    </tfoot>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {reportData.map((item, idx) => (
+                                <tr key={idx} className="hover:bg-yellow-50 cursor-pointer" onClick={() => handleReportItemClick(item.vehicleId)}>
+                                    <td className="p-2 font-mono text-gray-500">{item.date}</td>
+                                    <td className="p-2 font-bold truncate max-w-[150px]">
+                                        {/* 針對中港服務顯示不同顏色 */}
+                                        <span className={item.type === 'Service' ? 'text-indigo-700' : 'text-slate-800'}>{item.title}</span>
+                                    </td>
+                                    <td className="p-2 font-mono bg-slate-50">{item.regMark}</td>
+                                    
+                                    {/* 補齊對應欄位渲染 */}
+                                    {reportType === 'receivable' && <td className="p-2 text-xs"><span className={`px-2 py-0.5 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
+                                    {reportType === 'payable' && <td className="p-2">{item.company}</td>}
+                                    {reportType === 'payable' && <td className="p-2">{item.invoiceNo || '-'}</td>}
+                                    {reportType === 'sales' && <td className="p-2 text-right">{formatCurrency(item.cost)}</td>}
+
+                                    <td className="p-2 text-right font-mono font-bold text-slate-800">{formatCurrency(item.amount)}</td>
+                                    {reportType === 'sales' && <td className={`p-2 text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
+                                </tr>
+                            ))}
+                            {reportData.length === 0 && <tr><td colSpan={10} className="p-8 text-center text-gray-400">無符合條件的數據</td></tr>}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 bg-slate-50 font-bold border-t-2 border-slate-300 shadow-[0_-2px_5px_rgba(0,0,0,0.05)]">
+                            <tr>
+                                <td colSpan={reportType === 'payable' ? 5 : (reportType === 'receivable' ? 4 : 3)} className="p-2 text-right text-slate-500">總計:</td>
+                                {reportType === 'sales' && <td className="p-2"></td>}
+                                <td className="p-2 text-right text-blue-700 text-sm">{formatCurrency(totalReportAmount)}</td>
+                                {reportType === 'sales' && <td className="p-2 text-right text-green-700 text-sm">{formatCurrency(totalReportProfit)}</td>}
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -6382,7 +6418,7 @@ const CreateDocModule = ({
            
 
       <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
-        <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land</span><div className="w-7"></div></div>
+        <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land Auto</span><div className="w-7"></div></div>
 
         {isPreviewMode && (
           <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-center z-50 shadow-xl print:hidden gap-3">
@@ -6550,9 +6586,39 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-4 flex-none">
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center"><div className="font-bold mb-3 flex items-center text-xs text-slate-300"><Globe size={14} className="mr-1"/> 中港提醒</div><div className="space-y-3"><div><div className="text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div><div><div className="text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div></div></div><AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} /></div>
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 text-white shadow-sm flex gap-4 relative overflow-hidden"><div className="w-1/3 border-r border-white/10 pr-2 flex flex-col justify-center"><div className="font-bold mb-3 flex items-center text-xs text-blue-200"><Database size={14} className="mr-1"/> 文件提醒</div><div className="space-y-3"><div><div className="text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[10px] text-red-200/70">已過期</div></div><div><div className="text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[10px] text-amber-200/70">即將到期</div></div></div></div><AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} /></div>
+                      // ★★★ 修改：移除 hidden md:grid，改為 grid grid-cols-2 (手機並列) ★★★
+                      <div className="grid grid-cols-2 gap-2 flex-none">
+                          {/* 左卡片：中港提醒 */}
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
+                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
+                                      <Globe size={12} className="mr-1"/> 中港
+                                  </div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                                  </div>
+                              </div>
+                              {/* 手機隱藏列表細節，只留數字，點擊進入詳情 */}
+                              <div className="hidden md:block flex-1"><AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} /></div>
+                              {/* 手機版點擊層 */}
+                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
+                          </div>
+
+                          {/* 右卡片：文件提醒 */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
+                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
+                                      <Database size={12} className="mr-1"/> 文件
+                                  </div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                                  </div>
+                              </div>
+                              <div className="hidden md:block flex-1"><AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} /></div>
+                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
+                          </div>
                       </div>
                   );
               })()}
