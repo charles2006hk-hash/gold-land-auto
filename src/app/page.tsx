@@ -5656,31 +5656,46 @@ const DocumentTemplate = () => {
                     <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
                 </thead>
                 <tbody>
-                    {/* 發票模式下，顯示項目列表 */}
-                    {itemsToRender.length > 0 ? itemsToRender.map((item: any, i: number) => (
+                    {/* 1. 車價 (統一顯示) */}
+                    <tr className="border-b">
+                        <td className="p-2 font-medium">Vehicle Price ({activeVehicle.make} {activeVehicle.model})</td>
+                        <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
+                    </tr>
+
+                    {/* 2. 雜費 */}
+                    {itemsToRender.length > 0 && itemsToRender.map((item: any, i: number) => (
                         <tr key={i} className="border-b">
-                            <td className="p-2 font-medium">{item.desc}</td>
+                            <td className="p-2 font-medium pl-4">+ {item.desc}</td>
                             <td className="p-2 text-right font-mono">{formatCurrency(item.amount)}</td>
                         </tr>
-                    )) : (
-                        <tr className="border-b">
-                            <td className="p-2 font-medium">{activeType==='invoice'?'Vehicle Sales':'Deposit / Payment'} - {activeVehicle.regMark}</td>
-                            <td className="p-2 text-right font-mono">{formatCurrency(activeType==='invoice'?price:totalPaid)}</td>
+                    ))}
+
+                    {/* 3. 扣除已付 (★ 修改：Invoice/Receipt 也列出已付 ★) */}
+                    {depositItems.length > 0 && depositItems.map((item: any, idx: number) => (
+                        <tr key={idx} className="border-b">
+                            <td className="p-2 font-bold text-slate-600">
+                                Less: {item.label}
+                            </td>
+                            <td className="p-2 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
                         </tr>
-                    )}
+                    ))}
                 </tbody>
                 <tfoot>
                     <tr className="bg-slate-50 font-bold text-xs border-t-2 border-slate-800">
-                        <td className="p-2 text-right">Total</td>
-                        <td className="p-2 text-right font-mono text-sm">
-                            {/* 發票顯示項目總和，收據顯示已付總額 */}
-                            {formatCurrency(itemsToRender.length > 0 
-                                ? itemsToRender.reduce((s:number,i:any)=>s+i.amount,0) 
-                                : (activeType==='invoice'?price:totalPaid))}
+                        <td className="p-2 text-right">Balance Due (餘額)</td>
+                        <td className="p-2 text-right font-mono text-sm text-red-600">
+                            {formatCurrency(balance)}
                         </td>
                     </tr>
                 </tfoot>
             </table>
+
+            {/* ★★★ 新增：收據顯示收款方式 ★★★ */}
+            {activeType === 'receipt' && (activeVehicle as any).paymentMethod && (
+                <div className="mb-6 p-2 border border-slate-300 bg-slate-50 rounded">
+                    <p className="text-[10px] font-bold">Payment Method (收款方式): <span className="text-sm font-mono ml-2">{(activeVehicle as any).paymentMethod}</span></p>
+                </div>
+            )}
 
             {activeVehicle.remarks && (
                 <div className="mb-6 border-t border-slate-200 pt-2">
@@ -5731,7 +5746,7 @@ const CreateDocModule = ({
         customerName: '', customerId: '', customerAddress: '', customerPhone: '',
         regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '',
         price: '', deposit: '', balance: '', deliveryDate: new Date().toISOString().split('T')[0], 
-        handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), remarks: ''
+        handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), remarks: '', paymentMethod: 'Cheque'
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -5973,6 +5988,8 @@ const CreateDocModule = ({
             companyNameCh: formData.companyNameCh,
             companyEmail: formData.companyEmail, 
             companyPhone: formData.companyPhone
+
+            paymentMethod: formData.paymentMethod, // ★★★ 加入這行
         };
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
@@ -6065,12 +6082,10 @@ const CreateDocModule = ({
                                 </thead>
                                 <tbody>
                                     {/* 1. 車價 */}
-                                    {(!isBill || selectedDocType === 'invoice') && (
-                                        <tr className="border-b">
-                                            <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
-                                            <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
-                                        </tr>
-                                    )}
+                                    <tr className="border-b">
+                                        <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
+                                        <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
+                                    </tr>
 
                                     {/* 2. 額外項目 */}
                                     {docItems.filter(i=>i.isSelected).map((item, i) => (
@@ -6080,23 +6095,37 @@ const CreateDocModule = ({
                                         </tr>
                                     ))}
 
-                                    {/* 3. 訂金 (只在合約顯示為減項) */}
-                                    {!isBill && depositItems.map((item, idx) => (
+                                    {/* 3. 訂金/收款 (★ 修改：所有類型都顯示減項 ★) */}
+                                    {depositItems.map((item, idx) => (
                                         <tr key={`dep-${idx}`} className="border-b">
-                                            <td className="p-2 font-bold text-slate-600">Less: {item.label}</td>
+                                            <td className="p-2 font-bold text-slate-600">
+                                                Less: {item.label}
+                                                {/* 如果是收據且有收款方式，顯示在這裡 */}
+                                                {selectedDocType === 'receipt' && idx === depositItems.length - 1 && (
+                                                    <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>
+                                                )}
+                                            </td>
                                             <td className="p-2 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                                 <tfoot>
                                     <tr className="bg-slate-50 font-bold text-xs border-t-2 border-slate-800">
-                                        <td className="p-2 text-right">{isBill ? 'Total' : 'Balance'}</td>
+                                        {/* 發票顯示 Balance，收據如果結清顯示 Total Paid，或統一顯示 Balance */}
+                                        <td className="p-2 text-right">Balance Due (餘額)</td>
                                         <td className="p-2 text-right font-mono text-sm text-red-600">
-                                            {formatCurrency(isBill ? totalAmount : balance)}
+                                            {formatCurrency(balance)}
                                         </td>
                                     </tr>
                                 </tfoot>
                             </table>
+                            
+                            {/* ★★★ 收據專屬：顯示收款方式大字 ★★★ */}
+                            {selectedDocType === 'receipt' && (
+                                <div className="mb-4 p-2 bg-slate-50 border border-slate-200 rounded text-[10px]">
+                                    <span className="font-bold">Payment Method:</span> {formData.paymentMethod}
+                                </div>
+                            )}
 
                             {/* 條款預覽 (僅合約) */}
                             {!isBill && showTerms && (
@@ -6216,70 +6245,82 @@ const CreateDocModule = ({
                             <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent"/>
                         </div>
                         
-                        {/* 1. 基本款項與收款 (只在合約模式顯示) */}
-                        {!['invoice', 'receipt'].includes(selectedDocType) && (
-                            <div className="p-3 bg-yellow-50 rounded border border-yellow-200 mb-3">
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="text-[10px] font-bold text-yellow-600">交易金額與收款 (Payment)</div>
-                                    {/* ★★★ 條款隱藏開關 ★★★ */}
-                                    <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
-                                        <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
-                                        列印法律條款
-                                    </label>
-                                </div>
+                        {/* 1. 基本款項與收款 (★ 修改：所有單據都顯示，不再隱藏 ★) */}
+                        <div className="p-3 bg-yellow-50 rounded border border-yellow-200 mb-3">
+                            <div className="flex justify-between items-center mb-2">
+                                <div className="text-[10px] font-bold text-yellow-600">交易金額與收款 (Payment)</div>
+                                <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
+                                    <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
+                                    列印法律條款
+                                </label>
+                            </div>
 
-                                {/* A. 車價 (固定) */}
-                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-yellow-100">
-                                    <span className="text-xs font-bold text-slate-700">成交價 (Vehicle Price)</span>
-                                    <div className="flex items-center">
-                                        <span className="text-xs mr-1">$</span>
-                                        <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 bg-white border border-yellow-300 rounded px-1 text-right font-bold text-sm"/>
-                                    </div>
-                                </div>
-
-                                {/* B. 動態收款列表 (訂金/大訂等) */}
-                                <div className="space-y-1 mb-2">
-                                    {depositItems.map((item, idx) => (
-                                        <div key={item.id} className="flex items-center gap-1">
-                                            {/* 名稱可改 */}
-                                            <input 
-                                                value={item.label}
-                                                onChange={(e) => {
-                                                    const newArr = [...depositItems];
-                                                    newArr[idx].label = e.target.value;
-                                                    setDepositItems(newArr);
-                                                }}
-                                                className="flex-1 text-[10px] bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-600"
-                                            />
-                                            <span className="text-xs">$</span>
-                                            {/* 金額可改 */}
-                                            <input 
-                                                type="number" 
-                                                value={item.amount}
-                                                onChange={(e) => {
-                                                    const newArr = [...depositItems];
-                                                    newArr[idx].amount = Number(e.target.value);
-                                                    setDepositItems(newArr);
-                                                }}
-                                                className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-xs text-blue-600 font-bold"
-                                            />
-                                            {/* 刪除按鈕 (至少保留一個時不顯示，或者允許全刪) */}
-                                            <button onClick={() => setDepositItems(prev => prev.filter(i => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={12}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* 新增收款按鈕 */}
-                                <div className="text-right">
-                                    <button 
-                                        onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: 'Second Deposit (加訂)', amount: 0 }])}
-                                        className="text-[9px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
-                                    >
-                                        + 新增收款欄位
-                                    </button>
+                            {/* A. 車價 */}
+                            <div className="flex justify-between items-center mb-2 pb-2 border-b border-yellow-100">
+                                <span className="text-xs font-bold text-slate-700">成交價 (Vehicle Price)</span>
+                                <div className="flex items-center">
+                                    <span className="text-xs mr-1">$</span>
+                                    <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 bg-white border border-yellow-300 rounded px-1 text-right font-bold text-sm"/>
                                 </div>
                             </div>
-                        )}
+
+                            {/* B. 動態收款列表 */}
+                            <div className="space-y-1 mb-2">
+                                {depositItems.map((item, idx) => (
+                                    <div key={item.id} className="flex items-center gap-1">
+                                        <input 
+                                            value={item.label}
+                                            onChange={(e) => {
+                                                const newArr = [...depositItems];
+                                                newArr[idx].label = e.target.value;
+                                                setDepositItems(newArr);
+                                            }}
+                                            className="flex-1 text-[10px] bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-600"
+                                        />
+                                        <span className="text-xs">$</span>
+                                        <input 
+                                            type="number" 
+                                            value={item.amount}
+                                            onChange={(e) => {
+                                                const newArr = [...depositItems];
+                                                newArr[idx].amount = Number(e.target.value);
+                                                setDepositItems(newArr);
+                                            }}
+                                            className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-xs text-blue-600 font-bold"
+                                        />
+                                        <button onClick={() => setDepositItems(prev => prev.filter(i => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={12}/></button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* 新增收款按鈕 */}
+                            <div className="text-right mb-2">
+                                <button 
+                                    onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: selectedDocType === 'receipt' ? 'Payment (本次收款)' : 'Deposit (訂金)', amount: 0 }])}
+                                    className="text-[9px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200"
+                                >
+                                    + 新增收款欄位
+                                </button>
+                            </div>
+
+                            {/* ★★★ 新增：收款方式 (只在收據 Receipt 顯示) ★★★ */}
+                            {selectedDocType === 'receipt' && (
+                                <div className="pt-2 border-t border-yellow-200 flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-yellow-800">收款方式 (Payment Method):</span>
+                                    <select 
+                                        name="paymentMethod" 
+                                        value={formData.paymentMethod} 
+                                        onChange={handleChange}
+                                        className="text-xs p-1 rounded border border-yellow-300 bg-white font-bold text-slate-700 outline-none"
+                                    >
+                                        <option value="Cheque">支票 (Cheque)</option>
+                                        <option value="Transfer">銀行轉帳 (Transfer)</option>
+                                        <option value="Cash">現金 (Cash)</option>
+                                        <option value="USDT">USDT (泰達幣)</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
 
                         {/* 2. 額外收費項目 (所有單據都顯示，並支援直接修改文字/金額) */}
                         <div className="p-3 bg-green-50 rounded border border-green-200">
