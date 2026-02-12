@@ -5987,9 +5987,9 @@ const CreateDocModule = ({
             companyNameEn: formData.companyNameEn, 
             companyNameCh: formData.companyNameCh,
             companyEmail: formData.companyEmail, 
-            companyPhone: formData.companyPhone
-
-            paymentMethod: formData.paymentMethod, // ★★★ 加入這行
+            companyPhone: formData.companyPhone, // ★★★ 這裡補上了逗號！
+            
+            paymentMethod: formData.paymentMethod // ★★★ 這是新加的行
         };
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
