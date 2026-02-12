@@ -179,6 +179,7 @@ type MediaLibraryItem = {
     relatedVehicleId?: string;
     createdAt: any;
     isPrimary?: boolean;
+    uploadedBy?: string;
     // ★★★ 新增：AI 結構化數據 (解決編譯錯誤的關鍵) ★★★
     aiData?: {
         make?: string;
