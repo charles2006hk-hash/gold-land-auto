@@ -1612,33 +1612,43 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
     const [mobileTab, setMobileTab] = useState<'inbox' | 'classify' | 'gallery'>('inbox');
 
+    // ★★★ 智能圖庫資料讀取 (嚴格權限版：Inbox 私有化) ★★★
     useEffect(() => {
         if (!db || !staffId) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), orderBy('createdAt', 'desc'));
+        
         return onSnapshot(q, (snap) => {
             const list: MediaLibraryItem[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
             
-            // ★★★ 核心修復：只顯示「我的車」的圖片 ★★★
+            // 過濾邏輯
             const myImages = list.filter(img => {
-                // 1. 如果是管理員 (BOSS)，看全部
-                // (inventory 是從主程式傳進來的 visibleInventory)
-                if (staffId === 'BOSS' || (inventory.length > 0 && inventory.some((v: Vehicle) => v.managedBy && v.managedBy !== staffId))) {
+                // 1. 如果是管理員 (BOSS)，看全部 (包含所有人的 Inbox 和所有已連結圖片)
+                if (staffId === 'BOSS') {
                      return true; 
                 }
-
-                // 2. 如果是員工，只看已連結到「我的車」的圖片
+                
+                // 2. 如果是員工...
+                
+                //情況 A：已歸檔 (Linked) 的圖片
+                // 邏輯：看是否屬於「我能看到的車」(visibleInventory)
                 if (img.status === 'linked' && img.relatedVehicleId) {
                     return inventory.some((v: Vehicle) => v.id === img.relatedVehicleId);
                 }
                 
-                // 3. 未連結的 (Inbox) 圖片不給看，避免看到別人的隱私
+                // 情況 B：未歸檔 (Inbox) 的圖片
+                // ★★★ 關鍵修改：只看「我自己上傳的」 ★★★
+                if (img.status === 'unassigned' || !img.status) {
+                    return img.uploadedBy === staffId;
+                }
+                
+                // 其他情況不顯示
                 return false; 
             });
 
             setMediaItems(myImages);
         });
-    }, [db, staffId, appId, inventory]); // ★ 記得加入 inventory 依賴
+    }, [db, staffId, appId, inventory]);
 
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
@@ -1688,7 +1698,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 await uploadString(storageRef, compressedBase64, 'data_url');
                 
                 const downloadURL = await getDownloadURL(storageRef);
-                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), { url: downloadURL, path: filePath, fileName: file.name, tags: ["Inbox"], status: 'unassigned', aiData: {}, createdAt: serverTimestamp() });
+                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), { url: downloadURL, path: filePath, fileName: file.name, tags: ["Inbox"], status: 'unassigned', aiData: {}, createdAt: serverTimestamp(), uploadedBy: staffId });
             } catch (err) { console.error(err); }
         }
         setUploading(false);
