@@ -4557,124 +4557,7 @@ const deleteVehicle = async (id: string) => {
     setIsPreviewMode(true);
   };
 
-  // --- Report Logic (整合版：分拆顯示 + 狀態過濾) ---
-    const generateReportData = () => {
-        let data: any[] = [];
-        
-        if (reportType === 'receivable') {
-            // ★★★ 核心修改：只篩選【已售】或【已訂】的車輛 ★★★
-            // 只有這兩種狀態才算作「應收帳款」
-            const targetInventory = inventory.filter(v => v.status === 'Sold' || v.status === 'Reserved');
-
-            targetInventory.forEach(v => {
-                // --- 1. 車價欠款 (Vehicle Price) ---
-                // 只計算沒有指定 relatedTaskId 的付款，視為車價付款
-                const generalPayments = (v.payments || []).filter(p => !p.relatedTaskId).reduce((s, p) => s + (p.amount || 0), 0);
-                
-                // 這裡要包含一般費用(expenses)在應收計算中 (根據您刚才的要求 1.1)
-                const generalExpenses = (v.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
-                
-                // 應收 = 車價 + 雜費
-                const totalReceivable = (v.price || 0) + generalExpenses;
-                const carBalance = totalReceivable - generalPayments;
-                
-                // 只有當 (車價+費用) 有設定且還有欠款時，才顯示車價這一行
-                if (totalReceivable > 0 && carBalance > 0) {
-                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
-                    data.push({
-                        vehicleId: v.id,
-                        date: date, // 車價跟隨出庫日
-                        title: `${v.year} ${v.make} ${v.model}`,
-                        regMark: v.regMark,
-                        amount: carBalance,
-                        type: 'Vehicle',
-                        status: v.status,
-                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
-                    });
-                }
-
-                // --- 2. 中港業務欠款 (Cross Border) - 獨立顯示 ---
-                const cbTasks = v.crossBorder?.tasks || [];
-                cbTasks.forEach(task => {
-                    const fee = Number(task.fee) || 0;
-                    if (fee <= 0) return; // 沒費用的不顯示
-
-                    // 計算這筆任務專屬的付款
-                    const taskPaid = (v.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s, p) => s + (p.amount || 0), 0);
-                    const taskBalance = fee - taskPaid;
-
-                    if (taskBalance > 0) {
-                        // 優先使用任務日期
-                        let safeDate = task.date;
-                        if (!safeDate) safeDate = v.stockOutDate || new Date().toISOString().split('T')[0];
-
-                        data.push({
-                            vehicleId: v.id,
-                            date: safeDate, 
-                            title: `[中港] ${task.item}`, // 清楚標示這是中港項目
-                            regMark: v.regMark,
-                            amount: taskBalance,
-                            type: 'Service',
-                            status: 'Pending',
-                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
-                        });
-                    }
-                });
-            });
-
-            // 統一過濾 (日期、類別、搜尋關鍵字)
-            data = data.filter(item => {
-                const isDateMatch = (!reportStartDate || !reportEndDate) || (item.date >= reportStartDate && item.date <= reportEndDate);
-                const isCatMatch = reportCategory === 'All' || item.type === reportCategory;
-                const isSearchMatch = !reportSearchTerm || item.rawTitle.toLowerCase().includes(reportSearchTerm.toLowerCase());
-                
-                return isDateMatch && isCatMatch && isSearchMatch;
-            });
-
-            // 排序：日期新的在上面
-            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        } else if (reportType === 'payable') {
-            // (應付帳款邏輯保持不變)
-            inventory.forEach(v => {
-                (v.expenses || []).forEach(exp => {
-                    if (exp.status === 'Unpaid') {
-                        const rowStr = `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`;
-                        if (!reportSearchTerm || rowStr.toLowerCase().includes(reportSearchTerm.toLowerCase())) {
-                            data.push({
-                                vehicleId: v.id, id: exp.id, date: exp.date,
-                                title: `${v.regMark} - ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: 'Unpaid'
-                            });
-                        }
-                    }
-                });
-            });
-            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
-            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        } else if (reportType === 'sales') {
-            // (銷售報表邏輯保持不變)
-            data = inventory.filter(v => v.status === 'Sold').map(v => {
-                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                const totalRevenue = (v.price || 0) + cbFees;
-                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
-                return {
-                    vehicleId: v.id, date: safeSaleDate,
-                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
-                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost
-                };
-            });
-            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
-            if (reportSearchTerm) data = data.filter(d => (d.title+d.regMark).toLowerCase().includes(reportSearchTerm.toLowerCase()));
-            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        }
-        return data;
-    };
-
-  const reportData = generateReportData();
-  const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
+  
 
   // --- Sub-Components ---
 
@@ -5229,11 +5112,125 @@ const VehicleFormModal = ({
         if (vehicle) setEditingVehicle(vehicle);
     };
 
-    
+    // --- Report Logic (整合版：分拆顯示 + 狀態過濾) ---
+    const generateReportData = () => {
+        let data: any[] = [];
+        
+        if (reportType === 'receivable') {
+            // ★★★ 核心修改：只篩選【已售】或【已訂】的車輛 ★★★
+            // 只有這兩種狀態才算作「應收帳款」
+            const targetInventory = inventory.filter(v => v.status === 'Sold' || v.status === 'Reserved');
+
+            targetInventory.forEach(v => {
+                // --- 1. 車價欠款 (Vehicle Price) ---
+                // 只計算沒有指定 relatedTaskId 的付款，視為車價付款
+                const generalPayments = (v.payments || []).filter(p => !p.relatedTaskId).reduce((s, p) => s + (p.amount || 0), 0);
+                
+                // 這裡要包含一般費用(expenses)在應收計算中 (根據您刚才的要求 1.1)
+                const generalExpenses = (v.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
+                
+                // 應收 = 車價 + 雜費
+                const totalReceivable = (v.price || 0) + generalExpenses;
+                const carBalance = totalReceivable - generalPayments;
+                
+                // 只有當 (車價+費用) 有設定且還有欠款時，才顯示車價這一行
+                if (totalReceivable > 0 && carBalance > 0) {
+                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
+                    data.push({
+                        vehicleId: v.id,
+                        date: date, // 車價跟隨出庫日
+                        title: `${v.year} ${v.make} ${v.model}`,
+                        regMark: v.regMark,
+                        amount: carBalance,
+                        type: 'Vehicle',
+                        status: v.status,
+                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
+                    });
+                }
+
+                // --- 2. 中港業務欠款 (Cross Border) - 獨立顯示 ---
+                const cbTasks = v.crossBorder?.tasks || [];
+                cbTasks.forEach(task => {
+                    const fee = Number(task.fee) || 0;
+                    if (fee <= 0) return; // 沒費用的不顯示
+
+                    // 計算這筆任務專屬的付款
+                    const taskPaid = (v.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s, p) => s + (p.amount || 0), 0);
+                    const taskBalance = fee - taskPaid;
+
+                    if (taskBalance > 0) {
+                        // 優先使用任務日期
+                        let safeDate = task.date;
+                        if (!safeDate) safeDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+
+                        data.push({
+                            vehicleId: v.id,
+                            date: safeDate, 
+                            title: `[中港] ${task.item}`, // 清楚標示這是中港項目
+                            regMark: v.regMark,
+                            amount: taskBalance,
+                            type: 'Service',
+                            status: 'Pending',
+                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
+                        });
+                    }
+                });
+            });
+
+            // 統一過濾 (日期、類別、搜尋關鍵字)
+            data = data.filter(item => {
+                const isDateMatch = (!reportStartDate || !reportEndDate) || (item.date >= reportStartDate && item.date <= reportEndDate);
+                const isCatMatch = reportCategory === 'All' || item.type === reportCategory;
+                const isSearchMatch = !reportSearchTerm || item.rawTitle.toLowerCase().includes(reportSearchTerm.toLowerCase());
+                
+                return isDateMatch && isCatMatch && isSearchMatch;
+            });
+
+            // 排序：日期新的在上面
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        } else if (reportType === 'payable') {
+            // (應付帳款邏輯保持不變)
+            inventory.forEach(v => {
+                (v.expenses || []).forEach(exp => {
+                    if (exp.status === 'Unpaid') {
+                        const rowStr = `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`;
+                        if (!reportSearchTerm || rowStr.toLowerCase().includes(reportSearchTerm.toLowerCase())) {
+                            data.push({
+                                vehicleId: v.id, id: exp.id, date: exp.date,
+                                title: `${v.regMark} - ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: 'Unpaid'
+                            });
+                        }
+                    }
+                });
+            });
+            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        } else if (reportType === 'sales') {
+            // (銷售報表邏輯保持不變)
+            data = inventory.filter(v => v.status === 'Sold').map(v => {
+                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                const totalRevenue = (v.price || 0) + cbFees;
+                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+                return {
+                    vehicleId: v.id, date: safeSaleDate,
+                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
+                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost
+                };
+            });
+            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+            if (reportSearchTerm) data = data.filter(d => (d.title+d.regMark).toLowerCase().includes(reportSearchTerm.toLowerCase()));
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
+        return data;
+    };
 
     const reportData = generateReportData();
     const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
+
 
     return (
         <div className="p-2 md:p-6 bg-white rounded-lg shadow-sm min-h-screen flex flex-col">
