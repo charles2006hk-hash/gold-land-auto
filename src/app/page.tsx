@@ -4450,24 +4450,45 @@ const deleteVehicle = async (id: string) => {
   };
 
   // --- Dashboard Logic ---
-  // 3. ★★★ 修改 Dashboard 統計邏輯 (改用 visibleInventory) ★★★
+  // 3. ★★★ 修改 Dashboard 統計邏輯 (同步更新：含已訂/已售 + 完整費用計算) ★★★
   const dashboardStats = () => {
     let totalStockValue = 0;
     let totalReceivable = 0; 
     let totalPayable = 0; 
     let totalSoldThisMonth = 0;
 
-    // ★ 這裡原本是 inventory.forEach，改成 visibleInventory.forEach
     visibleInventory.forEach(car => {
+      // 1. 庫存總值
       if (car.status === 'In Stock') totalStockValue += car.price || 0;
+      
+      // 2. 應付未付 (所有車輛的未付開支)
       (car.expenses || []).forEach(exp => {
         if (exp.status === 'Unpaid') totalPayable += exp.amount || 0;
       });
-      if (car.status === 'Sold') {
+
+      // 3. ★★★ 修改：應收尾數邏輯 (已售 OR 已訂) ★★★
+      // 邏輯：(車價 + 所有費用 + 中港費用) - 已收金額
+      if (car.status === 'Sold' || car.status === 'Reserved') {
         const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
-        const balance = (car.price || 0) - received;
-        totalReceivable += balance > 0 ? balance : 0;
-        totalSoldThisMonth += car.price || 0;
+        
+        // 加回所有費用 (Expenses)
+        const expenses = (car.expenses || []).reduce((acc, e) => acc + (e.amount || 0), 0);
+        // 加回中港費用 (CrossBorder Tasks)
+        const cbFees = (car.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+        
+        // 應收總額
+        const totalDue = (car.price || 0) + expenses + cbFees;
+        const balance = totalDue - received;
+        
+        // 只有正數(欠款)才計入總應收
+        if (balance > 0) {
+            totalReceivable += balance;
+        }
+
+        // 4. 本月銷售額 (維持只算已售的車價，不含雜費以免虛高)
+        if (car.status === 'Sold') {
+            totalSoldThisMonth += car.price || 0;
+        }
       }
     });
 
@@ -4536,95 +4557,120 @@ const deleteVehicle = async (id: string) => {
     setIsPreviewMode(true);
   };
 
-  // --- Report Logic (v9.7: 修復中港費用顯示問題) ---
-  const generateReportData = () => {
-    let data: any[] = [];
-    
-    if (reportType === 'receivable') {
-        data = inventory.filter(v => {
-            // 1. 計算應收與已收
-            const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-            const totalReceivable = (v.price || 0) + cbFees;
-            const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
-            const balance = totalReceivable - received;
-            
-            // 2. 判斷是否顯示：只要有餘額 (欠款) 就應該顯示，不論狀態
-            if (balance <= 0) return false;
+  // --- Report Logic (整合版：分拆顯示 + 狀態過濾) ---
+    const generateReportData = () => {
+        let data: any[] = [];
+        
+        if (reportType === 'receivable') {
+            // ★★★ 核心修改：只篩選【已售】或【已訂】的車輛 ★★★
+            // 只有這兩種狀態才算作「應收帳款」
+            const targetInventory = inventory.filter(v => v.status === 'Sold' || v.status === 'Reserved');
 
-            // 3. 日期過濾邏輯
-            // A. 如果是賣車，看依據出庫/入庫日
-            const stockDate = v.stockOutDate || v.stockInDate || '';
-            const isStockMatch = stockDate && (!reportStartDate || stockDate >= reportStartDate) && (!reportEndDate || stockDate <= reportEndDate);
-            
-            // B. 如果是純代辦，看任務日期 (只要有一個任務在區間內就顯示)
-            const isTaskMatch = (v.crossBorder?.tasks || []).some(t => 
-                (!reportStartDate || t.date >= reportStartDate) && 
-                (!reportEndDate || t.date <= reportEndDate)
-            );
-
-            // 如果沒有選日期，或是符合日期區間
-            const isDateMatch = (!reportStartDate && !reportEndDate) || isStockMatch || isTaskMatch;
-
-            return isDateMatch;
-        }).map(v => {
-            const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-            const totalReceivable = (v.price || 0) + cbFees;
-            const received = (v.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
-            return {
-                vehicleId: v.id,
-                date: v.stockOutDate || (v.crossBorder?.tasks?.[0]?.date) || 'Service', // 顯示出庫日或第一個任務日
-                title: `${v.year} ${v.make} ${v.model}`,
-                regMark: v.regMark,
-                amount: totalReceivable - received, // 顯示欠款餘額
-                status: v.status
-            };
-        });
-
-    } else if (reportType === 'payable') {
-        // ... (應付帳款邏輯保持不變) ...
-        inventory.forEach(v => {
-            (v.expenses || []).forEach(exp => {
-                if (exp.status === 'Unpaid' && 
-                   (!reportStartDate || exp.date >= reportStartDate) &&
-                   (!reportEndDate || exp.date <= reportEndDate) &&
-                   (!reportCompany || exp.company === reportCompany)) {
+            targetInventory.forEach(v => {
+                // --- 1. 車價欠款 (Vehicle Price) ---
+                // 只計算沒有指定 relatedTaskId 的付款，視為車價付款
+                const generalPayments = (v.payments || []).filter(p => !p.relatedTaskId).reduce((s, p) => s + (p.amount || 0), 0);
+                
+                // 這裡要包含一般費用(expenses)在應收計算中 (根據您刚才的要求 1.1)
+                const generalExpenses = (v.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
+                
+                // 應收 = 車價 + 雜費
+                const totalReceivable = (v.price || 0) + generalExpenses;
+                const carBalance = totalReceivable - generalPayments;
+                
+                // 只有當 (車價+費用) 有設定且還有欠款時，才顯示車價這一行
+                if (totalReceivable > 0 && carBalance > 0) {
+                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
                     data.push({
                         vehicleId: v.id,
-                        id: exp.id,
-                        date: exp.date,
-                        title: `${v.regMark} - ${exp.type}`,
-                        company: exp.company,
-                        invoiceNo: exp.invoiceNo, 
-                        amount: exp.amount,
-                        status: 'Unpaid'
+                        date: date, // 車價跟隨出庫日
+                        title: `${v.year} ${v.make} ${v.model}`,
+                        regMark: v.regMark,
+                        amount: carBalance,
+                        type: 'Vehicle',
+                        status: v.status,
+                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
                     });
                 }
+
+                // --- 2. 中港業務欠款 (Cross Border) - 獨立顯示 ---
+                const cbTasks = v.crossBorder?.tasks || [];
+                cbTasks.forEach(task => {
+                    const fee = Number(task.fee) || 0;
+                    if (fee <= 0) return; // 沒費用的不顯示
+
+                    // 計算這筆任務專屬的付款
+                    const taskPaid = (v.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s, p) => s + (p.amount || 0), 0);
+                    const taskBalance = fee - taskPaid;
+
+                    if (taskBalance > 0) {
+                        // 優先使用任務日期
+                        let safeDate = task.date;
+                        if (!safeDate) safeDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+
+                        data.push({
+                            vehicleId: v.id,
+                            date: safeDate, 
+                            title: `[中港] ${task.item}`, // 清楚標示這是中港項目
+                            regMark: v.regMark,
+                            amount: taskBalance,
+                            type: 'Service',
+                            status: 'Pending',
+                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
+                        });
+                    }
+                });
             });
-        });
-    } else if (reportType === 'sales') {
-        // ... (銷售報表邏輯保持不變) ...
-        data = inventory.filter(v => 
-            v.status === 'Sold' &&
-            (!reportStartDate || (v.stockOutDate || '') >= reportStartDate) &&
-            (!reportEndDate || (v.stockOutDate || '') <= reportEndDate)
-        ).map(v => {
-            const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-            const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-            const totalRevenue = (v.price || 0) + cbFees;
-            const profit = totalRevenue - totalCost;
-            return {
-                vehicleId: v.id,
-                date: v.stockOutDate,
-                title: `${v.year} ${v.make} ${v.model}`,
-                regMark: v.regMark,
-                amount: totalRevenue, 
-                cost: totalCost,
-                profit: profit
-            };
-        });
-    }
-    return data;
-  };
+
+            // 統一過濾 (日期、類別、搜尋關鍵字)
+            data = data.filter(item => {
+                const isDateMatch = (!reportStartDate || !reportEndDate) || (item.date >= reportStartDate && item.date <= reportEndDate);
+                const isCatMatch = reportCategory === 'All' || item.type === reportCategory;
+                const isSearchMatch = !reportSearchTerm || item.rawTitle.toLowerCase().includes(reportSearchTerm.toLowerCase());
+                
+                return isDateMatch && isCatMatch && isSearchMatch;
+            });
+
+            // 排序：日期新的在上面
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        } else if (reportType === 'payable') {
+            // (應付帳款邏輯保持不變)
+            inventory.forEach(v => {
+                (v.expenses || []).forEach(exp => {
+                    if (exp.status === 'Unpaid') {
+                        const rowStr = `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`;
+                        if (!reportSearchTerm || rowStr.toLowerCase().includes(reportSearchTerm.toLowerCase())) {
+                            data.push({
+                                vehicleId: v.id, id: exp.id, date: exp.date,
+                                title: `${v.regMark} - ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: 'Unpaid'
+                            });
+                        }
+                    }
+                });
+            });
+            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        } else if (reportType === 'sales') {
+            // (銷售報表邏輯保持不變)
+            data = inventory.filter(v => v.status === 'Sold').map(v => {
+                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                const totalRevenue = (v.price || 0) + cbFees;
+                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+                return {
+                    vehicleId: v.id, date: safeSaleDate,
+                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
+                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost
+                };
+            });
+            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
+            if (reportSearchTerm) data = data.filter(d => (d.title+d.regMark).toLowerCase().includes(reportSearchTerm.toLowerCase()));
+            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
+        return data;
+    };
 
   const reportData = generateReportData();
   const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -4734,7 +4780,7 @@ const DatabaseSelector = ({
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
-    addSystemLog 
+    updateExpenseStatus, addSystemLog 
 }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -4783,7 +4829,7 @@ const VehicleFormModal = ({
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
     const generalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
     const totalExpenses = generalExpenses + cbFees;
-    const balance = totalRevenue - totalReceived; 
+    const balance = (totalRevenue + generalExpenses) - totalReceived; 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
@@ -5109,7 +5155,26 @@ const VehicleFormModal = ({
                                     <span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span>
                                 </h4>
                                 <div className="space-y-1 mb-2">
-                                    {(v.expenses || []).map((exp: any) => (<div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{exp.date}</div><div className="col-span-3 font-bold">{exp.type}</div><div className="col-span-3 text-gray-500 truncate">{exp.company}</div><div className="col-span-3 font-mono text-right">{formatCurrency(exp.amount)}</div><div className="col-span-1 text-right"><button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></div></div>))}
+                                    {(v.expenses || []).map((exp: any) => (
+                                        <div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
+                                            <div className="col-span-2 text-gray-400">{exp.date}</div>
+                                            <div className="col-span-3 font-bold">{exp.type}</div>
+                                            <div className="col-span-3 text-gray-500 truncate">{exp.company}</div>
+                                            <div className="col-span-2 font-mono text-right">{formatCurrency(exp.amount)}</div>
+                                            
+                                            {/* ★★★ 修改 1.2：加入付款狀態切換按鈕 ★★★ */}
+                                            <div className="col-span-2 text-right flex justify-end gap-1">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => updateExpenseStatus(v.id!, exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')}
+                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${exp.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}
+                                                >
+                                                    {exp.status === 'Paid' ? '已付' : '未付'}
+                                                </button>
+                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600"><X size={12}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
                                     {(v.crossBorder?.tasks || []).filter((t:any) => t.fee > 0).map((task: any) => (<div key={`cb-${task.id}`} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-blue-50/50 border border-blue-100 rounded shadow-sm items-center text-blue-800"><div className="col-span-2 text-blue-400">{task.date}</div><div className="col-span-3 font-bold flex items-center"><Globe size={10} className="mr-1"/> {task.item}</div><div className="col-span-3 text-blue-600/70 truncate">中港業務</div><div className="col-span-3 font-mono text-right">{formatCurrency(task.fee)}</div><div className="col-span-1 text-right"></div></div>))}
                                 </div>
                                 <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
@@ -5164,111 +5229,7 @@ const VehicleFormModal = ({
         if (vehicle) setEditingVehicle(vehicle);
     };
 
-    // --- Report Logic (分拆顯示邏輯) ---
-    const generateReportData = () => {
-        let data: any[] = [];
-        
-        if (reportType === 'receivable') {
-            inventory.forEach(v => {
-                // --- 1. 車價欠款 (Vehicle Price) ---
-                // 只計算沒有指定 relatedTaskId 的付款，視為車價付款
-                const generalPayments = (v.payments || []).filter(p => !p.relatedTaskId).reduce((s, p) => s + (p.amount || 0), 0);
-                const carBalance = (v.price || 0) - generalPayments;
-                
-                // 只有當車價有設定且還有欠款時，才顯示車價這一行
-                if ((v.price || 0) > 0 && carBalance > 0) {
-                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
-                    data.push({
-                        vehicleId: v.id,
-                        date: date, // 車價跟隨出庫日
-                        title: `${v.year} ${v.make} ${v.model}`,
-                        regMark: v.regMark,
-                        amount: carBalance,
-                        type: 'Vehicle',
-                        status: v.status,
-                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
-                    });
-                }
-
-                // --- 2. 中港業務欠款 (Cross Border) - 獨立顯示 ---
-                const cbTasks = v.crossBorder?.tasks || [];
-                cbTasks.forEach(task => {
-                    const fee = Number(task.fee) || 0;
-                    if (fee <= 0) return; // 沒費用的不顯示
-
-                    // 計算這筆任務專屬的付款
-                    const taskPaid = (v.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s, p) => s + (p.amount || 0), 0);
-                    const taskBalance = fee - taskPaid;
-
-                    if (taskBalance > 0) {
-                        // ★★★ 關鍵修正：優先使用任務日期，保證本月新增的費用會顯示 ★★★
-                        // 如果任務沒填日期，才退而求其次用出庫日或今天
-                        let safeDate = task.date;
-                        if (!safeDate) safeDate = v.stockOutDate || new Date().toISOString().split('T')[0];
-
-                        data.push({
-                            vehicleId: v.id,
-                            date: safeDate, 
-                            title: `[中港] ${task.item}`, // 清楚標示這是中港項目
-                            regMark: v.regMark,
-                            amount: taskBalance,
-                            type: 'Service',
-                            status: 'Pending',
-                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
-                        });
-                    }
-                });
-            });
-
-            // 統一過濾
-            data = data.filter(item => {
-                const isDateMatch = (!reportStartDate || !reportEndDate) || (item.date >= reportStartDate && item.date <= reportEndDate);
-                const isCatMatch = reportCategory === 'All' || item.type === reportCategory;
-                const isSearchMatch = !reportSearchTerm || item.rawTitle.toLowerCase().includes(reportSearchTerm.toLowerCase());
-                
-                return isDateMatch && isCatMatch && isSearchMatch;
-            });
-
-            // 排序：日期新的在上面
-            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        } else if (reportType === 'payable') {
-            // (應付帳款邏輯保持不變)
-            inventory.forEach(v => {
-                (v.expenses || []).forEach(exp => {
-                    if (exp.status === 'Unpaid') {
-                        const rowStr = `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`;
-                        if (!reportSearchTerm || rowStr.toLowerCase().includes(reportSearchTerm.toLowerCase())) {
-                            data.push({
-                                vehicleId: v.id, id: exp.id, date: exp.date,
-                                title: `${v.regMark} - ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: 'Unpaid'
-                            });
-                        }
-                    }
-                });
-            });
-            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
-            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        } else if (reportType === 'sales') {
-            // (銷售報表邏輯保持不變)
-            data = inventory.filter(v => v.status === 'Sold').map(v => {
-                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                const totalRevenue = (v.price || 0) + cbFees;
-                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
-                return {
-                    vehicleId: v.id, date: safeSaleDate,
-                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
-                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost
-                };
-            });
-            if (reportStartDate && reportEndDate) data = data.filter(d => d.date >= reportStartDate && d.date <= reportEndDate);
-            if (reportSearchTerm) data = data.filter(d => (d.title+d.regMark).toLowerCase().includes(reportSearchTerm.toLowerCase()));
-            data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        }
-        return data;
-    };
+    
 
     const reportData = generateReportData();
     const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
@@ -6514,6 +6475,7 @@ const CreateDocModule = ({
                   deletePayment={deletePayment}
                   addExpense={addExpense}
                   deleteExpense={deleteExpense}
+                  updateExpenseStatus={updateExpenseStatus}
                   addSystemLog={addSystemLog}
               />
           )}
