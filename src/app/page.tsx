@@ -5211,11 +5211,17 @@ const VehicleFormModal = ({
                                         }
 
                                         return relatedDocs.map((doc: any) => {
-                                            // 簡易類型標籤
-                                            const typeLabel = {
-                                                'sales_contract': '合約', 'purchase_contract': '收車', 'consignment_contract': '寄賣',
-                                                'invoice': '發票', 'receipt': '收據'
-                                            }[doc.type] || '單據';
+                                            // ★★★ 修正：明確定義型別 Record<string, string> 以解決 TS 報錯 ★★★
+                                            const typeMap: Record<string, string> = {
+                                                'sales_contract': '合約', 
+                                                'purchase_contract': '收車', 
+                                                'consignment_contract': '寄賣',
+                                                'invoice': '發票', 
+                                                'receipt': '收據'
+                                            };
+                                            
+                                            // 安全讀取
+                                            const typeLabel = typeMap[doc.type] || '單據';
                                             
                                             // 格式化日期
                                             const dateStr = doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString() : 'N/A';
