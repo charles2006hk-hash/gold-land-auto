@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  Check, AlertCircle, Link, Share2,
+  Check, AlertCircle, Link, Share2, Key, 
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
   Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing
 } from 'lucide-react';
@@ -3303,11 +3303,16 @@ const SettingsManager = ({
                                             : '請點擊右側按鈕以允許瀏覽器傳送通知。'}
                                     </p>
                                 </div>
-                                {permissionStatus !== 'granted' && (
-                                    <button onClick={requestNotificationPermission} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm">
-                                        請求權限
-                                    </button>
-                                )}
+                                {permissionStatus !== 'granted' ? (
+                                        <button onClick={requestNotificationPermission} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm">
+                                            請求權限
+                                        </button>
+                                    ) : (
+                                        // ★★★ 新增：已授權時顯示「查看 Token」按鈕 ★★★
+                                        <button onClick={requestNotificationPermission} className="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm flex items-center">
+                                            <Key size={14} className="mr-1"/> 查看 Token
+                                        </button>
+                                    )}
                             </div>
 
                             {/* 開關設定 */}
