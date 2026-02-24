@@ -1616,6 +1616,8 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
     const [mobileTab, setMobileTab] = useState<'inbox' | 'classify' | 'gallery'>('inbox');
 
+    const [classifySearch, setClassifySearch] = useState('');
+
     // ★★★ 智能圖庫資料讀取 (嚴格權限版：Inbox 私有化) ★★★
     useEffect(() => {
         if (!db || !staffId) return;
@@ -1656,10 +1658,21 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
+        
         const filteredItems = mediaItems.filter(i => {
             if (i.status !== 'linked') return false;
             if (!searchQuery) return true;
-            return `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase().includes(searchQuery.toLowerCase());
+            
+            // 搜尋字串
+            const query = searchQuery.toLowerCase();
+            const aiText = `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase();
+            
+            // ★★★ Feature 5: 增加車牌搜尋 ★★★
+            const car = inventory.find((v:any) => v.id === i.relatedVehicleId);
+            const regMark = car ? (car.regMark || '').toLowerCase() : '';
+            
+            // 只要 AI 資訊 或 車牌 符合搜尋字串就顯示
+            return aiText.includes(query) || regMark.includes(query);
         });
 
         filteredItems.forEach(item => {
@@ -1706,6 +1719,43 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             } catch (err) { console.error(err); }
         }
         setUploading(false);
+    };
+
+    // ★★★ Feature 3: 剪貼簿貼上上傳 (iPhone 友善) ★★★
+    const handlePasteUpload = async () => {
+        try {
+            // 需要瀏覽器權限 (通常要在 HTTPS 下運作)
+            const clipboardItems = await navigator.clipboard.read();
+            setUploading(true);
+            let hasImage = false;
+
+            for (const item of clipboardItems) {
+                const imageType = item.types.find(t => t.startsWith('image/'));
+                if (imageType) {
+                    hasImage = true;
+                    const blob = await item.getType(imageType);
+                    const file = new File([blob], `pasted_${Date.now()}.png`, { type: imageType });
+                    
+                    // 復用壓縮邏輯
+                    const compressedBase64 = await compressImage(file, 130);
+                    const filePath = `media/${appId}/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, filePath);
+                    await uploadString(storageRef, compressedBase64, 'data_url');
+                    const downloadURL = await getDownloadURL(storageRef);
+                    
+                    await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), { 
+                        url: downloadURL, path: filePath, fileName: file.name, tags: ["Inbox", "Pasted"], 
+                        status: 'unassigned', aiData: {}, createdAt: serverTimestamp(), uploadedBy: staffId 
+                    });
+                }
+            }
+            if (!hasImage) alert("剪貼簿中沒有圖片 / No Image found");
+        } catch (err) {
+            console.error(err);
+            alert("無法讀取剪貼簿 (需使用 HTTPS 或在 Safari 手動允許)");
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleSetPrimary = async (targetId: string, groupItems: MediaLibraryItem[]) => {
@@ -1794,10 +1844,16 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px] ${mobileTab === 'inbox' ? 'flex' : 'hidden md:flex'}`}>
                     <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
                         <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 待處理 ({inboxItems.length})</h3>
+                        <div className="flex gap-2">
+                            {/* ★★★ 新增貼上按鈕 ★★★ */}
+                            <button onClick={handlePasteUpload} disabled={uploading} className="bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-100 flex items-center shadow-sm disabled:opacity-50">
+                                <Clipboard size={14} className="mr-1"/> 貼上
+                            </button>
                         <label className={`bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
                             {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>} 匯入
                             <input type="file" multiple accept="image/*" className="hidden" onChange={handleSmartUpload} disabled={uploading}/>
                         </label>
+                        </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1 content-start">
                         {inboxItems.map(item => (
@@ -1825,7 +1881,38 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
                         <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
                             <label className="text-[10px] font-bold text-blue-800 mb-1 block">配對庫存</label>
-                            <select value={targetVehicleId} onChange={(e) => { const vId = e.target.value; setTargetVehicleId(vId); const v = inventory.find((i:any) => i.id === vId); if (v) setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' })); }} className="w-full p-1 text-xs border rounded"><option value="">-- 手動 / 不關聯 --</option>{inventory.map((v: Vehicle) => <option key={v.id} value={v.id}>{v.regMark || '(未出牌)'} - {v.make} {v.model}</option>)}</select>
+                            
+                            {/* ★★★ 4.2 增加搜尋框 ★★★ */}
+                            <input 
+                                type="text" 
+                                placeholder="輸入車牌或型號篩選..." 
+                                value={classifySearch}
+                                onChange={e => setClassifySearch(e.target.value)}
+                                className="w-full p-1.5 text-xs border rounded mb-2 outline-none focus:border-blue-400"
+                            />
+
+                            <select value={targetVehicleId} onChange={(e) => { 
+                                const vId = e.target.value; 
+                                setTargetVehicleId(vId); 
+                                const v = inventory.find((i:any) => i.id === vId); 
+                                if (v) setClassifyForm(prev => ({ ...prev, make: v.make || '', model: v.model || '', year: v.year || '', color: v.colorExt || '' })); 
+                            }} className="w-full p-1 text-xs border rounded">
+                                <option value="">-- 手動 / 不關聯 --</option>
+                                
+                                {/* ★★★ 4.1 排序並篩選 ★★★ */}
+                                {inventory
+                                    .filter((v: Vehicle) => {
+                                        const search = classifySearch.toUpperCase();
+                                        return !search || (v.regMark || '').includes(search) || (v.model || '').toUpperCase().includes(search);
+                                    })
+                                    .sort((a: Vehicle, b: Vehicle) => (a.regMark || '').localeCompare(b.regMark || '')) // 字母排序
+                                    .map((v: Vehicle) => (
+                                        <option key={v.id} value={v.id}>
+                                            {v.regMark || '(未出牌)'} - {v.make} {v.model}
+                                        </option>
+                                    ))
+                                }
+                            </select>
                         </div>
                         <div className="space-y-2">
                             <div><label className="text-[10px] font-bold text-slate-500">Year</label><input value={classifyForm.year} onChange={e => setClassifyForm({...classifyForm, year: e.target.value})} className="w-full p-1 border rounded text-xs"/></div>
@@ -3629,7 +3716,10 @@ export default function GoldLandAutoDMS() {
   const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[], dataAccess?: string } | null>(null);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
-  
+  const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
+  const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
+
+
   // --- User Management Helper (v13.1 新增) ---
     const updateSystemUsers = async (newUsers: any[]) => {
         setSystemUsers(newUsers); // 更新畫面
@@ -3770,6 +3860,25 @@ export default function GoldLandAutoDMS() {
   const handlePrint = () => { window.print(); };
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
+
+  // ★★★ 新增：監聽所有銷售單據 (放在主層) ★★★
+  useEffect(() => {
+      if (!db || !appId) return;
+      // 這裡假設您的單據集合名稱是 sales_documents
+      const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
+      const unsub = onSnapshot(q, (snapshot) => {
+          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setAllSalesDocs(list);
+      });
+      return () => unsub();
+  }, [db, appId]);
+
+  // ★★★ 新增：處理從車輛詳情跳轉到開單系統 ★★★
+  const handleJumpToDoc = (docData: any) => {
+      setExternalDocRequest(docData); // 設定目標單據
+      setActiveTab('create_doc');     // 切換到開單分頁
+      setEditingVehicle(null);        // 關閉車輛詳情彈窗
+  };
 
   useEffect(() => {
     if (!db || !appId) return;
@@ -4663,7 +4772,7 @@ const DatabaseSelector = ({
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
-    updateExpenseStatus, addSystemLog 
+    updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc, 
 }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -4919,7 +5028,19 @@ const VehicleFormModal = ({
                             <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
                             <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
                             <div className="grid grid-cols-2 gap-3 pt-2">
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Cyl. Cap.</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" placeholder="cc"/></div>
+                                {/* ★★★ 修改：根據 fuelType 動態顯示單位 (KW / cc) ★★★ */}
+                                <div>
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase">
+                                        {fuelType === 'Electric' ? 'Rated Power (KW)' : 'Cyl. Cap. (cc)'}
+                                    </label>
+                                    <input 
+                                        name="engineSize" 
+                                        value={engineSizeStr} 
+                                        onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} 
+                                        className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" 
+                                        placeholder={fuelType === 'Electric' ? "KW" : "cc"}
+                                    />
+                                </div>
                                 <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 7} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
                             </div>
                             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
@@ -5075,12 +5196,47 @@ const VehicleFormModal = ({
                         <div className="flex-1 mr-4">
                             <textarea name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2 border rounded h-16 resize-none outline-none focus:ring-1 ring-blue-200"></textarea>
                         </div>
+                        
+                        {/* ★★★ 修改：顯示關聯單據與跳轉按鈕 ★★★ */}
                         {v.id && (
-                            <div className="flex mr-auto gap-2">
-                                <button type="button" onClick={() => openPrintPreview('sales_contract', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印合約"><FileText size={18}/></button>
-                                <button type="button" onClick={() => openPrintPreview('invoice', v as Vehicle)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded" title="列印發票"><Printer size={18}/></button>
+                            <div className="flex flex-col gap-1 mr-auto">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase">Related Docs (點擊編輯):</span>
+                                <div className="flex flex-wrap gap-2">
+                                    {(() => {
+                                        // 篩選與此車相關的單據 (比對車牌)
+                                        const relatedDocs = allSalesDocs?.filter((d: any) => d.formData?.regMark === v.regMark) || [];
+                                        
+                                        if (relatedDocs.length === 0) {
+                                            return <span className="text-[10px] text-gray-400 italic">尚無單據</span>;
+                                        }
+
+                                        return relatedDocs.map((doc: any) => {
+                                            // 簡易類型標籤
+                                            const typeLabel = {
+                                                'sales_contract': '合約', 'purchase_contract': '收車', 'consignment_contract': '寄賣',
+                                                'invoice': '發票', 'receipt': '收據'
+                                            }[doc.type] || '單據';
+                                            
+                                            // 格式化日期
+                                            const dateStr = doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString() : 'N/A';
+                                            
+                                            return (
+                                                <button 
+                                                    key={doc.id}
+                                                    type="button" 
+                                                    onClick={() => onJumpToDoc(doc)} 
+                                                    className="px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded text-[10px] hover:bg-blue-100 flex items-center transition-colors"
+                                                    title={`點擊跳轉至開單系統處理: ${doc.summary}`}
+                                                >
+                                                    <FileText size={10} className="mr-1"/> {typeLabel} ({dateStr})
+                                                </button>
+                                            );
+                                        });
+                                    })()}
+                                </div>
                             </div>
                         )}
+                        
                         <button type="button" onClick={handleClose} className="px-5 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">取消</button>
                         <button type="submit" className="px-6 py-2 bg-gradient-to-r from-yellow-500 to-yellow-400 text-black font-bold text-sm rounded-lg shadow-md hover:shadow-lg transition-all transform active:scale-95 flex items-center"><Save size={16} className="mr-2"/> 儲存變更</button>
                     </div>
@@ -5694,7 +5850,7 @@ const DocumentTemplate = () => {
 // ★★★ 7. Create Document Module (v6.0: 支援多項目收費 + 公司資料修正) ★★★
 // ------------------------------------------------------------------
 const CreateDocModule = ({ 
-    inventory, openPrintPreview, db, staffId, appId 
+    inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest 
 }: { 
     inventory: Vehicle[], openPrintPreview: (type: DocType, data: any) => void, db: any, staffId: string, appId: string 
 }) => {
@@ -5742,6 +5898,26 @@ const CreateDocModule = ({
     const DEFAULT_REMARKS = `匯豐銀行香港賬戶：747-057347-838
     賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO
     「轉數快」識別碼 6134530`;
+
+    // ★★★ 新增：自動打開來自外部的單據請求 ★★★
+    useEffect(() => {
+        if (externalRequest) {
+            // 載入單據資料 (邏輯同 editDoc)
+            setDocId(externalRequest.id);
+            setSelectedDocType(externalRequest.type);
+            setFormData(externalRequest.formData);
+            setChecklist(externalRequest.checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' });
+            setDocItems(externalRequest.docItems || []);
+            setDepositItems(externalRequest.depositItems || [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
+            setShowTerms(externalRequest.showTerms !== false);
+            
+            // 切換到編輯模式
+            setViewMode('edit');
+            
+            // 處理完畢，清空請求
+            setExternalRequest(null);
+        }
+    }, [externalRequest]);
 
    // --- 1. 歷史紀錄 (合併修正版) ---
     useEffect(() => {
@@ -6474,6 +6650,8 @@ const CreateDocModule = ({
                   deleteExpense={deleteExpense}
                   updateExpenseStatus={updateExpenseStatus}
                   addSystemLog={addSystemLog}
+                  allSalesDocs={allSalesDocs} 
+                  onJumpToDoc={handleJumpToDoc}
               />
           )}
 
@@ -7106,6 +7284,8 @@ const CreateDocModule = ({
                   db={db}
                   staffId={staffId}
                   appId={appId}
+                  externalRequest={externalDocRequest}
+                  setExternalRequest={setExternalDocRequest}
               />
           )}
           
