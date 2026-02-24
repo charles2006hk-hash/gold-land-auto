@@ -3081,10 +3081,15 @@ const SettingsManager = ({
             setPermissionStatus(permission);
 
             if (permission === 'granted') {
-                // ★★★ 新增：獲取 FCM Token ★★★
-                const messaging = getMessaging(app); // 確保 app 是初始化的 Firebase App
+                // ★★★ 修正：加入 app 是否存在的檢查，解決 TS 報錯 ★★★
+                if (!app) {
+                    alert("Firebase 尚未初始化，無法獲取 Token");
+                    return;
+                }
+
+                const messaging = getMessaging(app); // 現在 TS 知道 app 肯定有值了
                 const token = await getToken(messaging, { 
-                    vapidKey: settings.pushConfig?.vapidKey // 使用您設定中的 Key
+                    vapidKey: settings.pushConfig?.vapidKey 
                 });
 
                 if (token) {
