@@ -3075,37 +3075,47 @@ const SettingsManager = ({
             alert("您的瀏覽器不支援通知功能");
             return;
         }
+        if (!app || !db || !staffId) {
+            alert("系統尚未初始化，無法儲存 Token");
+            return;
+        }
 
         try {
             const permission = await Notification.requestPermission();
             setPermissionStatus(permission);
 
             if (permission === 'granted') {
-                // ★★★ 修正：加入 app 是否存在的檢查，解決 TS 報錯 ★★★
-                if (!app) {
-                    alert("Firebase 尚未初始化，無法獲取 Token");
-                    return;
-                }
-
-                const messaging = getMessaging(app); // 現在 TS 知道 app 肯定有值了
+                const messaging = getMessaging(app);
                 const token = await getToken(messaging, { 
                     vapidKey: settings.pushConfig?.vapidKey 
                 });
 
                 if (token) {
-                    console.log("您的 iPhone Token:", token);
-                    alert("✅ 授權成功！\nToken 已複製到 Console (或請截圖): \n" + token.slice(0, 20) + "...");
-                    // 建議：將此 Token 暫時顯示在畫面上，方便您複製來測試
-                    prompt("請複製此 Token 去 Firebase Console 測試:", token);
+                    console.log("Device Token:", token);
+                    
+                    // ★★★ 修改：將 Token 寫入使用者的資料庫文檔 ★★★
+                    // 假設您的使用者設定檔存放在 system/users 列表或是獨立的 collection
+                    // 這裡我們示範將其存入 'system_users_tokens' 集合，以 staffId (Email) 為 ID
+                    const tokenRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tokens', staffId);
+                    
+                    await setDoc(tokenRef, {
+                        token: token,
+                        user: staffId,
+                        updatedAt: serverTimestamp(),
+                        device: navigator.userAgent // 紀錄是哪台設備
+                    }, { merge: true });
+
+                    alert(`✅ 裝置配對成功！\n您的 iPhone 現在已連結至帳號：${staffId}\n當有新車或售出時，此裝置將收到通知。`);
+                    
                 } else {
-                    alert("無法獲取 Token，請檢查權限或網絡。");
+                    alert("無法獲取 Token，請檢查 VAPID Key 設定");
                 }
             } else {
-                alert("❌ 授權失敗或被拒絕。請在瀏覽器設定中開啟。");
+                alert("權限被拒絕");
             }
         } catch (err) {
-            console.error("Notification Error:", err);
-            alert("發生錯誤，請查看 Console。");
+            console.error("Token Error:", err);
+            alert(`發生錯誤: ${err}`);
         }
     };
 
