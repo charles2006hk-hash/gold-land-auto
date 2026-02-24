@@ -1734,7 +1734,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 if (imageType) {
                     hasImage = true;
                     const blob = await item.getType(imageType);
-                    const file = new File([blob], `pasted_${Date.now()}.png`, { type: imageType });
+                    const file = new window.File([blob], `pasted_${Date.now()}.png`, { type: imageType });
                     
                     // 復用壓縮邏輯
                     const compressedBase64 = await compressImage(file, 130);
