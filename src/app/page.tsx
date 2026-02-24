@@ -35,6 +35,7 @@ import {
   uploadBytes,      // 新增：處理 Blob/File 上傳
   getDownloadURL    // 新增：獲取下載連結
 } from "firebase/storage";
+import { getMessaging, getToken } from "firebase/messaging";
 
 // ------------------------------------------------------------------
 // ★★★ Firebase 設定 (已鎖定) ★★★
@@ -3074,13 +3075,32 @@ const SettingsManager = ({
             alert("您的瀏覽器不支援通知功能");
             return;
         }
-        const permission = await Notification.requestPermission();
-        setPermissionStatus(permission);
-        if (permission === 'granted') {
-            alert("✅ 已授權！您現在可以接收通知。");
-            // 注意：實際部署時，這裡需要獲取 FCM Token 並存入資料庫
-        } else {
-            alert("❌ 授權失敗或被拒絕。請在瀏覽器設定中開啟。");
+
+        try {
+            const permission = await Notification.requestPermission();
+            setPermissionStatus(permission);
+
+            if (permission === 'granted') {
+                // ★★★ 新增：獲取 FCM Token ★★★
+                const messaging = getMessaging(app); // 確保 app 是初始化的 Firebase App
+                const token = await getToken(messaging, { 
+                    vapidKey: settings.pushConfig?.vapidKey // 使用您設定中的 Key
+                });
+
+                if (token) {
+                    console.log("您的 iPhone Token:", token);
+                    alert("✅ 授權成功！\nToken 已複製到 Console (或請截圖): \n" + token.slice(0, 20) + "...");
+                    // 建議：將此 Token 暫時顯示在畫面上，方便您複製來測試
+                    prompt("請複製此 Token 去 Firebase Console 測試:", token);
+                } else {
+                    alert("無法獲取 Token，請檢查權限或網絡。");
+                }
+            } else {
+                alert("❌ 授權失敗或被拒絕。請在瀏覽器設定中開啟。");
+            }
+        } catch (err) {
+            console.error("Notification Error:", err);
+            alert("發生錯誤，請查看 Console。");
         }
     };
 
