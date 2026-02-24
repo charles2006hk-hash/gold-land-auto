@@ -5902,9 +5902,7 @@ const CreateDocModule = ({
     const [showTerms, setShowTerms] = useState(true);
 
     // 放在 CreateDocModule 組件外部或內部皆可
-    const DEFAULT_REMARKS = `匯豐銀行香港賬戶：747-057347-838
-    賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO
-    「轉數快」識別碼 6134530`;
+    const DEFAULT_REMARKS = "匯豐銀行香港賬戶：747-057347-838\n賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO\n「轉數快」識別碼 6134530";
 
     // ★★★ 新增：自動打開來自外部的單據請求 ★★★
     useEffect(() => {
