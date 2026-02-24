@@ -5922,7 +5922,9 @@ const CreateDocModule = ({
             setViewMode('edit');
             
             // 處理完畢，清空請求
-            setExternalRequest(null);
+            if (setExternalRequest) {
+                setExternalRequest(null);
+            }
         }
     }, [externalRequest]);
 
