@@ -5858,7 +5858,8 @@ const DocumentTemplate = () => {
 const CreateDocModule = ({ 
     inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest 
 }: { 
-    inventory: Vehicle[], openPrintPreview: (type: DocType, data: any) => void, db: any, staffId: string, appId: string 
+    inventory: Vehicle[], openPrintPreview: (type: DocType, data: any) => void, db: any, staffId: string, appId: string, externalRequest?: any,
+    setExternalRequest?: (req: any) => void 
 }) => {
     // 視圖模式
     const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
