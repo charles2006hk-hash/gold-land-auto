@@ -4376,95 +4376,50 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
     };
 
     try {
-        // 1. 儲存資料庫 (原始邏輯)
         if (editingVehicle && editingVehicle.id) {
             await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
-            addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`);
+            addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`); // ★ 加入日誌
             alert('車輛資料已更新');
         } else {
             await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
-                ...vData,
-                createdAt: serverTimestamp(),
-                expenses: [],
-                payments: []
+            ...vData,
+            createdAt: serverTimestamp(),
+            expenses: [],
+            payments: []
             });
-            addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
+            addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`); // ★ 加入日誌
             alert('新車輛已入庫');
         }
 
-        // 2. 資料連動邏輯 (原始邏輯 - 保持不變)
-        if (vData.customerName) {
-            await syncToDatabase({
-                name: vData.customerName,
-                phone: vData.customerPhone
-            }, '客戶');
-        }
+      // ★★★ 資料連動邏輯：自動建立客戶與司機檔案 ★★★
+      
+      // 1. 同步客戶資料
+      if (vData.customerName) {
+          await syncToDatabase({
+              name: vData.customerName,
+              phone: vData.customerPhone
+          }, '客戶');
+      }
 
-        if (crossBorderData.isEnabled) {
-            if (crossBorderData.driver1) await syncToDatabase({ name: crossBorderData.driver1, plate: crossBorderData.mainlandPlate, quota: crossBorderData.quotaNumber }, '司機');
-            if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
-            if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 }, '司機');
-        }
+      // 2. 同步司機資料
+      if (crossBorderData.isEnabled) {
+          if (crossBorderData.driver1) {
+              await syncToDatabase({
+                  name: crossBorderData.driver1,
+                  plate: crossBorderData.mainlandPlate,
+                  quota: crossBorderData.quotaNumber
+              }, '司機');
+          }
+          if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
+          if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 }, '司機');
+      }
 
-        // ============================================================
-        // ★★★ 新增：智能推送觸發邏輯 (配合 settings 設定開關) ★★★
-        // ============================================================
-        const pushConfig = settings.pushConfig; // 從 settings 讀取設定
-
-        // 1. 檢查總開關是否開啟
-        if (pushConfig && pushConfig.isEnabled) {
-            
-            let pushTitle = "";
-            let pushBody = "";
-            let shouldSend = false;
-
-            // 情況 A：新車入庫 (New Car) -> 當 editingVehicle 為空或沒有 ID 時
-            if (!editingVehicle || !editingVehicle.id) {
-                if (pushConfig.events?.newCar) { // 檢查設定頁面的「新車通知」勾選框
-                    shouldSend = true;
-                    pushTitle = "🚗 新車入庫通知";
-                    pushBody = `${vData.year} ${vData.make} ${vData.model} (${vData.regMark}) 已上架！`;
-                }
-            } 
-            // 情況 B：車輛售出 (Sold) -> 當狀態變成 Sold，且原本狀態不是 Sold 時
-            else if (vData.status === 'Sold' && editingVehicle.status !== 'Sold') {
-                if (pushConfig.events?.sold) { // 檢查設定頁面的「售出通知」勾選框
-                    shouldSend = true;
-                    pushTitle = "💰 恭喜！車輛已售出";
-                    pushBody = `${vData.regMark} 已成功售出，請團隊跟進文件。`;
-                }
-            }
-
-            // 2. 發送請求 (如果符合條件)
-            if (shouldSend && pushTitle) {
-                // 使用非同步呼叫 (不等待結果，避免卡住界面)
-                fetch('/api/send-push', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: pushTitle,
-                        body: pushBody
-                    })
-                }).then(() => {
-                    console.log(`[Push] Notification sent: ${pushTitle}`);
-                }).catch(err => {
-                    console.error("[Push] Trigger Error:", err);
-                });
-            }
-        }
-        // ============================================================
-        // ★★★ 新增結束 ★★★
-        // ============================================================
-
-        setEditingVehicle(null);
-        if (activeTab === 'inventory_add') {
-            setActiveTab('inventory');
-        }
-    } catch (e) { 
-        alert('儲存失敗'); 
-        console.error(e); 
-    }
-};
+      setEditingVehicle(null);
+      if (activeTab === 'inventory_add') {
+          setActiveTab('inventory');
+      }
+    } catch (e) { alert('儲存失敗'); console.error(e); }
+  };
 
 const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
@@ -7411,5 +7366,4 @@ const CreateDocModule = ({
       </main>
     </div>
   );
-}
 }
