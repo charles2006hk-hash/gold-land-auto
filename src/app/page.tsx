@@ -1136,13 +1136,15 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         return () => unsub();
     }, [staffId, db, appId, currentUser]); // 加入 currentUser 依賴
 
-    // PDF 與圖片上傳 (保持不變)
+    // ★★★ 修改：支援 15MB 上傳 + 智能壓縮至 200KB ★★★
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
           const files = e.target.files;
           if (!files || files.length === 0) return;
           const file = files[0];
+
+          // 1. PDF 處理邏輯 (保持不變)
           if (file.type === 'application/pdf') {
-              if (file.size > 10 * 1024 * 1024) { alert("PDF 檔案過大 (限制 10MB)"); return; }
+              if (file.size > 15 * 1024 * 1024) { alert("PDF 檔案過大 (限制 15MB)"); return; } // 也順便放寬 PDF 限制
               try {
                   const pdfjsLib = await import('pdfjs-dist');
                   (pdfjsLib as any).GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/build/pdf.worker.min.mjs`;
@@ -1160,6 +1162,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                       canvas.height = viewport.height; canvas.width = viewport.width;
                       if (context) {
                           await page.render({ canvasContext: context, viewport: viewport } as any).promise;
+                          // PDF 轉圖片維持較高清晰度 (0.8)
                           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                           newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: dataUrl });
                       }
@@ -1167,28 +1170,29 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                   setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, ...newAttachments] } : null);
                   alert(`成功匯入 PDF 前 ${numPages} 頁！`);
               } catch (err: any) { console.error("PDF 解析錯誤:", err); alert(`PDF 解析失敗: ${err.message}`); }
-              e.target.value = ''; return;
+              e.target.value = ''; 
+              return;
           }
-          if (file.size > 5 * 1024 * 1024) { alert(`檔案過大`); return; }
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = (event) => {
-              const img = new Image();
-              img.src = event.target?.result as string;
-              img.onload = () => {
-                  const canvas = document.createElement('canvas');
-                  let width = img.width; let height = img.height;
-                  const MAX_DIMENSION = 1024;
-                  if (width > height) { if (width > MAX_DIMENSION) { height *= MAX_DIMENSION / width; width = MAX_DIMENSION; } } 
-                  else { if (height > MAX_DIMENSION) { width *= MAX_DIMENSION / height; height = MAX_DIMENSION; } }
-                  canvas.width = width; canvas.height = height;
-                  const ctx = canvas.getContext('2d');
-                  if (!ctx) return;
-                  ctx.drawImage(img, 0, 0, width, height);
-                  const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                  setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: file.name, data: dataUrl }] } : null);
-              };
-          };
+
+          // 2. 圖片處理邏輯 (修改重點)
+          // 限制放寬到 15MB
+          if (file.size > 15 * 1024 * 1024) { alert(`檔案過大 (限制 15MB)`); return; }
+          
+          try {
+              // ★ 使用 compressImage 工具，目標設定為 200KB (此數值可微調) ★
+              // 這會自動調整解析度與品質，直到檔案大小接近 200KB，比原本的固定尺寸更清晰
+              const compressedBase64 = await compressImage(file, 200);
+              
+              setEditingEntry(prev => prev ? { 
+                  ...prev, 
+                  attachments: [...prev.attachments, { name: file.name, data: compressedBase64 }] 
+              } : null);
+
+          } catch (error) {
+              console.error("Compression error:", error);
+              alert("圖片處理失敗，請重試");
+          }
+          
           e.target.value = '';
     };
 
