@@ -17,12 +17,11 @@ export async function POST(req: Request) {
     const base64Data = image.includes('base64,') ? image.split(',')[1] : image;
 
     // =================================================================================
-    // 1. 根據 docType 切換 Prompt (保持您需要的四證八面邏輯)
+    // 1. 根據 docType 切換 Prompt
     // =================================================================================
     let prompt = "";
 
     if (docType === '四證八面') {
-        // --- A. 針對「四證八面」的專屬指令 ---
         prompt = `
           你是一個專業的證件識別系統。這張圖片可能包含以下一種或多種證件：
           1. 香港永久性居民身份證 (HKID)
@@ -34,7 +33,6 @@ export async function POST(req: Request) {
           請直接回傳純 JSON 格式，不要有 Markdown 標記，若找不到該欄位請回傳空字串 ""。
 
           目標欄位與對應內容：
-          
           // 1. 香港身份證
           - hkid_name: 姓名 (英文或中文，優先取英文)
           - hkid_code: 電碼/符號 (例如 ***AZ)
@@ -56,26 +54,25 @@ export async function POST(req: Request) {
           - cndl_num: 證號
           - cndl_address: 住址
           - cndl_firstIssue: 初次領證日期
-          - cndl_validPeriod: 有效期限 (請提取完整的起止日期，例如 "2025-05-19 至 2031-05-19")
-          - cndl_issueLoc: 簽發地 (通常在紅色印章上，例如 "廣東省深圳市...")
-          - cndl_fileNum: 檔案編號 (位於駕駛證副頁，例如 4403100...)
+          - cndl_validPeriod: 有效期限 (請提取完整的起止日期)
+          - cndl_issueLoc: 簽發地 (通常在紅色印章上)
+          - cndl_fileNum: 檔案編號 (位於駕駛證副頁)
           
           - name: 為了系統兼容，請將識別到的任一主要姓名填入此欄
         `;
     } else {
-        // --- B. 原有的 VRD 抓取邏輯 ---
         prompt = `
           你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
           請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
           如果找不到該欄位，請回傳空字串 ""。
           
           特別注意：
-          1. 對於牌薄 (VRD) 的車主名稱，通常會有中文和英文兩行 (例如第一行: 陳大文, 第二行: CHAN TAI MAN)。
+          1. 對於牌薄 (VRD) 的車主名稱，通常會有中文和英文兩行。
           2. 請務必將這兩行合併為單一字串回傳 (例如: "陳大文 CHAN TAI MAN")。
           
           目標欄位：
           - name: 標題名稱 (如果是牌薄 VRD，請抓取 Registered Owner，務必合併中文與英文姓名)
-          - registeredOwnerName: 登記車主名稱 (同上，請合併顯示，例如 "陳大文 CHAN TAI MAN")
+          - registeredOwnerName: 登記車主名稱
           - idNumber: 身份證號 / 商業登記號 / 車牌號
           - registeredOwnerId: 登記車主身份證號
           - phone: 電話號碼
@@ -85,13 +82,13 @@ export async function POST(req: Request) {
           - plateNoHK: 香港車牌
           - chassisNo: 底盤號碼
           - engineNo: 引擎號碼
-          - prevOwners: 前任車主數目 (純數字，例如 0, 1)
+          - prevOwners: 前任車主數目 (純數字)
           - priceA1: 首次登記稅值 (純數字)
           - priceTax: 已繳付登記稅 (純數字)
           - make: 廠名
           - model: 型號
           - manufactureYear: 出廠年份
-          - vehicleColor: 車身顏色 (例如: BLACK, WHITE)
+          - vehicleColor: 車身顏色
           - firstRegCondition: 首次登記狀況
           - engineSize: 汽缸容量 (純數字)
           - description: 其他重要備註摘要
@@ -99,11 +96,10 @@ export async function POST(req: Request) {
     }
 
     // =================================================================================
-    // 2. 發送請求 (切換回 1.5-flash)
+    // 2. 智能偵錯版 API 呼叫 (遇到 404 會自動列出可用模型)
     // =================================================================================
-    
-    // ★★★ 使用付費層級最穩定的 1.5-pro 模型 ★★★
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const defaultModel = 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${defaultModel}:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
       method: 'POST',
@@ -120,15 +116,32 @@ export async function POST(req: Request) {
 
     const data = await response.json();
 
+    // ★★★ 智能偵錯核心邏輯 ★★★
+    if (data.error && data.error.code === 404) {
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const listRes = await fetch(listUrl);
+        const listData = await listRes.json();
+        
+        let availableModels = "無法取得模型列表，請檢查 API Key 是否正確啟用 Generative Language API";
+        if (listData.models) {
+            // 過濾出支援生成內容且支援圖片的模型
+            availableModels = listData.models
+                .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent') && !m.name.includes('vision'))
+                .map((m: any) => m.name.replace('models/', ''))
+                .join(', ');
+        }
+        
+        throw new Error(`\n⚠️ 找不到模型。您這把金鑰實際支援的模型有：\n[ ${availableModels} ]\n請告訴我名單，我幫您選最適合的！`);
+    }
+
     if (data.error) {
-        console.error("Google API Error:", JSON.stringify(data.error, null, 2));
         throw new Error(`Google API Error: ${data.error.message}`);
     }
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("AI 沒有回傳任何文字結果");
     
-    const cleanJson = text.replace(/```json|```/g, '').trim();
+    const cleanJson = text.replace(/\`\`\`json|\`\`\`/g, '').trim();
     const parsedData = JSON.parse(cleanJson);
 
     return NextResponse.json({ success: true, data: parsedData });
