@@ -1414,7 +1414,13 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
                         <div className="flex gap-2">
                             <button onClick={scanForDuplicates} className="bg-amber-100 text-amber-700 p-2 rounded-full hover:bg-amber-200" title="檢查重複"><RefreshCw size={18}/></button>
-                            <button onClick={(e) => { e.preventDefault(); setEditingEntry({ id: '', category: 'Person', name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); setIsDbEditing(true); }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
+                            <button onClick={(e) => { 
+                                e.preventDefault(); 
+                                // ★ 自動抓取 Person 類別的第一個文件類型作為預設值
+                                const defaultDoc = settings.dbDocTypes?.['Person']?.[0] || '';
+                                setEditingEntry({ id: '', category: 'Person', docType: defaultDoc, name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); 
+                                setIsDbEditing(true); 
+                            }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
                         </div>
                     </div>
                     <div className="space-y-2">
@@ -1507,7 +1513,22 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
                                     <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
                                         <label className="block text-xs font-bold text-blue-800 mb-2">資料類別</label>
-                                        <div className="flex gap-2">{DB_CATEGORIES.map(cat => (<button key={cat.id} type="button" onClick={() => setEditingEntry({...editingEntry, category: cat.id as any, docType: ''})} className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}>{cat.label}</button>))}</div>
+                                        <div className="flex gap-2">
+                                            {DB_CATEGORIES.map(cat => (
+                                                <button 
+                                                    key={cat.id} 
+                                                    type="button" 
+                                                    onClick={() => {
+                                                        // ★ 自動抓取切換後該類別的第一個文件類型作為預設值
+                                                        const newDefaultDoc = settings.dbDocTypes?.[cat.id]?.[0] || '';
+                                                        setEditingEntry({...editingEntry, category: cat.id as any, docType: newDefaultDoc});
+                                                    }} 
+                                                    className={`px-3 py-1.5 text-sm rounded-md border transition-all ${editingEntry.category === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 hover:bg-blue-100'}`}
+                                                >
+                                                    {cat.label}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             )}
