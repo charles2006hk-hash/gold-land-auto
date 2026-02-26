@@ -102,7 +102,8 @@ export async function POST(req: Request) {
     // 2. 發送請求 (切換回 1.5-flash)
     // =================================================================================
     
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key=${apiKey}`;
+    // ★★★ 使用付費層級最穩定的 1.5-pro 模型 ★★★
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
       method: 'POST',
