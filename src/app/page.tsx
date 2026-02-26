@@ -1134,6 +1134,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 
                 list.push({ 
                     id: doc.id, 
+                    ...data,
                     category: data.category || 'Person', 
                     name: data.name || data.title || '',
                     phone: data.phone || '', 
