@@ -1305,6 +1305,30 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             
             // ★ 新增/編輯時，確保負責人欄位正確 (若為空則預設為當前員工)
             managedBy: editingEntry.managedBy || staffId, 
+
+            // ==========================================
+            // ★★★ 把四證八面的代碼貼在這裡！ ★★★
+            // ==========================================
+            hkid_name: editingEntry.hkid_name || '',
+            hkid_code: editingEntry.hkid_code || '',
+            hkid_dob: editingEntry.hkid_dob || '',
+            hkid_issueDate: editingEntry.hkid_issueDate || '',
+            
+            hrp_nameCN: editingEntry.hrp_nameCN || '',
+            hrp_expiry: editingEntry.hrp_expiry || '',
+            hrp_num: editingEntry.hrp_num || '',
+            
+            hkdl_num: editingEntry.hkdl_num || '',
+            hkdl_validTo: editingEntry.hkdl_validTo || '',
+            hkdl_ref: editingEntry.hkdl_ref || '',
+            
+            cndl_num: editingEntry.cndl_num || '',
+            cndl_address: editingEntry.cndl_address || '',
+            cndl_firstIssue: editingEntry.cndl_firstIssue || '',
+            cndl_validPeriod: editingEntry.cndl_validPeriod || '',
+            cndl_issueLoc: editingEntry.cndl_issueLoc || '',
+            cndl_fileNum: editingEntry.cndl_fileNum || ''
+            // ==========================================
         };
 
         try {
