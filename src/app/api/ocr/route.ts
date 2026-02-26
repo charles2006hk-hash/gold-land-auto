@@ -22,8 +22,9 @@ export async function POST(req: Request) {
     let prompt = "";
 
     if (docType === '四證八面') {
+        // --- A. 針對「四證八面」的專屬指令 (已優化格式與日期) ---
         prompt = `
-          你是一個專業的證件識別系統。這張圖片可能包含以下一種或多種證件：
+          你是一個專業的證件識別系統。這張圖片包含以下四種證件：
           1. 香港永久性居民身份證 (HKID)
           2. 港澳居民來往內地通行證 (回鄉證 / Home Return Permit)
           3. 香港駕駛執照 (HK Driving Licence)
@@ -32,33 +33,40 @@ export async function POST(req: Request) {
           請盡可能識別圖片中的資訊，並提取以下欄位。
           請直接回傳純 JSON 格式，不要有 Markdown 標記，若找不到該欄位請回傳空字串 ""。
 
+          【★★★ 重要日期格式規定 ★★★】
+          所有日期欄位 (出生日期、簽發日、到期日等) 必須強制轉換為 "YYYY-MM-DD" 格式。
+          例如：圖片上是 "22-04-1993" 或 "22/04/1993"，請轉換為 "1993-04-22"。
+          圖片上如果是 "27-07-22" (2022年)，請轉換為 "2022-07-27"。
+          回鄉證期限如為 "2023.01.26-2033.01.25"，到期日請填 "2033-01-25"。
+
           目標欄位與對應內容：
+          
           // 1. 香港身份證
-          - hkid_name: 姓名 (英文或中文，優先取英文)
-          - hkid_code: 電碼/符號 (例如 ***AZ)
-          - hkid_dob: 出生日期
-          - hkid_issueDate: 簽發日期 (例如 22-07-22)
-          - idNumber: 身份證號碼 (例如 A123456(7))
+          - hkid_name: 姓名 (必須同時包含中文與英文，例如 "葉葳劼 YIP, Wai Kit")
+          - hkid_code: 中文姓名電碼 (即中文名字下方的幾組數字，例如 "5509 5524 0512"。絕對不要抓取 ***AZ 等符號)
+          - hkid_dob: 出生日期 (格式 YYYY-MM-DD)
+          - hkid_issueDate: 簽發日期 (格式 YYYY-MM-DD，通常在括號下方)
+          - idNumber: 身份證號碼 (例如 Y311858(2))
 
           // 2. 回鄉證
-          - hrp_nameCN: 姓名 (簡體中文)
-          - hrp_expiry: 有效期限 (例如 2033.01.25)
+          - hrp_nameCN: 姓名 (簡體中文，例如 "叶葳劼")
+          - hrp_expiry: 有效期限/到期日 (格式 YYYY-MM-DD，提取期限的最後一天)
           - hrp_num: 證件號碼 (例如 H03256342)
 
           // 3. 香港駕照
           - hkdl_num: 執照號碼 (通常同身份證)
-          - hkdl_validTo: 有效期至 (例如 17/07/2034)
+          - hkdl_validTo: 有效期至 (格式 YYYY-MM-DD)
           - hkdl_ref: 檔號 (Ref No., 例如 A68-0106...)
 
           // 4. 中國駕照 (含正頁與副頁)
           - cndl_num: 證號
           - cndl_address: 住址
-          - cndl_firstIssue: 初次領證日期
-          - cndl_validPeriod: 有效期限 (請提取完整的起止日期)
+          - cndl_firstIssue: 初次領證日期 (格式 YYYY-MM-DD)
+          - cndl_validPeriod: 有效期限 (保留文字描述，例如 "2025-05-19 至 2031-05-19")
           - cndl_issueLoc: 簽發地 (通常在紅色印章上)
-          - cndl_fileNum: 檔案編號 (位於駕駛證副頁)
+          - cndl_fileNum: 檔案編號 (位於駕駛證副頁，例如 440310071350)
           
-          - name: 為了系統兼容，請將識別到的任一主要姓名填入此欄
+          - name: 為了系統兼容，請將識別到的主要姓名填入此欄 (例如 "葉葳劼")
         `;
     } else {
         prompt = `
