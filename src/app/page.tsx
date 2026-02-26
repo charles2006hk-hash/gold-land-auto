@@ -1059,6 +1059,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
                     return {
                         ...prev,
+                        // --- 原有通用與 VRD 欄位 ---
                         name: data.name || prev.name,
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
@@ -1079,10 +1080,35 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         priceA1: data.priceA1 ? Number(data.priceA1) : prev.priceA1,
                         priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
                         prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : prev.prevOwners,
+                        
+                        // ==========================================================
+                        // ★★★ 新增：四證八面資料接收映射 ★★★
+                        // ==========================================================
+                        hkid_name: data.hkid_name || prev.hkid_name,
+                        hkid_code: data.hkid_code || prev.hkid_code,
+                        hkid_dob: data.hkid_dob || prev.hkid_dob,
+                        hkid_issueDate: data.hkid_issueDate || prev.hkid_issueDate,
+                        
+                        hrp_nameCN: data.hrp_nameCN || prev.hrp_nameCN,
+                        hrp_expiry: data.hrp_expiry || prev.hrp_expiry,
+                        hrp_num: data.hrp_num || prev.hrp_num,
+                        
+                        hkdl_num: data.hkdl_num || prev.hkdl_num,
+                        hkdl_validTo: data.hkdl_validTo || prev.hkdl_validTo,
+                        hkdl_ref: data.hkdl_ref || prev.hkdl_ref,
+                        
+                        cndl_num: data.cndl_num || prev.cndl_num,
+                        cndl_address: data.cndl_address || prev.cndl_address,
+                        cndl_firstIssue: data.cndl_firstIssue || prev.cndl_firstIssue,
+                        cndl_validPeriod: data.cndl_validPeriod || prev.cndl_validPeriod,
+                        cndl_issueLoc: data.cndl_issueLoc || prev.cndl_issueLoc,
+                        cndl_fileNum: data.cndl_fileNum || prev.cndl_fileNum,
+                        // ==========================================================
+
                         description: prev.description + (data.description ? `\n[AI]: ${data.description}` : '')
                     };
                 });
-                alert("AI 識別成功！顏色、車主與首數已自動填入。");
+                alert("AI 識別成功！資料已自動填入。");
             }
         } catch (error: any) {
             console.error("AI Scan Error:", error);
