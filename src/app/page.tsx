@@ -1509,14 +1509,29 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                         </>
                                     )}
                                     
+                                    {/* --- 中港指標專屬區塊 (修正版) --- */}
                                     {editingEntry.category === 'CrossBorder' && (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
-                                            <div><label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>{isDbEditing ? (<select value={editingEntry.relatedPlateNo || ''} onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})} className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold"><option value="">-- 無關聯 --</option>{inventory.map(v => (<option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>))}</select>) : (<div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>)}</div>
-                                        </div>
-                                    
-                                    
-                                    {/* ★★★ 2. 新增：四證八面專屬輸入區 (只有選中該類型時顯示) ★★★ */}
+                                        <div className="space-y-4 mb-4">
+                                            {/* 1. 原有的通用欄位 (指標號/關聯車牌) */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">指標號 (Quota No)</label>
+                                                    <input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>
+                                                    {isDbEditing ? (
+                                                        <select value={editingEntry.relatedPlateNo || ''} onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})} className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold">
+                                                            <option value="">-- 無關聯 --</option>
+                                                            {inventory.map(v => (<option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>))}
+                                                        </select>
+                                                    ) : (
+                                                        <div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* 2. 四證八面專屬輸入區 (只有選中該類型時顯示) */}
                                             {editingEntry.docType === '四證八面' && (
                                                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4 animate-fade-in mt-2">
                                                     <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
