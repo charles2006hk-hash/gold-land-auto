@@ -158,7 +158,33 @@ type DatabaseEntry = {
     // 附件與標籤
     attachments: DatabaseAttachment[]; // 取代舊的 images string[]
     tags: string[]; // 用於多重分類搜尋
-    
+
+    // --- 四證八面專屬欄位 ---
+    // 1.1 香港身份證
+    hkid_name?: string;       // 姓名
+    hkid_code?: string;       // 電碼 (CCC)
+    hkid_dob?: string;        // 出生日期
+    hkid_issueDate?: string;  // 簽發日期
+    // hkid_num 使用原本的 idNumber 欄位即可
+
+    // 1.2 港澳居民通行證 (回鄉證)
+    hrp_nameCN?: string;      // 姓名 (簡體)
+    hrp_expiry?: string;      // 到期日
+    hrp_num?: string;         // 證件號碼
+
+    // 1.3 香港駕駛執照
+    hkdl_num?: string;        // 號碼 (通常同身份證)
+    hkdl_validTo?: string;    // 有效期至
+    hkdl_ref?: string;        // 檔號 (Ref No.)
+
+    // 1.4 中國機動車駕駛證
+    cndl_num?: string;        // 證號
+    cndl_address?: string;    // 住址
+    cndl_firstIssue?: string; // 初次領證日期
+    cndl_validPeriod?: string;// 有效期限 (例如: 2023-01-01 至 2029-01-01)
+    cndl_issueLoc?: string;   // 簽發地 (印章地區)
+    cndl_fileNum?: string;    // 檔案編號 (副頁)
+
     createdAt: any;
     updatedAt?: any;
     // ★★★ 新增：提醒與續期功能欄位 ★★★
@@ -1488,8 +1514,56 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">指標號</label><input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/></div>
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>{isDbEditing ? (<select value={editingEntry.relatedPlateNo || ''} onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})} className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold"><option value="">-- 無關聯 --</option>{inventory.map(v => (<option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>))}</select>) : (<div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>)}</div>
                                         </div>
-                                    )}
                                     
+                                    
+                                    {/* ★★★ 2. 新增：四證八面專屬輸入區 (只有選中該類型時顯示) ★★★ */}
+                                            {editingEntry.docType === '四證八面' && (
+                                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-4 animate-fade-in mt-2">
+                                                    <div className="flex items-center gap-2 border-b border-slate-200 pb-1">
+                                                        <span className="text-xs font-black text-slate-700 bg-yellow-200 px-2 rounded">1. 香港身份證</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                        <div><label className="text-[10px] text-gray-500">姓名 (Name)</label><input disabled={!isDbEditing} value={editingEntry.hkid_name || ''} onChange={e => setEditingEntry({...editingEntry, hkid_name: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">身份證號碼</label><input disabled={!isDbEditing} value={editingEntry.idNumber || ''} onChange={e => setEditingEntry({...editingEntry, idNumber: e.target.value})} className="w-full p-1.5 border rounded text-xs font-bold"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">電碼 (Code)</label><input disabled={!isDbEditing} value={editingEntry.hkid_code || ''} onChange={e => setEditingEntry({...editingEntry, hkid_code: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">出生日期</label><input type="date" disabled={!isDbEditing} value={editingEntry.hkid_dob || ''} onChange={e => setEditingEntry({...editingEntry, hkid_dob: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">簽發日期</label><input type="date" disabled={!isDbEditing} value={editingEntry.hkid_issueDate || ''} onChange={e => setEditingEntry({...editingEntry, hkid_issueDate: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 border-b border-slate-200 pb-1 pt-2">
+                                                        <span className="text-xs font-black text-slate-700 bg-blue-200 px-2 rounded">2. 回鄉證 (港澳居民通行證)</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                        <div><label className="text-[10px] text-gray-500">姓名 (簡體)</label><input disabled={!isDbEditing} value={editingEntry.hrp_nameCN || ''} onChange={e => setEditingEntry({...editingEntry, hrp_nameCN: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">證件號碼</label><input disabled={!isDbEditing} value={editingEntry.hrp_num || ''} onChange={e => setEditingEntry({...editingEntry, hrp_num: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">有效期至</label><input type="date" disabled={!isDbEditing} value={editingEntry.hrp_expiry || ''} onChange={e => setEditingEntry({...editingEntry, hrp_expiry: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 border-b border-slate-200 pb-1 pt-2">
+                                                        <span className="text-xs font-black text-slate-700 bg-green-200 px-2 rounded">3. 香港駕駛執照</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                        <div><label className="text-[10px] text-gray-500">執照號碼</label><input disabled={!isDbEditing} value={editingEntry.hkdl_num || ''} onChange={e => setEditingEntry({...editingEntry, hkdl_num: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">有效期至</label><input type="date" disabled={!isDbEditing} value={editingEntry.hkdl_validTo || ''} onChange={e => setEditingEntry({...editingEntry, hkdl_validTo: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">檔號 (Ref No)</label><input disabled={!isDbEditing} value={editingEntry.hkdl_ref || ''} onChange={e => setEditingEntry({...editingEntry, hkdl_ref: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 border-b border-slate-200 pb-1 pt-2">
+                                                        <span className="text-xs font-black text-slate-700 bg-red-200 px-2 rounded">4. 中國機動車駕駛證</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div><label className="text-[10px] text-gray-500">證號</label><input disabled={!isDbEditing} value={editingEntry.cndl_num || ''} onChange={e => setEditingEntry({...editingEntry, cndl_num: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">檔案編號 (副頁)</label><input disabled={!isDbEditing} value={editingEntry.cndl_fileNum || ''} onChange={e => setEditingEntry({...editingEntry, cndl_fileNum: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
+                                                        <div className="col-span-2"><label className="text-[10px] text-gray-500">住址</label><input disabled={!isDbEditing} value={editingEntry.cndl_address || ''} onChange={e => setEditingEntry({...editingEntry, cndl_address: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">初次領證日期</label><input type="date" disabled={!isDbEditing} value={editingEntry.cndl_firstIssue || ''} onChange={e => setEditingEntry({...editingEntry, cndl_firstIssue: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div><label className="text-[10px] text-gray-500">簽發地 (印章)</label><input disabled={!isDbEditing} value={editingEntry.cndl_issueLoc || ''} onChange={e => setEditingEntry({...editingEntry, cndl_issueLoc: e.target.value})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                        <div className="col-span-2"><label className="text-[10px] text-gray-500">有效期限 (起止)</label><input disabled={!isDbEditing} value={editingEntry.cndl_validPeriod || ''} onChange={e => setEditingEntry({...editingEntry, cndl_validPeriod: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="例如: 2023-01-01 至 2029-01-01"/></div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
                                     <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                                         <div className="flex justify-between items-center mb-3">
@@ -3222,6 +3296,17 @@ const SettingsManager = ({
         }; 
         r.readAsText(f); 
     };
+// 1. 新增排序函數 (放在 SettingsManager 內部)
+    const moveDocType = (cat: string, idx: number, direction: 'up' | 'down') => {
+        const currentList = [...(settings.dbDocTypes[cat] || [])];
+        if (direction === 'up' && idx > 0) {
+            [currentList[idx - 1], currentList[idx]] = [currentList[idx], currentList[idx - 1]];
+        } else if (direction === 'down' && idx < currentList.length - 1) {
+            [currentList[idx + 1], currentList[idx]] = [currentList[idx], currentList[idx + 1]];
+        }
+        updateSettings('dbDocTypes', { ...settings.dbDocTypes, [cat]: currentList });
+    };
+
 
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -3574,9 +3659,12 @@ const SettingsManager = ({
                     </div>
                 )}
 
+            
+
                 {activeTab === 'database_config' && (
                     <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <h3 className="font-bold text-slate-700 mb-4">資料庫文件分類</h3>
+
                         <div className="bg-blue-50 p-4 rounded-lg mb-4 flex gap-2">
                             {['Person', 'Company', 'Vehicle', 'CrossBorder'].map(cat => (
                                 <button key={cat} onClick={() => setSelectedDbCat(cat)} className={`px-4 py-2 rounded-lg text-sm font-bold border ${selectedDbCat === cat ? 'bg-blue-600 text-white' : 'bg-white'}`}>{cat}</button>
@@ -3598,6 +3686,29 @@ const SettingsManager = ({
                                     const newList = current.filter((_:any, i:number) => i !== idx);
                                     updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList });
                                 }}/></span>
+                            ))}
+                        </div>
+
+                        <div className="space-y-2">
+                            <p className="text-xs text-gray-400 mb-2">* 列表第一個項目將作為該分類的預設值</p>
+                            {(settings.dbDocTypes?.[selectedDbCat] || []).map((type:string, idx:number) => (
+                                <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-100">
+                                    <div className="flex items-center">
+                                        <span className="bg-slate-200 text-slate-600 text-[10px] w-5 h-5 flex items-center justify-center rounded-full mr-3 font-bold">{idx + 1}</span>
+                                        <span className="text-sm font-medium text-slate-700">{type}</span>
+                                        {idx === 0 && <span className="ml-2 text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">預設</span>}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => moveDocType(selectedDbCat, idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronUp size={16}/></button>
+                                        <button onClick={() => moveDocType(selectedDbCat, idx, 'down')} disabled={idx === (settings.dbDocTypes[selectedDbCat]?.length || 0) - 1} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronDown size={16}/></button>
+                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                        <button onClick={() => {
+                                            const current = settings.dbDocTypes[selectedDbCat] || [];
+                                            const newList = current.filter((_:any, i:number) => i !== idx);
+                                            updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList });
+                                        }} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     </div>
