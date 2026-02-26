@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const base64Data = image.includes('base64,') ? image.split(',')[1] : image;
 
     // =================================================================================
-    // ★★★ 修改重點：根據 docType 切換 Prompt (提示詞) ★★★
+    // 1. 根據 docType 切換 Prompt (保持您需要的四證八面邏輯)
     // =================================================================================
     let prompt = "";
 
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
           - name: 為了系統兼容，請將識別到的任一主要姓名填入此欄
         `;
     } else {
-        // --- B. 原有的 VRD 抓取邏輯 (完全保留不變) ---
+        // --- B. 原有的 VRD 抓取邏輯 ---
         prompt = `
           你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
           請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
@@ -99,11 +99,11 @@ export async function POST(req: Request) {
     }
 
     // =================================================================================
-
-    // ★★★ 修正：使用您列表中存在的 gemini-2.5-flash ★★★
-    // 注意：gemini-2.5-flash 尚未正式發布到穩定版 URL，如果報錯 404，請改回 gemini-1.5-flash
-    // 這裡我們暫時保留您原始代碼的寫法
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`; // 建議改用 2.0-flash 或 1.5-flash 比較穩定
+    // 2. 發送請求 (切換回 1.5-flash)
+    // =================================================================================
+    
+    // ★★★ 關鍵修改：使用 gemini-1.5-flash ★★★
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
       method: 'POST',
