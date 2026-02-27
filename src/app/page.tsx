@@ -20,7 +20,8 @@ import { compressImage } from '@/utils/imageHelpers';
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { 
   getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, 
-  initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth 
+  initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword 
 } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { 
@@ -703,30 +704,73 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
     setError('');
     setIsLoading(true);
 
-    // 模擬網路延遲
-    await new Promise(r => setTimeout(r, 500));
-
     const inputId = userId.trim();
 
-    // 1. 超級管理員後門 (緊急用，不分大小寫)
+    // 1. 超級管理員後門 (緊急用，維持不變)
     if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
-        const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'] };
+        const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all' };
         handleSuccess(adminUser);
+        setIsLoading(false);
         return;
     }
 
-    // 2. 驗證用戶 (★ 關鍵修正：大小寫不敏感比對 ★)
-    // 這樣無論輸入 "Charles" 還是 "charles"，只要密碼對，都能找到資料庫裡那個正確的 user 物件
-    // 注意：systemUsers 是從主程式傳進來的，裡面是資料庫的正確名單
-    const validUser = systemUsers.find(u => 
-        u.email.toLowerCase() === inputId.toLowerCase() && 
-        u.password === password
-    );
-    
-    if (validUser) {
-        handleSuccess(validUser);
-    } else {
-        setError('帳號或密碼錯誤 (Invalid Credentials)');
+    try {
+        if (!auth) throw new Error("系統連線尚未準備好，請稍後再試");
+
+        // 2. 先去您的舊資料庫(systemUsers)找這個人，確保他有權限設定
+        const dbUserConfig = systemUsers.find(u => 
+            u.email.toLowerCase() === inputId.toLowerCase()
+        );
+
+        if (!dbUserConfig) {
+            throw new Error("帳號不存在於系統授權名單中");
+        }
+
+        // ========================================================
+        // ★★★ 3. 核心安全升級：啟動 Firebase 官方安全驗證 ★★★
+        // ========================================================
+        let userCredential;
+        try {
+            // 嘗試透過 Google Firebase Auth 登入 (這不會在前端暴露密碼)
+            userCredential = await signInWithEmailAndPassword(auth, dbUserConfig.email, password);
+        } catch (loginError: any) {
+            
+            // 【無痛遷移機制】
+            // 如果是舊員工第一次用新系統，Firebase Auth 裡面還沒有他，
+            // 但他輸入的密碼跟您資料庫裡的舊密碼一致，我們就自動幫他建立加密帳號！
+            if (dbUserConfig.password === password) {
+                try {
+                    userCredential = await createUserWithEmailAndPassword(auth, dbUserConfig.email, password);
+                    console.log("舊用戶升級加密帳號成功！");
+                } catch (regError: any) {
+                    if (regError.code === 'auth/email-already-in-use') {
+                        throw new Error('密碼錯誤 (Invalid Password)');
+                    }
+                    throw regError;
+                }
+            } else {
+                throw new Error('密碼錯誤 (Invalid Password)');
+            }
+        }
+
+        // ========================================================
+        // ★★★ 4. 完美保留人員權限：合併官方帳號與您的設定 ★★★
+        // ========================================================
+        const finalUser = {
+            email: userCredential.user.email || inputId,
+            modules: dbUserConfig.modules || [],         // ★ 完全保留模組權限
+            dataAccess: dbUserConfig.dataAccess || 'all',// ★ 完全保留資料視角
+            defaultTab: dbUserConfig.defaultTab || 'dashboard'
+        };
+
+        handleSuccess(finalUser);
+
+    } catch (err: any) {
+        console.error(err);
+        // 隱藏具體錯誤代碼，給出統一提示，防範駭客猜測
+        const msg = err.message || '登入失敗，請檢查帳號密碼';
+        setError(msg.includes('auth/') ? '帳號或密碼錯誤 (Invalid Credentials)' : msg);
+    } finally {
         setIsLoading(false);
     }
   };
