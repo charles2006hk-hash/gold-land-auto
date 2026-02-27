@@ -705,71 +705,80 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
     setIsLoading(true);
 
     const inputId = userId.trim();
+    // ★ 魔術轉換：自動為沒有 @ 的帳號加上內部網域，滿足 Google 格式要求
+    const authEmail = inputId.includes('@') ? inputId : `${inputId}@gla.local`;
 
-    // 1. 超級管理員後門 (緊急用，維持不變)
+    // 1. 超級管理員後門
     if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
-        const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all' };
+        const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all', defaultTab: 'dashboard' };
         handleSuccess(adminUser);
         setIsLoading(false);
         return;
     }
 
     try {
-        if (!auth) throw new Error("系統連線尚未準備好，請稍後再試");
+        if (!auth) throw new Error("系統連線尚未準備好");
 
-        // 2. 先去您的舊資料庫(systemUsers)找這個人，確保他有權限設定
-        const dbUserConfig = systemUsers.find(u => 
-            u.email.toLowerCase() === inputId.toLowerCase()
-        );
-
-        if (!dbUserConfig) {
-            throw new Error("帳號不存在於系統授權名單中");
-        }
-
-        // ========================================================
-        // ★★★ 3. 核心安全升級：啟動 Firebase 官方安全驗證 ★★★
-        // ========================================================
         let userCredential;
         try {
-            // 嘗試透過 Google Firebase Auth 登入 (這不會在前端暴露密碼)
-            userCredential = await signInWithEmailAndPassword(auth, dbUserConfig.email, password);
-        } catch (loginError: any) {
+            // 2. 嘗試用正規 Firebase 方式登入
+            userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
+        } catch (loginErr: any) {
             
-            // 【無痛遷移機制】
-            // 如果是舊員工第一次用新系統，Firebase Auth 裡面還沒有他，
-            // 但他輸入的密碼跟您資料庫裡的舊密碼一致，我們就自動幫他建立加密帳號！
-            if (dbUserConfig.password === password) {
-                try {
-                    userCredential = await createUserWithEmailAndPassword(auth, dbUserConfig.email, password);
-                    console.log("舊用戶升級加密帳號成功！");
-                } catch (regError: any) {
-                    if (regError.code === 'auth/email-already-in-use') {
-                        throw new Error('密碼錯誤 (Invalid Password)');
+            // ★ 3. 核心修復：如果帳號不存在 (代表是剛在後台新增的員工)
+            if (loginErr.code === 'auth/user-not-found' || loginErr.code === 'auth/invalid-credential' || loginErr.code === 'auth/invalid-email') {
+                
+                // 啟動訪客通行證 (匿名登入) 去資料庫查名單
+                await signInAnonymously(auth);
+                const db = getFirestore();
+                const docSnap = await getDoc(doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
+                
+                if (docSnap.exists()) {
+                    const usersList = docSnap.data().list || [];
+                    const dbUserConfig = usersList.find((u:any) => u.email.toLowerCase() === inputId.toLowerCase());
+                    
+                    // 如果名單裡有這個人，且密碼符合 BOSS 設定的初始密碼
+                    if (dbUserConfig && dbUserConfig.password === password) {
+                        // 系統自動幫他在 Google Auth 註冊實體帳號
+                        userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
+                        console.log("新用戶/舊用戶 同步至 Auth 成功！");
+                    } else {
+                        throw new Error("密碼錯誤或未經授權");
                     }
-                    throw regError;
+                } else {
+                    throw new Error("無法讀取權限名單");
                 }
             } else {
-                throw new Error('密碼錯誤 (Invalid Password)');
+                throw loginErr; // 其他未知的登入錯誤
             }
         }
 
-        // ========================================================
-        // ★★★ 4. 完美保留人員權限：合併官方帳號與您的設定 ★★★
-        // ========================================================
-        const finalUser = {
-            email: userCredential.user.email || inputId,
-            modules: dbUserConfig.modules || [],         // ★ 完全保留模組權限
-            dataAccess: dbUserConfig.dataAccess || 'all',// ★ 完全保留資料視角
-            defaultTab: dbUserConfig.defaultTab || 'dashboard'
-        };
+        // 4. 登入/註冊成功後，去資料庫拿他最新的權限
+        let finalUser = { email: inputId, modules: [], dataAccess: 'all', defaultTab: 'dashboard' };
+        try {
+            const db = getFirestore();
+            const docSnap = await getDoc(doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
+            if (docSnap.exists()) {
+                const usersList = docSnap.data().list || [];
+                const dbUserConfig = usersList.find((u:any) => u.email.toLowerCase() === inputId.toLowerCase());
+                if (dbUserConfig) {
+                    finalUser = {
+                        ...finalUser,
+                        modules: dbUserConfig.modules || [],
+                        dataAccess: dbUserConfig.dataAccess || 'all',
+                        defaultTab: dbUserConfig.defaultTab || 'dashboard'
+                    };
+                }
+            }
+        } catch (dbErr) {
+            console.warn("讀取權限失敗", dbErr);
+        }
 
         handleSuccess(finalUser);
 
     } catch (err: any) {
         console.error(err);
-        // 隱藏具體錯誤代碼，給出統一提示，防範駭客猜測
-        const msg = err.message || '登入失敗，請檢查帳號密碼';
-        setError(msg.includes('auth/') ? '帳號或密碼錯誤 (Invalid Credentials)' : msg);
+        setError('帳號或密碼錯誤 (Invalid Credentials)');
     } finally {
         setIsLoading(false);
     }
