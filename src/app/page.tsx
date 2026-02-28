@@ -7680,9 +7680,16 @@ const CreateDocModule = ({
 
                                           {/* 中排：圖片 + 資料 */}
                                           <div className="flex gap-3">
-                                              <div className="w-20 h-14 bg-white rounded-md overflow-hidden flex-shrink-0 border border-slate-200 p-0.5 flex items-center justify-center">
-                                                    {thumbUrl ? <img src={thumbUrl} className="w-full h-full object-contain" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>}
-                                              </div>
+                                              <div className="w-20 h-14 bg-slate-800 rounded-md overflow-hidden flex-shrink-0 border border-slate-200 flex items-center justify-center relative shadow-inner">
+                                                    {thumbUrl ? (
+                                                        <>
+                                                            <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-125" />
+                                                            <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-0.5 drop-shadow-md" />
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100"><Car size={16}/></div>
+                                                    )}
+                                                </div>
                                               <div className="flex-1 min-w-0">
                                                   {/* ★★★ 這裡補回了年份 car.year ★★★ */}
                                                   <div className="font-bold text-sm text-slate-700 truncate">
@@ -7756,13 +7763,16 @@ const CreateDocModule = ({
                                       
                                       <td className="p-3">
                                           <div className="flex items-center gap-3">
-                                              <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-white shadow-sm p-0.5 flex items-center justify-center">
-                                                {thumbUrl ? (
-                                                    <img src={thumbUrl} className="w-full h-full object-contain" alt="Car" />
-                                                ) : (
-                                                      <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>
-                                                  )}
-                                              </div>
+                                              <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-slate-800 shadow-sm flex items-center justify-center">
+                                                    {thumbUrl ? (
+                                                        <>
+                                                            <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-125" alt="bg" />
+                                                            <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-0.5 drop-shadow" alt="Car" />
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100"><Car size={16}/></div>
+                                                    )}
+                                                </div>
                                               
                                               <div className="flex flex-col gap-1 items-start">
                                                   <div className="flex gap-1">
@@ -7892,17 +7902,24 @@ const CreateDocModule = ({
                         <div key={car.id} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative overflow-hidden">
                             <div className="flex h-36"> {/* 稍微加高一點以容納雙車牌 */}
                                 {/* 左側：縮圖區域 (佔 35%) */}
-                                <div className="w-[35%] bg-white relative overflow-hidden cursor-pointer flex items-center justify-center" onClick={() => setEditingVehicle(car)}>
+                                <div className="w-[35%] bg-slate-900 relative overflow-hidden cursor-pointer flex items-center justify-center" onClick={() => setEditingVehicle(car)}>
                                     {thumbUrl ? (
-                                        <img src={thumbUrl} className="w-full h-full object-contain p-1 transition-transform group-hover:scale-105" alt="Car" loading="lazy" />
+                                        <>
+                                            {/* 底層：模糊背景 (填滿、模糊、微暗，填補白邊) */}
+                                            <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110 transition-transform group-hover:scale-125" alt="bg" loading="lazy" />
+                                            
+                                            {/* 上層：清晰主圖 (完整顯示、加陰影立體感) */}
+                                            <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-1 drop-shadow-xl transition-transform group-hover:scale-105" alt="Car" loading="lazy" />
+                                        </>
                                     ) : (
-                                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 bg-slate-100">
                                             <Car size={32} />
                                             <span className="text-[10px] mt-1">No Image</span>
                                         </div>
                                     )}
-                                    {/* 狀態標籤 (左上) */}
-                                    <div className="absolute top-1 left-1">
+                                    
+                                    {/* 狀態標籤 (左上) - 加上 z-20 確保浮在圖片最上層 */}
+                                    <div className="absolute top-1 left-1 z-20">
                                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shadow-sm ${car.status==='In Stock'?'bg-green-500 text-white':(car.status==='Sold'?'bg-blue-600 text-white':(car.status==='Reserved'?'bg-yellow-500 text-white':'bg-gray-500 text-white'))}`}>
                                             {car.status === 'In Stock' ? '在庫' : (car.status === 'Sold' ? '已售' : (car.status === 'Reserved' ? '已訂' : '撤回'))}
                                         </span>
