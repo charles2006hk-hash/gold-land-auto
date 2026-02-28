@@ -2296,6 +2296,8 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     // ★★★ 新增：控制圖片編輯器的狀態 ★★★
     const [editingMedia, setEditingMedia] = useState<MediaLibraryItem | null>(null);
 
+    const [activeGroupImages, setActiveGroupImages] = useState<Record<string, string>>({});
+
     // ★★★ 新增：處理編輯後儲存的邏輯 ★★★
     const handleSaveEditedImage = async (oldItem: MediaLibraryItem, newBase64: string) => {
         if (!storage || !db) return;
