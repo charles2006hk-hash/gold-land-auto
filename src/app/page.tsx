@@ -1920,8 +1920,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                     
                                     <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
                                         {editingEntry.attachments?.map((file, idx) => (
-                                            
-                                            {/* ★★★ 修改 1：加入紫底選中特效 (動態 className) ★★★ */}
                                             <div key={idx} className={`relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col transition-all ${selectedForPrint.includes(idx) ? 'ring-2 ring-purple-500' : ''}`}>
                                                 
                                                 <div className="w-full bg-slate-50 relative p-1">
@@ -1937,7 +1935,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                         )}
                                                     </div>
 
-                                                    {/* ★★★ 修改 2：新增選取核取方塊 (Checkbox) ★★★ */}
+                                                    {/* ★ 選取核取方塊 (Checkbox) */}
                                                     <div className="absolute top-2 left-2 z-20 bg-white/80 p-1 rounded-md backdrop-blur-sm shadow-sm">
                                                         <input 
                                                             type="checkbox" 
@@ -1950,7 +1948,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                         />
                                                     </div>
 
-                                                    {/* ★★★ 修改 3：把下載按鈕的 left-2 改成 left-10，避免跟核取方塊重疊 ★★★ */}
+                                                    {/* ★ 下載按鈕 (left-10) */}
                                                     <button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-10 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button>
                                                 </div>
                                                 
