@@ -1071,6 +1071,169 @@ type DatabaseModuleProps = {
     systemUsers: any[];
 };
 
+// ------------------------------------------------------------------
+// ★★★ 新增：A4 智能證件排版與列印 (Smart A4 Layout Printer) ★★★
+// ------------------------------------------------------------------
+const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
+    // 預設將圖片轉為物件並賦予初始座標與尺寸 (標準證件尺寸：85.6mm x 54mm)
+    const [images, setImages] = useState(
+        selectedItems.map((item: any, index: number) => ({
+            id: item.id,
+            url: item.url,
+            // 如果有兩張，自動排成上下；超過就往下排
+            x: 60, // mm (大約置中)
+            y: 40 + (index * 80), // mm
+            width: 85.6, // mm (標準證件寬)
+            height: 54   // mm (標準證件高)
+        }))
+    );
+
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+
+    // 拖曳邏輯 (將螢幕像素轉換為大約的 mm 比例，方便在 A4 上移動)
+    const handlePointerDown = (e: any, id: string) => {
+        setDraggingId(id);
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        setStartPos({ x: clientX, y: clientY });
+    };
+
+    const handlePointerMove = (e: any) => {
+        if (!draggingId) return;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        // 簡單的像素轉 mm 估算 (可根據畫面縮放微調)
+        const dx = (clientX - startPos.x) * 0.28; 
+        const dy = (clientY - startPos.y) * 0.28;
+
+        setImages(images.map((img: any) => 
+            img.id === draggingId ? { ...img, x: img.x + dx, y: img.y + dy } : img
+        ));
+        setStartPos({ x: clientX, y: clientY });
+    };
+
+    const handlePointerUp = () => setDraggingId(null);
+
+    // 綁定全域事件防止拖曳出界卡住
+    useEffect(() => {
+        if (draggingId) {
+            window.addEventListener('mousemove', handlePointerMove);
+            window.addEventListener('mouseup', handlePointerUp);
+            window.addEventListener('touchmove', handlePointerMove, { passive: false });
+            window.addEventListener('touchend', handlePointerUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handlePointerMove);
+            window.removeEventListener('mouseup', handlePointerUp);
+            window.removeEventListener('touchmove', handlePointerMove);
+            window.removeEventListener('touchend', handlePointerUp);
+        };
+    }, [draggingId, startPos]);
+
+    // 智能排版按鈕功能
+    const applyTemplate = (type: 'id_card' | 'a4_full') => {
+        setImages(images.map((img: any, index: number) => {
+            if (type === 'id_card') {
+                return { ...img, width: 85.6, height: 54, x: 62, y: 40 + (index * 70) };
+            } else if (type === 'a4_full') {
+                return { ...img, width: 190, height: 270, x: 10, y: 10 }; // 幾乎滿版
+            }
+            return img;
+        }));
+    };
+
+    // 列印專用樣式
+    const PrintStyle = () => (
+        <style>{`
+            @media print {
+                @page { size: A4; margin: 0; }
+                body * { visibility: hidden; }
+                #a4-print-area, #a4-print-area * { visibility: visible; }
+                #a4-print-area { position: absolute; left: 0; top: 0; transform: scale(1) !important; margin: 0 !important; background: white; box-shadow: none !important; border: none !important; }
+                .print-hidden { display: none !important; }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            }
+        `}</style>
+    );
+
+    return (
+        <div className="fixed inset-0 z-[250] bg-slate-900/95 flex flex-col md:flex-row overflow-hidden backdrop-blur-sm">
+            <PrintStyle />
+            
+            {/* 左側：控制面板 (列印時隱藏) */}
+            <div className="w-full md:w-72 bg-slate-800 text-white p-5 flex flex-col gap-4 border-r border-slate-700 print-hidden flex-none">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold flex items-center"><Printer size={18} className="mr-2 text-yellow-400"/> 智能排版輸出</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full"><X size={20}/></button>
+                </div>
+
+                <div className="bg-slate-900/50 p-3 rounded-lg text-xs text-slate-300 leading-relaxed mb-2">
+                    💡 已選取 {images.length} 張圖片。<br/>
+                    您可以直接在右側 A4 紙上「拖曳」圖片調整位置。
+                </div>
+
+                <div>
+                    <label className="text-xs font-bold text-slate-400 mb-2 block">快速套用尺寸模板</label>
+                    <div className="flex flex-col gap-2">
+                        <button onClick={() => applyTemplate('id_card')} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm text-left flex justify-between items-center transition shadow-sm">
+                            <span>💳 標準證件 (1:1 大小)</span> <span className="text-[10px] text-slate-400">86x54mm</span>
+                        </button>
+                        <button onClick={() => applyTemplate('a4_full')} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm text-left flex justify-between items-center transition shadow-sm">
+                            <span>📄 A4 滿版文件 (如牌薄)</span> <span className="text-[10px] text-slate-400">適應A4</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-auto pt-4 border-t border-slate-700">
+                    <button onClick={() => window.print()} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95">
+                        <Printer size={18} className="mr-2"/> 正式列印
+                    </button>
+                </div>
+            </div>
+
+            {/* 右側：A4 預覽區 (列印時唯一顯示) */}
+            <div className="flex-1 overflow-auto bg-gray-300 flex justify-center items-start pt-10 pb-20 relative select-none touch-none">
+                {/* A4 畫布 (固定 210x297mm，使用 scale 縮放適應螢幕) */}
+                <div 
+                    id="a4-print-area"
+                    className="bg-white shadow-2xl relative overflow-hidden print:shadow-none"
+                    style={{ 
+                        width: '210mm', 
+                        height: '297mm', 
+                        transform: 'scale(0.85)', // 螢幕上稍微縮小，列印時會被 CSS 恢復 1:1
+                        transformOrigin: 'top center'
+                    }}
+                >
+                    {/* 背景輔助格線 (列印時不會印出來) */}
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10mm_10mm] print-hidden pointer-events-none"></div>
+                    
+                    {/* 可拖曳的圖片 */}
+                    {images.map((img: any) => (
+                        <div 
+                            key={img.id}
+                            style={{
+                                position: 'absolute',
+                                left: `${img.x}mm`,
+                                top: `${img.y}mm`,
+                                width: `${img.width}mm`,
+                                height: `${img.height}mm`,
+                                zIndex: draggingId === img.id ? 10 : 1
+                            }}
+                            className={`cursor-move transition-shadow ${draggingId === img.id ? 'ring-4 ring-blue-500 shadow-2xl' : 'shadow-md border border-gray-200 print:shadow-none print:border-none hover:ring-2 hover:ring-blue-300 print-hidden-ring'}`}
+                            onMouseDown={(e) => handlePointerDown(e, img.id)}
+                            onTouchStart={(e) => { e.preventDefault(); handlePointerDown(e, img.id); }}
+                        >
+                            <img src={img.url} className="w-full h-full object-cover pointer-events-none" draggable={false} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory, currentUser, systemUsers }: DatabaseModuleProps) => {
     const [entries, setEntries] = useState<DatabaseEntry[]>([]);
     const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
@@ -1083,6 +1246,15 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
     // AI 識別狀態
     const [isScanning, setIsScanning] = useState(false);
+
+    // ★★★ 新增：控制 A4 智能排版與圖片選取狀態 ★★★
+    const [selectedForPrint, setSelectedForPrint] = useState<number[]>([]);
+    const [showA4Printer, setShowA4Printer] = useState(false);
+
+    // 當切換不同客戶資料時，自動清空選取狀態
+    useEffect(() => {
+        setSelectedForPrint([]);
+    }, [editingEntry?.id]);
 
     // ★★★ AI 識別函數 (保持不變) ★★★
     const analyzeImageWithAI = async (base64Image: string, docType: string) => {
@@ -1725,17 +1897,33 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
                                         <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
-                                        {isDbEditing && (
-                                            <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors">
-                                                <Upload size={14} className="mr-1"/> 上傳圖片
-                                                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
-                                            </label>
-                                        )}
+                                        <div className="flex gap-2">
+                                            {/* ★★★ A4 排版按鈕 (當有選取圖片時才會顯示) ★★★ */}
+                                            {selectedForPrint.length > 0 && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setShowA4Printer(true)} 
+                                                    className="text-xs bg-purple-600 text-white px-3 py-1 rounded-full hover:bg-purple-700 flex items-center shadow-sm transition-colors"
+                                                >
+                                                    <Printer size={14} className="mr-1"/> A4排版 ({selectedForPrint.length})
+                                                </button>
+                                            )}
+                                            
+                                            {isDbEditing && (
+                                                <label className="cursor-pointer text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 flex items-center border border-blue-200 shadow-sm transition-colors">
+                                                    <Upload size={14} className="mr-1"/> 上傳圖片
+                                                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileUpload} />
+                                                </label>
+                                            )}
+                                        </div>
                                     </div>
                                     
                                     <div className="grid grid-cols-1 gap-6 max-h-[800px] overflow-y-auto pr-2">
                                         {editingEntry.attachments?.map((file, idx) => (
-                                            <div key={idx} className="relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col">
+                                            
+                                            {/* ★★★ 修改 1：加入紫底選中特效 (動態 className) ★★★ */}
+                                            <div key={idx} className={`relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col transition-all ${selectedForPrint.includes(idx) ? 'ring-2 ring-purple-500' : ''}`}>
+                                                
                                                 <div className="w-full bg-slate-50 relative p-1">
                                                     <img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />
                                                     <div className="absolute top-2 right-2 flex gap-2">
@@ -1748,8 +1936,24 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                             </>
                                                         )}
                                                     </div>
-                                                    <button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-2 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button>
+
+                                                    {/* ★★★ 修改 2：新增選取核取方塊 (Checkbox) ★★★ */}
+                                                    <div className="absolute top-2 left-2 z-20 bg-white/80 p-1 rounded-md backdrop-blur-sm shadow-sm">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-4 h-4 accent-purple-600 cursor-pointer block"
+                                                            checked={selectedForPrint.includes(idx)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) setSelectedForPrint([...selectedForPrint, idx]);
+                                                                else setSelectedForPrint(selectedForPrint.filter(i => i !== idx));
+                                                            }}
+                                                        />
+                                                    </div>
+
+                                                    {/* ★★★ 修改 3：把下載按鈕的 left-2 改成 left-10，避免跟核取方塊重疊 ★★★ */}
+                                                    <button type="button" onClick={(e) => { e.preventDefault(); downloadImage(file.data, file.name); }} className="absolute top-2 left-10 bg-blue-600 text-white p-2 rounded-full opacity-80 hover:opacity-100 transition-opacity shadow-lg" title="下載圖片"><DownloadCloud size={18}/></button>
                                                 </div>
+                                                
                                                 <div className="p-3 border-t bg-white text-sm text-slate-700 font-medium flex items-center"><File size={16} className="mr-2 text-blue-600 flex-shrink-0"/>{isDbEditing ? (<input value={file.name} onChange={e => { const newAttachments = [...editingEntry.attachments]; newAttachments[idx].name = e.target.value; setEditingEntry({...editingEntry, attachments: newAttachments}); }} className="w-full bg-transparent outline-none focus:border-b-2 border-blue-400 py-1" placeholder="輸入檔名..." />) : (<span className="truncate">{file.name}</span>)}</div>
                                             </div>
                                         ))}
@@ -1769,6 +1973,17 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         <div className="flex-1 overflow-y-auto p-4 space-y-6">{dupeGroups.map((group, idx) => (<div key={idx} className="border rounded-lg p-3 bg-slate-50"><h4 className="font-bold mb-2 text-slate-700">名稱: {group[0].name}</h4><div className="space-y-2">{group.map(item => (<div key={item.id} className="flex justify-between items-center bg-white p-2 rounded border"><div className="text-xs"><div><span className="font-bold">ID:</span> {item.id}</div><div><span className="font-bold">建立:</span> {item.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}</div></div><button onClick={() => resolveDuplicate(item.id, group)} className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">保留此筆 (刪除其他)</button></div>))}</div></div>))}</div>
                     </div>
                 </div>
+            )}
+            {/* ★★★ A4 排版列印彈窗 (資料庫版) ★★★ */}
+            {showA4Printer && (
+                <A4DocumentPrinter 
+                    selectedItems={selectedForPrint.map(idx => ({
+                        id: idx.toString(),
+                        // 取出對應索引的 Base64 圖片數據
+                        url: editingEntry?.attachments[idx].data 
+                    }))}
+                    onClose={() => setShowA4Printer(false)} 
+                />
             )}
         </div>
     );
