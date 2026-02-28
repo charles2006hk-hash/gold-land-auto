@@ -7680,8 +7680,8 @@ const CreateDocModule = ({
 
                                           {/* 中排：圖片 + 資料 */}
                                           <div className="flex gap-3">
-                                              <div className="w-20 h-14 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 border border-slate-200">
-                                                  {thumbUrl ? <img src={thumbUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>}
+                                              <div className="w-20 h-14 bg-white rounded-md overflow-hidden flex-shrink-0 border border-slate-200 p-0.5 flex items-center justify-center">
+                                                    {thumbUrl ? <img src={thumbUrl} className="w-full h-full object-contain" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>}
                                               </div>
                                               <div className="flex-1 min-w-0">
                                                   {/* ★★★ 這裡補回了年份 car.year ★★★ */}
@@ -7756,10 +7756,10 @@ const CreateDocModule = ({
                                       
                                       <td className="p-3">
                                           <div className="flex items-center gap-3">
-                                              <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-gray-100 shadow-sm">
-                                                  {thumbUrl ? (
-                                                      <img src={thumbUrl} className="w-full h-full object-cover" alt="Car" />
-                                                  ) : (
+                                              <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-white shadow-sm p-0.5 flex items-center justify-center">
+                                                {thumbUrl ? (
+                                                    <img src={thumbUrl} className="w-full h-full object-contain" alt="Car" />
+                                                ) : (
                                                       <div className="w-full h-full flex items-center justify-center text-slate-300"><Car size={16}/></div>
                                                   )}
                                               </div>
@@ -7892,9 +7892,9 @@ const CreateDocModule = ({
                         <div key={car.id} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative overflow-hidden">
                             <div className="flex h-36"> {/* 稍微加高一點以容納雙車牌 */}
                                 {/* 左側：縮圖區域 (佔 35%) */}
-                                <div className="w-[35%] bg-gray-100 relative overflow-hidden cursor-pointer" onClick={() => setEditingVehicle(car)}>
+                                <div className="w-[35%] bg-white relative overflow-hidden cursor-pointer flex items-center justify-center" onClick={() => setEditingVehicle(car)}>
                                     {thumbUrl ? (
-                                        <img src={thumbUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Car" loading="lazy" />
+                                        <img src={thumbUrl} className="w-full h-full object-contain p-1 transition-transform group-hover:scale-105" alt="Car" loading="lazy" />
                                     ) : (
                                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                                             <Car size={32} />
