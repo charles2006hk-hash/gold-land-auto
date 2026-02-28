@@ -4351,10 +4351,13 @@ const SettingsManager = ({
     );
 };
 
-// --- 新增：車輛推介單預覽組件 (iPhone 專用) ---
+// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 對客分享版) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // ★ 需求 3: 加上可自訂編輯的備註
+    const [customRemark, setCustomRemark] = useState('');
 
     // 自動讀取該車輛的照片
     useEffect(() => {
@@ -4369,7 +4372,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
             snap.forEach(d => list.push(d.data()));
             // 簡單排序：封面優先，然後取前 6 張
             list.sort((a,b) => (b.isPrimary?1:0) - (a.isPrimary?1:0));
-            setPhotos(list.map(i => i.url).slice(0, 6)); // 取前6張 (外觀+內飾)
+            setPhotos(list.map(i => i.url).slice(0, 6)); 
             setLoading(false);
         });
         return () => unsub();
@@ -4379,73 +4382,96 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
         <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white w-full max-w-sm md:max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                 {/* Header Actions */}
-                <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden">
+                <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden flex-none">
                     <span className="text-xs font-bold">預覽模式 (可截圖或列印)</span>
-                    <button onClick={onClose}><X size={20}/></button>
+                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
                 </div>
 
-                {/* Content Area (白色區域，適合截圖) */}
+                {/* Content Area (白色區域，適合截圖/列印) */}
                 <div className="flex-1 overflow-y-auto p-6 bg-white" id="share-content">
                     {/* Logo & Header */}
                     <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
                         <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
                         <div>
-                            <h1 className="text-xl font-black text-slate-900 leading-none">{COMPANY_INFO.name_en}</h1>
-                            <h2 className="text-sm font-bold text-slate-600 mt-1">{COMPANY_INFO.name_ch}</h2>
+                            <h1 className="text-xl font-black text-slate-900 leading-none tracking-wide">{COMPANY_INFO.name_en}</h1>
+                            <h2 className="text-sm font-bold text-slate-600 mt-1 tracking-widest">{COMPANY_INFO.name_ch}</h2>
                         </div>
                     </div>
 
-                    {/* Car Title */}
-                    <div className="mb-4">
-                        <h3 className="text-2xl font-black text-slate-800">{vehicle.make} {vehicle.model}</h3>
-                        <p className="text-sm text-slate-500 font-mono mt-1">{vehicle.year} | {vehicle.regMark || "未出牌"}</p>
+                    {/* Car Title (★ 需求 4: 隱藏車牌文字，只顯示年份廠牌) */}
+                    <div className="mb-4 flex justify-between items-end">
+                        <div>
+                            <h3 className="text-2xl font-black text-slate-800 leading-tight">{vehicle.make} {vehicle.model}</h3>
+                            <p className="text-sm text-slate-500 font-mono mt-1">製造年份: {vehicle.year}</p>
+                        </div>
+                        {/* 顯示價格 */}
+                        <div className="text-right pb-1">
+                            <span className="text-lg font-black text-yellow-600">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price)}</span>
+                        </div>
                     </div>
 
-                    {/* Key Specs Grid */}
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase">顏色 (Color)</span>
-                            <span className="font-bold text-slate-800">{vehicle.colorExt}</span>
+                    {/* Key Specs Grid (★ 需求 5: 加入牌費到期日) */}
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">顏色 (Color)</span>
+                            <span className="font-bold text-slate-800 text-xs truncate">{vehicle.colorExt || '-'}</span>
                         </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase">手數 (Owners)</span>
-                            <span className="font-bold text-slate-800">{vehicle.previousOwners || '0'} 手</span>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數 (Owners)</span>
+                            <span className="font-bold text-slate-800 text-xs">{vehicle.previousOwners || '0'} 手</span>
                         </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase">里數 (Mileage)</span>
-                            <span className="font-bold text-slate-800">{Number(vehicle.mileage||0).toLocaleString()} km</span>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積 (Engine)</span>
+                            <span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}cc` : '-'}</span>
                         </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100">
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase">容積 (Engine)</span>
-                            <span className="font-bold text-slate-800">{vehicle.engineSize} cc</span>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數 (Mileage)</span>
+                            <span className="font-bold text-slate-800 text-xs">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-'}</span>
                         </div>
+                        <div className="bg-yellow-50 p-2 rounded border border-yellow-200 col-span-2 flex flex-col justify-center">
+                            <span className="block text-[9px] text-yellow-600 font-bold uppercase mb-0.5">牌費到期日 (License Expiry)</span>
+                            <span className="font-bold text-yellow-900 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span>
+                        </div>
+                    </div>
+
+                    {/* ★ 需求 3: 可自訂編輯的備註區 */}
+                    <div className="mb-6 relative group">
+                        <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註 (點擊編輯，列印或截圖時自動隱藏外框)</span>
+                        <textarea
+                            value={customRemark}
+                            onChange={(e) => setCustomRemark(e.target.value)}
+                            placeholder="在這裡輸入車輛亮點、改裝項目或給客戶的話..."
+                            className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:border-none print:bg-transparent print:p-0 min-h-[60px] leading-relaxed"
+                        />
                     </div>
 
                     {/* Photos Grid */}
                     <div className="grid grid-cols-2 gap-2 mb-4">
                         {loading ? <div className="col-span-2 text-center text-xs py-10">載入圖片中...</div> : 
                          photos.length > 0 ? photos.map((url, i) => (
-                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 aspect-video ${i===0 ? 'col-span-2' : ''}`}>
+                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 bg-gray-100 aspect-video ${i===0 ? 'col-span-2' : ''}`}>
                                 <img src={url} className="w-full h-full object-cover"/>
                             </div>
                         )) : (
-                            <div className="col-span-2 text-center py-8 bg-gray-50 text-gray-400 text-xs rounded">暫無圖片</div>
+                            <div className="col-span-2 text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>
                         )}
                     </div>
 
-                    {/* Contact Footer */}
+                    {/* Contact Footer (★ 需求 2: 移除了地址和指派人，變得極簡專業) */}
                     <div className="text-center border-t border-slate-100 pt-4 mt-4">
-                        <p className="text-xs font-bold text-slate-800">有意請聯絡: {staffId}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">{COMPANY_INFO.address_ch}</p>
+                        <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
+                        <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
                     </div>
                 </div>
 
                 {/* Footer Action */}
-                <div className="p-4 bg-slate-100 border-t print:hidden">
-                    <button onClick={() => window.print()} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
-                        <Printer size={16} className="mr-2"/> 列印 / 儲存 PDF
+                <div className="p-4 bg-slate-100 border-t print:hidden flex-none">
+                    <button onClick={() => window.print()} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
+                        <Printer size={16} className="mr-2"/> 列印 / 輸出 PDF
                     </button>
-                    <p className="text-[10px] text-center text-slate-400 mt-2">提示：iPhone 可直接截圖發送 WhatsApp</p>
+                    <p className="text-[10px] text-center text-slate-500 mt-3 leading-tight">
+                        💡 提示：iPhone 可直接截圖發送 WhatsApp。<br/>如需遮擋圖片中的車牌，請先在「智能圖庫」中使用遮罩工具。
+                    </p>
                 </div>
             </div>
         </div>
