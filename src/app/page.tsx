@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  Check, AlertCircle, Link, Share2, Key, Sun, Crop,
+  Check, AlertCircle, Link, Share2, Key, Sun, Crop, Move, MousePointerSquare,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
   Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing
 } from 'lucide-react';
@@ -1250,6 +1250,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     // ★★★ 新增：控制 A4 智能排版與圖片選取狀態 ★★★
     const [selectedForPrint, setSelectedForPrint] = useState<number[]>([]);
     const [showA4Printer, setShowA4Printer] = useState(false);
+    // ★ 記錄每個車輛群組目前正在預覽的是哪一張小圖
+    const [activeGroupImages, setActiveGroupImages] = useState<Record<string, string>>({});
 
     // 當切換不同客戶資料時，自動清空選取狀態
     useEffect(() => {
@@ -2027,20 +2029,33 @@ const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：智慧圖片編輯器 (支援裁切、亮度、車牌遮罩與手機觸控) ★★★
+// ★★★ 升級版：智慧圖片編輯器 (支援自由拖曳、縮放、車牌遮罩) ★★★
 // ------------------------------------------------------------------
 const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [imgObj, setImgObj] = useState<HTMLImageElement | null>(null);
     const [brightness, setBrightness] = useState(100);
+    
+    // ★ 新增：控制畫布內的圖片縮放與位移
+    const [zoom, setZoom] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    
+    // ★ 新增：操作模式切換 (移動圖片 vs 畫遮罩)
+    const [editorMode, setEditorMode] = useState<'pan' | 'mask'>('pan');
+    
     const [masks, setMasks] = useState<{x:number, y:number, w:number, h:number}[]>([]);
     const [isDrawingMask, setIsDrawingMask] = useState(false);
+    const [isDraggingImage, setIsDraggingImage] = useState(false);
+    
     const [startPos, setStartPos] = useState({x:0, y:0});
     const [currentPos, setCurrentPos] = useState({x:0, y:0});
     const [isProcessing, setIsProcessing] = useState(false);
-    const [cropBox, setCropBox] = useState<{x:number, y:number, w:number, h:number}|null>(null);
 
-    // 1. 載入圖片 (處理跨域轉 Base64)
+    // 固定輸出畫質：1200x900 (標準 4:3 黃金比例)
+    const CANVAS_W = 1200;
+    const CANVAS_H = 900;
+
+    // 1. 載入圖片並自動置中填滿
     useEffect(() => {
         const loadImg = async () => {
             try {
@@ -2050,12 +2065,17 @@ const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
                 const img = new Image();
                 img.onload = () => {
                     setImgObj(img);
-                    setCropBox({ x: 0, y: 0, w: img.width, h: img.height });
+                    // 自動計算：讓圖片預設填滿 4:3 畫布
+                    const defaultScale = Math.max(CANVAS_W / img.width, CANVAS_H / img.height);
+                    setZoom(defaultScale);
+                    setPan({
+                        x: (CANVAS_W - img.width * defaultScale) / 2,
+                        y: (CANVAS_H - img.height * defaultScale) / 2
+                    });
                 };
                 img.src = localUrl;
             } catch(e) { 
-                alert("圖片加載失敗，可能是跨域限制。"); 
-                onClose(); 
+                alert("圖片加載失敗"); onClose(); 
             }
         };
         loadImg();
@@ -2063,88 +2083,104 @@ const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
 
     // 2. 繪製 Canvas
     useEffect(() => {
-        if (!imgObj || !canvasRef.current || !cropBox) return;
+        if (!imgObj || !canvasRef.current) return;
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        canvas.width = cropBox.w;
-        canvas.height = cropBox.h;
+        canvas.width = CANVAS_W;
+        canvas.height = CANVAS_H;
 
-        // 繪製底圖 (套用亮度和裁切位移)
+        // 清空畫布
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // A. 繪製圖片 (包含位移、縮放、亮度)
+        ctx.save();
+        ctx.translate(pan.x, pan.y);
+        ctx.scale(zoom, zoom);
         ctx.filter = `brightness(${brightness}%)`;
-        ctx.drawImage(imgObj, cropBox.x, cropBox.y, cropBox.w, cropBox.h, 0, 0, cropBox.w, cropBox.h);
-        ctx.filter = 'none';
+        ctx.drawImage(imgObj, 0, 0);
+        ctx.restore();
 
-        // 繪製已保存的遮罩 (黑色方塊)
+        // B. 繪製已保存的遮罩 (相對畫布坐標)
         ctx.fillStyle = '#1e293b'; 
         masks.forEach(m => { ctx.fillRect(m.x, m.y, m.w, m.h); });
 
-        // 繪製拖曳中的預覽框
-        if (isDrawingMask) {
+        // C. 繪製拖曳中的預覽框 (僅在畫遮罩模式)
+        if (editorMode === 'mask' && isDrawingMask) {
             ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
             const w = currentPos.x - startPos.x;
             const h = currentPos.y - startPos.y;
             ctx.fillRect(startPos.x, startPos.y, w, h);
             ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 4;
             ctx.strokeRect(startPos.x, startPos.y, w, h);
         }
-    }, [imgObj, brightness, masks, isDrawingMask, currentPos, cropBox]);
+    }, [imgObj, brightness, zoom, pan, masks, isDrawingMask, currentPos, editorMode]);
 
-    // 3. 滑鼠與觸控事件 (畫遮罩)
-    const getPos = (clientX: number, clientY: number) => {
+    // 3. 滑鼠與觸控事件 (支援移動圖片或畫遮罩)
+    const getCanvasPos = (clientX: number, clientY: number) => {
         const rect = canvasRef.current!.getBoundingClientRect();
-        const scaleX = canvasRef.current!.width / rect.width;
-        const scaleY = canvasRef.current!.height / rect.height;
+        const scaleX = CANVAS_W / rect.width;
+        const scaleY = CANVAS_H / rect.height;
         return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
     };
 
-    const startDraw = (clientX: number, clientY: number) => {
-        setIsDrawingMask(true);
-        const pos = getPos(clientX, clientY);
-        setStartPos(pos); setCurrentPos(pos);
-    };
-    const moveDraw = (clientX: number, clientY: number) => {
-        if (!isDrawingMask) return;
-        setCurrentPos(getPos(clientX, clientY));
-    };
-    const endDraw = () => {
-        if (!isDrawingMask) return;
-        setIsDrawingMask(false);
-        const w = currentPos.x - startPos.x;
-        const h = currentPos.y - startPos.y;
-        if (Math.abs(w) > 15 && Math.abs(h) > 15) { // 避免誤觸
-            const finalX = w > 0 ? startPos.x : currentPos.x;
-            const finalY = h > 0 ? startPos.y : currentPos.y;
-            setMasks([...masks, { x: finalX, y: finalY, w: Math.abs(w), h: Math.abs(h) }]);
+    const handlePointerDown = (e: any) => {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        if (editorMode === 'mask') {
+            setIsDrawingMask(true);
+            const pos = getCanvasPos(clientX, clientY);
+            setStartPos(pos); setCurrentPos(pos);
+        } else if (editorMode === 'pan') {
+            setIsDraggingImage(true);
+            // 記錄原始螢幕座標，用於計算位移差
+            setStartPos({ x: clientX, y: clientY }); 
         }
     };
 
-    // 4. 自動置中裁切 (4:3 黃金比例)
-    const handleAutoCenter = () => {
-        if (!imgObj) return;
-        const targetRatio = 4 / 3;
-        const imgRatio = imgObj.width / imgObj.height;
-        let newW, newH, newX, newY;
+    const handlePointerMove = (e: any) => {
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-        if (imgRatio > targetRatio) {
-            newH = imgObj.height; newW = newH * targetRatio;
-            newX = (imgObj.width - newW) / 2; newY = 0;
-        } else {
-            newW = imgObj.width; newH = newW / targetRatio;
-            newX = 0; newY = (imgObj.height - newH) / 2;
+        if (editorMode === 'mask' && isDrawingMask) {
+            setCurrentPos(getCanvasPos(clientX, clientY));
+        } else if (editorMode === 'pan' && isDraggingImage) {
+            // 計算真實像素移動距離，並放大以適應畫布比例
+            const rect = canvasRef.current!.getBoundingClientRect();
+            const ratio = CANVAS_W / rect.width;
+            const dx = (clientX - startPos.x) * ratio;
+            const dy = (clientY - startPos.y) * ratio;
+            
+            setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+            setStartPos({ x: clientX, y: clientY }); // 更新起點
         }
-        setCropBox({ x: newX, y: newY, w: newW, h: newH });
-        setMasks([]); // 座標改變，清空之前的遮罩
     };
 
-    // 5. 儲存圖片
+    const handlePointerUp = () => {
+        if (editorMode === 'mask' && isDrawingMask) {
+            setIsDrawingMask(false);
+            const w = currentPos.x - startPos.x;
+            const h = currentPos.y - startPos.y;
+            if (Math.abs(w) > 20 && Math.abs(h) > 20) {
+                const finalX = w > 0 ? startPos.x : currentPos.x;
+                const finalY = h > 0 ? startPos.y : currentPos.y;
+                setMasks([...masks, { x: finalX, y: finalY, w: Math.abs(w), h: Math.abs(h) }]);
+            }
+        } else if (editorMode === 'pan') {
+            setIsDraggingImage(false);
+        }
+    };
+
+    // 儲存圖片
     const handleSaveClick = async () => {
         if (!canvasRef.current) return;
         setIsProcessing(true);
         try {
-            const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.85); // 輸出高畫質
+            const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.85); 
             await onSave(mediaItem, dataUrl);
         } catch(e) { alert('儲存失敗'); } 
         finally { setIsProcessing(false); }
@@ -2152,59 +2188,76 @@ const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
 
     return (
         <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center md:p-4">
-            <div className="w-full md:max-w-5xl bg-slate-900 text-white md:rounded-2xl flex flex-col h-full md:h-[85vh] overflow-hidden shadow-2xl">
-                {/* 頂部 Header */}
+            <div className="w-full md:max-w-6xl bg-slate-900 text-white md:rounded-2xl flex flex-col h-full md:h-[90vh] overflow-hidden shadow-2xl">
                 <div className="p-4 flex justify-between items-center border-b border-slate-700 bg-slate-800 flex-none">
-                    <h3 className="font-bold flex items-center"><Edit size={18} className="mr-2 text-blue-400"/> 圖片編輯與美化</h3>
+                    <h3 className="font-bold flex items-center"><Edit size={18} className="mr-2 text-blue-400"/> 圖片排版與美化 (輸出比例 4:3)</h3>
                     <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
                 </div>
                 
-                {/* 編輯區 */}
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                    {/* 左側：畫布 (支援手機觸控) */}
-                    <div className="flex-1 p-2 md:p-6 flex items-center justify-center bg-black/50 overflow-hidden relative touch-none">
+                    {/* 左側：畫布 */}
+                    <div className="flex-1 p-2 md:p-6 flex items-center justify-center bg-black/80 overflow-hidden relative touch-none">
                         {!imgObj && <div className="text-white flex items-center"><Loader2 className="animate-spin mr-2"/> 載入中...</div>}
                         <canvas 
                             ref={canvasRef}
-                            onMouseDown={(e) => startDraw(e.clientX, e.clientY)}
-                            onMouseMove={(e) => moveDraw(e.clientX, e.clientY)}
-                            onMouseUp={endDraw} onMouseLeave={endDraw}
-                            onTouchStart={(e) => { e.preventDefault(); startDraw(e.touches[0].clientX, e.touches[0].clientY); }}
-                            onTouchMove={(e) => { e.preventDefault(); moveDraw(e.touches[0].clientX, e.touches[0].clientY); }}
-                            onTouchEnd={endDraw}
-                            className="max-w-full max-h-full object-contain cursor-crosshair shadow-2xl border border-white/10"
+                            onMouseDown={handlePointerDown} onMouseMove={handlePointerMove}
+                            onMouseUp={handlePointerUp} onMouseLeave={handlePointerUp}
+                            onTouchStart={(e) => { e.preventDefault(); handlePointerDown(e); }}
+                            onTouchMove={(e) => { e.preventDefault(); handlePointerMove(e); }}
+                            onTouchEnd={handlePointerUp}
+                            className={`max-w-full max-h-full object-contain shadow-[0_0_50px_rgba(0,0,0,0.5)] border-2 border-slate-700 ${editorMode === 'pan' ? (isDraggingImage ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
                         />
                     </div>
 
-                    {/* 右側/底部：控制面板 */}
-                    <div className="w-full md:w-72 bg-slate-800 p-5 flex flex-col gap-6 overflow-y-auto flex-none border-t md:border-t-0 md:border-l border-slate-700">
+                    {/* 右側：控制面板 */}
+                    <div className="w-full md:w-80 bg-slate-800 p-5 flex flex-col gap-6 overflow-y-auto flex-none border-t md:border-t-0 md:border-l border-slate-700">
                         
+                        {/* 模式切換 */}
                         <div>
-                            <label className="text-xs text-slate-400 font-bold mb-3 flex items-center"><Sun size={16} className="mr-1.5"/> 亮度調整 ({brightness}%)</label>
-                            <input type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} className="w-full accent-blue-500"/>
-                        </div>
-
-                        <div>
-                            <label className="text-xs text-slate-400 font-bold mb-3 flex items-center"><Crop size={16} className="mr-1.5"/> 智能裁切</label>
-                            <button onClick={handleAutoCenter} className="w-full bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-3 rounded-lg border border-slate-600 transition shadow-sm">
-                                自動置中 (4:3)
-                            </button>
-                            <p className="text-[10px] text-slate-500 mt-2 leading-tight">適用於封面圖，自動裁除多餘的左右或上下邊緣。</p>
-                        </div>
-
-                        <div>
-                            <label className="text-xs text-slate-400 font-bold mb-3 flex items-center">🛡️ 車牌遮罩</label>
-                            <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 text-xs text-slate-300 leading-relaxed">
-                                💡 直接在圖片上 <span className="text-yellow-400 font-bold">「滑動手指/滑鼠」</span> 即可畫出黑色方塊，用來遮擋車牌或路人。
+                            <label className="text-xs text-slate-400 font-bold mb-2 block">1. 選擇操作模式</label>
+                            <div className="flex bg-slate-900 rounded-lg p-1">
+                                <button onClick={() => setEditorMode('pan')} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition ${editorMode === 'pan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                                    <Move size={16} className="mr-2"/> 移動排版
+                                </button>
+                                <button onClick={() => setEditorMode('mask')} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition ${editorMode === 'mask' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                                    <MousePointerSquare size={16} className="mr-2"/> 畫遮罩
+                                </button>
                             </div>
-                            {masks.length > 0 && (
-                                <button onClick={() => setMasks([])} className="w-full mt-3 bg-red-900/40 hover:bg-red-900/80 text-red-200 text-xs font-bold py-2 rounded-lg transition border border-red-800/50">
+                            <p className="text-[10px] text-slate-400 mt-2 leading-tight">
+                                {editorMode === 'pan' ? '💡 目前模式：在左側圖片上滑動即可移動車輛位置。' : '💡 目前模式：在左側圖片上滑動畫出黑色方塊遮擋車牌。'}
+                            </p>
+                        </div>
+
+                        {/* 縮放與亮度 */}
+                        {editorMode === 'pan' && (
+                            <div className="space-y-4 animate-in fade-in">
+                                <div>
+                                    <label className="text-xs text-slate-400 font-bold mb-2 flex justify-between">
+                                        <span>🔍 圖片縮放 (Zoom)</span>
+                                        <span className="text-blue-400">{Math.round(zoom * 100)}%</span>
+                                    </label>
+                                    <input type="range" min="0.2" max="3" step="0.05" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-full accent-blue-500"/>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400 font-bold mb-2 flex justify-between">
+                                        <span>☀️ 亮度調整 (Brightness)</span>
+                                        <span className="text-yellow-400">{brightness}%</span>
+                                    </label>
+                                    <input type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} className="w-full accent-yellow-500"/>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 遮罩控制 */}
+                        {editorMode === 'mask' && masks.length > 0 && (
+                            <div className="animate-in fade-in">
+                                <button onClick={() => setMasks([])} className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 text-sm font-bold py-2.5 rounded-lg transition border border-slate-600">
                                     復原 (清除所有遮罩)
                                 </button>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
-                        <div className="mt-auto pt-4 md:border-t border-slate-700">
+                        <div className="mt-auto pt-4 border-t border-slate-700">
                             <button onClick={handleSaveClick} disabled={isProcessing || !imgObj} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition disabled:opacity-50 active:scale-95">
                                 {isProcessing ? <><Loader2 className="animate-spin mr-2" size={18}/> 處理中...</> : <><Save size={18} className="mr-2"/> 覆蓋並儲存</>}
                             </button>
@@ -2638,26 +2691,57 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                             {isExpanded ? <Minimize2 size={16} className="text-slate-400"/> : <Maximize2 size={16} className="text-slate-400"/>}
                                         </div>
                                         
-                                        {isExpanded && (
+                                        {isExpanded && (() => {
+                                            // 取得當前群組應該顯示的大圖 (如果有選取過就用選取的，否則用封面圖)
+                                            const currentActiveImgUrl = activeGroupImages[group.key] || primaryImage?.url;
+
+                                            return (
                                             <div>
-                                                <div className="w-full h-64 bg-gray-100 relative cursor-zoom-in group" onClick={() => setPreviewImage(primaryImage?.url)}>
-                                                    {primaryImage ? <img src={primaryImage.url} className="w-full h-full object-contain bg-slate-900" /> : <div className="p-10 text-center text-slate-400">無圖片</div>}
-                                                    <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">點擊放大</div>
+                                                {/* 上方：大預覽圖 (點擊才會全螢幕放大) */}
+                                                <div className="w-full h-64 bg-slate-900 relative cursor-zoom-in group overflow-hidden" onClick={() => setPreviewImage(currentActiveImgUrl)}>
+                                                    {currentActiveImgUrl ? (
+                                                        <>
+                                                            <img src={currentActiveImgUrl} className="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110" />
+                                                            <img src={currentActiveImgUrl} className="relative z-10 w-full h-full object-contain drop-shadow-xl p-1" />
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-slate-500">無圖片</div>
+                                                    )}
+                                                    <div className="absolute bottom-2 right-2 z-20 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">點擊全螢幕預覽</div>
                                                 </div>
+                                                
+                                                {/* 下方：小圖列表 */}
                                                 <div className="p-3 bg-slate-50 border-t border-slate-100">
-                                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
                                                         {group.items.map(img => (
-                                                            <div key={img.id} className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${img.isPrimary ? 'border-yellow-400 shadow-md' : 'border-transparent hover:border-slate-300'}`}>
-                                                                <img src={img.url} className="w-full h-full object-cover" onClick={() => setPreviewImage(img.url)}/>
-                                                                <button onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} className={`absolute top-1 left-1 p-1 rounded-full shadow-sm backdrop-blur-sm transition-all ${img.isPrimary ? 'bg-yellow-400 text-white' : 'bg-black/30 text-white/70 hover:bg-yellow-400 hover:text-white'}`} title="設為封面"><Star size={10} className={img.isPrimary ? 'fill-white' : ''}/></button>
-                                                                <button onClick={(e) => { e.stopPropagation(); setEditingMedia(img); }} className="absolute top-1 right-8 p-1 bg-black/30 hover:bg-blue-500 text-white rounded-full backdrop-blur-sm transition-colors" title="編輯圖片"><Edit size={10}/></button>
-                                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} className="absolute top-1 right-1 p-1 bg-black/30 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors" title="刪除圖片"><Trash2 size={10}/></button>
+                                                            <div 
+                                                                key={img.id} 
+                                                                className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${currentActiveImgUrl === img.url ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : (img.isPrimary ? 'border-yellow-400 shadow-sm' : 'border-transparent hover:border-slate-300')}`}
+                                                            >
+                                                                <img 
+                                                                    src={img.url} 
+                                                                    className="w-full h-full object-cover" 
+                                                                    // ★ 點擊小圖：只更新上方的大預覽框
+                                                                    onClick={() => setActiveGroupImages(prev => ({...prev, [group.key]: img.url}))}
+                                                                    // ★ 雙擊小圖：直接全螢幕放大
+                                                                    onDoubleClick={() => setPreviewImage(img.url)}
+                                                                />
+                                                                
+                                                                {/* ★ 修復按鈕重疊：右上角群組 (編輯 + 刪除並排) */}
+                                                                <div className="absolute top-1 right-1 flex items-center gap-1 z-20">
+                                                                    <button onClick={(e) => { e.stopPropagation(); setEditingMedia(img); }} className="p-1.5 bg-black/50 hover:bg-blue-500 text-white rounded-full backdrop-blur-sm transition-colors" title="進入編輯排版模式"><Edit size={12}/></button>
+                                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} className="p-1.5 bg-black/50 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors" title="永久刪除"><Trash2 size={12}/></button>
+                                                                </div>
+                                                                
+                                                                {/* ★ 左上角：設為封面 (星星) */}
+                                                                <button onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} className={`absolute top-1 left-1 p-1.5 rounded-full shadow-sm backdrop-blur-sm transition-all z-20 ${img.isPrimary ? 'bg-yellow-500 text-white' : 'bg-black/50 text-white/70 hover:bg-yellow-500 hover:text-white'}`} title="設為封面圖"><Star size={12} className={img.isPrimary ? 'fill-white' : ''}/></button>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
                                             </div>
-                                        )}
+                                            );
+                                        })()}
                                     </div>
                                 );
                             })}
