@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  Check, AlertCircle, Link, Share2, Key, Sun, Crop, Move, MousePointerSquare,
+  Check, AlertCircle, Link, Share2, Key, Sun, Crop, Move, MousePointer2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
   Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing
 } from 'lucide-react';
@@ -2220,7 +2220,7 @@ const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
                                     <Move size={16} className="mr-2"/> 移動排版
                                 </button>
                                 <button onClick={() => setEditorMode('mask')} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition ${editorMode === 'mask' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
-                                    <MousePointerSquare size={16} className="mr-2"/> 畫遮罩
+                                    <MousePointer2 size={16} className="mr-2"/> 畫遮罩
                                 </button>
                             </div>
                             <p className="text-[10px] text-slate-400 mt-2 leading-tight">
