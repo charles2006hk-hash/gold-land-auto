@@ -9,7 +9,7 @@ import {
   ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
   StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  Check, AlertCircle, Link, Share2, Key, 
+  Check, AlertCircle, Link, Share2, Key, Sun, Crop,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
   Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing
 } from 'lucide-react';
@@ -1814,6 +1814,196 @@ const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ------------------------------------------------------------------
+// ★★★ 新增：智慧圖片編輯器 (支援裁切、亮度、車牌遮罩與手機觸控) ★★★
+// ------------------------------------------------------------------
+const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [imgObj, setImgObj] = useState<HTMLImageElement | null>(null);
+    const [brightness, setBrightness] = useState(100);
+    const [masks, setMasks] = useState<{x:number, y:number, w:number, h:number}[]>([]);
+    const [isDrawingMask, setIsDrawingMask] = useState(false);
+    const [startPos, setStartPos] = useState({x:0, y:0});
+    const [currentPos, setCurrentPos] = useState({x:0, y:0});
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [cropBox, setCropBox] = useState<{x:number, y:number, w:number, h:number}|null>(null);
+
+    // 1. 載入圖片 (處理跨域轉 Base64)
+    useEffect(() => {
+        const loadImg = async () => {
+            try {
+                const res = await fetch(mediaItem.url);
+                const blob = await res.blob();
+                const localUrl = URL.createObjectURL(blob);
+                const img = new Image();
+                img.onload = () => {
+                    setImgObj(img);
+                    setCropBox({ x: 0, y: 0, w: img.width, h: img.height });
+                };
+                img.src = localUrl;
+            } catch(e) { 
+                alert("圖片加載失敗，可能是跨域限制。"); 
+                onClose(); 
+            }
+        };
+        loadImg();
+    }, [mediaItem]);
+
+    // 2. 繪製 Canvas
+    useEffect(() => {
+        if (!imgObj || !canvasRef.current || !cropBox) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = cropBox.w;
+        canvas.height = cropBox.h;
+
+        // 繪製底圖 (套用亮度和裁切位移)
+        ctx.filter = `brightness(${brightness}%)`;
+        ctx.drawImage(imgObj, cropBox.x, cropBox.y, cropBox.w, cropBox.h, 0, 0, cropBox.w, cropBox.h);
+        ctx.filter = 'none';
+
+        // 繪製已保存的遮罩 (黑色方塊)
+        ctx.fillStyle = '#1e293b'; 
+        masks.forEach(m => { ctx.fillRect(m.x, m.y, m.w, m.h); });
+
+        // 繪製拖曳中的預覽框
+        if (isDrawingMask) {
+            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+            const w = currentPos.x - startPos.x;
+            const h = currentPos.y - startPos.y;
+            ctx.fillRect(startPos.x, startPos.y, w, h);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(startPos.x, startPos.y, w, h);
+        }
+    }, [imgObj, brightness, masks, isDrawingMask, currentPos, cropBox]);
+
+    // 3. 滑鼠與觸控事件 (畫遮罩)
+    const getPos = (clientX: number, clientY: number) => {
+        const rect = canvasRef.current!.getBoundingClientRect();
+        const scaleX = canvasRef.current!.width / rect.width;
+        const scaleY = canvasRef.current!.height / rect.height;
+        return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    };
+
+    const startDraw = (clientX: number, clientY: number) => {
+        setIsDrawingMask(true);
+        const pos = getPos(clientX, clientY);
+        setStartPos(pos); setCurrentPos(pos);
+    };
+    const moveDraw = (clientX: number, clientY: number) => {
+        if (!isDrawingMask) return;
+        setCurrentPos(getPos(clientX, clientY));
+    };
+    const endDraw = () => {
+        if (!isDrawingMask) return;
+        setIsDrawingMask(false);
+        const w = currentPos.x - startPos.x;
+        const h = currentPos.y - startPos.y;
+        if (Math.abs(w) > 15 && Math.abs(h) > 15) { // 避免誤觸
+            const finalX = w > 0 ? startPos.x : currentPos.x;
+            const finalY = h > 0 ? startPos.y : currentPos.y;
+            setMasks([...masks, { x: finalX, y: finalY, w: Math.abs(w), h: Math.abs(h) }]);
+        }
+    };
+
+    // 4. 自動置中裁切 (4:3 黃金比例)
+    const handleAutoCenter = () => {
+        if (!imgObj) return;
+        const targetRatio = 4 / 3;
+        const imgRatio = imgObj.width / imgObj.height;
+        let newW, newH, newX, newY;
+
+        if (imgRatio > targetRatio) {
+            newH = imgObj.height; newW = newH * targetRatio;
+            newX = (imgObj.width - newW) / 2; newY = 0;
+        } else {
+            newW = imgObj.width; newH = newW / targetRatio;
+            newX = 0; newY = (imgObj.height - newH) / 2;
+        }
+        setCropBox({ x: newX, y: newY, w: newW, h: newH });
+        setMasks([]); // 座標改變，清空之前的遮罩
+    };
+
+    // 5. 儲存圖片
+    const handleSaveClick = async () => {
+        if (!canvasRef.current) return;
+        setIsProcessing(true);
+        try {
+            const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.85); // 輸出高畫質
+            await onSave(mediaItem, dataUrl);
+        } catch(e) { alert('儲存失敗'); } 
+        finally { setIsProcessing(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center md:p-4">
+            <div className="w-full md:max-w-5xl bg-slate-900 text-white md:rounded-2xl flex flex-col h-full md:h-[85vh] overflow-hidden shadow-2xl">
+                {/* 頂部 Header */}
+                <div className="p-4 flex justify-between items-center border-b border-slate-700 bg-slate-800 flex-none">
+                    <h3 className="font-bold flex items-center"><Edit size={18} className="mr-2 text-blue-400"/> 圖片編輯與美化</h3>
+                    <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
+                </div>
+                
+                {/* 編輯區 */}
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    {/* 左側：畫布 (支援手機觸控) */}
+                    <div className="flex-1 p-2 md:p-6 flex items-center justify-center bg-black/50 overflow-hidden relative touch-none">
+                        {!imgObj && <div className="text-white flex items-center"><Loader2 className="animate-spin mr-2"/> 載入中...</div>}
+                        <canvas 
+                            ref={canvasRef}
+                            onMouseDown={(e) => startDraw(e.clientX, e.clientY)}
+                            onMouseMove={(e) => moveDraw(e.clientX, e.clientY)}
+                            onMouseUp={endDraw} onMouseLeave={endDraw}
+                            onTouchStart={(e) => { e.preventDefault(); startDraw(e.touches[0].clientX, e.touches[0].clientY); }}
+                            onTouchMove={(e) => { e.preventDefault(); moveDraw(e.touches[0].clientX, e.touches[0].clientY); }}
+                            onTouchEnd={endDraw}
+                            className="max-w-full max-h-full object-contain cursor-crosshair shadow-2xl border border-white/10"
+                        />
+                    </div>
+
+                    {/* 右側/底部：控制面板 */}
+                    <div className="w-full md:w-72 bg-slate-800 p-5 flex flex-col gap-6 overflow-y-auto flex-none border-t md:border-t-0 md:border-l border-slate-700">
+                        
+                        <div>
+                            <label className="text-xs text-slate-400 font-bold mb-3 flex items-center"><Sun size={16} className="mr-1.5"/> 亮度調整 ({brightness}%)</label>
+                            <input type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} className="w-full accent-blue-500"/>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-slate-400 font-bold mb-3 flex items-center"><Crop size={16} className="mr-1.5"/> 智能裁切</label>
+                            <button onClick={handleAutoCenter} className="w-full bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold py-3 rounded-lg border border-slate-600 transition shadow-sm">
+                                自動置中 (4:3)
+                            </button>
+                            <p className="text-[10px] text-slate-500 mt-2 leading-tight">適用於封面圖，自動裁除多餘的左右或上下邊緣。</p>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-slate-400 font-bold mb-3 flex items-center">🛡️ 車牌遮罩</label>
+                            <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 text-xs text-slate-300 leading-relaxed">
+                                💡 直接在圖片上 <span className="text-yellow-400 font-bold">「滑動手指/滑鼠」</span> 即可畫出黑色方塊，用來遮擋車牌或路人。
+                            </div>
+                            {masks.length > 0 && (
+                                <button onClick={() => setMasks([])} className="w-full mt-3 bg-red-900/40 hover:bg-red-900/80 text-red-200 text-xs font-bold py-2 rounded-lg transition border border-red-800/50">
+                                    復原 (清除所有遮罩)
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="mt-auto pt-4 md:border-t border-slate-700">
+                            <button onClick={handleSaveClick} disabled={isProcessing || !imgObj} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition disabled:opacity-50 active:scale-95">
+                                {isProcessing ? <><Loader2 className="animate-spin mr-2" size={18}/> 處理中...</> : <><Save size={18} className="mr-2"/> 覆蓋並儲存</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
 // ★★★ Media Library Module (v16.1: 使用標準壓縮工具 + 130KB 限制) ★★★
 // ------------------------------------------------------------------
 const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }: any) => {
@@ -1836,6 +2026,40 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
     const [mobileTab, setMobileTab] = useState<'inbox' | 'classify' | 'gallery'>('inbox');
 
     const [classifySearch, setClassifySearch] = useState('');
+
+    // ★★★ 新增：控制圖片編輯器的狀態 ★★★
+    const [editingMedia, setEditingMedia] = useState<MediaLibraryItem | null>(null);
+
+    // ★★★ 新增：處理編輯後儲存的邏輯 ★★★
+    const handleSaveEditedImage = async (oldItem: MediaLibraryItem, newBase64: string) => {
+        if (!storage || !db) return;
+        try {
+            // 1. 上傳新圖片到 Storage
+            const newFilePath = `media/${appId}/edited_${Date.now()}.jpg`;
+            const storageRef = ref(storage, newFilePath);
+            await uploadString(storageRef, newBase64, 'data_url');
+            const newUrl = await getDownloadURL(storageRef);
+
+            // 2. 更新資料庫中的 URL 與路徑
+            const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', oldItem.id);
+            await updateDoc(docRef, {
+                url: newUrl,
+                path: newFilePath,
+                updatedAt: serverTimestamp()
+            });
+
+            // 3. 刪除舊圖片 (節省空間)
+            if (oldItem.path) {
+                const oldRef = ref(storage, oldItem.path);
+                await deleteObject(oldRef).catch(e => console.warn("舊圖刪除失敗(可忽略)", e));
+            }
+
+            setEditingMedia(null); // 關閉編輯器
+        } catch (err) {
+            console.error(err);
+            alert('儲存失敗，請檢查網路連線。');
+        }
+    };
 
     // ★★★ 智能圖庫資料讀取 (嚴格權限版：Inbox 私有化) ★★★
     useEffect(() => {
@@ -2085,6 +2309,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                 {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10"><Check size={10}/></div>}
                                 <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                                     <button onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} className="p-1 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm" title="預覽"><Maximize2 size={12} /></button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingMedia(item); }} className="p-1 rounded-full bg-blue-600/70 hover:bg-blue-600 text-white backdrop-blur-sm" title="編輯圖片"><Edit size={12} /></button>
                                     <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} className="p-1 rounded-full bg-red-600/70 hover:bg-red-600 text-white backdrop-blur-sm" title="刪除"><Trash2 size={12} /></button>
                                 </div>
                             </div>
@@ -2212,6 +2437,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                                             <div key={img.id} className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${img.isPrimary ? 'border-yellow-400 shadow-md' : 'border-transparent hover:border-slate-300'}`}>
                                                                 <img src={img.url} className="w-full h-full object-cover" onClick={() => setPreviewImage(img.url)}/>
                                                                 <button onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} className={`absolute top-1 left-1 p-1 rounded-full shadow-sm backdrop-blur-sm transition-all ${img.isPrimary ? 'bg-yellow-400 text-white' : 'bg-black/30 text-white/70 hover:bg-yellow-400 hover:text-white'}`} title="設為封面"><Star size={10} className={img.isPrimary ? 'fill-white' : ''}/></button>
+                                                                <button onClick={(e) => { e.stopPropagation(); setEditingMedia(img); }} className="absolute top-1 right-8 p-1 bg-black/30 hover:bg-blue-500 text-white rounded-full backdrop-blur-sm transition-colors" title="編輯圖片"><Edit size={10}/></button>
                                                                 <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} className="absolute top-1 right-1 p-1 bg-black/30 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors" title="刪除圖片"><Trash2 size={10}/></button>
                                                             </div>
                                                         ))}
@@ -2228,6 +2454,15 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
             </div>
 
             {previewImage && (<div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}><img src={previewImage} className="max-w-full max-h-[90vh] object-contain"/><button className="absolute top-4 right-4 text-white"><X size={32}/></button></div>)}
+            {/* 圖片編輯器彈窗 */}
+            {editingMedia && (
+                <ImageEditorModal 
+                    mediaItem={editingMedia} 
+                    onClose={() => setEditingMedia(null)} 
+                    onSave={handleSaveEditedImage} 
+                />
+            )}
+        
         </div>
     );
 };
