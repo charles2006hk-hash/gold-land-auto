@@ -5993,17 +5993,45 @@ const VehicleFormModal = ({
                         <div className="grid grid-cols-1 gap-4">
                             {/* 收款區 */}
                             <div className="bg-gray-50 p-3 rounded-xl border border-gray-200">
-                                <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center"><span>收款記錄 (Payments)</span><span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span></h4>
-                                <div className="space-y-1 mb-2">
-                                    {(v.payments || []).map((p: any) => (<div key={p.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center"><div className="col-span-2 text-gray-400">{p.date}</div><div className="col-span-3 font-bold">{p.type}</div><div className="col-span-3 text-gray-500 truncate">{p.note || '-'}</div><div className="col-span-3 font-mono text-right">{formatCurrency(p.amount)}</div><div className="col-span-1 text-right">{!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600"><Trash2 size={12}/></button>}</div></div>))}
-                                    {pendingCbTasks.map((task: any) => (<div key={task.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊自動填入下方收款欄"><div className="col-span-2 text-amber-600/70">{task.date}</div><div className="col-span-3 font-bold flex items-center"><Info size={10} className="mr-1"/> {task.item}</div><div className="col-span-3 text-amber-700 truncate">{task.institution}</div><div className="col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div><div className="col-span-1 text-right"><span className="bg-amber-200 px-1 rounded text-[9px] font-bold">待收</span></div></div>))}
+                                <h4 className="font-bold text-xs text-gray-500 mb-2 flex justify-between items-center">
+                                    <span>收款記錄 (Payments)</span>
+                                    <span className="text-green-600 bg-green-100 px-2 py-0.5 rounded">已收: {formatCurrency(totalReceived)}</span>
+                                </h4>
+                                
+                                {/* --- 收款列表 (響應式修改) --- */}
+                                <div className="space-y-2 mb-2">
+                                    {(v.payments || []).map((p: any) => (
+                                        <div key={p.id} className="flex flex-wrap md:grid md:grid-cols-12 gap-y-1 md:gap-2 text-xs p-2 bg-white border rounded shadow-sm items-center relative">
+                                            <div className="w-1/2 md:col-span-2 text-gray-400">{p.date}</div>
+                                            <div className="w-1/2 md:col-span-3 font-bold text-right md:text-left pr-6 md:pr-0 text-slate-700">{p.type}</div>
+                                            <div className="w-full md:col-span-3 text-gray-500 truncate text-[10px] md:text-xs">{p.note || '-'}</div>
+                                            <div className="w-full md:col-span-3 font-mono text-right font-bold text-blue-600 md:text-black">{formatCurrency(p.amount)}</div>
+                                            <div className="absolute right-1 top-1 md:static md:col-span-1 text-right">
+                                                {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600 p-1.5 bg-gray-50 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14}/></button>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    
+                                    {pendingCbTasks.map((task: any) => (
+                                        <div key={task.id} className="flex flex-wrap md:grid md:grid-cols-12 gap-y-1 md:gap-2 text-xs p-2 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 group transition-colors items-center relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊自動填入下方收款欄">
+                                            <div className="w-1/2 md:col-span-2 text-amber-600/70">{task.date}</div>
+                                            <div className="w-1/2 md:col-span-3 font-bold flex items-center justify-end md:justify-start pr-8 md:pr-0"><Info size={12} className="mr-1"/> {task.item}</div>
+                                            <div className="w-full md:col-span-3 text-amber-700 truncate text-[10px] md:text-xs">{task.institution}</div>
+                                            <div className="w-full md:col-span-3 font-mono font-bold text-right">{formatCurrency(task.fee)}</div>
+                                            <div className="absolute right-2 top-2 md:static md:col-span-1 text-right"><span className="bg-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm">待收</span></div>
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
-                                    <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                    <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white font-bold">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
-                                    <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                    <input type="text" placeholder="$" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
-                                    <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-3 rounded hover:bg-slate-700">收款</button>
+
+                                {/* --- 新增收款輸入區 (響應式修改) --- */}
+                                <div className="grid grid-cols-2 md:flex gap-2 pt-3 border-t border-gray-200 mt-3">
+                                    <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white shadow-sm"/>
+                                    <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white font-bold shadow-sm text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
+                                    <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="col-span-2 md:flex-1 text-xs p-2 border rounded outline-none bg-white shadow-sm"/>
+                                    <div className="col-span-2 flex gap-2">
+                                        <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 md:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-blue-600 shadow-sm"/>
+                                        <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="bg-slate-800 text-white text-xs px-5 rounded-lg hover:bg-slate-700 shadow-sm font-bold whitespace-nowrap active:scale-95 transition-transform">新增收款</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -6013,35 +6041,50 @@ const VehicleFormModal = ({
                                     <span>車輛費用 (Expenses)</span>
                                     <span className="text-slate-600 bg-slate-200 px-2 py-0.5 rounded">總計: {formatCurrency(totalExpenses)}</span>
                                 </h4>
-                                <div className="space-y-1 mb-2">
+                                
+                                {/* --- 費用列表 (響應式修改) --- */}
+                                <div className="space-y-2 mb-2">
                                     {(v.expenses || []).map((exp: any) => (
-                                        <div key={exp.id} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-white border rounded shadow-sm items-center">
-                                            <div className="col-span-2 text-gray-400">{exp.date}</div>
-                                            <div className="col-span-3 font-bold">{exp.type}</div>
-                                            <div className="col-span-3 text-gray-500 truncate">{exp.company}</div>
-                                            <div className="col-span-2 font-mono text-right">{formatCurrency(exp.amount)}</div>
+                                        <div key={exp.id} className="flex flex-wrap md:grid md:grid-cols-12 gap-y-1 md:gap-2 text-xs p-2 bg-white border rounded shadow-sm items-center relative">
+                                            <div className="w-1/2 md:col-span-2 text-gray-400">{exp.date}</div>
+                                            <div className="w-1/2 md:col-span-3 font-bold text-right md:text-left pr-16 md:pr-0 text-slate-700">{exp.type}</div>
+                                            <div className="w-full md:col-span-3 text-gray-500 truncate text-[10px] md:text-xs">{exp.company}</div>
+                                            <div className="w-full md:col-span-2 font-mono text-right font-bold md:text-black">{formatCurrency(exp.amount)}</div>
                                             
-                                            {/* ★★★ 修改 1.2：加入付款狀態切換按鈕 ★★★ */}
-                                            <div className="col-span-2 text-right flex justify-end gap-1">
+                                            {/* 付款狀態切換與刪除按鈕 */}
+                                            <div className="absolute right-1 top-1 md:static w-auto md:w-full md:col-span-2 flex justify-end gap-1 items-center">
                                                 <button 
                                                     type="button" 
                                                     onClick={() => updateExpenseStatus(v.id!, exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')}
-                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${exp.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}
+                                                    className={`px-2 py-1 md:px-1.5 md:py-0.5 rounded text-[10px] font-bold border shadow-sm transition-colors ${exp.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}
                                                 >
                                                     {exp.status === 'Paid' ? '已付' : '未付'}
                                                 </button>
-                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600"><X size={12}/></button>
+                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 p-1 bg-gray-50 hover:bg-red-50 rounded-md transition-colors"><X size={14}/></button>
                                             </div>
                                         </div>
                                     ))}
-                                    {(v.crossBorder?.tasks || []).filter((t:any) => t.fee > 0).map((task: any) => (<div key={`cb-${task.id}`} className="grid grid-cols-12 gap-2 text-xs p-1.5 bg-blue-50/50 border border-blue-100 rounded shadow-sm items-center text-blue-800"><div className="col-span-2 text-blue-400">{task.date}</div><div className="col-span-3 font-bold flex items-center"><Globe size={10} className="mr-1"/> {task.item}</div><div className="col-span-3 text-blue-600/70 truncate">中港業務</div><div className="col-span-3 font-mono text-right">{formatCurrency(task.fee)}</div><div className="col-span-1 text-right"></div></div>))}
+                                    
+                                    {(v.crossBorder?.tasks || []).filter((t:any) => t.fee > 0).map((task: any) => (
+                                        <div key={`cb-${task.id}`} className="flex flex-wrap md:grid md:grid-cols-12 gap-y-1 md:gap-2 text-xs p-2 bg-blue-50/50 border border-blue-100 rounded shadow-sm items-center text-blue-800">
+                                            <div className="w-1/2 md:col-span-2 text-blue-400">{task.date}</div>
+                                            <div className="w-1/2 md:col-span-3 font-bold flex items-center justify-end md:justify-start"><Globe size={10} className="mr-1"/> {task.item}</div>
+                                            <div className="w-full md:col-span-3 text-blue-600/70 truncate text-[10px] md:text-xs">中港業務代辦</div>
+                                            <div className="w-full md:col-span-3 font-mono text-right font-bold">{formatCurrency(task.fee)}</div>
+                                            <div className="hidden md:block md:col-span-1 text-right"></div>
+                                        </div>
+                                    ))}
                                 </div>
-                                <div className="flex gap-1 pt-1 border-t border-gray-200 mt-2">
-                                    <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-24 text-xs p-1.5 border rounded outline-none bg-white"/>
-                                    <select value={newExpense.type} onChange={handleExpenseTypeChange} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
-                                    <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="flex-1 text-xs p-1.5 border rounded outline-none bg-white"><option value="">公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
-                                    <input type="text" placeholder="$" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-20 text-xs p-1.5 border rounded outline-none bg-white text-right font-mono"/>
-                                    <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-3 rounded hover:bg-gray-700">新增</button>
+
+                                {/* --- 新增費用輸入區 (響應式修改) --- */}
+                                <div className="grid grid-cols-2 md:flex gap-2 pt-3 border-t border-gray-200 mt-3">
+                                    <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white shadow-sm"/>
+                                    <select value={newExpense.type} onChange={handleExpenseTypeChange} className="col-span-1 md:flex-1 text-xs p-2 border rounded outline-none bg-white shadow-sm text-slate-700"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
+                                    <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="col-span-2 md:flex-1 text-xs p-2 border rounded outline-none bg-white shadow-sm text-slate-700"><option value="">選公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
+                                    <div className="col-span-2 flex gap-2">
+                                        <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="flex-1 md:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-red-600 shadow-sm"/>
+                                        <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-5 rounded-lg hover:bg-gray-700 shadow-sm font-bold whitespace-nowrap active:scale-95 transition-transform">記一筆</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
