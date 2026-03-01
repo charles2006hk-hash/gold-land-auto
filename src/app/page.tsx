@@ -5838,10 +5838,10 @@ const VehicleFormModal = ({
             </div>
           </div>
 
-          <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+          <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-24 md:pb-0">
             
             {/* 左側欄 (VRD & Photos) */}
-            <div className="w-full md:w-[35%] bg-slate-200/50 border-r border-slate-300 flex flex-col h-auto md:h-full overflow-hidden relative order-2 md:order-1">
+                <div className="w-full md:w-[35%] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:flex-auto md:h-full md:overflow-hidden relative order-2 md:order-1">
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in zoom-in-95 duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫中心</h3><button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button></div>
@@ -5918,8 +5918,8 @@ const VehicleFormModal = ({
             </div>
             
             {/* 右側欄 (Sales & Finance) */}
-            <div className="flex-1 flex flex-col h-full bg-white overflow-hidden order-1 md:order-2">
-                <div className="flex-1 overflow-y-auto p-6 scrollbar-thin pb-24">
+                <div className="w-full md:flex-1 flex flex-col flex-none md:flex-auto md:h-full bg-white md:overflow-hidden order-1 md:order-2">
+                    <div className="flex-1 md:overflow-y-auto p-6 scrollbar-thin">
                     <div className="flex flex-wrap items-center justify-between gap-4 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-100">
                         <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm"><input type="hidden" name="status" value={currentStatus} />{['In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(status => (<button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-3 py-1.5 rounded-md text-[10px] md:text-xs font-bold transition-all border ${currentStatus === status ? 'bg-slate-800 text-white border-slate-800 shadow' : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'}`}>{status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}</button>))}</div>
                         {/* ★★★ 2. 在這裡插入「負責人選單」 ★★★ */}
@@ -6047,7 +6047,7 @@ const VehicleFormModal = ({
                         </div>
                     </div>
 
-                    <div className="p-4 border-t border-slate-200 bg-white sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex justify-end gap-3 items-start safe-area-bottom">
+                    <div className="p-4 border-t border-slate-200 bg-white fixed bottom-0 left-0 w-full md:w-auto md:sticky md:bottom-0 z-[60] shadow-[0_-10px_30px_rgba(0,0,0,0.15)] flex justify-end gap-3 items-start safe-area-bottom">
                         <div className="flex-1 mr-4">
                             <textarea name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2 border rounded h-16 resize-none outline-none focus:ring-1 ring-blue-200"></textarea>
                         </div>
