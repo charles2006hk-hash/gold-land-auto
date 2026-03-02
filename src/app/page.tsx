@@ -3548,45 +3548,47 @@ const CrossBorderView = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：AI 智能新聞快訊 (具備智慧排程、LocalStorage快取、25條Buffer) ★★★
+// ★★★ 新增：AI 智能新聞快訊 (結合實時匯率與翻頁特效版) ★★★
 // ------------------------------------------------------------------
 const SmartNewsTicker = () => {
     const [aiNewsFeed, setAiNewsFeed] = useState([
         { tag: '⏳ 系統提示', text: '正在載入 AI 即時整理的車市與財經快訊...', time: '--:--' }
     ]);
 
+    // 金融翻頁看板的當前索引
+    const [finIndex, setFinIndex] = useState(0);
+    
+    // 金融數據狀態 (預設顯示載入中)
+    const [financialStats, setFinancialStats] = useState([
+        { label: '恆生指數', value: '載入中', color: 'text-slate-400' },
+        { label: '日圓/港元', value: '...', color: 'text-slate-400' },
+        { label: '澳元/港元', value: '...', color: 'text-slate-400' },
+        { label: '歐元/港元', value: '...', color: 'text-slate-400' },
+        { label: '英鎊/港元', value: '...', color: 'text-slate-400' }
+    ]);
+
     useEffect(() => {
+        // 1. 抓取 AI 新聞 (保留您上一版的完美快取邏輯)
         const checkAndFetchNews = async () => {
             const now = new Date();
             const currentHour = now.getHours();
-            
-            // 從瀏覽器本地記憶體拿取上次更新時間與資料
             const lastFetchStr = localStorage.getItem('goldland_news_last_fetch');
             const cachedNewsStr = localStorage.getItem('goldland_news_cache');
             
             let shouldFetch = false;
 
             if (!lastFetchStr || !cachedNewsStr) {
-                // 狀況 1：從來沒抓過資料 (第一次打開系統)
                 shouldFetch = true;
             } else {
                 const lastFetchDate = new Date(parseInt(lastFetchStr));
-                const isNewDay = 
-                    lastFetchDate.getDate() !== now.getDate() || 
-                    lastFetchDate.getMonth() !== now.getMonth() || 
-                    lastFetchDate.getFullYear() !== now.getFullYear();
+                const isNewDay = lastFetchDate.getDate() !== now.getDate() || lastFetchDate.getMonth() !== now.getMonth() || lastFetchDate.getFullYear() !== now.getFullYear();
 
                 if (isNewDay) {
-                    // 狀況 2：跨日了，這是「當天第一次打開」，強制更新
                     shouldFetch = true;
                 } else {
-                    // 狀況 3：同一天內，檢查是否在 10:00 ~ 22:00 之間
                     if (currentHour >= 10 && currentHour < 22) {
                         const hoursSinceLastFetch = (now.getTime() - lastFetchDate.getTime()) / (1000 * 60 * 60);
-                        if (hoursSinceLastFetch >= 3) {
-                            // 距離上次抓取已經超過 3 小時，執行更新
-                            shouldFetch = true;
-                        }
+                        if (hoursSinceLastFetch >= 3) shouldFetch = true;
                     }
                 }
             }
@@ -3598,29 +3600,65 @@ const SmartNewsTicker = () => {
                         const data = await res.json();
                         if (data && data.length > 0) {
                             setAiNewsFeed(data);
-                            // 存入 LocalStorage，記錄時間與資料
                             localStorage.setItem('goldland_news_last_fetch', now.getTime().toString());
                             localStorage.setItem('goldland_news_cache', JSON.stringify(data));
                         }
                     }
                 } catch (e) {
-                    console.error("Failed to fetch news", e);
-                    // 如果斷網或 API 壞掉，且本機有舊資料，就拿舊資料頂著用
                     if (cachedNewsStr) setAiNewsFeed(JSON.parse(cachedNewsStr));
                 }
             } else if (cachedNewsStr) {
-                // 不需要抓取時，直接秒速從記憶體讀取之前存好的 20 幾條新聞
                 setAiNewsFeed(JSON.parse(cachedNewsStr));
             }
         };
 
-        // 畫面載入時立刻檢查一次
-        checkAndFetchNews(); 
+        // 2. 抓取實時真實匯率 (免 API Key 的公共接口)
+        const fetchRealTimeForex = async () => {
+            try {
+                const res = await fetch('https://open.er-api.com/v6/latest/HKD');
+                const data = await res.json();
+                if (data && data.rates) {
+                    // 香港習慣：日圓通常看「百算」 (100 JPY = ? HKD)
+                    const jpy100 = (100 / data.rates.JPY).toFixed(2); 
+                    const aud = (1 / data.rates.AUD).toFixed(2);
+                    const eur = (1 / data.rates.EUR).toFixed(2);
+                    const gbp = (1 / data.rates.GBP).toFixed(2);
+
+                    // 這裡可以加入模擬的恆生指數 (因為免費即時股票API較少)
+                    const mockHSI = (19500 + Math.random() * 200).toFixed(0);
+
+                    setFinancialStats([
+                        { label: '恆指(模擬)', value: mockHSI, color: 'text-green-400' },
+                        { label: '百日圓/港元', value: jpy100, color: 'text-yellow-400' },
+                        { label: '澳元/港元', value: aud, color: 'text-blue-300' },
+                        { label: '歐元/港元', value: eur, color: 'text-blue-300' },
+                        { label: '英鎊/港元', value: gbp, color: 'text-blue-300' }
+                    ]);
+                }
+            } catch (error) {
+                console.error("Forex fetch error", error);
+            }
+        };
+
+        checkAndFetchNews();
+        fetchRealTimeForex(); 
         
-        // 設定每 10 分鐘在背景靜默檢查一次時間條件是否滿足 (滿足才會真的呼叫 API)
-        const interval = setInterval(checkAndFetchNews, 10 * 60 * 1000);
-        return () => clearInterval(interval);
+        const newsInterval = setInterval(checkAndFetchNews, 10 * 60 * 1000);
+        const forexInterval = setInterval(fetchRealTimeForex, 60 * 60 * 1000); // 匯率每小時更新一次
+        
+        return () => {
+            clearInterval(newsInterval);
+            clearInterval(forexInterval);
+        };
     }, []);
+
+    // 處理金融數據的翻頁跳動 (每 3 秒換一個)
+    useEffect(() => {
+        const flipInterval = setInterval(() => {
+            setFinIndex((prev) => (prev + 1) % financialStats.length);
+        }, 3000);
+        return () => clearInterval(flipInterval);
+    }, [financialStats.length]);
 
     return (
         <div className="flex items-center bg-slate-100 text-slate-700 rounded-full shadow-inner overflow-hidden w-full border border-slate-200 h-8 relative max-w-3xl mx-auto">
@@ -3632,7 +3670,6 @@ const SmartNewsTicker = () => {
                 .animate-marquee-inline {
                     display: inline-flex;
                     white-space: nowrap;
-                    /* ★ 將時間從 40s 調慢到 150s，以適應 20 幾條新聞的長度 */
                     animation: marquee-inline 150s linear infinite;
                 }
                 .animate-marquee-inline:hover {
@@ -3644,17 +3681,33 @@ const SmartNewsTicker = () => {
                 }
             `}</style>
 
-            {/* 左側標籤 */}
-            <div className="flex-none bg-blue-600 text-white text-[10px] font-bold px-3 h-full flex items-center z-10 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
+            {/* 1. 左側標籤 (iPhone上自動縮寫為 AI 省空間) */}
+            <div className="flex-none bg-blue-600 text-white text-[10px] font-bold px-2 md:px-3 h-full flex items-center z-20 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                 <Zap size={12} className="mr-1 text-yellow-400 fill-yellow-400 animate-pulse"/> 
-                AI 快訊
+                <span className="hidden md:inline">AI 快訊</span>
+                <span className="md:hidden">AI</span>
             </div>
 
-            {/* 右側滾動文字 */}
+            {/* 2. ★★★ 新增：實時金融垂直翻頁區 ★★★ */}
+            <div className="flex-none bg-slate-800 text-white h-full relative overflow-hidden flex items-center justify-center min-w-[95px] md:min-w-[120px] border-r border-slate-700 z-10 shadow-inner">
+                {financialStats.map((stat, idx) => (
+                    <div 
+                        key={idx} 
+                        className={`absolute inset-0 flex items-center justify-center px-2 transition-all duration-500 ease-in-out ${
+                            finIndex === idx ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                        }`}
+                    >
+                        <span className="text-[9px] md:text-[10px] text-slate-300 mr-1.5 whitespace-nowrap">{stat.label}</span>
+                        <span className={`text-[10px] md:text-[11px] font-bold font-mono tracking-tight ${stat.color}`}>{stat.value}</span>
+                    </div>
+                ))}
+            </div>
+
+            {/* 3. 右側新聞滾動文字 */}
             <div className="flex-1 overflow-hidden relative mask-edges-inline flex items-center h-full">
                 <div className="animate-marquee-inline cursor-default h-full flex items-center">
                     {[...aiNewsFeed, ...aiNewsFeed].map((item, idx) => (
-                        <div key={idx} className="flex items-center px-4 shrink-0">
+                        <div key={idx} className="flex items-center px-4 shrink-0 hover:bg-black/5 transition-colors h-full">
                             <span className="text-[9px] text-slate-400 font-mono mr-1.5">[{item.time}]</span>
                             <span className="text-[10px] font-bold text-blue-600 mr-1.5">{item.tag}</span>
                             <span className="text-[11px] text-slate-600 tracking-wide">{item.text}</span>
@@ -4732,6 +4785,21 @@ export default function GoldLandAutoDMS() {
   const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
 
+  // ★★★ 新增：自動喚醒主畫面機制 ★★★
+  useEffect(() => {
+      // 當使用者登入狀態確認後，強制刷新一次狀態來喚醒畫面
+      if (currentUser) {
+          setActiveTab(prev => {
+              // 如果不知為何變成了空值，強制切回 dashboard
+              if (!prev) return 'dashboard';
+              
+              // 觸發 React 重新渲染的微小 Hack：先清空再瞬間切回來
+              const currentTab = prev;
+              setTimeout(() => setActiveTab(currentTab), 10);
+              return prev; 
+          });
+      }
+  }, [currentUser]);
 
   // --- User Management Helper (v13.1 新增) ---
     const updateSystemUsers = async (newUsers: any[]) => {
