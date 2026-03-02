@@ -3548,34 +3548,77 @@ const CrossBorderView = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：AI 智能新聞快訊 (自動連線更新版) ★★★
+// ★★★ 新增：AI 智能新聞快訊 (具備智慧排程、LocalStorage快取、25條Buffer) ★★★
 // ------------------------------------------------------------------
 const SmartNewsTicker = () => {
-    // 預設顯示載入中
     const [aiNewsFeed, setAiNewsFeed] = useState([
         { tag: '⏳ 系統提示', text: '正在載入 AI 即時整理的車市與財經快訊...', time: '--:--' }
     ]);
 
     useEffect(() => {
-        const fetchNews = async () => {
-            try {
-                // 呼叫我們剛剛寫的後端 API
-                const res = await fetch('/api/news');
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.length > 0) {
-                        setAiNewsFeed(data);
+        const checkAndFetchNews = async () => {
+            const now = new Date();
+            const currentHour = now.getHours();
+            
+            // 從瀏覽器本地記憶體拿取上次更新時間與資料
+            const lastFetchStr = localStorage.getItem('goldland_news_last_fetch');
+            const cachedNewsStr = localStorage.getItem('goldland_news_cache');
+            
+            let shouldFetch = false;
+
+            if (!lastFetchStr || !cachedNewsStr) {
+                // 狀況 1：從來沒抓過資料 (第一次打開系統)
+                shouldFetch = true;
+            } else {
+                const lastFetchDate = new Date(parseInt(lastFetchStr));
+                const isNewDay = 
+                    lastFetchDate.getDate() !== now.getDate() || 
+                    lastFetchDate.getMonth() !== now.getMonth() || 
+                    lastFetchDate.getFullYear() !== now.getFullYear();
+
+                if (isNewDay) {
+                    // 狀況 2：跨日了，這是「當天第一次打開」，強制更新
+                    shouldFetch = true;
+                } else {
+                    // 狀況 3：同一天內，檢查是否在 10:00 ~ 22:00 之間
+                    if (currentHour >= 10 && currentHour < 22) {
+                        const hoursSinceLastFetch = (now.getTime() - lastFetchDate.getTime()) / (1000 * 60 * 60);
+                        if (hoursSinceLastFetch >= 3) {
+                            // 距離上次抓取已經超過 3 小時，執行更新
+                            shouldFetch = true;
+                        }
                     }
                 }
-            } catch (e) {
-                console.error("Failed to fetch news", e);
+            }
+
+            if (shouldFetch) {
+                try {
+                    const res = await fetch('/api/news');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && data.length > 0) {
+                            setAiNewsFeed(data);
+                            // 存入 LocalStorage，記錄時間與資料
+                            localStorage.setItem('goldland_news_last_fetch', now.getTime().toString());
+                            localStorage.setItem('goldland_news_cache', JSON.stringify(data));
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch news", e);
+                    // 如果斷網或 API 壞掉，且本機有舊資料，就拿舊資料頂著用
+                    if (cachedNewsStr) setAiNewsFeed(JSON.parse(cachedNewsStr));
+                }
+            } else if (cachedNewsStr) {
+                // 不需要抓取時，直接秒速從記憶體讀取之前存好的 20 幾條新聞
+                setAiNewsFeed(JSON.parse(cachedNewsStr));
             }
         };
 
-        fetchNews(); // 初次載入抓取
+        // 畫面載入時立刻檢查一次
+        checkAndFetchNews(); 
         
-        // 設定每 1 小時 (3600000 毫秒) 自動重新抓取一次
-        const interval = setInterval(fetchNews, 3600000);
+        // 設定每 10 分鐘在背景靜默檢查一次時間條件是否滿足 (滿足才會真的呼叫 API)
+        const interval = setInterval(checkAndFetchNews, 10 * 60 * 1000);
         return () => clearInterval(interval);
     }, []);
 
@@ -3589,7 +3632,8 @@ const SmartNewsTicker = () => {
                 .animate-marquee-inline {
                     display: inline-flex;
                     white-space: nowrap;
-                    animation: marquee-inline 40s linear infinite;
+                    /* ★ 將時間從 40s 調慢到 150s，以適應 20 幾條新聞的長度 */
+                    animation: marquee-inline 150s linear infinite;
                 }
                 .animate-marquee-inline:hover {
                     animation-play-state: paused;
@@ -3610,7 +3654,7 @@ const SmartNewsTicker = () => {
             <div className="flex-1 overflow-hidden relative mask-edges-inline flex items-center h-full">
                 <div className="animate-marquee-inline cursor-default h-full flex items-center">
                     {[...aiNewsFeed, ...aiNewsFeed].map((item, idx) => (
-                        <div key={idx} className="flex items-center px-4">
+                        <div key={idx} className="flex items-center px-4 shrink-0">
                             <span className="text-[9px] text-slate-400 font-mono mr-1.5">[{item.time}]</span>
                             <span className="text-[10px] font-bold text-blue-600 mr-1.5">{item.tag}</span>
                             <span className="text-[11px] text-slate-600 tracking-wide">{item.text}</span>
