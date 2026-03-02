@@ -911,16 +911,69 @@ const InfoWidget = () => {
         return () => clearInterval(trafficTimer);
     }, []);
 
+    // ★★★ 修改：升級版農曆轉換邏輯 (支援生肖與全中文日期) ★★★
     const getLunarDate = () => {
-        try { return new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime); } catch (e) { return ''; }
+        try {
+            const formatter = new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', dateStyle: 'full' });
+            const parts = formatter.formatToParts(currentTime);
+            
+            let year = '', month = '', day = '';
+            parts.forEach(p => {
+                if (p.type === 'year') year = p.value;
+                if (p.type === 'month') month = p.value;
+                if (p.type === 'day') day = p.value;
+            });
+
+            // 提取干支 (過濾掉可能的西元年數字與年這字)
+            const ganzhi = year.replace(/[0-9]/g, '').replace('年', '');
+            
+            // 生肖對照表
+            const zodiacMap: Record<string, string> = {
+                '子':'鼠', '丑':'牛', '寅':'虎', '卯':'兔', '辰':'龍', '巳':'蛇',
+                '午':'馬', '未':'羊', '申':'猴', '酉':'雞', '戌':'狗', '亥':'豬'
+            };
+            
+            let zodiac = '';
+            if (ganzhi.length >= 2) {
+                zodiac = zodiacMap[ganzhi.charAt(1)] || '';
+            }
+
+            // 如果日期回傳的是阿拉伯數字 (例如 14)，轉為農曆中文習慣 (十四)
+            if (/^\d+$/.test(day)) {
+                const num = parseInt(day, 10);
+                const chars = ['十', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+                if (num <= 10) day = '初' + (num === 10 ? '十' : chars[num]);
+                else if (num < 20) day = '十' + (num === 10 ? '' : chars[num % 10]);
+                else if (num === 20) day = '二十';
+                else if (num < 30) day = '廿' + chars[num % 10];
+                else if (num === 30) day = '三十';
+            }
+
+            // 確保尾部有「日」字 (例如: 正月十四日)
+            if (!day.includes('日')) day += '日';
+
+            if (ganzhi && zodiac) {
+                return `${ganzhi}年(${zodiac}年) ${month}${day}`;
+            }
+            return `${month}${day}`;
+        } catch (e) {
+            return '';
+        }
     };
 
     return (
         <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80">
             <div className="mb-3 border-b border-slate-700 pb-2">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">{currentTime.toLocaleTimeString('en-GB', { hour12: false })}</div>
-                <div className="flex justify-between mt-1 text-slate-400"><span>{currentTime.toLocaleDateString('zh-HK')}</span><span>{['日','一','二','三','四','五','六'][currentTime.getDay()]}</span></div>
-                <div className="text-center mt-1 text-yellow-500 font-medium">{getLunarDate().replace('年', '年 ')}</div>
+                {/* ★★★ 修改：將星期改為全稱「星期一」 ★★★ */}
+                <div className="flex justify-between mt-1 text-slate-400">
+                    <span>{currentTime.toLocaleDateString('zh-HK')}</span>
+                    <span>{['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][currentTime.getDay()]}</span>
+                </div>
+                {/* ★★★ 修改：直接呼叫 getLunarDate() 渲染 ★★★ */}
+                <div className="text-center mt-1 text-yellow-500 font-medium">
+                    {getLunarDate()}
+                </div>
             </div>
             {portStatus.length > 0 ? (
                 <div className="space-y-1.5 animate-fade-in">
@@ -3495,15 +3548,36 @@ const CrossBorderView = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：AI 智能新聞快訊 (單行膠囊版) ★★★
+// ★★★ 新增：AI 智能新聞快訊 (自動連線更新版) ★★★
 // ------------------------------------------------------------------
 const SmartNewsTicker = () => {
-    const aiNewsFeed = [
-        { tag: '🚗 中港政策', text: '廣東省公安廳宣布「港車北上」續期流程優化，預計縮短至3個工作日。', time: '09:00' },
-        { tag: '🌐 全球財經', text: '美聯儲維持基準利率不變，暗示年底前可能小幅降息，車市融資成本持穩。', time: '13:00' },
-        { tag: '🛣️ 交通情報', text: '港珠澳大橋本週末將迎來出境高峰，建議跨境司機提早預留通關時間。', time: '13:30' },
-        { tag: '📊 本地車市', text: '汽車及經銷商板塊受惠於新能源政策補貼，整體上揚2.5%。', time: '14:00' }
-    ];
+    // 預設顯示載入中
+    const [aiNewsFeed, setAiNewsFeed] = useState([
+        { tag: '⏳ 系統提示', text: '正在載入 AI 即時整理的車市與財經快訊...', time: '--:--' }
+    ]);
+
+    useEffect(() => {
+        const fetchNews = async () => {
+            try {
+                // 呼叫我們剛剛寫的後端 API
+                const res = await fetch('/api/news');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        setAiNewsFeed(data);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch news", e);
+            }
+        };
+
+        fetchNews(); // 初次載入抓取
+        
+        // 設定每 1 小時 (3600000 毫秒) 自動重新抓取一次
+        const interval = setInterval(fetchNews, 3600000);
+        return () => clearInterval(interval);
+    }, []);
 
     return (
         <div className="flex items-center bg-slate-100 text-slate-700 rounded-full shadow-inner overflow-hidden w-full border border-slate-200 h-8 relative max-w-3xl mx-auto">
