@@ -1144,16 +1144,38 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
         }));
     };
 
-    // 列印專用樣式
+    // 列印專用樣式 (終極修復版：解決空白頁問題)
     const PrintStyle = () => (
         <style>{`
             @media print {
                 @page { size: A4; margin: 0; }
-                body * { visibility: hidden; }
-                #a4-print-area, #a4-print-area * { visibility: visible; }
-                #a4-print-area { position: absolute; left: 0; top: 0; transform: scale(1) !important; margin: 0 !important; background: white; box-shadow: none !important; border: none !important; }
+                
+                /* 隱藏所有不需要印的元素，並加上 !important 強制執行 */
+                body * { visibility: hidden !important; }
+                
+                /* 強制將列印區塊與其內容設為可見 */
+                #a4-print-area, #a4-print-area * { 
+                    visibility: visible !important; 
+                }
+                
+                /* 將 A4 畫布強制釘在列印頁面的左上角，無視外層彈窗的限制 */
+                #a4-print-area { 
+                    position: fixed !important; 
+                    left: 0 !important; 
+                    top: 0 !important; 
+                    width: 210mm !important; 
+                    height: 297mm !important;
+                    transform: none !important; /* 覆蓋螢幕預覽時的縮小，還原 1:1 真實比例 */
+                    margin: 0 !important; 
+                    padding: 0 !important;
+                    background: white !important; 
+                    box-shadow: none !important; 
+                    border: none !important; 
+                    z-index: 999999 !important;
+                }
+                
                 .print-hidden { display: none !important; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
             }
         `}</style>
     );
