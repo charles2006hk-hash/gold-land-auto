@@ -3493,6 +3493,62 @@ const CrossBorderView = ({
         </div>
     );
 };
+
+// ------------------------------------------------------------------
+// ★★★ 新增：AI 智能新聞快訊 (單行膠囊版) ★★★
+// ------------------------------------------------------------------
+const SmartNewsTicker = () => {
+    const aiNewsFeed = [
+        { tag: '🚗 中港政策', text: '廣東省公安廳宣布「港車北上」續期流程優化，預計縮短至3個工作日。', time: '09:00' },
+        { tag: '🌐 全球財經', text: '美聯儲維持基準利率不變，暗示年底前可能小幅降息，車市融資成本持穩。', time: '13:00' },
+        { tag: '🛣️ 交通情報', text: '港珠澳大橋本週末將迎來出境高峰，建議跨境司機提早預留通關時間。', time: '13:30' },
+        { tag: '📊 本地車市', text: '汽車及經銷商板塊受惠於新能源政策補貼，整體上揚2.5%。', time: '14:00' }
+    ];
+
+    return (
+        <div className="flex items-center bg-slate-100 text-slate-700 rounded-full shadow-inner overflow-hidden w-full border border-slate-200 h-8 relative max-w-3xl mx-auto">
+            <style>{`
+                @keyframes marquee-inline {
+                    0% { transform: translateX(0); }
+                    100% { transform: translateX(-50%); } 
+                }
+                .animate-marquee-inline {
+                    display: inline-flex;
+                    white-space: nowrap;
+                    animation: marquee-inline 40s linear infinite;
+                }
+                .animate-marquee-inline:hover {
+                    animation-play-state: paused;
+                }
+                .mask-edges-inline {
+                    -webkit-mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+                    mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+                }
+            `}</style>
+
+            {/* 左側標籤 */}
+            <div className="flex-none bg-blue-600 text-white text-[10px] font-bold px-3 h-full flex items-center z-10 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
+                <Zap size={12} className="mr-1 text-yellow-400 fill-yellow-400 animate-pulse"/> 
+                AI 快訊
+            </div>
+
+            {/* 右側滾動文字 */}
+            <div className="flex-1 overflow-hidden relative mask-edges-inline flex items-center h-full">
+                <div className="animate-marquee-inline cursor-default h-full flex items-center">
+                    {[...aiNewsFeed, ...aiNewsFeed].map((item, idx) => (
+                        <div key={idx} className="flex items-center px-4">
+                            <span className="text-[9px] text-slate-400 font-mono mr-1.5">[{item.time}]</span>
+                            <span className="text-[10px] font-bold text-blue-600 mr-1.5">{item.tag}</span>
+                            <span className="text-[11px] text-slate-600 tracking-wide">{item.text}</span>
+                            <span className="mx-4 text-slate-300">|</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ------------------------------------------------------------------
 // ★★★ 8. Smart Notification Center (首頁右上角：全域提醒與列印) ★★★
 // ------------------------------------------------------------------
@@ -7621,9 +7677,22 @@ const CreateDocModule = ({
                 
                 {shareVehicle && <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} onClose={()=>setShareVehicle(null)} />}
 
-                <div className="flex justify-between items-center flex-none">
-                 <h2 className="text-2xl font-bold text-slate-800">業務儀表板</h2>
-                 <SmartNotificationCenter inventory={visibleInventory} settings={settings} />
+                {/* 儀表板頂部：標題、快訊、鈴鐺 */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
+                    
+                    {/* 1. 標題 */}
+                    <h2 className="text-2xl font-bold text-slate-800 whitespace-nowrap">業務儀表板</h2>
+                    
+                    {/* 2. 中間的一行字 AI 快訊 (會自動佔滿剩餘空間) */}
+                    <div className="flex-1 w-full min-w-0 px-0 md:px-4">
+                        <SmartNewsTicker />
+                    </div>
+
+                    {/* 3. 右側鈴鐺 */}
+                    <div className="absolute right-0 top-0 md:static">
+                        <SmartNotificationCenter inventory={visibleInventory} settings={settings} />
+                    </div>
+                    
                 </div>
               
               {/* 卡片統計 (保持不變) */}
