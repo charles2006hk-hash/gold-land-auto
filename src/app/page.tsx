@@ -7856,41 +7856,42 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      // ★ 改為：手機版上下排列 (grid-cols-1)，電腦版左右並排 (md:grid-cols-2)
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-none">
+                      // ★ 恢復：手機版左右並排 (grid-cols-2)，保持小巧精緻
+                      <div className="grid grid-cols-2 gap-2 flex-none">
                           
                           {/* 左卡片：中港提醒 */}
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col gap-2 relative overflow-hidden">
-                              <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                                  <div className="font-bold flex items-center text-sm text-slate-300">
-                                      <Globe size={16} className="mr-1.5"/> 中港業務提醒
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
+                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
+                                      <Globe size={12} className="mr-1"/> 中港
                                   </div>
-                                  <div className="flex gap-4">
-                                      <div className="flex items-baseline"><span className="text-xl font-bold text-red-400 leading-none">{cbExpiredCount}</span><span className="text-[10px] text-red-200/70 ml-1">過期</span></div>
-                                      <div className="flex items-baseline"><span className="text-xl font-bold text-amber-400 leading-none">{cbSoonCount}</span><span className="text-[10px] text-amber-200/70 ml-1">即將</span></div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
                                   </div>
                               </div>
-                              {/* 移除隱藏屬性，直接顯示列表 */}
-                              <div className="flex-1">
+                              {/* 電腦版：顯示詳細清單 */}
+                              <div className="hidden md:block flex-1">
                                   <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
                               </div>
+                              {/* 手機版：隱藏清單，點擊整張卡片跳轉 */}
+                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
                           {/* 右卡片：文件與牌費提醒 */}
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col gap-2 relative overflow-hidden">
-                              <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                                  <div className="font-bold flex items-center text-sm text-blue-200">
-                                      <Database size={16} className="mr-1.5"/> 文件 / 牌費提醒
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
+                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
+                                      <Database size={12} className="mr-1"/> 文件/牌費
                                   </div>
-                                  <div className="flex gap-4">
-                                      <div className="flex items-baseline"><span className="text-xl font-bold text-red-400 leading-none">{docExpiredCount}</span><span className="text-[10px] text-red-200/70 ml-1">過期</span></div>
-                                      <div className="flex items-baseline"><span className="text-xl font-bold text-amber-400 leading-none">{docSoonCount}</span><span className="text-[10px] text-amber-200/70 ml-1">即將</span></div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
                                   </div>
                               </div>
-                              {/* 移除隱藏屬性，直接顯示列表 */}
-                              <div className="flex-1">
+                              {/* 電腦版：顯示詳細清單與智慧跳轉 */}
+                              <div className="hidden md:block flex-1">
                                   <AlertList items={docAlerts} onItemClick={(item:any) => { 
-                                      // ★ 智慧跳轉判斷
                                       if (item.source === 'vehicle') {
                                           setActiveTab('inventory');
                                           setEditingVehicle(item.raw);
@@ -7901,6 +7902,8 @@ const CreateDocModule = ({
                                       }
                                   }} />
                               </div>
+                              {/* 手機版：隱藏清單，點擊跳轉至資料庫 (要看明細可點右上角鈴鐺) */}
+                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
                           </div>
                           
                       </div>
