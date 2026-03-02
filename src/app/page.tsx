@@ -1144,48 +1144,127 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
         }));
     };
 
-    // 列印專用樣式 (終極修復版：解決空白頁問題)
-    const PrintStyle = () => (
-        <style>{`
-            @media print {
-                @page { size: A4; margin: 0; }
-                
-                /* 隱藏所有不需要印的元素，並加上 !important 強制執行 */
-                body * { visibility: hidden !important; }
-                
-                /* 強制將列印區塊與其內容設為可見 */
-                #a4-print-area, #a4-print-area * { 
-                    visibility: visible !important; 
-                }
-                
-                /* 將 A4 畫布強制釘在列印頁面的左上角，無視外層彈窗的限制 */
-                #a4-print-area { 
-                    position: fixed !important; 
-                    left: 0 !important; 
-                    top: 0 !important; 
-                    width: 210mm !important; 
-                    height: 297mm !important;
-                    transform: none !important; /* 覆蓋螢幕預覽時的縮小，還原 1:1 真實比例 */
-                    margin: 0 !important; 
-                    padding: 0 !important;
-                    background: white !important; 
-                    box-shadow: none !important; 
-                    border: none !important; 
-                    z-index: 999999 !important;
-                }
-                
-                .print-hidden { display: none !important; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-            }
-        `}</style>
+    // ------------------------------------------------------------------
+// ★★★ 新增：A4 智能證件排版與列印 (終極修復：獨立視窗列印法) ★★★
+// ------------------------------------------------------------------
+const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
+    const [images, setImages] = useState(
+        selectedItems.map((item: any, index: number) => ({
+            id: item.id,
+            url: item.url,
+            x: 60,
+            y: 40 + (index * 80),
+            width: 85.6,
+            height: 54
+        }))
     );
+
+    const [draggingId, setDraggingId] = useState<string | null>(null);
+    const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+
+    const handlePointerDown = (e: any, id: string) => {
+        setDraggingId(id);
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        setStartPos({ x: clientX, y: clientY });
+    };
+
+    const handlePointerMove = (e: any) => {
+        if (!draggingId) return;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const dx = (clientX - startPos.x) * 0.28; 
+        const dy = (clientY - startPos.y) * 0.28;
+        setImages(images.map((img: any) => img.id === draggingId ? { ...img, x: img.x + dx, y: img.y + dy } : img));
+        setStartPos({ x: clientX, y: clientY });
+    };
+
+    const handlePointerUp = () => setDraggingId(null);
+
+    useEffect(() => {
+        if (draggingId) {
+            window.addEventListener('mousemove', handlePointerMove);
+            window.addEventListener('mouseup', handlePointerUp);
+            window.addEventListener('touchmove', handlePointerMove, { passive: false });
+            window.addEventListener('touchend', handlePointerUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handlePointerMove);
+            window.removeEventListener('mouseup', handlePointerUp);
+            window.removeEventListener('touchmove', handlePointerMove);
+            window.removeEventListener('touchend', handlePointerUp);
+        };
+    }, [draggingId, startPos]);
+
+    const applyTemplate = (type: 'id_card' | 'a4_full') => {
+        setImages(images.map((img: any, index: number) => {
+            if (type === 'id_card') return { ...img, width: 85.6, height: 54, x: 62, y: 40 + (index * 70) };
+            if (type === 'a4_full') return { ...img, width: 190, height: 270, x: 10, y: 10 };
+            return img;
+        }));
+    };
+
+    // ★★★ 終極解決方案：打開乾淨的獨立視窗來列印 ★★★
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('請允許瀏覽器彈出視窗以進行列印');
+            return;
+        }
+
+        // 產生所有圖片的 HTML 標籤 (帶有絕對座標)
+        const imagesHtml = images.map((img: any) => `
+            <img src="${img.url}" style="position: absolute; left: ${img.x}mm; top: ${img.y}mm; width: ${img.width}mm; height: ${img.height}mm; object-fit: cover; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.2);" />
+        `).join('');
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>A4 文件列印</title>
+                <style>
+                    @page { size: A4; margin: 0; }
+                    body { 
+                        margin: 0; 
+                        padding: 0; 
+                        background: white; 
+                        -webkit-print-color-adjust: exact; 
+                        print-color-adjust: exact; 
+                    }
+                    .a4-page { 
+                        position: relative; 
+                        width: 210mm; 
+                        height: 297mm; 
+                        background: white; 
+                        overflow: hidden; 
+                        margin: 0;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="a4-page">
+                    ${imagesHtml}
+                </div>
+                <script>
+                    // 等待圖片載入後再觸發列印 (避免印出空白)
+                    window.onload = function() {
+                        setTimeout(function() {
+                            window.print();
+                            // 列印完畢或取消後自動關閉視窗 (Safari 需要延遲)
+                            setTimeout(function() { window.close(); }, 500);
+                        }, 500);
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
 
     return (
         <div className="fixed inset-0 z-[250] bg-slate-900/95 flex flex-col md:flex-row overflow-hidden backdrop-blur-sm">
-            <PrintStyle />
-            
-            {/* 左側：控制面板 (列印時隱藏) */}
-            <div className="w-full md:w-72 bg-slate-800 text-white p-5 flex flex-col gap-4 border-r border-slate-700 print-hidden flex-none">
+            {/* 左側：控制面板 */}
+            <div className="w-full md:w-72 bg-slate-800 text-white p-5 flex flex-col gap-4 border-r border-slate-700 flex-none">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold flex items-center"><Printer size={18} className="mr-2 text-yellow-400"/> 智能排版輸出</h3>
                     <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full"><X size={20}/></button>
@@ -1203,47 +1282,31 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
                             <span>💳 標準證件 (1:1 大小)</span> <span className="text-[10px] text-slate-400">86x54mm</span>
                         </button>
                         <button onClick={() => applyTemplate('a4_full')} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm text-left flex justify-between items-center transition shadow-sm">
-                            <span>📄 A4 滿版文件 (如牌薄)</span> <span className="text-[10px] text-slate-400">適應A4</span>
+                            <span>📄 A4 滿版文件</span> <span className="text-[10px] text-slate-400">適應A4</span>
                         </button>
                     </div>
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-slate-700">
-                    <button onClick={() => window.print()} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95">
+                    <button onClick={handlePrint} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95">
                         <Printer size={18} className="mr-2"/> 正式列印
                     </button>
                 </div>
             </div>
 
-            {/* 右側：A4 預覽區 (列印時唯一顯示) */}
+            {/* 右側：A4 預覽區 */}
             <div className="flex-1 overflow-auto bg-gray-300 flex justify-center items-start pt-10 pb-20 relative select-none touch-none">
-                {/* A4 畫布 (固定 210x297mm，使用 scale 縮放適應螢幕) */}
                 <div 
                     id="a4-print-area"
-                    className="bg-white shadow-2xl relative overflow-hidden print:shadow-none"
-                    style={{ 
-                        width: '210mm', 
-                        height: '297mm', 
-                        transform: 'scale(0.85)', // 螢幕上稍微縮小，列印時會被 CSS 恢復 1:1
-                        transformOrigin: 'top center'
-                    }}
+                    className="bg-white shadow-2xl relative overflow-hidden"
+                    style={{ width: '210mm', height: '297mm', transform: 'scale(0.85)', transformOrigin: 'top center' }}
                 >
-                    {/* 背景輔助格線 (列印時不會印出來) */}
-                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10mm_10mm] print-hidden pointer-events-none"></div>
-                    
-                    {/* 可拖曳的圖片 */}
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10mm_10mm] pointer-events-none"></div>
                     {images.map((img: any) => (
                         <div 
                             key={img.id}
-                            style={{
-                                position: 'absolute',
-                                left: `${img.x}mm`,
-                                top: `${img.y}mm`,
-                                width: `${img.width}mm`,
-                                height: `${img.height}mm`,
-                                zIndex: draggingId === img.id ? 10 : 1
-                            }}
-                            className={`cursor-move transition-shadow ${draggingId === img.id ? 'ring-4 ring-blue-500 shadow-2xl' : 'shadow-md border border-gray-200 print:shadow-none print:border-none hover:ring-2 hover:ring-blue-300 print-hidden-ring'}`}
+                            style={{ position: 'absolute', left: `${img.x}mm`, top: `${img.y}mm`, width: `${img.width}mm`, height: `${img.height}mm`, zIndex: draggingId === img.id ? 10 : 1 }}
+                            className={`cursor-move transition-shadow ${draggingId === img.id ? 'ring-4 ring-blue-500 shadow-2xl' : 'shadow-md border border-gray-200 hover:ring-2 hover:ring-blue-300'}`}
                             onMouseDown={(e) => handlePointerDown(e, img.id)}
                             onTouchStart={(e) => { e.preventDefault(); handlePointerDown(e, img.id); }}
                         >
