@@ -1072,26 +1072,23 @@ type DatabaseModuleProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：A4 智能證件排版與列印 (Smart A4 Layout Printer) ★★★
+// ★★★ 新增：A4 智能證件排版與列印 (終極修復：獨立視窗列印法) ★★★
 // ------------------------------------------------------------------
 const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
-    // 預設將圖片轉為物件並賦予初始座標與尺寸 (標準證件尺寸：85.6mm x 54mm)
     const [images, setImages] = useState(
         selectedItems.map((item: any, index: number) => ({
             id: item.id,
             url: item.url,
-            // 如果有兩張，自動排成上下；超過就往下排
-            x: 60, // mm (大約置中)
-            y: 40 + (index * 80), // mm
-            width: 85.6, // mm (標準證件寬)
-            height: 54   // mm (標準證件高)
+            x: 60,
+            y: 40 + (index * 80),
+            width: 85.6,
+            height: 54
         }))
     );
 
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
 
-    // 拖曳邏輯 (將螢幕像素轉換為大約的 mm 比例，方便在 A4 上移動)
     const handlePointerDown = (e: any, id: string) => {
         setDraggingId(id);
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -1103,20 +1100,14 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
         if (!draggingId) return;
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        
-        // 簡單的像素轉 mm 估算 (可根據畫面縮放微調)
         const dx = (clientX - startPos.x) * 0.28; 
         const dy = (clientY - startPos.y) * 0.28;
-
-        setImages(images.map((img: any) => 
-            img.id === draggingId ? { ...img, x: img.x + dx, y: img.y + dy } : img
-        ));
+        setImages(images.map((img: any) => img.id === draggingId ? { ...img, x: img.x + dx, y: img.y + dy } : img));
         setStartPos({ x: clientX, y: clientY });
     };
 
     const handlePointerUp = () => setDraggingId(null);
 
-    // 綁定全域事件防止拖曳出界卡住
     useEffect(() => {
         if (draggingId) {
             window.addEventListener('mousemove', handlePointerMove);
@@ -1132,60 +1123,57 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
         };
     }, [draggingId, startPos]);
 
-    // 智能排版按鈕功能
     const applyTemplate = (type: 'id_card' | 'a4_full') => {
         setImages(images.map((img: any, index: number) => {
-            if (type === 'id_card') {
-                return { ...img, width: 85.6, height: 54, x: 62, y: 40 + (index * 70) };
-            } else if (type === 'a4_full') {
-                return { ...img, width: 190, height: 270, x: 10, y: 10 }; // 幾乎滿版
-            }
+            if (type === 'id_card') return { ...img, width: 85.6, height: 54, x: 62, y: 40 + (index * 70) };
+            if (type === 'a4_full') return { ...img, width: 190, height: 270, x: 10, y: 10 };
             return img;
         }));
     };
 
-    // 列印專用樣式 (終極修復版：解決空白頁問題)
-    const PrintStyle = () => (
-        <style>{`
-            @media print {
-                @page { size: A4; margin: 0; }
-                
-                /* 隱藏所有不需要印的元素，並加上 !important 強制執行 */
-                body * { visibility: hidden !important; }
-                
-                /* 強制將列印區塊與其內容設為可見 */
-                #a4-print-area, #a4-print-area * { 
-                    visibility: visible !important; 
-                }
-                
-                /* 將 A4 畫布強制釘在列印頁面的左上角，無視外層彈窗的限制 */
-                #a4-print-area { 
-                    position: fixed !important; 
-                    left: 0 !important; 
-                    top: 0 !important; 
-                    width: 210mm !important; 
-                    height: 297mm !important;
-                    transform: none !important; /* 覆蓋螢幕預覽時的縮小，還原 1:1 真實比例 */
-                    margin: 0 !important; 
-                    padding: 0 !important;
-                    background: white !important; 
-                    box-shadow: none !important; 
-                    border: none !important; 
-                    z-index: 999999 !important;
-                }
-                
-                .print-hidden { display: none !important; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
-            }
-        `}</style>
-    );
+    // ★★★ 終極解決方案：打開乾淨的獨立視窗來列印 (移除 script 標籤，解決編譯報錯) ★★★
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('請允許瀏覽器彈出視窗以進行列印');
+            return;
+        }
+
+        const imagesHtml = images.map((img: any) => `
+            <img src="${img.url}" style="position: absolute; left: ${img.x}mm; top: ${img.y}mm; width: ${img.width}mm; height: ${img.height}mm; object-fit: cover; border-radius: 2px; box-shadow: 0 0 2px rgba(0,0,0,0.2);" />
+        `).join('');
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>A4 文件列印</title>
+                <style>
+                    @page { size: A4; margin: 0; }
+                    body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .a4-page { position: relative; width: 210mm; height: 297mm; background: white; overflow: hidden; margin: 0; }
+                </style>
+            </head>
+            <body>
+                <div class="a4-page">
+                    ${imagesHtml}
+                </div>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+
+        // 使用 React 端的 setTimeout 觸發列印，徹底避開字串內寫 script 的問題
+        setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+            setTimeout(() => { printWindow.close(); }, 500);
+        }, 500);
+    };
 
     return (
         <div className="fixed inset-0 z-[250] bg-slate-900/95 flex flex-col md:flex-row overflow-hidden backdrop-blur-sm">
-            <PrintStyle />
-            
-            {/* 左側：控制面板 (列印時隱藏) */}
-            <div className="w-full md:w-72 bg-slate-800 text-white p-5 flex flex-col gap-4 border-r border-slate-700 print-hidden flex-none">
+            <div className="w-full md:w-72 bg-slate-800 text-white p-5 flex flex-col gap-4 border-r border-slate-700 flex-none">
                 <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold flex items-center"><Printer size={18} className="mr-2 text-yellow-400"/> 智能排版輸出</h3>
                     <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full"><X size={20}/></button>
@@ -1203,50 +1191,23 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
                             <span>💳 標準證件 (1:1 大小)</span> <span className="text-[10px] text-slate-400">86x54mm</span>
                         </button>
                         <button onClick={() => applyTemplate('a4_full')} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm text-left flex justify-between items-center transition shadow-sm">
-                            <span>📄 A4 滿版文件 (如牌薄)</span> <span className="text-[10px] text-slate-400">適應A4</span>
+                            <span>📄 A4 滿版文件</span> <span className="text-[10px] text-slate-400">適應A4</span>
                         </button>
                     </div>
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-slate-700">
-                    <button onClick={() => window.print()} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95">
+                    <button onClick={handlePrint} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition active:scale-95">
                         <Printer size={18} className="mr-2"/> 正式列印
                     </button>
                 </div>
             </div>
 
-            {/* 右側：A4 預覽區 (列印時唯一顯示) */}
             <div className="flex-1 overflow-auto bg-gray-300 flex justify-center items-start pt-10 pb-20 relative select-none touch-none">
-                {/* A4 畫布 (固定 210x297mm，使用 scale 縮放適應螢幕) */}
-                <div 
-                    id="a4-print-area"
-                    className="bg-white shadow-2xl relative overflow-hidden print:shadow-none"
-                    style={{ 
-                        width: '210mm', 
-                        height: '297mm', 
-                        transform: 'scale(0.85)', // 螢幕上稍微縮小，列印時會被 CSS 恢復 1:1
-                        transformOrigin: 'top center'
-                    }}
-                >
-                    {/* 背景輔助格線 (列印時不會印出來) */}
-                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10mm_10mm] print-hidden pointer-events-none"></div>
-                    
-                    {/* 可拖曳的圖片 */}
+                <div id="a4-print-area" className="bg-white shadow-2xl relative overflow-hidden" style={{ width: '210mm', height: '297mm', transform: 'scale(0.85)', transformOrigin: 'top center' }}>
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:10mm_10mm] pointer-events-none"></div>
                     {images.map((img: any) => (
-                        <div 
-                            key={img.id}
-                            style={{
-                                position: 'absolute',
-                                left: `${img.x}mm`,
-                                top: `${img.y}mm`,
-                                width: `${img.width}mm`,
-                                height: `${img.height}mm`,
-                                zIndex: draggingId === img.id ? 10 : 1
-                            }}
-                            className={`cursor-move transition-shadow ${draggingId === img.id ? 'ring-4 ring-blue-500 shadow-2xl' : 'shadow-md border border-gray-200 print:shadow-none print:border-none hover:ring-2 hover:ring-blue-300 print-hidden-ring'}`}
-                            onMouseDown={(e) => handlePointerDown(e, img.id)}
-                            onTouchStart={(e) => { e.preventDefault(); handlePointerDown(e, img.id); }}
-                        >
+                        <div key={img.id} style={{ position: 'absolute', left: `${img.x}mm`, top: `${img.y}mm`, width: `${img.width}mm`, height: `${img.height}mm`, zIndex: draggingId === img.id ? 10 : 1 }} className={`cursor-move transition-shadow ${draggingId === img.id ? 'ring-4 ring-blue-500 shadow-2xl' : 'shadow-md border border-gray-200 hover:ring-2 hover:ring-blue-300'}`} onMouseDown={(e) => handlePointerDown(e, img.id)} onTouchStart={(e) => { e.preventDefault(); handlePointerDown(e, img.id); }}>
                             <img src={img.url} className="w-full h-full object-cover pointer-events-none" draggable={false} />
                         </div>
                     ))}
@@ -1255,6 +1216,7 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
         </div>
     );
 };
+
 
 const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory, currentUser, systemUsers }: DatabaseModuleProps) => {
     const [entries, setEntries] = useState<DatabaseEntry[]>([]);
@@ -7675,14 +7637,41 @@ const CreateDocModule = ({
               {/* 提醒中心 (修復版：使用 visibleInventory) */}
               {(() => {
                   const docAlerts: any[] = [];
-                  // dbEntries 已經在上面的 useEffect 被我們過濾過了，所以這裡是安全的
-                  dbEntries.forEach(d => { if (d.reminderEnabled && d.expiryDate) { const days = getDaysRemaining(d.expiryDate); if (days !== null && days <= 30) { docAlerts.push({ id: d.id, title: d.name, desc: d.docType, date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d }); } } });
+                  
+                  // 1. 處理資料庫文件提醒
+                  dbEntries.forEach(d => { 
+                      if (d.reminderEnabled && d.expiryDate) { 
+                          const days = getDaysRemaining(d.expiryDate); 
+                          if (days !== null && days <= 30) { 
+                              docAlerts.push({ id: d.id, title: d.name, desc: d.docType || '文件', date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d, source: 'database' }); 
+                          } 
+                      } 
+                  });
+
+                  // 2. ★★★ 新增：處理車輛牌費提醒 ★★★
+                  visibleInventory.forEach(v => {
+                      if (v.licenseExpiry) {
+                          const days = getDaysRemaining(v.licenseExpiry);
+                          if (days !== null && days <= 30) {
+                              docAlerts.push({ 
+                                  id: v.id, 
+                                  title: v.regMark || '未出牌', 
+                                  desc: '牌費到期', 
+                                  date: v.licenseExpiry, 
+                                  days, 
+                                  status: days < 0 ? 'expired' : 'soon', 
+                                  raw: v, 
+                                  source: 'vehicle' 
+                              });
+                          }
+                      }
+                  });
+
                   docAlerts.sort((a, b) => a.days - b.days);
 
                   const cbAlerts: any[] = [];
                   const cbDateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記 (BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
                   
-                  // ★★★ 關鍵修改：這裡必須用 visibleInventory ★★★
                   visibleInventory.forEach(v => { 
                       const cb = v.crossBorder; 
                       if (!cb) return; 
@@ -7703,50 +7692,74 @@ const CreateDocModule = ({
                   const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
                   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
-                  // ... (下方的 return 渲染部分保持不變) ...
                   const AlertList = ({ items, onItemClick }: any) => (
                       <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
-                              {items.map((item:any, idx:number) => (<div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}><div className="flex-1 min-w-0 mr-2"><div className="font-bold truncate text-white">{item.title}</div><div className="text-white/60 truncate">{item.desc}</div></div><div className="text-right whitespace-nowrap"><div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `已過期 ${Math.abs(item.days)} 天` : `還有 ${item.days} 天就過期`}</div><div className="text-white/40 scale-90">{item.date}</div></div></div>))}
+                              {items.map((item:any, idx:number) => (
+                                  <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
+                                      <div className="flex-1 min-w-0 mr-2">
+                                          <div className="font-bold truncate text-white">{item.title}</div>
+                                          <div className="text-white/60 truncate">{item.desc}</div>
+                                      </div>
+                                      <div className="text-right whitespace-nowrap">
+                                          <div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `已過期 ${Math.abs(item.days)} 天` : `還有 ${item.days} 天`}</div>
+                                          <div className="text-white/40 scale-90">{item.date}</div>
+                                      </div>
+                                  </div>
+                              ))}
                               {items.length === 0 && <div className="text-white/30 text-xs text-center mt-4">無提醒事項</div>}
                           </div>
                       </div>
                   );
 
                   return (
-                      // ★★★ 修改：移除 hidden md:grid，改為 grid grid-cols-2 (手機並列) ★★★
-                      <div className="grid grid-cols-2 gap-2 flex-none">
+                      // ★ 改為：手機版上下排列 (grid-cols-1)，電腦版左右並排 (md:grid-cols-2)
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-none">
+                          
                           {/* 左卡片：中港提醒 */}
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
-                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
-                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
-                                      <Globe size={12} className="mr-1"/> 中港
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col gap-2 relative overflow-hidden">
+                              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                                  <div className="font-bold flex items-center text-sm text-slate-300">
+                                      <Globe size={16} className="mr-1.5"/> 中港業務提醒
                                   </div>
-                                  <div className="flex justify-between md:block">
-                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
-                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                                  <div className="flex gap-4">
+                                      <div className="flex items-baseline"><span className="text-xl font-bold text-red-400 leading-none">{cbExpiredCount}</span><span className="text-[10px] text-red-200/70 ml-1">過期</span></div>
+                                      <div className="flex items-baseline"><span className="text-xl font-bold text-amber-400 leading-none">{cbSoonCount}</span><span className="text-[10px] text-amber-200/70 ml-1">即將</span></div>
                                   </div>
                               </div>
-                              {/* 手機隱藏列表細節，只留數字，點擊進入詳情 */}
-                              <div className="hidden md:block flex-1"><AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} /></div>
-                              {/* 手機版點擊層 */}
-                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
+                              {/* 移除隱藏屬性，直接顯示列表 */}
+                              <div className="flex-1">
+                                  <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
+                              </div>
                           </div>
 
-                          {/* 右卡片：文件提醒 */}
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
-                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
-                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
-                                      <Database size={12} className="mr-1"/> 文件
+                          {/* 右卡片：文件與牌費提醒 */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col gap-2 relative overflow-hidden">
+                              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                                  <div className="font-bold flex items-center text-sm text-blue-200">
+                                      <Database size={16} className="mr-1.5"/> 文件 / 牌費提醒
                                   </div>
-                                  <div className="flex justify-between md:block">
-                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
-                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                                  <div className="flex gap-4">
+                                      <div className="flex items-baseline"><span className="text-xl font-bold text-red-400 leading-none">{docExpiredCount}</span><span className="text-[10px] text-red-200/70 ml-1">過期</span></div>
+                                      <div className="flex items-baseline"><span className="text-xl font-bold text-amber-400 leading-none">{docSoonCount}</span><span className="text-[10px] text-amber-200/70 ml-1">即將</span></div>
                                   </div>
                               </div>
-                              <div className="hidden md:block flex-1"><AlertList items={docAlerts} onItemClick={(item:any) => { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }} /></div>
-                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
+                              {/* 移除隱藏屬性，直接顯示列表 */}
+                              <div className="flex-1">
+                                  <AlertList items={docAlerts} onItemClick={(item:any) => { 
+                                      // ★ 智慧跳轉判斷
+                                      if (item.source === 'vehicle') {
+                                          setActiveTab('inventory');
+                                          setEditingVehicle(item.raw);
+                                      } else {
+                                          setActiveTab('database'); 
+                                          setEditingEntry(item.raw); 
+                                          setIsDbEditing(true); 
+                                      }
+                                  }} />
+                              </div>
                           </div>
+                          
                       </div>
                   );
               })()}
