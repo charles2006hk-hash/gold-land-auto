@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 // ★★★ 核心設定：讓這個 API 的結果快取 3600 秒 (1小時) ★★★
 // 確保每小時只會去爬蟲與呼叫 Gemini 一次，極度節省 API 費用
-export const revalidate = 3600;
+export const revalidate = 0;
 
 export async function GET() {
     try {
@@ -84,11 +84,11 @@ export async function GET() {
         
         return NextResponse.json(content.news);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Gemini News Fetch Error:', error);
-        // 發生錯誤時的備用靜態數據
+        // ★ 將具體的錯誤訊息 (error.message) 顯示在跑馬燈上，方便我們一眼看出問題！
         return NextResponse.json([
-            { tag: '⚠️ 系統提示', text: 'AI 新聞模組暫時無法連線，將於下小時自動重試。', time: '00:00' }
+            { tag: '⚠️ 系統除錯', text: `API 發生錯誤: ${error.message}`, time: '00:00' }
         ]);
     }
 }
