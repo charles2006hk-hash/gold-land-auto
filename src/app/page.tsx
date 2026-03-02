@@ -4785,21 +4785,22 @@ export default function GoldLandAutoDMS() {
   const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
 
-  // ★★★ 新增：自動喚醒主畫面機制 ★★★
+  // ★★★ 終極喚醒主畫面機制 (解決重新整理後空白問題) ★★★
+  const [hasInitialized, setHasInitialized] = useState(false);
+
   useEffect(() => {
-      // 當使用者登入狀態確認後，強制刷新一次狀態來喚醒畫面
-      if (currentUser) {
-          setActiveTab(prev => {
-              // 如果不知為何變成了空值，強制切回 dashboard
-              if (!prev) return 'dashboard';
-              
-              // 觸發 React 重新渲染的微小 Hack：先清空再瞬間切回來
-              const currentTab = prev;
-              setTimeout(() => setActiveTab(currentTab), 10);
-              return prev; 
-          });
+      // 只有在使用者剛驗證完身份，且還沒執行過喚醒動作時才執行
+      if (currentUser && !hasInitialized) {
+          // 故意先切換到別的空標籤 (打破 React 的偷懶機制)
+          setActiveTab('settings'); 
+          
+          // 10 毫秒後，光速切回業務儀表板，保證 100% 觸發完整畫面重繪
+          setTimeout(() => {
+              setActiveTab('dashboard');
+              setHasInitialized(true); // 標記為已喚醒，避免重複執行
+          }, 10);
       }
-  }, [currentUser]);
+  }, [currentUser, hasInitialized]);
 
   // --- User Management Helper (v13.1 新增) ---
     const updateSystemUsers = async (newUsers: any[]) => {
