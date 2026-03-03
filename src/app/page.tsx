@@ -5846,7 +5846,7 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v19.0: 進貨稅金計算 + 付款系統) ★★★
+// ★★★ 1. Vehicle Form Modal (v19.5: 加寬排版 + 修復日期換行 + 一換一專屬圖) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
@@ -5863,7 +5863,9 @@ const VehicleFormModal = ({
     const [rightTab, setRightTab] = useState<'sales' | 'cost' | 'cb'>('sales');
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
 
-    // ★★★ 進貨與成本狀態 ★★★
+    // ★★★ 新增監聽 acqVendor，用於觸發「一換一」圖片 ★★★
+    const [acqVendor, setAcqVendor] = useState((v as any).acquisition?.vendor || '');
+
     const [acqType, setAcqType] = useState<'Local' | 'Import'>((v as any).acquisition?.type || 'Local');
     const [acqForeignPrice, setAcqForeignPrice] = useState(formatNumberInput(String((v as any).acquisition?.foreignPrice || '')));
     const [acqExchangeRate, setAcqExchangeRate] = useState(String((v as any).acquisition?.exchangeRate || '1.0'));
@@ -5871,9 +5873,8 @@ const VehicleFormModal = ({
     const [acqPortFee, setAcqPortFee] = useState(formatNumberInput(String((v as any).acquisition?.portFee || '')));
     const [acqA1Price, setAcqA1Price] = useState(formatNumberInput(String((v as any).acquisition?.a1Price || '')));
     const [acqFrtTax, setAcqFrtTax] = useState(formatNumberInput(String((v as any).acquisition?.frtTax || '')));
-    const [acqCostExclTax, setAcqCostExclTax] = useState('0'); // 未包含稅金的純車成本
+    const [acqCostExclTax, setAcqCostExclTax] = useState('0'); 
     
-    // ★★★ 進貨付款狀態 ★★★
     const [acqPayments, setAcqPayments] = useState<any[]>((v as any).acquisition?.payments || []);
     const [newAcqPayment, setNewAcqPayment] = useState({ date: new Date().toISOString().split('T')[0], method: 'Transfer', amount: '', note: '' });
 
@@ -5910,7 +5911,7 @@ const VehicleFormModal = ({
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
 
-    // ★★★ 核心邏輯：自動計算香港 FRT 入口稅與成本 ★★★
+    // 自動計算香港 FRT 入口稅與成本
     useEffect(() => {
         if (acqType === 'Import') {
             const fp = Number(acqForeignPrice.replace(/,/g, ''));
@@ -5919,11 +5920,9 @@ const VehicleFormModal = ({
             const port = Number(acqPortFee.replace(/,/g, ''));
             const a1 = Number(acqA1Price.replace(/,/g, ''));
 
-            // 1. 計算未含稅的港幣成本 (外幣車價 + 當地費用) * 匯率 + 到港雜費
             const costExcl = Math.round((fp + localCharges) * er) + port;
             setAcqCostExclTax(formatNumberInput(String(costExcl)));
 
-            // 2. 自動計算 FRT (香港海關入口稅階梯)
             let frt = 0;
             if (a1 > 0) {
                 if (a1 <= 150000) { frt = a1 * 0.46; }
@@ -5932,8 +5931,6 @@ const VehicleFormModal = ({
                 else { frt = 150000 * 0.46 + 150000 * 0.86 + 200000 * 1.15 + (a1 - 500000) * 1.32; }
             }
             setAcqFrtTax(formatNumberInput(String(Math.round(frt))));
-
-            // 3. 總成本寫入 costStr (連動系統全域報表)
             setCostStr(formatNumberInput(String(costExcl + Math.round(frt))));
         }
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
@@ -6027,7 +6024,6 @@ const VehicleFormModal = ({
         const formData = new FormData(e.currentTarget);
         if(!formData.has('mileage')) { const hiddenMileage = document.createElement('input'); hiddenMileage.type = 'hidden'; hiddenMileage.name = 'mileage'; hiddenMileage.value = mileageStr.replace(/,/g, ''); e.currentTarget.appendChild(hiddenMileage); }
         
-        // ★★★ 把新增的 acqPayments 偷偷塞進 editingVehicle 物件，讓 saveVehicle 函數可以讀到 ★★★
         if(editingVehicle) {
             editingVehicle.photos = carPhotos;
             (editingVehicle as any).acqPayments = acqPayments; 
@@ -6038,9 +6034,16 @@ const VehicleFormModal = ({
 
     const handleClose = () => { setEditingVehicle(null); if(activeTab === 'inventory_add') setActiveTab('inventory'); };
 
+    // ★★★ 特殊邏輯：決定顯示的圖片 (如果是一換一且沒有照片，套用預設圖) ★★★
+    const isOneForOne = acqVendor.includes('一換一');
+    const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+    const displayPhotos = (isOneForOne && carPhotos.length === 0) ? [oneForOnePlaceholder] : carPhotos;
+
+
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden">
-        <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[98vw] xl:max-w-[1400px] h-full md:h-[92vh] flex flex-col overflow-hidden border border-slate-600">
+        {/* ★ 修改 1：將 max-w 加大至 1600px，讓右側內容不擁擠 */}
+        <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[98vw] xl:max-w-[1500px] 2xl:max-w-[1600px] h-full md:h-[92vh] flex flex-col overflow-hidden border border-slate-600">
           
           {/* Header */}
           <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20 safe-area-top">
@@ -6060,7 +6063,7 @@ const VehicleFormModal = ({
 
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0">
             
-            {/* ================= 左側欄 (VRD & Photos) 寬度 30% ================= */}
+            {/* ================= 左側欄 (VRD & Photos) 寬度微調 ================= */}
             <div className="w-full lg:w-[30%] md:w-[35%] min-w-[320px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-1 md:order-1">
                  
                  {/* VRD 搜尋遮罩 */}
@@ -6115,15 +6118,16 @@ const VehicleFormModal = ({
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                         <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button></div>
                         <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1">
-                            {carPhotos.map((url, idx) => (<div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm cursor-zoom-in" onClick={() => setPreviewImage(url)}><img src={url} className="w-full h-full object-cover"/></div>))}
-                            {carPhotos.length === 0 && (<div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
+                            {/* ★ 使用處理後的 displayPhotos，支援一換一預設圖 ★ */}
+                            {displayPhotos.map((url, idx) => (<div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm cursor-zoom-in" onClick={() => setPreviewImage(url)}><img src={url} className="w-full h-full object-cover"/></div>))}
+                            {displayPhotos.length === 0 && (<div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
                         </div>
                     </div>
                  </div>
             </div>
             
             {/* ================= 右側欄 (Tabs System) ================= */}
-            <div className="w-full md:flex-1 flex flex-col md:h-full bg-white md:overflow-hidden order-2 md:order-2">
+            <div className="w-full md:flex-1 flex flex-col md:h-full bg-white md:overflow-hidden order-2 md:order-2 min-w-0">
                 
                 {/* 頂部全域狀態列 */}
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:px-6 md:pt-6 bg-white flex-none border-t md:border-t-0 border-slate-200">
@@ -6184,20 +6188,20 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
-                        {/* 收款記錄 */}
+                        {/* 收款記錄 - ★ 修改：使用 flex-1 確保日期不換行 */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>收款記錄 (Payments Received)</span><span className="text-green-600 bg-green-100 px-3 py-1 rounded-full text-xs">總已收: {formatCurrency(totalReceived)}</span></h4>
                             
                             <div className="space-y-2 mb-4">
                                 {(v.payments || []).map((p: any) => (
                                     <div key={p.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-white border rounded shadow-sm relative">
-                                        <div className="flex items-center gap-2 md:w-2/3 min-w-0">
-                                            <span className="text-gray-400 font-mono w-16 flex-shrink-0">{p.date}</span>
+                                        <div className="flex items-center gap-2 md:flex-1 min-w-0">
+                                            <span className="text-gray-400 font-mono w-20 md:w-24 flex-shrink-0">{p.date}</span>
                                             <span className="font-bold text-slate-700 w-16 md:w-20 truncate flex-shrink-0">{p.type}</span>
                                             <span className="bg-slate-100 text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap font-bold flex-shrink-0">{p.method || 'Cash'}</span>
                                             <span className="text-gray-500 flex-1 truncate">{p.note || '-'}</span>
                                         </div>
-                                        <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
+                                        <div className="flex items-center justify-between md:justify-end gap-3 md:w-auto flex-shrink-0">
                                             <span className="font-mono font-bold text-blue-600 text-right text-sm">{formatCurrency(p.amount)}</span>
                                             {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded flex-shrink-0"><Trash2 size={14}/></button>}
                                         </div>
@@ -6205,12 +6209,12 @@ const VehicleFormModal = ({
                                 ))}
                                 {pendingCbTasks.map((task: any) => (
                                     <div key={task.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊載入收款欄">
-                                        <div className="flex items-center gap-2 md:w-2/3 min-w-0">
-                                            <span className="text-amber-600/70 font-mono w-16 flex-shrink-0">{task.date}</span>
+                                        <div className="flex items-center gap-2 md:flex-1 min-w-0">
+                                            <span className="text-amber-600/70 font-mono w-20 md:w-24 flex-shrink-0">{task.date}</span>
                                             <span className="font-bold flex items-center w-24 md:w-32 truncate flex-shrink-0"><Info size={12} className="mr-1 flex-shrink-0"/>{task.item}</span>
                                             <span className="text-amber-700 flex-1 truncate">{task.institution}</span>
                                         </div>
-                                        <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
+                                        <div className="flex items-center justify-between md:justify-end gap-3 md:w-auto flex-shrink-0">
                                             <span className="font-mono font-bold text-right text-sm">{formatCurrency(task.fee)}</span>
                                             <span className="bg-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0">待收</span>
                                         </div>
@@ -6256,11 +6260,11 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
-                            {/* ★★★ 國外訂車表單 (含自動稅金計算) ★★★ */}
+                            {/* 國外訂車表單 */}
                             {acqType === 'Import' ? (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label><input name="acq_vendor" defaultValue={(v as any).acquisition?.vendor} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="供應商 / 拍賣場名稱"/></div>
+                                        <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label><input name="acq_vendor" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="供應商 / 拍賣場名稱"/></div>
                                         <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono"/></div>
                                         <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
                                     </div>
@@ -6301,7 +6305,7 @@ const VehicleFormModal = ({
                             ) : (
                                 /* ★★★ 本地收車表單 ★★★ */
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label><input name="acq_vendor" defaultValue={(v as any).acquisition?.vendor} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="收車對象名稱"/></div>
+                                    <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label><input name="acq_vendor" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="收車對象名稱 (輸入'一換一'套用優惠圖)"/></div>
                                     <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option></select></div>
 
                                     <div className="bg-red-100/60 p-2 rounded border border-red-200 col-span-2"><label className="block text-[10px] text-red-800 font-bold mb-1 uppercase">Purchase Price (收車價 HKD)</label><div className="flex items-center"><span className="text-red-700 font-mono text-lg mr-1">$</span><input name="costPrice" value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-xl outline-none font-mono font-black text-red-700" placeholder="0"/></div></div>
@@ -6311,7 +6315,7 @@ const VehicleFormModal = ({
                                 </div>
                             )}
                             
-                            {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
+                            {/* ★★★ 進貨付款紀錄 (Outgoing Payments) - ★ 排版修復 ★ */}
                             <div className="mt-6 border-t border-red-200 pt-4">
                                 <h4 className="font-bold text-xs text-red-800 mb-3 flex justify-between items-center">
                                     <span>付款紀錄 (Acquisition Payments)</span>
@@ -6324,12 +6328,12 @@ const VehicleFormModal = ({
                                 <div className="space-y-2 mb-3">
                                     {acqPayments.map((p: any) => (
                                         <div key={p.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2 bg-white border border-red-100 rounded shadow-sm relative">
-                                            <div className="flex items-center gap-2 md:w-2/3 min-w-0">
-                                                <span className="text-gray-400 font-mono w-16 flex-shrink-0">{p.date}</span>
+                                            <div className="flex items-center gap-2 md:flex-1 min-w-0">
+                                                <span className="text-gray-400 font-mono w-20 md:w-24 flex-shrink-0">{p.date}</span>
                                                 <span className="bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap font-bold flex-shrink-0">{p.method}</span>
                                                 <span className="text-gray-500 flex-1 truncate">{p.note || '-'}</span>
                                             </div>
-                                            <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
+                                            <div className="flex items-center justify-between md:justify-end gap-3 md:w-auto flex-shrink-0">
                                                 <span className="font-mono font-bold text-red-700 text-sm">{formatCurrency(p.amount)}</span>
                                                 <button type="button" onClick={() => handleDeleteAcqPayment(p.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded flex-shrink-0"><Trash2 size={14}/></button>
                                             </div>
@@ -6356,23 +6360,23 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
-                        {/* 車輛維修與雜費 (Expenses) */}
+                        {/* 車輛維修與雜費 (Expenses) - ★ 排版修復 ★ */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-6">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>車輛維修與其他費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-3 py-1 rounded-full text-xs">總支出: {formatCurrency(totalExpenses)}</span></h4>
                             
                             <div className="space-y-2 mb-4">
                                 {(v.expenses || []).map((exp: any) => (
                                     <div key={exp.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-white border rounded shadow-sm relative">
-                                        <div className="flex items-center gap-3 md:w-2/3">
-                                            <span className="text-gray-400 font-mono w-20 flex-shrink-0">{exp.date}</span>
-                                            <span className="font-bold text-slate-700 w-24 truncate">{exp.type}</span>
+                                        <div className="flex items-center gap-3 md:flex-1 min-w-0">
+                                            <span className="text-gray-400 font-mono w-20 md:w-24 flex-shrink-0">{exp.date}</span>
+                                            <span className="font-bold text-slate-700 w-24 truncate flex-shrink-0">{exp.type}</span>
                                             <span className="text-gray-500 flex-1 truncate">{exp.company}</span>
                                         </div>
-                                        <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
+                                        <div className="flex items-center justify-between md:justify-end gap-3 md:w-auto flex-shrink-0">
                                             <span className="font-mono font-bold text-right">{formatCurrency(exp.amount)}</span>
                                             <div className="flex items-center gap-2">
                                                 <button type="button" onClick={() => updateExpenseStatus(v.id!, exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')} className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${exp.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>{exp.status === 'Paid' ? '已付' : '未付'}</button>
-                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded"><X size={14}/></button>
+                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded flex-shrink-0"><X size={14}/></button>
                                             </div>
                                         </div>
                                     </div>
@@ -6380,12 +6384,12 @@ const VehicleFormModal = ({
                                 {/* 唯讀的中港業務代辦費 */}
                                 {(v.crossBorder?.tasks || []).filter((t:any) => t.fee > 0).map((task: any) => (
                                     <div key={`cb-${task.id}`} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-blue-50/50 border border-blue-100 rounded shadow-sm text-blue-800">
-                                        <div className="flex items-center gap-3 md:w-2/3">
-                                            <span className="text-blue-400 font-mono w-20 flex-shrink-0">{task.date}</span>
-                                            <span className="font-bold flex items-center w-32 truncate"><Globe size={10} className="mr-1 flex-shrink-0"/>{task.item}</span>
+                                        <div className="flex items-center gap-3 md:flex-1 min-w-0">
+                                            <span className="text-blue-400 font-mono w-20 md:w-24 flex-shrink-0">{task.date}</span>
+                                            <span className="font-bold flex items-center w-24 truncate flex-shrink-0"><Globe size={10} className="mr-1 flex-shrink-0"/>{task.item}</span>
                                             <span className="text-blue-600/70 flex-1 truncate">中港代辦費</span>
                                         </div>
-                                        <div className="flex items-center justify-end gap-3 md:w-1/3">
+                                        <div className="flex items-center justify-end gap-3 md:w-auto flex-shrink-0">
                                             <span className="font-mono font-bold text-right">{formatCurrency(task.fee)}</span>
                                             <div className="w-14"></div> {/* 佔位 */}
                                         </div>
