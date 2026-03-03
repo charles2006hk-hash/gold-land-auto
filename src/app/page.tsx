@@ -8219,7 +8219,11 @@ const CreateDocModule = ({
                                   else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
                                   else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
 
-                                  const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                                  // ★★★ 智能讀取封面圖與一換一預設圖 ★★★
+                                    const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                                    const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                                    const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+                                    const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
 
                                   return (
                                       <div key={car.id} onClick={() => setEditingVehicle(car)} className="p-3 border-b border-slate-100 active:bg-slate-50 transition-colors relative">
@@ -8313,7 +8317,11 @@ const CreateDocModule = ({
                                   else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
                                   else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
 
-                                  const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                                  // ★★★ 智能讀取封面圖與一換一預設圖 ★★★
+                                    const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                                    const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                                    const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+                                    const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
 
                                   // 標籤邏輯
                                   const getTags = () => {
@@ -8467,8 +8475,11 @@ const CreateDocModule = ({
                         };
                         const cbTags = getRefinedTags();
                         
-                        // ★★★ 智能讀取封面圖 ★★★
-                        const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                        // ★★★ 智能讀取封面圖與一換一預設圖 ★★★
+                        const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                        const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                        const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+                        const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
 
                         return (
                         <div key={car.id} className="bg-white rounded-lg shadow-sm border border-slate-200 hover:border-yellow-400 transition group relative overflow-hidden">
