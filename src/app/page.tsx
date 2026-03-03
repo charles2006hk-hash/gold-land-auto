@@ -5317,7 +5317,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         const formData = new FormData(e.currentTarget);
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         
-        // ★★★ 強效防呆：使用 ?.replace 確保找不到欄位時不會報錯崩潰 ★★★
         const status = formData.get('status') as any;
         const priceRaw = formData.get('price') as string;
         const costPriceRaw = formData.get('costPrice') as string;
@@ -5335,19 +5334,25 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         const engineSize = Number(engineSizeRaw?.replace(/,/g, '') || 0);
         const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
-        // 擷取進貨與成本資料 (Acquisition)
+        // ★★★ 升級版：擷取進貨與成本資料 (Acquisition) ★★★
         const acquisitionData = {
             type: formData.get('acq_type') as string || 'Local',
             vendor: formData.get('acq_vendor') as string || '',
             currency: formData.get('acq_currency') as string || 'HKD',
             foreignPrice: Number((formData.get('acq_foreignPrice') as string)?.replace(/,/g, '') || 0),
             exchangeRate: Number((formData.get('acq_exchangeRate') as string) || 1),
-            shippingFee: Number((formData.get('acq_shippingFee') as string)?.replace(/,/g, '') || 0),
+            // 新增：當地費用、A1與稅金
+            localChargesForeign: Number((formData.get('acq_localChargesForeign') as string)?.replace(/,/g, '') || 0),
             portFee: Number((formData.get('acq_portFee') as string)?.replace(/,/g, '') || 0),
+            a1Price: Number((formData.get('acq_a1Price') as string)?.replace(/,/g, '') || 0),
+            frtTax: Number((formData.get('acq_frtTax') as string)?.replace(/,/g, '') || 0),
+            
             eta: formData.get('acq_eta') as string || '',
             paymentStatus: formData.get('acq_paymentStatus') as string || 'Unpaid',
             offsetAmount: Number((formData.get('acq_offsetAmount') as string)?.replace(/,/g, '') || 0),
-            advanceFee: Number((formData.get('acq_advanceFee') as string)?.replace(/,/g, '') || 0)
+            advanceFee: Number((formData.get('acq_advanceFee') as string)?.replace(/,/g, '') || 0),
+            // 寫入進貨付款紀錄 (透過外掛屬性傳入)
+            payments: (editingVehicle as any)?.acqPayments || []
         };
 
         // Cross Border Data Capture
@@ -5401,7 +5406,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             mileage: Number(mileageRaw?.replace(/,/g, '') || 0), 
             remarks: formData.get('remarks') || '', 
             seating: Number(formData.get('seating') || 5), 
-            priceA1: valA1,
+            priceA1: valA1, // 這裡保留的是「出車給客人的A1」
             priceTax: valTax,
             priceRegistered: valRegistered,
             fuelType: fuelType,
@@ -5841,7 +5846,7 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v18.5: 修復手機顯示、優化比例與收款方式) ★★★
+// ★★★ 1. Vehicle Form Modal (v19.0: 進貨稅金計算 + 付款系統) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
@@ -5855,16 +5860,22 @@ const VehicleFormModal = ({
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
-
-    // 分頁控制
     const [rightTab, setRightTab] = useState<'sales' | 'cost' | 'cb'>('sales');
-
-    // 中港車管家是否展開的狀態
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
 
+    // ★★★ 進貨與成本狀態 ★★★
     const [acqType, setAcqType] = useState<'Local' | 'Import'>((v as any).acquisition?.type || 'Local');
     const [acqForeignPrice, setAcqForeignPrice] = useState(formatNumberInput(String((v as any).acquisition?.foreignPrice || '')));
     const [acqExchangeRate, setAcqExchangeRate] = useState(String((v as any).acquisition?.exchangeRate || '1.0'));
+    const [acqLocalChargesForeign, setAcqLocalChargesForeign] = useState(formatNumberInput(String((v as any).acquisition?.localChargesForeign || '')));
+    const [acqPortFee, setAcqPortFee] = useState(formatNumberInput(String((v as any).acquisition?.portFee || '')));
+    const [acqA1Price, setAcqA1Price] = useState(formatNumberInput(String((v as any).acquisition?.a1Price || '')));
+    const [acqFrtTax, setAcqFrtTax] = useState(formatNumberInput(String((v as any).acquisition?.frtTax || '')));
+    const [acqCostExclTax, setAcqCostExclTax] = useState('0'); // 未包含稅金的純車成本
+    
+    // ★★★ 進貨付款狀態 ★★★
+    const [acqPayments, setAcqPayments] = useState<any[]>((v as any).acquisition?.payments || []);
+    const [newAcqPayment, setNewAcqPayment] = useState({ date: new Date().toISOString().split('T')[0], method: 'Transfer', amount: '', note: '' });
 
     const [priceStr, setPriceStr] = useState(formatNumberInput(String(v.price || '')));
     const [costStr, setCostStr] = useState(formatNumberInput(String(v.costPrice || '')));
@@ -5872,7 +5883,6 @@ const VehicleFormModal = ({
     const [priceA1Str, setPriceA1Str] = useState(formatNumberInput(String(v.priceA1 || '')));
     const [priceTaxStr, setPriceTaxStr] = useState(formatNumberInput(String(v.priceTax || '')));
     const [engineSizeStr, setEngineSizeStr] = useState(formatNumberInput(String(v.engineSize || '')));
-    
     const [fuelType, setFuelType] = useState<'Petrol'|'Diesel'|'Electric'>(v.fuelType || 'Petrol');
     const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
     const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
@@ -5898,16 +5908,49 @@ const VehicleFormModal = ({
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
-    // ★ 新增：預設收款方式
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
 
+    // ★★★ 核心邏輯：自動計算香港 FRT 入口稅與成本 ★★★
     useEffect(() => {
         if (acqType === 'Import') {
             const fp = Number(acqForeignPrice.replace(/,/g, ''));
+            const localCharges = Number(acqLocalChargesForeign.replace(/,/g, ''));
             const er = Number(acqExchangeRate);
-            if (fp && er) setCostStr(formatNumberInput(String(Math.round(fp * er))));
+            const port = Number(acqPortFee.replace(/,/g, ''));
+            const a1 = Number(acqA1Price.replace(/,/g, ''));
+
+            // 1. 計算未含稅的港幣成本 (外幣車價 + 當地費用) * 匯率 + 到港雜費
+            const costExcl = Math.round((fp + localCharges) * er) + port;
+            setAcqCostExclTax(formatNumberInput(String(costExcl)));
+
+            // 2. 自動計算 FRT (香港海關入口稅階梯)
+            let frt = 0;
+            if (a1 > 0) {
+                if (a1 <= 150000) { frt = a1 * 0.46; }
+                else if (a1 <= 300000) { frt = 150000 * 0.46 + (a1 - 150000) * 0.86; }
+                else if (a1 <= 500000) { frt = 150000 * 0.46 + 150000 * 0.86 + (a1 - 300000) * 1.15; }
+                else { frt = 150000 * 0.46 + 150000 * 0.86 + 200000 * 1.15 + (a1 - 500000) * 1.32; }
+            }
+            setAcqFrtTax(formatNumberInput(String(Math.round(frt))));
+
+            // 3. 總成本寫入 costStr (連動系統全域報表)
+            setCostStr(formatNumberInput(String(costExcl + Math.round(frt))));
         }
-    }, [acqForeignPrice, acqExchangeRate, acqType]);
+    }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
+
+    // 計算進貨已付款總額與欠款
+    const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const acqOffsetAmount = acqType === 'Local' ? Number(((v as any).acquisition?.offsetAmount || '').replace(/,/g, '')) : 0;
+    const acqBalance = Number(costStr.replace(/,/g, '')) - totalAcqPaid - acqOffsetAmount;
+
+    const handleAddAcqPayment = () => {
+        const amt = Number(newAcqPayment.amount.replace(/,/g, ''));
+        if (amt > 0) {
+            setAcqPayments([...acqPayments, { id: Date.now().toString(), ...newAcqPayment, amount: amt }]);
+            setNewAcqPayment({ ...newAcqPayment, amount: '', note: '' });
+        }
+    };
+    const handleDeleteAcqPayment = (id: string) => { setAcqPayments(acqPayments.filter(p => p.id !== id)); };
 
     useEffect(() => { const size = Number(engineSizeStr.replace(/,/g, '')); setAutoLicenseFee(calculateLicenseFee(fuelType, size)); }, [fuelType, engineSizeStr]);
     const calcRegisteredPrice = () => { const a1 = Number(priceA1Str.replace(/,/g, '')) || 0; const tax = Number(priceTaxStr.replace(/,/g, '')) || 0; return formatNumberInput(String(a1 + tax)); };
@@ -5983,7 +6026,14 @@ const VehicleFormModal = ({
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
         if(!formData.has('mileage')) { const hiddenMileage = document.createElement('input'); hiddenMileage.type = 'hidden'; hiddenMileage.name = 'mileage'; hiddenMileage.value = mileageStr.replace(/,/g, ''); e.currentTarget.appendChild(hiddenMileage); }
-        try { if(editingVehicle) editingVehicle.photos = carPhotos; await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
+        
+        // ★★★ 把新增的 acqPayments 偷偷塞進 editingVehicle 物件，讓 saveVehicle 函數可以讀到 ★★★
+        if(editingVehicle) {
+            editingVehicle.photos = carPhotos;
+            (editingVehicle as any).acqPayments = acqPayments; 
+        }
+        
+        try { await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
     };
 
     const handleClose = () => { setEditingVehicle(null); if(activeTab === 'inventory_add') setActiveTab('inventory'); };
@@ -6008,12 +6058,10 @@ const VehicleFormModal = ({
             <button type="button" onClick={handleClose} className="hidden md:block p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
           </div>
 
-          {/* ★ 修改：加入 overflow-y-auto 讓手機版可以往下捲動整個表單 */}
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0">
             
-            {/* ================= 左側欄 (VRD & Photos) ================= */}
-            {/* ★ 修改 1：移除 hidden md:flex，手機版自然顯示在上方 (order-1)；電腦版寬度縮為 35% */}
-            <div className="w-full md:w-[35%] lg:w-[35%] xl:w-[30%] min-w-[340px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-1 md:order-1">
+            {/* ================= 左側欄 (VRD & Photos) 寬度 30% ================= */}
+            <div className="w-full lg:w-[30%] md:w-[35%] min-w-[320px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-1 md:order-1">
                  
                  {/* VRD 搜尋遮罩 */}
                  {showVrdOverlay && (
@@ -6026,8 +6074,7 @@ const VehicleFormModal = ({
                     </div>
                  )}
 
-                 {/* ★ 修改 2：加上 md:overflow-y-auto 讓電腦版可以獨立滾動 */}
-                 <div className="flex-1 md:overflow-y-auto p-4 space-y-4 scrollbar-thin">
+                 <div className="flex-1 overflow-y-auto md:overflow-y-auto p-4 space-y-4 scrollbar-thin">
                      {/* VRD Card */}
                      <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                         <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
@@ -6064,7 +6111,7 @@ const VehicleFormModal = ({
                         </div>
                      </div>
 
-                     {/* Photos Card - ★ 修改：放寬高度 (max-h-[260px]) 讓第二排照片不需滾動 */}
+                     {/* Photos Card */}
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                         <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button></div>
                         <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1">
@@ -6147,7 +6194,6 @@ const VehicleFormModal = ({
                                         <div className="flex items-center gap-2 md:w-2/3 min-w-0">
                                             <span className="text-gray-400 font-mono w-16 flex-shrink-0">{p.date}</span>
                                             <span className="font-bold text-slate-700 w-16 md:w-20 truncate flex-shrink-0">{p.type}</span>
-                                            {/* ★ 顯示收款方式標籤 ★ */}
                                             <span className="bg-slate-100 text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap font-bold flex-shrink-0">{p.method || 'Cash'}</span>
                                             <span className="text-gray-500 flex-1 truncate">{p.note || '-'}</span>
                                         </div>
@@ -6157,7 +6203,6 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                 ))}
-                                {/* 待收中港款項提示 */}
                                 {pendingCbTasks.map((task: any) => (
                                     <div key={task.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊載入收款欄">
                                         <div className="flex items-center gap-2 md:w-2/3 min-w-0">
@@ -6173,19 +6218,13 @@ const VehicleFormModal = ({
                                 ))}
                             </div>
 
-                            {/* ★ 新增收款：加入 Payment Method 下拉選單並優化排版 ★ */}
-                            <div className="grid grid-cols-2 md:flex gap-2 pt-3 border-t border-gray-200">
-                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white"/>
-                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="col-span-1 md:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
-                                <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value})} className="col-span-1 md:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-blue-700">
-                                    <option value="Cash">現金 (Cash)</option>
-                                    <option value="Cheque">支票 (Cheque)</option>
-                                    <option value="Transfer">轉帳 (Transfer)</option>
-                                    <option value="USDT">USDT</option>
-                                </select>
-                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="col-span-1 md:flex-1 text-xs p-2 border rounded outline-none bg-white"/>
+                            <div className="grid grid-cols-2 lg:flex gap-2 pt-3 border-t border-gray-200">
+                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 lg:w-28 text-xs p-2 border rounded outline-none bg-white"/>
+                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="col-span-1 lg:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
+                                <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value})} className="col-span-1 lg:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-blue-700"><option value="Cash">現金 (Cash)</option><option value="Cheque">支票 (Cheque)</option><option value="Transfer">轉帳 (Transfer)</option><option value="USDT">USDT</option></select>
+                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="col-span-1 lg:flex-1 text-xs p-2 border rounded outline-none bg-white"/>
                                 <div className="col-span-2 flex gap-2">
-                                    <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 md:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-blue-600"/>
+                                    <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 lg:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-blue-600"/>
                                     <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: '', method: 'Cash'}); }}} className="bg-slate-800 text-white text-xs px-4 rounded-lg hover:bg-slate-700 font-bold active:scale-95 transition-transform whitespace-nowrap">新增收款</button>
                                 </div>
                             </div>
@@ -6217,23 +6256,50 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
+                            {/* ★★★ 國外訂車表單 (含自動稅金計算) ★★★ */}
                             {acqType === 'Import' ? (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label><input name="acq_vendor" defaultValue={(v as any).acquisition?.vendor} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="供應商 / 拍賣場名稱"/></div>
-                                    <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono"/></div>
-                                    <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
-
-                                    <div className="border-t border-red-100 pt-3 col-span-2 md:col-span-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Currency</label><select name="acq_currency" defaultValue={(v as any).acquisition?.currency || 'JPY'} className="w-full bg-white border border-red-100 p-2.5 rounded text-sm outline-none font-bold"><option value="JPY">日圓 (JPY)</option><option value="GBP">英鎊 (GBP)</option><option value="EUR">歐元 (EUR)</option><option value="RMB">人民幣 (RMB)</option><option value="USD">美金 (USD)</option></select></div>
-                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Foreign Price (外幣)</label><input name="acq_foreignPrice" value={acqForeignPrice} onChange={e=>setAcqForeignPrice(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-100 p-2.5 rounded text-sm outline-none font-mono text-right font-bold text-slate-800 focus:ring-2 focus:ring-red-200" placeholder="0"/></div>
-                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Rate (當時匯率)</label><input name="acq_exchangeRate" value={acqExchangeRate} onChange={e=>setAcqExchangeRate(e.target.value)} className="w-full bg-white border border-red-100 p-2.5 rounded text-sm outline-none font-mono text-right focus:ring-2 focus:ring-red-200" placeholder="0.051"/></div>
-                                        <div className="bg-red-100/60 p-2 rounded border border-red-200"><label className="block text-[10px] text-red-800 font-bold mb-1 uppercase">HKD Cost (港幣成本)</label><input name="costPrice" value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-base outline-none font-mono text-right font-black text-red-700" placeholder="0"/></div>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label><input name="acq_vendor" defaultValue={(v as any).acquisition?.vendor} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="供應商 / 拍賣場名稱"/></div>
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono"/></div>
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
                                     </div>
 
-                                    <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Shipping Fee (物流 HKD)</label><div className="flex items-center bg-white border border-red-100 rounded px-2"><span className="text-gray-400 font-mono text-sm">$</span><input name="acq_shippingFee" defaultValue={formatNumberInput(String((v as any).acquisition?.shippingFee||''))} className="w-full p-2 text-sm outline-none font-mono text-right"/></div></div>
-                                    <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Port Fee (到港雜費 HKD)</label><div className="flex items-center bg-white border border-red-100 rounded px-2"><span className="text-gray-400 font-mono text-sm">$</span><input name="acq_portFee" defaultValue={formatNumberInput(String((v as any).acquisition?.portFee||''))} className="w-full p-2 text-sm outline-none font-mono text-right"/></div></div>
+                                    {/* 外幣與當地費用 */}
+                                    <div className="bg-white p-3 rounded-lg border border-red-100 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Currency</label><select name="acq_currency" defaultValue={(v as any).acquisition?.currency || 'JPY'} className="w-full bg-slate-50 border border-red-100 p-2 rounded text-sm outline-none font-bold"><option value="JPY">日圓 (JPY)</option><option value="GBP">英鎊 (GBP)</option><option value="EUR">歐元 (EUR)</option><option value="RMB">人民幣 (RMB)</option><option value="USD">美金 (USD)</option></select></div>
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Foreign Price (外幣車價)</label><input name="acq_foreignPrice" value={acqForeignPrice} onChange={e=>setAcqForeignPrice(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border border-red-100 p-2 rounded text-sm outline-none font-mono text-right font-bold text-slate-800" placeholder="0"/></div>
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Local Charges (當地費用)</label><input name="acq_localChargesForeign" value={acqLocalChargesForeign} onChange={e=>setAcqLocalChargesForeign(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border border-red-100 p-2 rounded text-sm outline-none font-mono text-right" placeholder="0"/></div>
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Rate (當時匯率)</label><input name="acq_exchangeRate" value={acqExchangeRate} onChange={e=>setAcqExchangeRate(e.target.value)} className="w-full bg-slate-50 border border-red-100 p-2 rounded text-sm outline-none font-mono text-right" placeholder="0.051"/></div>
+                                    </div>
+
+                                    {/* 港幣成本與海關稅金 */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                                        <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Port Fee (到港雜費 HKD)</label><div className="flex items-center bg-white border border-red-100 rounded px-2"><span className="text-gray-400 font-mono text-sm">$</span><input name="acq_portFee" value={acqPortFee} onChange={e=>setAcqPortFee(formatNumberInput(e.target.value))} className="w-full p-2 text-sm outline-none font-mono text-right"/></div></div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 font-bold mb-1 uppercase">Cost excl. Tax (未含稅成本)</label>
+                                            <div className="bg-gray-100 border border-gray-200 p-2 rounded text-sm text-right font-mono font-bold text-gray-600">${acqCostExclTax}</div>
+                                        </div>
+                                        
+                                        <div className="bg-red-50 p-2 rounded border border-red-200">
+                                            <label className="block text-[10px] text-red-600 font-bold mb-1 uppercase">A1 (海關 PRP 費用 HKD)</label>
+                                            <input name="acq_a1Price" value={acqA1Price} onChange={e=>setAcqA1Price(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-300 p-1.5 rounded text-sm outline-none font-mono text-right font-bold text-red-700" placeholder="0"/>
+                                        </div>
+                                        <div className="bg-red-50 p-2 rounded border border-red-200">
+                                            <label className="block text-[10px] text-red-600 font-bold mb-1 uppercase">FRT (入口稅 HKD)</label>
+                                            <input name="acq_frtTax" value={acqFrtTax} readOnly className="w-full bg-transparent border-b border-red-300 p-1 text-sm outline-none font-mono text-right font-bold text-red-700" placeholder="Auto Calc"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex justify-end pt-2 border-t border-red-200">
+                                        <div className="text-right">
+                                            <span className="text-[10px] text-red-500 font-bold uppercase block mb-1">Total HKD Cost (港幣總成本)</span>
+                                            <div className="flex items-center"><span className="text-red-700 font-mono text-xl mr-1">$</span><input name="costPrice" value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="bg-transparent text-2xl outline-none font-mono font-black text-red-700 text-right w-32" placeholder="0"/></div>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
+                                /* ★★★ 本地收車表單 ★★★ */
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label><input name="acq_vendor" defaultValue={(v as any).acquisition?.vendor} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="收車對象名稱"/></div>
                                     <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option></select></div>
@@ -6244,10 +6310,54 @@ const VehicleFormModal = ({
                                     <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Advance Fee (代支 HKD)</label><input name="acq_advanceFee" defaultValue={formatNumberInput(String((v as any).acquisition?.advanceFee||''))} className="w-full bg-white border border-red-100 p-2.5 rounded text-sm outline-none font-mono text-right" placeholder="$0" title="例如代支留牌費等"/></div>
                                 </div>
                             )}
+                            
+                            {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
+                            <div className="mt-6 border-t border-red-200 pt-4">
+                                <h4 className="font-bold text-xs text-red-800 mb-3 flex justify-between items-center">
+                                    <span>付款紀錄 (Acquisition Payments)</span>
+                                    <div className="flex gap-3">
+                                        <span className="text-slate-500 font-mono">已付: {formatCurrency(totalAcqPaid)}</span>
+                                        <span className="text-red-600 font-bold font-mono">未付尾數: {formatCurrency(acqBalance)}</span>
+                                    </div>
+                                </h4>
+                                
+                                <div className="space-y-2 mb-3">
+                                    {acqPayments.map((p: any) => (
+                                        <div key={p.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2 bg-white border border-red-100 rounded shadow-sm relative">
+                                            <div className="flex items-center gap-2 md:w-2/3 min-w-0">
+                                                <span className="text-gray-400 font-mono w-16 flex-shrink-0">{p.date}</span>
+                                                <span className="bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap font-bold flex-shrink-0">{p.method}</span>
+                                                <span className="text-gray-500 flex-1 truncate">{p.note || '-'}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
+                                                <span className="font-mono font-bold text-red-700 text-sm">{formatCurrency(p.amount)}</span>
+                                                <button type="button" onClick={() => handleDeleteAcqPayment(p.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded flex-shrink-0"><Trash2 size={14}/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {acqPayments.length === 0 && <div className="text-center text-xs text-gray-400 py-2 border border-dashed rounded bg-white/50">尚無付款紀錄</div>}
+                                </div>
+
+                                {/* 新增進貨付款 */}
+                                <div className="grid grid-cols-2 lg:flex gap-2 pt-2">
+                                    <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="col-span-1 lg:w-28 text-xs p-2 border border-red-200 rounded outline-none bg-white"/>
+                                    <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="col-span-1 lg:w-24 text-xs p-2 border border-red-200 rounded outline-none bg-white font-bold text-red-700">
+                                        <option value="Cash">現金</option>
+                                        <option value="Cheque">支票</option>
+                                        <option value="Transfer">轉帳</option>
+                                        <option value="USDT">USDT</option>
+                                    </select>
+                                    <input type="text" placeholder="付款備註..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="col-span-2 lg:flex-1 text-xs p-2 border border-red-200 rounded outline-none bg-white"/>
+                                    <div className="col-span-2 flex gap-2">
+                                        <input type="text" placeholder="$ 金額" value={newAcqPayment.amount} onChange={e => setNewAcqPayment({...newAcqPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 lg:w-28 text-sm p-2 border border-red-200 rounded outline-none bg-white text-right font-mono font-bold text-red-600"/>
+                                        <button type="button" onClick={handleAddAcqPayment} className="bg-red-700 text-white text-xs px-4 rounded-lg hover:bg-red-800 font-bold active:scale-95 transition-transform whitespace-nowrap">新增付款</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* 車輛維修與雜費 (Expenses) */}
-                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-6">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>車輛維修與其他費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-3 py-1 rounded-full text-xs">總支出: {formatCurrency(totalExpenses)}</span></h4>
                             
                             <div className="space-y-2 mb-4">
@@ -6255,14 +6365,14 @@ const VehicleFormModal = ({
                                     <div key={exp.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-white border rounded shadow-sm relative">
                                         <div className="flex items-center gap-3 md:w-2/3">
                                             <span className="text-gray-400 font-mono w-20 flex-shrink-0">{exp.date}</span>
-                                            <span className="font-bold text-slate-700 w-24 truncate flex-shrink-0">{exp.type}</span>
+                                            <span className="font-bold text-slate-700 w-24 truncate">{exp.type}</span>
                                             <span className="text-gray-500 flex-1 truncate">{exp.company}</span>
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
-                                            <span className="font-mono font-bold text-right text-sm">{formatCurrency(exp.amount)}</span>
+                                            <span className="font-mono font-bold text-right">{formatCurrency(exp.amount)}</span>
                                             <div className="flex items-center gap-2">
                                                 <button type="button" onClick={() => updateExpenseStatus(v.id!, exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')} className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${exp.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>{exp.status === 'Paid' ? '已付' : '未付'}</button>
-                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded flex-shrink-0"><X size={14}/></button>
+                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded"><X size={14}/></button>
                                             </div>
                                         </div>
                                     </div>
@@ -6272,11 +6382,11 @@ const VehicleFormModal = ({
                                     <div key={`cb-${task.id}`} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-blue-50/50 border border-blue-100 rounded shadow-sm text-blue-800">
                                         <div className="flex items-center gap-3 md:w-2/3">
                                             <span className="text-blue-400 font-mono w-20 flex-shrink-0">{task.date}</span>
-                                            <span className="font-bold flex items-center w-24 truncate flex-shrink-0"><Globe size={10} className="mr-1 flex-shrink-0"/>{task.item}</span>
+                                            <span className="font-bold flex items-center w-32 truncate"><Globe size={10} className="mr-1 flex-shrink-0"/>{task.item}</span>
                                             <span className="text-blue-600/70 flex-1 truncate">中港代辦費</span>
                                         </div>
                                         <div className="flex items-center justify-end gap-3 md:w-1/3">
-                                            <span className="font-mono font-bold text-right text-sm">{formatCurrency(task.fee)}</span>
+                                            <span className="font-mono font-bold text-right">{formatCurrency(task.fee)}</span>
                                             <div className="w-14"></div> {/* 佔位 */}
                                         </div>
                                     </div>
@@ -6284,16 +6394,17 @@ const VehicleFormModal = ({
                             </div>
 
                             {/* 新增費用 */}
-                            <div className="grid grid-cols-2 md:flex gap-2 pt-3 border-t border-gray-200">
-                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white"/>
-                                <select value={newExpense.type} onChange={handleExpenseTypeChange} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
-                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="col-span-2 md:flex-1 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
+                            <div className="grid grid-cols-2 lg:flex gap-2 pt-3 border-t border-gray-200">
+                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 lg:w-28 text-xs p-2 border rounded outline-none bg-white"/>
+                                <select value={newExpense.type} onChange={handleExpenseTypeChange} className="col-span-1 lg:w-28 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
+                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="col-span-2 lg:flex-1 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
                                 <div className="col-span-2 flex gap-2">
-                                    <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="flex-1 md:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-red-600"/>
+                                    <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="flex-1 lg:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-red-600"/>
                                     <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-4 rounded-lg hover:bg-gray-700 font-bold active:scale-95 transition-transform whitespace-nowrap">記一筆</button>
                                 </div>
                             </div>
                         </div>
+
                     </div>
 
                     {/* ===== Tab 3: 中港車管家 (Cross-Border) ===== */}
