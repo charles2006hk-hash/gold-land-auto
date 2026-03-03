@@ -3548,27 +3548,22 @@ const CrossBorderView = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：AI 智能新聞快訊 (結合實時匯率與翻頁特效版) ★★★
+// ★★★ 新增：AI 智能新聞快訊 (實時股票指數 + 匯率翻頁版) ★★★
 // ------------------------------------------------------------------
 const SmartNewsTicker = () => {
     const [aiNewsFeed, setAiNewsFeed] = useState([
         { tag: '⏳ 系統提示', text: '正在載入 AI 即時整理的車市與財經快訊...', time: '--:--' }
     ]);
 
-    // 金融翻頁看板的當前索引
     const [finIndex, setFinIndex] = useState(0);
     
-    // 金融數據狀態 (預設顯示載入中)
+    // 預設載入中狀態
     const [financialStats, setFinancialStats] = useState([
-        { label: '恆生指數', value: '載入中', color: 'text-slate-400' },
-        { label: '日圓/港元', value: '...', color: 'text-slate-400' },
-        { label: '澳元/港元', value: '...', color: 'text-slate-400' },
-        { label: '歐元/港元', value: '...', color: 'text-slate-400' },
-        { label: '英鎊/港元', value: '...', color: 'text-slate-400' }
+        { label: '實時金融', value: '載入中...', color: 'text-slate-400' }
     ]);
 
     useEffect(() => {
-        // 1. 抓取 AI 新聞 (保留您上一版的完美快取邏輯)
+        // 1. 抓取 AI 新聞 (保留原本的智慧排程與 localStorage 快取)
         const checkAndFetchNews = async () => {
             const now = new Date();
             const currentHour = now.getHours();
@@ -3612,39 +3607,47 @@ const SmartNewsTicker = () => {
             }
         };
 
-        // 2. 抓取實時真實匯率 (免 API Key 的公共接口)
-        const fetchRealTimeForex = async () => {
+        // 2. 抓取實時金融數據 (指數 + 匯率)
+        const fetchRealTimeData = async () => {
             try {
-                const res = await fetch('https://open.er-api.com/v6/latest/HKD');
-                const data = await res.json();
-                if (data && data.rates) {
-                    // 香港習慣：日圓通常看「百算」 (100 JPY = ? HKD)
-                    const jpy100 = (100 / data.rates.JPY).toFixed(2); 
-                    const aud = (1 / data.rates.AUD).toFixed(2);
-                    const eur = (1 / data.rates.EUR).toFixed(2);
-                    const gbp = (1 / data.rates.GBP).toFixed(2);
+                let newStats: any[] = [];
 
-                    // 這裡可以加入模擬的恆生指數 (因為免費即時股票API較少)
-                    const mockHSI = (19500 + Math.random() * 200).toFixed(0);
+                // A. 呼叫我們自己寫的 API 抓取恆指、道瓊、上證
+                const indicesRes = await fetch('/api/finance');
+                if (indicesRes.ok) {
+                    const indicesData = await indicesRes.json();
+                    if (Array.isArray(indicesData)) {
+                        newStats = [...newStats, ...indicesData];
+                    }
+                }
 
-                    setFinancialStats([
-                        { label: '恆指(模擬)', value: mockHSI, color: 'text-green-400' },
-                        { label: '百日圓/港元', value: jpy100, color: 'text-yellow-400' },
-                        { label: '澳元/港元', value: aud, color: 'text-blue-300' },
-                        { label: '歐元/港元', value: eur, color: 'text-blue-300' },
-                        { label: '英鎊/港元', value: gbp, color: 'text-blue-300' }
-                    ]);
+                // B. 抓取實時匯率 (免金鑰公共 API)
+                const forexRes = await fetch('https://open.er-api.com/v6/latest/HKD');
+                if (forexRes.ok) {
+                    const forexData = await forexRes.json();
+                    if (forexData && forexData.rates) {
+                        newStats.push(
+                            { label: '百日圓/港', value: (100 / forexData.rates.JPY).toFixed(2), color: 'text-yellow-400' },
+                            { label: '澳元/港元', value: (1 / forexData.rates.AUD).toFixed(2), color: 'text-blue-300' },
+                            { label: '歐元/港元', value: (1 / forexData.rates.EUR).toFixed(2), color: 'text-blue-300' },
+                            { label: '英鎊/港元', value: (1 / forexData.rates.GBP).toFixed(2), color: 'text-blue-300' }
+                        );
+                    }
+                }
+
+                if (newStats.length > 0) {
+                    setFinancialStats(newStats);
                 }
             } catch (error) {
-                console.error("Forex fetch error", error);
+                console.error("Financial data fetch error", error);
             }
         };
 
         checkAndFetchNews();
-        fetchRealTimeForex(); 
+        fetchRealTimeData(); 
         
         const newsInterval = setInterval(checkAndFetchNews, 10 * 60 * 1000);
-        const forexInterval = setInterval(fetchRealTimeForex, 60 * 60 * 1000); // 匯率每小時更新一次
+        const forexInterval = setInterval(fetchRealTimeData, 5 * 60 * 1000); // 股市與匯率每 5 分鐘更新一次
         
         return () => {
             clearInterval(newsInterval);
@@ -3652,11 +3655,11 @@ const SmartNewsTicker = () => {
         };
     }, []);
 
-    // 處理金融數據的翻頁跳動 (每 3 秒換一個)
+    // 翻頁動畫定時器 (每 3.5 秒換一頁)
     useEffect(() => {
         const flipInterval = setInterval(() => {
             setFinIndex((prev) => (prev + 1) % financialStats.length);
-        }, 3000);
+        }, 3500);
         return () => clearInterval(flipInterval);
     }, [financialStats.length]);
 
@@ -3681,29 +3684,29 @@ const SmartNewsTicker = () => {
                 }
             `}</style>
 
-            {/* 1. 左側標籤 (iPhone上自動縮寫為 AI 省空間) */}
+            {/* 左側標籤 (iPhone 極簡化) */}
             <div className="flex-none bg-blue-600 text-white text-[10px] font-bold px-2 md:px-3 h-full flex items-center z-20 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                 <Zap size={12} className="mr-1 text-yellow-400 fill-yellow-400 animate-pulse"/> 
                 <span className="hidden md:inline">AI 快訊</span>
                 <span className="md:hidden">AI</span>
             </div>
 
-            {/* 2. ★★★ 新增：實時金融垂直翻頁區 ★★★ */}
-            <div className="flex-none bg-slate-800 text-white h-full relative overflow-hidden flex items-center justify-center min-w-[95px] md:min-w-[120px] border-r border-slate-700 z-10 shadow-inner">
+            {/* ★★★ 金融實時翻頁區 (加寬以容納指數與漲跌幅) ★★★ */}
+            <div className="flex-none bg-slate-800 text-white h-full relative overflow-hidden flex items-center justify-center min-w-[130px] md:min-w-[160px] border-r border-slate-700 z-10 shadow-inner">
                 {financialStats.map((stat, idx) => (
                     <div 
                         key={idx} 
-                        className={`absolute inset-0 flex items-center justify-center px-2 transition-all duration-500 ease-in-out ${
+                        className={`absolute inset-0 flex items-center justify-center px-1.5 md:px-2 transition-all duration-500 ease-in-out ${
                             finIndex === idx ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
                         }`}
                     >
                         <span className="text-[9px] md:text-[10px] text-slate-300 mr-1.5 whitespace-nowrap">{stat.label}</span>
-                        <span className={`text-[10px] md:text-[11px] font-bold font-mono tracking-tight ${stat.color}`}>{stat.value}</span>
+                        <span className={`text-[10px] md:text-[11px] font-bold font-mono tracking-tight whitespace-nowrap ${stat.color}`}>{stat.value}</span>
                     </div>
                 ))}
             </div>
 
-            {/* 3. 右側新聞滾動文字 */}
+            {/* 右側新聞滾動文字 */}
             <div className="flex-1 overflow-hidden relative mask-edges-inline flex items-center h-full">
                 <div className="animate-marquee-inline cursor-default h-full flex items-center">
                     {[...aiNewsFeed, ...aiNewsFeed].map((item, idx) => (
