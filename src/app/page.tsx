@@ -5841,7 +5841,7 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v18.0: 修復比例、排版走位與儲存錯誤) ★★★
+// ★★★ 1. Vehicle Form Modal (v18.5: 修復手機顯示、優化比例與收款方式) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
@@ -5859,7 +5859,7 @@ const VehicleFormModal = ({
     // 分頁控制
     const [rightTab, setRightTab] = useState<'sales' | 'cost' | 'cb'>('sales');
 
-    // ★★★ 新增：控制中港車管家是否展開的狀態 ★★★
+    // 中港車管家是否展開的狀態
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
 
     const [acqType, setAcqType] = useState<'Local' | 'Import'>((v as any).acquisition?.type || 'Local');
@@ -5898,6 +5898,7 @@ const VehicleFormModal = ({
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
+    // ★ 新增：預設收款方式
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
 
     useEffect(() => {
@@ -6007,10 +6008,12 @@ const VehicleFormModal = ({
             <button type="button" onClick={handleClose} className="hidden md:block p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
           </div>
 
-          <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+          {/* ★ 修改：加入 overflow-y-auto 讓手機版可以往下捲動整個表單 */}
+          <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0">
             
-            {/* ================= 左側欄 (VRD & Photos) ★修改：寬度縮減為 30% ================= */}
-            <div className="w-full lg:w-[30%] md:w-1/3 min-w-[320px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-2 md:order-1 hidden md:flex">
+            {/* ================= 左側欄 (VRD & Photos) ================= */}
+            {/* ★ 修改 1：移除 hidden md:flex，手機版自然顯示在上方 (order-1)；電腦版寬度縮為 35% */}
+            <div className="w-full md:w-[35%] lg:w-[35%] xl:w-[30%] min-w-[340px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-1 md:order-1">
                  
                  {/* VRD 搜尋遮罩 */}
                  {showVrdOverlay && (
@@ -6023,7 +6026,8 @@ const VehicleFormModal = ({
                     </div>
                  )}
 
-                 <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+                 {/* ★ 修改 2：加上 md:overflow-y-auto 讓電腦版可以獨立滾動 */}
+                 <div className="flex-1 md:overflow-y-auto p-4 space-y-4 scrollbar-thin">
                      {/* VRD Card */}
                      <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                         <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
@@ -6060,10 +6064,10 @@ const VehicleFormModal = ({
                         </div>
                      </div>
 
-                     {/* Photos Card */}
+                     {/* Photos Card - ★ 修改：放寬高度 (max-h-[260px]) 讓第二排照片不需滾動 */}
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                         <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button></div>
-                        <div className="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto pr-1">
+                        <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1">
                             {carPhotos.map((url, idx) => (<div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm cursor-zoom-in" onClick={() => setPreviewImage(url)}><img src={url} className="w-full h-full object-cover"/></div>))}
                             {carPhotos.length === 0 && (<div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
                         </div>
@@ -6072,10 +6076,10 @@ const VehicleFormModal = ({
             </div>
             
             {/* ================= 右側欄 (Tabs System) ================= */}
-            <div className="w-full md:flex-1 flex flex-col h-full bg-white md:overflow-hidden order-1 md:order-2">
+            <div className="w-full md:flex-1 flex flex-col md:h-full bg-white md:overflow-hidden order-2 md:order-2">
                 
-                {/* 頂部全域狀態列 (永遠顯示) */}
-                <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:px-6 md:pt-6 bg-white flex-none">
+                {/* 頂部全域狀態列 */}
+                <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:px-6 md:pt-6 bg-white flex-none border-t md:border-t-0 border-slate-200">
                     <div className="flex bg-slate-100 rounded-lg p-1 border border-slate-200 shadow-inner">
                         <input type="hidden" name="status" value={currentStatus} />
                         {['In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(status => (<button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${currentStatus === status ? 'bg-white text-blue-700 shadow border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>{status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}</button>))}
@@ -6096,15 +6100,15 @@ const VehicleFormModal = ({
                     </div>
                 </div>
 
-                {/* ★★★ 右側分頁導航 (Tabs) ★★★ */}
+                {/* 右側分頁導航 (Tabs) */}
                 <div className="flex border-b border-slate-200 px-4 md:px-6 gap-2 md:gap-6 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide">
                     <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'sales' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售與收款</button>
                     <button type="button" onClick={() => setRightTab('cost')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cost' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><DownloadCloud size={16} className="inline mr-1 mb-0.5"/>進貨與成本</button>
                     <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
                 </div>
 
-                {/* ★★★ 分頁內容區 (改用 className 隱藏而非移除，解決表單取值問題) ★★★ */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white scrollbar-thin relative">
+                {/* 分頁內容區 */}
+                <div className="flex-1 md:overflow-y-auto p-4 md:p-6 bg-white scrollbar-thin relative">
                     
                     {/* ===== Tab 1: 銷售與收款 (Sales) ===== */}
                     <div className={rightTab === 'sales' ? 'block space-y-6 animate-fade-in' : 'hidden'}>
@@ -6133,47 +6137,57 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
-                        {/* 收款記錄 ★排版修復：確保格線對齊且不走位 */}
+                        {/* 收款記錄 */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>收款記錄 (Payments Received)</span><span className="text-green-600 bg-green-100 px-3 py-1 rounded-full text-xs">總已收: {formatCurrency(totalReceived)}</span></h4>
                             
                             <div className="space-y-2 mb-4">
                                 {(v.payments || []).map((p: any) => (
                                     <div key={p.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-white border rounded shadow-sm relative">
-                                        <div className="flex items-center gap-3 md:w-2/3">
-                                            <span className="text-gray-400 font-mono w-20 flex-shrink-0">{p.date}</span>
-                                            <span className="font-bold text-slate-700 w-24 truncate">{p.type}</span>
+                                        <div className="flex items-center gap-2 md:w-2/3 min-w-0">
+                                            <span className="text-gray-400 font-mono w-16 flex-shrink-0">{p.date}</span>
+                                            <span className="font-bold text-slate-700 w-16 md:w-20 truncate flex-shrink-0">{p.type}</span>
+                                            {/* ★ 顯示收款方式標籤 ★ */}
+                                            <span className="bg-slate-100 text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap font-bold flex-shrink-0">{p.method || 'Cash'}</span>
                                             <span className="text-gray-500 flex-1 truncate">{p.note || '-'}</span>
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
-                                            <span className="font-mono font-bold text-blue-600 text-right">{formatCurrency(p.amount)}</span>
-                                            {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded"><Trash2 size={14}/></button>}
+                                            <span className="font-mono font-bold text-blue-600 text-right text-sm">{formatCurrency(p.amount)}</span>
+                                            {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded flex-shrink-0"><Trash2 size={14}/></button>}
                                         </div>
                                     </div>
                                 ))}
                                 {/* 待收中港款項提示 */}
                                 {pendingCbTasks.map((task: any) => (
                                     <div key={task.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊載入收款欄">
-                                        <div className="flex items-center gap-3 md:w-2/3">
-                                            <span className="text-amber-600/70 font-mono w-20 flex-shrink-0">{task.date}</span>
-                                            <span className="font-bold flex items-center w-32 truncate"><Info size={12} className="mr-1 flex-shrink-0"/>{task.item}</span>
+                                        <div className="flex items-center gap-2 md:w-2/3 min-w-0">
+                                            <span className="text-amber-600/70 font-mono w-16 flex-shrink-0">{task.date}</span>
+                                            <span className="font-bold flex items-center w-24 md:w-32 truncate flex-shrink-0"><Info size={12} className="mr-1 flex-shrink-0"/>{task.item}</span>
                                             <span className="text-amber-700 flex-1 truncate">{task.institution}</span>
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
-                                            <span className="font-mono font-bold text-right">{formatCurrency(task.fee)}</span>
-                                            <span className="bg-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold">待收</span>
+                                            <span className="font-mono font-bold text-right text-sm">{formatCurrency(task.fee)}</span>
+                                            <span className="bg-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold flex-shrink-0">待收</span>
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* 新增收款 */}
-                            <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 pt-3 border-t border-gray-200">
-                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 lg:col-span-1 text-xs p-2 border rounded outline-none bg-white"/>
-                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="col-span-1 lg:col-span-1 text-xs p-2 border rounded outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
-                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="col-span-2 lg:col-span-2 text-xs p-2 border rounded outline-none bg-white"/>
-                                <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="col-span-1 lg:col-span-1 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-blue-600"/>
-                                <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: ''}); }}} className="col-span-1 lg:col-span-1 bg-slate-800 text-white text-xs px-2 rounded hover:bg-slate-700 font-bold active:scale-95 transition-transform">新增收款</button>
+                            {/* ★ 新增收款：加入 Payment Method 下拉選單並優化排版 ★ */}
+                            <div className="grid grid-cols-2 md:flex gap-2 pt-3 border-t border-gray-200">
+                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white"/>
+                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="col-span-1 md:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
+                                <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value})} className="col-span-1 md:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-blue-700">
+                                    <option value="Cash">現金 (Cash)</option>
+                                    <option value="Cheque">支票 (Cheque)</option>
+                                    <option value="Transfer">轉帳 (Transfer)</option>
+                                    <option value="USDT">USDT</option>
+                                </select>
+                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="col-span-1 md:flex-1 text-xs p-2 border rounded outline-none bg-white"/>
+                                <div className="col-span-2 flex gap-2">
+                                    <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="flex-1 md:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-blue-600"/>
+                                    <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: '', method: 'Cash'}); }}} className="bg-slate-800 text-white text-xs px-4 rounded-lg hover:bg-slate-700 font-bold active:scale-95 transition-transform whitespace-nowrap">新增收款</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -6232,7 +6246,7 @@ const VehicleFormModal = ({
                             )}
                         </div>
 
-                        {/* 車輛維修與雜費 (Expenses) ★排版修復：防止擠壓走位 */}
+                        {/* 車輛維修與雜費 (Expenses) */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>車輛維修與其他費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-3 py-1 rounded-full text-xs">總支出: {formatCurrency(totalExpenses)}</span></h4>
                             
@@ -6241,14 +6255,14 @@ const VehicleFormModal = ({
                                     <div key={exp.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-white border rounded shadow-sm relative">
                                         <div className="flex items-center gap-3 md:w-2/3">
                                             <span className="text-gray-400 font-mono w-20 flex-shrink-0">{exp.date}</span>
-                                            <span className="font-bold text-slate-700 w-24 truncate">{exp.type}</span>
+                                            <span className="font-bold text-slate-700 w-24 truncate flex-shrink-0">{exp.type}</span>
                                             <span className="text-gray-500 flex-1 truncate">{exp.company}</span>
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-3 md:w-1/3">
-                                            <span className="font-mono font-bold text-right">{formatCurrency(exp.amount)}</span>
+                                            <span className="font-mono font-bold text-right text-sm">{formatCurrency(exp.amount)}</span>
                                             <div className="flex items-center gap-2">
                                                 <button type="button" onClick={() => updateExpenseStatus(v.id!, exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')} className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${exp.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>{exp.status === 'Paid' ? '已付' : '未付'}</button>
-                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded"><X size={14}/></button>
+                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-1.5 rounded flex-shrink-0"><X size={14}/></button>
                                             </div>
                                         </div>
                                     </div>
@@ -6258,11 +6272,11 @@ const VehicleFormModal = ({
                                     <div key={`cb-${task.id}`} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-blue-50/50 border border-blue-100 rounded shadow-sm text-blue-800">
                                         <div className="flex items-center gap-3 md:w-2/3">
                                             <span className="text-blue-400 font-mono w-20 flex-shrink-0">{task.date}</span>
-                                            <span className="font-bold flex items-center w-32 truncate"><Globe size={10} className="inline mr-1 flex-shrink-0"/>{task.item}</span>
+                                            <span className="font-bold flex items-center w-24 truncate flex-shrink-0"><Globe size={10} className="mr-1 flex-shrink-0"/>{task.item}</span>
                                             <span className="text-blue-600/70 flex-1 truncate">中港代辦費</span>
                                         </div>
                                         <div className="flex items-center justify-end gap-3 md:w-1/3">
-                                            <span className="font-mono font-bold text-right">{formatCurrency(task.fee)}</span>
+                                            <span className="font-mono font-bold text-right text-sm">{formatCurrency(task.fee)}</span>
                                             <div className="w-14"></div> {/* 佔位 */}
                                         </div>
                                     </div>
@@ -6270,15 +6284,16 @@ const VehicleFormModal = ({
                             </div>
 
                             {/* 新增費用 */}
-                            <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 pt-3 border-t border-gray-200">
-                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 lg:col-span-1 text-xs p-2 border rounded outline-none bg-white"/>
-                                <select value={newExpense.type} onChange={handleExpenseTypeChange} className="col-span-1 lg:col-span-1 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
-                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="col-span-2 lg:col-span-2 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
-                                <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="col-span-1 lg:col-span-1 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-red-600"/>
-                                <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="col-span-1 lg:col-span-1 bg-gray-600 text-white text-xs px-2 rounded hover:bg-gray-700 font-bold active:scale-95 transition-transform">記一筆</button>
+                            <div className="grid grid-cols-2 md:flex gap-2 pt-3 border-t border-gray-200">
+                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white"/>
+                                <select value={newExpense.type} onChange={handleExpenseTypeChange} className="col-span-1 md:w-28 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
+                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="col-span-2 md:flex-1 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
+                                <div className="col-span-2 flex gap-2">
+                                    <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="flex-1 md:w-28 text-sm p-2 border rounded outline-none bg-white text-right font-mono font-bold text-red-600"/>
+                                    <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="bg-gray-600 text-white text-xs px-4 rounded-lg hover:bg-gray-700 font-bold active:scale-95 transition-transform whitespace-nowrap">記一筆</button>
+                                </div>
                             </div>
                         </div>
-
                     </div>
 
                     {/* ===== Tab 3: 中港車管家 (Cross-Border) ===== */}
@@ -6292,7 +6307,7 @@ const VehicleFormModal = ({
                                 </label>
                             </div>
                             
-                            {/* ★★★ 只有打勾時才顯示以下內容 ★★★ */}
+                            {/* ★ 只有打勾時才顯示以下內容 ★ */}
                             {cbEnabled ? (
                                 <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
                                     <div className="col-span-1"><label className="text-[10px] text-blue-800 font-bold uppercase">Mainland Plate</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none" placeholder="粵Z..."/></div>
@@ -6330,13 +6345,13 @@ const VehicleFormModal = ({
                     </div>
                 </div>
 
-                {/* 底部儲存列 (永遠顯示) */}
+                {/* 底部儲存列 */}
                 <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between gap-4 items-start md:items-center flex-none">
                     <div className="w-full md:flex-1 max-w-xl">
                         <input name="remarks" defaultValue={v.remarks} placeholder="Remarks / 備註..." className="w-full text-xs p-2.5 border rounded-lg outline-none focus:ring-2 ring-blue-200 bg-white shadow-sm font-mono"/>
                     </div>
                     
-                    {/* ★★★ 關聯單據跳轉按鈕 (行動裝置也可橫向滾動查看) ★★★ */}
+                    {/* 關聯單據跳轉按鈕 */}
                     {v.id && (
                         <div className="flex flex-col gap-1 w-full md:w-auto md:mr-auto">
                             <span className="text-[9px] font-bold text-slate-400 uppercase">Related Docs (關聯單據):</span>
