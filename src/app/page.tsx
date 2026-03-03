@@ -350,7 +350,7 @@ type Vehicle = {
   deposit?: number;
 
   crossBorder?: CrossBorderData;
-
+  acquisition?: any;
   createdAt?: any;
   updatedAt?: any;
 
