@@ -4930,7 +4930,7 @@ export default function GoldLandAutoDMS() {
   const [sortConfig, setSortConfig] = useState<{ key: keyof Vehicle; direction: 'asc' | 'desc' } | null>(null);
 
   // Report States
-  const [reportType, setReportType] = useState<'receivable' | 'payable' | 'sales'>('receivable');
+  const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>('receivable');
   const [reportStartDate, setReportStartDate] = useState(new Date().getFullYear() + '-01-01');
   const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportCompany, setReportCompany] = useState('');
