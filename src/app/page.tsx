@@ -4778,6 +4778,317 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
     );
 };
 
+
+// ------------------------------------------------------------------
+// ★★★ 2. Report View (v14.5: 獨立組件 + 智慧日期開關鎖定) ★★★
+// ------------------------------------------------------------------
+const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: any) => {
+    const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>('receivable');
+    const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>('All');
+    const [reportSearchTerm, setReportSearchTerm] = useState('');
+    const [reportCompany, setReportCompany] = useState('');
+
+    // ★★★ 新增：日期區間開關 (預設開啟) ★★★
+    const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(true);
+
+    const [reportStartDate, setReportStartDate] = useState(() => {
+        const date = new Date();
+        return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [reportEndDate, setReportEndDate] = useState(() => {
+        const date = new Date();
+        return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+    });
+
+    const handleReportItemClick = (vehicleId: string) => {
+        const vehicle = inventory.find((v: any) => v.id === vehicleId);
+        if (vehicle) setEditingVehicle(vehicle);
+    };
+
+    // 日期快捷按鈕：點擊時「自動開啟」開關
+    const setThisMonth = () => {
+        const date = new Date();
+        setReportStartDate(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
+        setReportEndDate(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
+        setIsDateFilterEnabled(true); // 自動打勾
+    };
+
+    const handlePrint = () => { window.print(); };
+
+    // --- Report Logic ---
+    const generateReportData = () => {
+        let data: any[] = [];
+        
+        if (reportType === 'receivable') {
+            const targetInventory = inventory.filter((v:any) => v.status === 'Sold' || v.status === 'Reserved');
+
+            targetInventory.forEach((v:any) => {
+                const generalPayments = (v.payments || []).filter((p:any) => !p.relatedTaskId).reduce((s:any, p:any) => s + (p.amount || 0), 0);
+                const generalExpenses = (v.expenses || []).reduce((s:any, e:any) => s + (e.amount || 0), 0);
+                const totalReceivable = (v.price || 0) + generalExpenses;
+                const carBalance = totalReceivable - generalPayments;
+                
+                if (totalReceivable > 0 && carBalance > 0) {
+                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
+                    data.push({
+                        vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`,
+                        regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status,
+                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
+                    });
+                }
+
+                const cbTasks = v.crossBorder?.tasks || [];
+                cbTasks.forEach((task:any) => {
+                    const fee = Number(task.fee) || 0;
+                    if (fee <= 0) return;
+                    const taskPaid = (v.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:any, p:any) => s + (p.amount || 0), 0);
+                    const taskBalance = fee - taskPaid;
+
+                    if (taskBalance > 0) {
+                        let safeDate = task.date || v.stockOutDate || new Date().toISOString().split('T')[0];
+                        data.push({
+                            vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, 
+                            regMark: v.regMark, amount: taskBalance, type: 'Service', status: 'Pending',
+                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
+                        });
+                    }
+                });
+            });
+
+        } else if (reportType === 'payable' || reportType === 'paid_expenses') {
+            const isTargetPaid = reportType === 'paid_expenses';
+            const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
+
+            inventory.forEach((v:any) => {
+                (v.expenses || []).forEach((exp:any) => {
+                    if (exp.status === targetStatus) {
+                        data.push({
+                            vehicleId: v.id, id: exp.id, date: exp.date,
+                            title: `[維修/雜費] ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: targetStatus,
+                            regMark: v.regMark, 
+                            rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`
+                        });
+                    }
+                });
+
+                if (isTargetPaid) {
+                    (v.acquisition?.payments || []).forEach((p: any) => {
+                        const vendorName = v.acquisition?.vendor || '未填寫供應商';
+                        data.push({
+                            vehicleId: v.id, id: p.id, date: p.date,
+                            title: `[進貨付款] ${v.make} ${v.model}`, 
+                            company: vendorName, 
+                            invoiceNo: p.method, 
+                            amount: p.amount, 
+                            status: 'Paid',
+                            regMark: v.regMark,
+                            rawTitle: `${v.regMark} 進貨付款 ${vendorName} ${p.method}`
+                        });
+                    });
+                } else {
+                    const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                    const acqOffset = Number(v.acquisition?.offsetAmount || 0);
+                    const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
+                    
+                    if (acqBalance > 0) {
+                        const vendorName = v.acquisition?.vendor || '未填寫供應商';
+                        const acqTypeLabel = v.acquisition?.type === 'Import' ? '國外訂車' : '本地收車';
+                        
+                        data.push({
+                            vehicleId: v.id, id: `acq-${v.id}`, 
+                            date: v.stockInDate || new Date().toISOString().split('T')[0],
+                            title: `[車輛進貨] ${v.make} ${v.model}`, 
+                            company: vendorName, 
+                            invoiceNo: acqTypeLabel, 
+                            amount: acqBalance, 
+                            status: 'Unpaid',
+                            regMark: v.regMark, 
+                            rawTitle: `${v.regMark} 進貨尾數 ${vendorName} ${acqTypeLabel}`
+                        });
+                    }
+                }
+            });
+
+        } else if (reportType === 'sales') {
+            data = inventory.filter((v:any) => v.status === 'Sold').map((v:any) => {
+                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
+                const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
+                const totalRevenue = (v.price || 0) + cbFees;
+                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+                return {
+                    vehicleId: v.id, date: safeSaleDate,
+                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
+                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost,
+                    rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}`
+                };
+            });
+        }
+
+        // ★★★ 日期開關邏輯 (如果開啟才進行過濾) ★★★
+        if (isDateFilterEnabled) {
+            if (reportStartDate) data = data.filter(d => d.date >= reportStartDate);
+            if (reportEndDate) data = data.filter(d => d.date <= reportEndDate);
+        }
+        
+        if (reportSearchTerm) data = data.filter(d => (d.rawTitle || '').toLowerCase().includes(reportSearchTerm.toLowerCase()));
+        if (reportType === 'receivable' && reportCategory !== 'All') data = data.filter(d => d.type === reportCategory);
+        if ((reportType === 'payable' || reportType === 'paid_expenses') && reportCompany) data = data.filter(d => d.company === reportCompany);
+
+        data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return data;
+    };
+
+    const reportData = generateReportData();
+    const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
+
+    return (
+        <div className="p-2 md:p-6 bg-white rounded-lg shadow-sm min-h-screen flex flex-col">
+            <div className="flex justify-between items-center mb-4 flex-none">
+                <h2 className="text-lg md:text-xl font-bold flex items-center text-slate-800"><FileBarChart className="mr-2" size={20}/> 統計報表</h2>
+                <div className="flex space-x-2">
+                    <button onClick={handlePrint} className="hidden md:flex bg-slate-900 text-white px-4 py-2 rounded text-sm items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
+                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-100 text-gray-600 px-3 py-1.5 text-xs md:text-sm rounded hover:bg-gray-200">返回</button>
+                </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-xl border mb-4 flex-none shadow-sm">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="col-span-2 md:col-span-1">
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">報表類型</label>
+                        <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-1.5 rounded text-xs font-bold text-slate-700 h-8 bg-white outline-none focus:ring-2 ring-blue-100 cursor-pointer">
+                            <option value="receivable">應收未收 (Receivables)</option>
+                            <option value="payable">應付未付 (Payable - Unpaid)</option>
+                            <option value="paid_expenses">應付已付 (Paid Expenses)</option>
+                            <option value="sales">銷售統計 (Sales Profit)</option>
+                        </select>
+                    </div>
+
+                    {reportType === 'receivable' && (
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1">業務類別</label>
+                            <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)} className="w-full border p-1.5 rounded text-xs font-bold text-slate-700 h-8 bg-white">
+                                <option value="All">全部 (All)</option>
+                                <option value="Vehicle">車輛銷售 (Sales)</option>
+                                <option value="Service">中港/代辦服務 (Services)</option>
+                            </select>
+                        </div>
+                    )}
+
+                    <div className="col-span-2 md:col-span-1 relative">
+                        <label className="block text-[10px] font-bold text-gray-500 mb-1">關鍵字搜尋</label>
+                        <Search size={14} className="absolute left-2 top-7 text-gray-400"/>
+                        <input type="text" value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} placeholder="車牌/對象..." className="w-full border p-1.5 pl-7 rounded text-xs focus:ring-1 ring-blue-500 outline-none h-8 bg-white"/>
+                    </div>
+
+                    {/* ★★★ 智慧型日期區間控制 ★★★ */}
+                    <div className="col-span-2 md:col-span-2 bg-white border border-gray-200 p-2 rounded-lg flex flex-col justify-center">
+                        <div className="flex justify-between items-center mb-1">
+                            <label className="flex items-center text-[10px] font-bold text-gray-700 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isDateFilterEnabled} 
+                                    onChange={(e) => setIsDateFilterEnabled(e.target.checked)} 
+                                    className="mr-1.5 accent-blue-600"
+                                />
+                                啟用日期區間鎖定
+                            </label>
+                            <button onClick={setThisMonth} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-100 font-bold active:scale-95 transition-transform">
+                                抓取本月
+                            </button>
+                        </div>
+                        <div className={`flex items-center gap-1 transition-opacity ${!isDateFilterEnabled ? 'opacity-40' : 'opacity-100'}`}>
+                            <input 
+                                type="date" 
+                                value={reportStartDate} 
+                                onChange={e => { setReportStartDate(e.target.value); setIsDateFilterEnabled(true); }} 
+                                disabled={!isDateFilterEnabled}
+                                className="w-full border-b border-gray-200 p-0.5 text-xs outline-none focus:border-blue-500 bg-transparent cursor-pointer disabled:cursor-not-allowed" 
+                            />
+                            <span className="text-gray-400 text-xs">至</span>
+                            <input 
+                                type="date" 
+                                value={reportEndDate} 
+                                onChange={e => { setReportEndDate(e.target.value); setIsDateFilterEnabled(true); }} 
+                                disabled={!isDateFilterEnabled}
+                                className="w-full border-b border-gray-200 p-0.5 text-xs outline-none focus:border-blue-500 bg-transparent cursor-pointer disabled:cursor-not-allowed" 
+                            />
+                        </div>
+                    </div>
+                    
+                    {(reportType === 'payable' || reportType === 'paid_expenses') && (
+                        <div className="col-span-2 md:col-span-1 mt-1">
+                            <label className="block text-[10px] font-bold text-gray-500 mb-1">負責公司/供應商</label>
+                            <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-1.5 rounded text-xs h-8 bg-white"><option value="">全部</option>{settings.expenseCompanies?.map((c:string) => <option key={c} value={c}>{c}</option>)}</select>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-hidden relative border rounded-lg bg-white">
+                <div className="absolute inset-0 overflow-auto scrollbar-thin">
+                    <table className="w-full border-collapse text-xs whitespace-nowrap">
+                        <thead className="sticky top-0 bg-slate-100 z-10 text-slate-600 shadow-sm">
+                            <tr className="border-b-2 border-slate-200 text-left">
+                                <th className="p-2 w-20">日期</th>
+                                <th className="p-2">項目</th>
+                                <th className="p-2 w-24">車牌</th>
+                                
+                                {reportType === 'receivable' && <th className="p-2 w-20">類別</th>}
+                                {(reportType === 'payable' || reportType === 'paid_expenses') && <th className="p-2">供應商 / 車房</th>}
+                                {(reportType === 'payable' || reportType === 'paid_expenses') && <th className="p-2">類型 / 方式</th>}
+                                {reportType === 'sales' && <th className="p-2 text-right">總成本 (含進貨)</th>}
+                                
+                                <th className="p-2 text-right w-24">金額</th>
+                                {reportType === 'sales' && <th className="p-2 text-right w-20">利潤</th>}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {reportData.map((item, idx) => (
+                                <tr key={idx} className="hover:bg-yellow-50 cursor-pointer transition-colors" onClick={() => handleReportItemClick(item.vehicleId)}>
+                                    <td className="p-2 font-mono text-gray-500">{item.date}</td>
+                                    <td className="p-2 font-bold truncate max-w-[180px]">
+                                        <span className={item.type === 'Service' ? 'text-indigo-700' : (item.title.includes('[進貨') ? 'text-red-700' : 'text-slate-800')}>{item.title}</span>
+                                    </td>
+                                    <td className="p-2 font-mono"><span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-bold">{item.regMark || '未出牌'}</span></td>
+                                    
+                                    {reportType === 'receivable' && <td className="p-2 text-xs"><span className={`px-2 py-0.5 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
+                                    {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-2 font-bold text-slate-700">{item.company}</td>}
+                                    {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-2"><span className={`px-2 py-0.5 rounded border ${item.invoiceNo === '本地收車' || item.invoiceNo === '國外訂車' || item.title.includes('[進貨付款]') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{item.invoiceNo || '-'}</span></td>}
+                                    {reportType === 'sales' && <td className="p-2 text-right font-mono">
+                                        {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.cost)}
+                                    </td>}
+
+                                    <td className="p-2 text-right font-mono font-bold text-slate-800">
+                                        {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.amount)}
+                                    </td>
+                                    {reportType === 'sales' && <td className={`p-2 text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.profit)}
+                                    </td>}
+                                </tr>
+                            ))}
+                            {reportData.length === 0 && <tr><td colSpan={10} className="p-10 text-center text-gray-400">目前區間無符合條件的數據</td></tr>}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 bg-slate-50 font-bold border-t-2 border-slate-300 shadow-[0_-2px_5px_rgba(0,0,0,0.05)]">
+                            <tr>
+                                <td colSpan={reportType === 'payable' || reportType === 'paid_expenses' ? 5 : (reportType === 'receivable' ? 4 : 3)} className="p-2 text-right text-slate-500">總計:</td>
+                                {reportType === 'sales' && <td className="p-2"></td>}
+                                <td className={`p-2 text-right text-sm ${reportType === 'payable' ? 'text-red-600' : (reportType === 'paid_expenses' ? 'text-green-600' : 'text-blue-700')}`}>
+                                    {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(totalReportAmount)}
+                                </td>
+                                {reportType === 'sales' && <td className="p-2 text-right text-green-700 text-sm">
+                                    {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(totalReportProfit)}
+                                </td>}
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
@@ -6500,299 +6811,7 @@ const VehicleFormModal = ({
     );
 };
 
-  // 2. Report View (v13.0: 新增應付已付、修復車牌顯示、加強日期鎖定控制)
-  const ReportView = ({ inventory }: { inventory: Vehicle[] }) => {
-    const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>('All');
-    const [reportSearchTerm, setReportSearchTerm] = useState('');
-    
-    // 預設日期範圍：本月
-    const [reportStartDate, setReportStartDate] = useState(() => {
-        const date = new Date();
-        return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-    });
-    const [reportEndDate, setReportEndDate] = useState(() => {
-        const date = new Date();
-        return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-    });
-
-    const handleReportItemClick = (vehicleId: string) => {
-        const vehicle = inventory.find(v => v.id === vehicleId);
-        if (vehicle) setEditingVehicle(vehicle);
-    };
-
-    // 日期快捷按鈕
-    const setThisMonth = () => {
-        const date = new Date();
-        setReportStartDate(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
-        setReportEndDate(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
-    };
-    const clearDates = () => {
-        setReportStartDate('');
-        setReportEndDate('');
-    };
-
-    // --- Report Logic ---
-    const generateReportData = () => {
-        let data: any[] = [];
-        
-        if (reportType === 'receivable') {
-            const targetInventory = inventory.filter(v => v.status === 'Sold' || v.status === 'Reserved');
-
-            targetInventory.forEach(v => {
-                const generalPayments = (v.payments || []).filter(p => !p.relatedTaskId).reduce((s, p) => s + (p.amount || 0), 0);
-                const generalExpenses = (v.expenses || []).reduce((s, e) => s + (e.amount || 0), 0);
-                const totalReceivable = (v.price || 0) + generalExpenses;
-                const carBalance = totalReceivable - generalPayments;
-                
-                if (totalReceivable > 0 && carBalance > 0) {
-                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
-                    data.push({
-                        vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`,
-                        regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status,
-                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
-                    });
-                }
-
-                const cbTasks = v.crossBorder?.tasks || [];
-                cbTasks.forEach(task => {
-                    const fee = Number(task.fee) || 0;
-                    if (fee <= 0) return;
-                    const taskPaid = (v.payments || []).filter(p => p.relatedTaskId === task.id).reduce((s, p) => s + (p.amount || 0), 0);
-                    const taskBalance = fee - taskPaid;
-
-                    if (taskBalance > 0) {
-                        let safeDate = task.date || v.stockOutDate || new Date().toISOString().split('T')[0];
-                        data.push({
-                            vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, 
-                            regMark: v.regMark, amount: taskBalance, type: 'Service', status: 'Pending',
-                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
-                        });
-                    }
-                });
-            });
-
-        } else if (reportType === 'payable' || reportType === 'paid_expenses') {
-            // ★ 合併處理：應付未付 (Unpaid) 與 應付已付 (Paid)
-            const isTargetPaid = reportType === 'paid_expenses';
-            const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
-
-            inventory.forEach(v => {
-                // 1. 一般費用 (車房/零件/雜費)
-                (v.expenses || []).forEach(exp => {
-                    if (exp.status === targetStatus) {
-                        data.push({
-                            vehicleId: v.id, id: exp.id, date: exp.date,
-                            title: `[維修/雜費] ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: targetStatus,
-                            regMark: v.regMark, // ★ 修復：補回車牌號碼
-                            rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`
-                        });
-                    }
-                });
-
-                // 2. 進貨與成本
-                if (isTargetPaid) {
-                    // ★ 應付已付：列出所有的進貨付款紀錄
-                    (v.acquisition?.payments || []).forEach((p: any) => {
-                        const vendorName = v.acquisition?.vendor || '未填寫供應商';
-                        data.push({
-                            vehicleId: v.id, id: p.id, date: p.date,
-                            title: `[進貨付款] ${v.make} ${v.model}`, 
-                            company: vendorName, 
-                            invoiceNo: p.method, // 用來顯示付款方式(Cash, Cheque...)
-                            amount: p.amount, 
-                            status: 'Paid',
-                            regMark: v.regMark,
-                            rawTitle: `${v.regMark} 進貨付款 ${vendorName} ${p.method}`
-                        });
-                    });
-                } else {
-                    // ★ 應付未付：計算未付尾數
-                    const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-                    const acqOffset = Number(v.acquisition?.offsetAmount || 0);
-                    const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
-                    
-                    if (acqBalance > 0) {
-                        const vendorName = v.acquisition?.vendor || '未填寫供應商';
-                        const acqTypeLabel = v.acquisition?.type === 'Import' ? '國外訂車' : '本地收車';
-                        
-                        data.push({
-                            vehicleId: v.id, id: `acq-${v.id}`, 
-                            date: v.stockInDate || new Date().toISOString().split('T')[0],
-                            title: `[車輛進貨] ${v.make} ${v.model}`, 
-                            company: vendorName, 
-                            invoiceNo: acqTypeLabel, 
-                            amount: acqBalance, 
-                            status: 'Unpaid',
-                            regMark: v.regMark, // ★ 修復：補回車牌號碼
-                            rawTitle: `${v.regMark} 進貨尾數 ${vendorName} ${acqTypeLabel}`
-                        });
-                    }
-                }
-            });
-
-        } else if (reportType === 'sales') {
-            data = inventory.filter(v => v.status === 'Sold').map(v => {
-                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-                const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                const totalRevenue = (v.price || 0) + cbFees;
-                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
-                return {
-                    vehicleId: v.id, date: safeSaleDate,
-                    title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
-                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost,
-                    rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}`
-                };
-            });
-        }
-
-        // ★ 全局統一過濾 (無論報表類型怎麼切，日期條件永遠鎖定生效)
-        if (reportStartDate) data = data.filter(d => d.date >= reportStartDate);
-        if (reportEndDate) data = data.filter(d => d.date <= reportEndDate);
-        
-        // 關鍵字過濾
-        if (reportSearchTerm) {
-            data = data.filter(d => (d.rawTitle || '').toLowerCase().includes(reportSearchTerm.toLowerCase()));
-        }
-        
-        // 類別過濾 (僅 Receivable 有效)
-        if (reportType === 'receivable' && reportCategory !== 'All') {
-            data = data.filter(d => d.type === reportCategory);
-        }
-
-        // 公司過濾 (僅 Payable/Paid 有效)
-        if ((reportType === 'payable' || reportType === 'paid_expenses') && reportCompany) {
-            data = data.filter(d => d.company === reportCompany);
-        }
-
-        // 依照日期由新到舊排序
-        data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        return data;
-    };
-
-    const reportData = generateReportData();
-    const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
-    const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
-
-    return (
-        <div className="p-2 md:p-6 bg-white rounded-lg shadow-sm min-h-screen flex flex-col">
-            <div className="flex justify-between items-center mb-4 flex-none">
-                <h2 className="text-lg md:text-xl font-bold flex items-center text-slate-800"><FileBarChart className="mr-2" size={20}/> 統計報表</h2>
-                <div className="flex space-x-2">
-                    <button onClick={handlePrint} className="hidden md:flex bg-slate-900 text-white px-4 py-2 rounded text-sm items-center hover:bg-slate-700"><Printer size={16} className="mr-2"/> 輸出 PDF</button>
-                    <button onClick={() => setActiveTab('dashboard')} className="bg-gray-100 text-gray-600 px-3 py-1.5 text-xs md:text-sm rounded hover:bg-gray-200">返回</button>
-                </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-xl border mb-4 flex-none shadow-sm">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <div className="col-span-2 md:col-span-1">
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1">報表類型</label>
-                        <select value={reportType} onChange={e => setReportType(e.target.value as any)} className="w-full border p-1.5 rounded text-xs font-bold text-slate-700 h-8 bg-white outline-none focus:ring-2 ring-blue-100 cursor-pointer">
-                            <option value="receivable">應收未收 (Receivables)</option>
-                            <option value="payable">應付未付 (Payable - Unpaid)</option>
-                            <option value="paid_expenses">應付已付 (Paid Expenses)</option>
-                            <option value="sales">銷售統計 (Sales Profit)</option>
-                        </select>
-                    </div>
-
-                    {reportType === 'receivable' && (
-                        <div className="col-span-2 md:col-span-1">
-                            <label className="block text-[10px] font-bold text-gray-500 mb-1">業務類別</label>
-                            <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)} className="w-full border p-1.5 rounded text-xs font-bold text-slate-700 h-8 bg-white">
-                                <option value="All">全部 (All)</option>
-                                <option value="Vehicle">車輛銷售 (Sales)</option>
-                                <option value="Service">中港/代辦服務 (Services)</option>
-                            </select>
-                        </div>
-                    )}
-
-                    <div className="col-span-2 md:col-span-1 relative">
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1">關鍵字搜尋</label>
-                        <Search size={14} className="absolute left-2 top-7 text-gray-400"/>
-                        <input type="text" value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} placeholder="車牌/對象..." className="w-full border p-1.5 pl-7 rounded text-xs focus:ring-1 ring-blue-500 outline-none h-8 bg-white"/>
-                    </div>
-
-                    {/* ★★★ 日期區間控制 (加入快捷按鈕) ★★★ */}
-                    <div className="col-span-2 md:col-span-2 bg-white border border-gray-200 p-2 rounded-lg flex flex-col justify-center">
-                        <div className="flex justify-between items-center mb-1">
-                            <label className="text-[10px] font-bold text-gray-500">日期區間 (鎖定)</label>
-                            <div className="flex gap-2">
-                                <button onClick={setThisMonth} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-100 font-bold">本月</button>
-                                <button onClick={clearDates} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded hover:bg-gray-200 font-bold">清除(全部)</button>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <input type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} className="w-full border-b border-gray-200 p-0.5 text-xs outline-none focus:border-blue-500" />
-                            <span className="text-gray-400 text-xs">至</span>
-                            <input type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} className="w-full border-b border-gray-200 p-0.5 text-xs outline-none focus:border-blue-500" />
-                        </div>
-                    </div>
-                    
-                    {(reportType === 'payable' || reportType === 'paid_expenses') && (
-                        <div className="col-span-2 md:col-span-1 mt-1">
-                            <label className="block text-[10px] font-bold text-gray-500 mb-1">負責公司/供應商</label>
-                            <select value={reportCompany} onChange={e => setReportCompany(e.target.value)} className="w-full border p-1.5 rounded text-xs h-8 bg-white"><option value="">全部</option>{settings.expenseCompanies?.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-hidden relative border rounded-lg bg-white">
-                <div className="absolute inset-0 overflow-auto scrollbar-thin">
-                    <table className="w-full border-collapse text-xs whitespace-nowrap">
-                        <thead className="sticky top-0 bg-slate-100 z-10 text-slate-600 shadow-sm">
-                            <tr className="border-b-2 border-slate-200 text-left">
-                                <th className="p-2 w-20">日期</th>
-                                <th className="p-2">項目</th>
-                                <th className="p-2 w-24">車牌</th>
-                                
-                                {reportType === 'receivable' && <th className="p-2 w-20">類別</th>}
-                                {(reportType === 'payable' || reportType === 'paid_expenses') && <th className="p-2">供應商 / 車房</th>}
-                                {(reportType === 'payable' || reportType === 'paid_expenses') && <th className="p-2">類型 / 方式</th>}
-                                {reportType === 'sales' && <th className="p-2 text-right">總成本 (含進貨)</th>}
-                                
-                                <th className="p-2 text-right w-24">金額</th>
-                                {reportType === 'sales' && <th className="p-2 text-right w-20">利潤</th>}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {reportData.map((item, idx) => (
-                                <tr key={idx} className="hover:bg-yellow-50 cursor-pointer transition-colors" onClick={() => handleReportItemClick(item.vehicleId)}>
-                                    <td className="p-2 font-mono text-gray-500">{item.date}</td>
-                                    <td className="p-2 font-bold truncate max-w-[180px]">
-                                        <span className={item.type === 'Service' ? 'text-indigo-700' : (item.title.includes('[進貨') ? 'text-red-700' : 'text-slate-800')}>{item.title}</span>
-                                    </td>
-                                    {/* ★ 車牌號碼正常顯示 ★ */}
-                                    <td className="p-2 font-mono"><span className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-slate-800 font-bold">{item.regMark || '未出牌'}</span></td>
-                                    
-                                    {reportType === 'receivable' && <td className="p-2 text-xs"><span className={`px-2 py-0.5 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
-                                    {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-2 font-bold text-slate-700">{item.company}</td>}
-                                    {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-2"><span className={`px-2 py-0.5 rounded border ${item.invoiceNo === '本地收車' || item.invoiceNo === '國外訂車' || item.title.includes('[進貨付款]') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{item.invoiceNo || '-'}</span></td>}
-                                    {reportType === 'sales' && <td className="p-2 text-right font-mono">{formatCurrency(item.cost)}</td>}
-
-                                    <td className="p-2 text-right font-mono font-bold text-slate-800">{formatCurrency(item.amount)}</td>
-                                    {reportType === 'sales' && <td className={`p-2 text-right font-mono font-bold ${item.profit > 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
-                                </tr>
-                            ))}
-                            {reportData.length === 0 && <tr><td colSpan={10} className="p-10 text-center text-gray-400">目前區間無符合條件的數據</td></tr>}
-                        </tbody>
-                        <tfoot className="sticky bottom-0 bg-slate-50 font-bold border-t-2 border-slate-300 shadow-[0_-2px_5px_rgba(0,0,0,0.05)]">
-                            <tr>
-                                <td colSpan={reportType === 'payable' || reportType === 'paid_expenses' ? 5 : (reportType === 'receivable' ? 4 : 3)} className="p-2 text-right text-slate-500">總計:</td>
-                                {reportType === 'sales' && <td className="p-2"></td>}
-                                <td className={`p-2 text-right text-sm ${reportType === 'payable' ? 'text-red-600' : (reportType === 'paid_expenses' ? 'text-green-600' : 'text-blue-700')}`}>
-                                    {formatCurrency(totalReportAmount)}
-                                </td>
-                                {reportType === 'sales' && <td className="p-2 text-right text-green-700 text-sm">{formatCurrency(totalReportProfit)}</td>}
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            </div>
-        </div>
-    );
-  };
+  
 
 
 // ------------------------------------------------------------------
@@ -7954,11 +7973,16 @@ const CreateDocModule = ({
           )}
 
           {/* Report Tab - 讓它內部也可以滾動 */}
-            {activeTab === 'reports' && (
-                <div className="flex-1 overflow-y-auto">
-                    <ReportView inventory={visibleInventory} /> {/* ★ 關鍵修改：傳入過濾後的資料 */}
-                </div>
-            )}
+                {activeTab === 'reports' && (
+                    <div className="flex-1 overflow-y-auto">
+                        <ReportView 
+                            inventory={visibleInventory} 
+                            settings={settings}
+                            setEditingVehicle={setEditingVehicle}
+                            setActiveTab={setActiveTab}
+                        />
+                    </div>
+                )}
 
          {/* Cross Border Tab (v10.5: TypeScript 類型修復) */}
           {activeTab === 'cross_border' && (
