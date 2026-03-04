@@ -6155,7 +6155,7 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v19.5: 加寬排版 + 修復日期換行 + 一換一專屬圖) ★★★
+// ★★★ 1. Vehicle Form Modal (v19.6: 進貨 Vendor 連動常用公司下拉選單) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
@@ -6172,9 +6172,7 @@ const VehicleFormModal = ({
     const [rightTab, setRightTab] = useState<'sales' | 'cost' | 'cb'>('sales');
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
 
-    // ★★★ 新增監聽 acqVendor，用於觸發「一換一」圖片 ★★★
     const [acqVendor, setAcqVendor] = useState((v as any).acquisition?.vendor || '');
-
     const [acqType, setAcqType] = useState<'Local' | 'Import'>((v as any).acquisition?.type || 'Local');
     const [acqForeignPrice, setAcqForeignPrice] = useState(formatNumberInput(String((v as any).acquisition?.foreignPrice || '')));
     const [acqExchangeRate, setAcqExchangeRate] = useState(String((v as any).acquisition?.exchangeRate || '1.0'));
@@ -6220,7 +6218,6 @@ const VehicleFormModal = ({
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
 
-    // 自動計算香港 FRT 入口稅與成本
     useEffect(() => {
         if (acqType === 'Import') {
             const fp = Number(acqForeignPrice.replace(/,/g, ''));
@@ -6244,7 +6241,6 @@ const VehicleFormModal = ({
         }
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
-    // 計算進貨已付款總額與欠款
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
     const acqOffsetAmount = acqType === 'Local' ? Number(((v as any).acquisition?.offsetAmount || '').replace(/,/g, '')) : 0;
     const acqBalance = Number(costStr.replace(/,/g, '')) - totalAcqPaid - acqOffsetAmount;
@@ -6343,18 +6339,14 @@ const VehicleFormModal = ({
 
     const handleClose = () => { setEditingVehicle(null); if(activeTab === 'inventory_add') setActiveTab('inventory'); };
 
-    // ★★★ 特殊邏輯：決定顯示的圖片 (如果是一換一且沒有照片，套用預設圖) ★★★
     const isOneForOne = acqVendor.includes('一換一');
     const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
     const displayPhotos = (isOneForOne && carPhotos.length === 0) ? [oneForOnePlaceholder] : carPhotos;
 
-
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden">
-        {/* ★ 修改 1：將 max-w 加大至 1600px，讓右側內容不擁擠 */}
         <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[98vw] xl:max-w-[1500px] 2xl:max-w-[1600px] h-full md:h-[92vh] flex flex-col overflow-hidden border border-slate-600">
           
-          {/* Header */}
           <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20 safe-area-top">
             <div className="flex items-center gap-3">
                 <button type="button" onClick={handleClose} className="md:hidden p-2 -ml-2 mr-1 text-slate-300 hover:text-white"><ChevronLeft size={28} /></button>
@@ -6372,10 +6364,8 @@ const VehicleFormModal = ({
 
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0">
             
-            {/* ================= 左側欄 (VRD & Photos) 寬度微調 ================= */}
+            {/* ================= 左側欄 ================= */}
             <div className="w-full lg:w-[30%] md:w-[35%] min-w-[320px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-1 md:order-1">
-                 
-                 {/* VRD 搜尋遮罩 */}
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫</h3><button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button></div>
@@ -6427,7 +6417,6 @@ const VehicleFormModal = ({
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
                         <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-[10px] bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg border hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button></div>
                         <div className="grid grid-cols-3 gap-2 max-h-[260px] overflow-y-auto pr-1">
-                            {/* ★ 使用處理後的 displayPhotos，支援一換一預設圖 ★ */}
                             {displayPhotos.map((url, idx) => (<div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm cursor-zoom-in" onClick={() => setPreviewImage(url)}><img src={url} className="w-full h-full object-cover"/></div>))}
                             {displayPhotos.length === 0 && (<div className="col-span-3 py-8 text-center text-slate-400 text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
                         </div>
@@ -6497,7 +6486,7 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
-                        {/* 收款記錄 - ★ 修改：使用 flex-1 確保日期不換行 */}
+                        {/* 收款記錄 */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>收款記錄 (Payments Received)</span><span className="text-green-600 bg-green-100 px-3 py-1 rounded-full text-xs">總已收: {formatCurrency(totalReceived)}</span></h4>
                             
@@ -6516,6 +6505,7 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                 ))}
+                                {/* 待收中港款項提示 */}
                                 {pendingCbTasks.map((task: any) => (
                                     <div key={task.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊載入收款欄">
                                         <div className="flex items-center gap-2 md:flex-1 min-w-0">
@@ -6532,7 +6522,7 @@ const VehicleFormModal = ({
                             </div>
 
                             <div className="grid grid-cols-2 lg:flex gap-2 pt-3 border-t border-gray-200">
-                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 lg:w-28 text-xs p-2 border rounded outline-none bg-white"/>
+                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="col-span-1 lg:w-32 text-xs p-2 border rounded outline-none bg-white"/>
                                 <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="col-span-1 lg:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
                                 <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value})} className="col-span-1 lg:w-24 text-xs p-2 border rounded outline-none bg-white font-bold text-blue-700"><option value="Cash">現金 (Cash)</option><option value="Cheque">支票 (Cheque)</option><option value="Transfer">轉帳 (Transfer)</option><option value="USDT">USDT</option></select>
                                 <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="col-span-1 lg:flex-1 text-xs p-2 border rounded outline-none bg-white"/>
@@ -6573,7 +6563,19 @@ const VehicleFormModal = ({
                             {acqType === 'Import' ? (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label><input name="acq_vendor" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="供應商 / 拍賣場名稱"/></div>
+                                        {/* ★★★ 這裡換成 Combobox ★★★ */}
+                                        <div className="col-span-2">
+                                            <label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label>
+                                            <input 
+                                                name="acq_vendor" 
+                                                list="vendor_list"
+                                                value={acqVendor} 
+                                                onChange={e => setAcqVendor(e.target.value)} 
+                                                className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" 
+                                                placeholder="供應商 / 拍賣場名稱 (可下拉或手填)"
+                                            />
+                                            <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
+                                        </div>
                                         <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono"/></div>
                                         <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
                                     </div>
@@ -6614,7 +6616,19 @@ const VehicleFormModal = ({
                             ) : (
                                 /* ★★★ 本地收車表單 ★★★ */
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label><input name="acq_vendor" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="收車對象名稱 (輸入'一換一'套用優惠圖)"/></div>
+                                    {/* ★★★ 這裡換成 Combobox ★★★ */}
+                                    <div className="col-span-2">
+                                        <label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label>
+                                        <input 
+                                            name="acq_vendor" 
+                                            list="vendor_list"
+                                            value={acqVendor} 
+                                            onChange={e => setAcqVendor(e.target.value)} 
+                                            className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" 
+                                            placeholder="收車對象名稱 (輸入'一換一'套用優惠圖)"
+                                        />
+                                        <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
+                                    </div>
                                     <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option></select></div>
 
                                     <div className="bg-red-100/60 p-2 rounded border border-red-200 col-span-2"><label className="block text-[10px] text-red-800 font-bold mb-1 uppercase">Purchase Price (收車價 HKD)</label><div className="flex items-center"><span className="text-red-700 font-mono text-lg mr-1">$</span><input name="costPrice" value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-xl outline-none font-mono font-black text-red-700" placeholder="0"/></div></div>
@@ -6624,7 +6638,7 @@ const VehicleFormModal = ({
                                 </div>
                             )}
                             
-                            {/* ★★★ 進貨付款紀錄 (Outgoing Payments) - ★ 排版修復 ★ */}
+                            {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
                             <div className="mt-6 border-t border-red-200 pt-4">
                                 <h4 className="font-bold text-xs text-red-800 mb-3 flex justify-between items-center">
                                     <span>付款紀錄 (Acquisition Payments)</span>
@@ -6653,7 +6667,7 @@ const VehicleFormModal = ({
 
                                 {/* 新增進貨付款 */}
                                 <div className="grid grid-cols-2 lg:flex gap-2 pt-2">
-                                    <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="col-span-1 lg:w-28 text-xs p-2 border border-red-200 rounded outline-none bg-white"/>
+                                    <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="col-span-1 lg:w-32 text-xs p-2 border border-red-200 rounded outline-none bg-white"/>
                                     <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="col-span-1 lg:w-24 text-xs p-2 border border-red-200 rounded outline-none bg-white font-bold text-red-700">
                                         <option value="Cash">現金</option>
                                         <option value="Cheque">支票</option>
@@ -6669,7 +6683,7 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
-                        {/* 車輛維修與雜費 (Expenses) - ★ 排版修復 ★ */}
+                        {/* 車輛維修與雜費 (Expenses) */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mt-6">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>車輛維修與其他費用 (Expenses)</span><span className="text-slate-600 bg-slate-200 px-3 py-1 rounded-full text-xs">總支出: {formatCurrency(totalExpenses)}</span></h4>
                             
@@ -6708,7 +6722,7 @@ const VehicleFormModal = ({
 
                             {/* 新增費用 */}
                             <div className="grid grid-cols-2 lg:flex gap-2 pt-3 border-t border-gray-200">
-                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 lg:w-28 text-xs p-2 border rounded outline-none bg-white"/>
+                                <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="col-span-1 lg:w-32 text-xs p-2 border rounded outline-none bg-white"/>
                                 <select value={newExpense.type} onChange={handleExpenseTypeChange} className="col-span-1 lg:w-28 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
                                 <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="col-span-2 lg:flex-1 text-xs p-2 border rounded outline-none bg-white text-slate-700"><option value="">選公司...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
                                 <div className="col-span-2 flex gap-2">
