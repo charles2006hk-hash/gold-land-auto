@@ -5780,16 +5780,13 @@ const deleteVehicle = async (id: string) => {
   };
 
   // --- Sub-Item Management (FIXED: Updates Local State) ---
-  const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder', newItems: any) => {
-    // ★★★ 修正：使用局部變數 currentDb ★★★
+  const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder'|'salesAddons', newItems: any) => {
     if (!db || !staffId) return;
     const currentDb = db;
-
-    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
 
-    let updateData: any = {}; // 這裡加了 any 避免類型推斷錯誤
+    let updateData: any = {}; 
     let newVehicleState = { ...v };
 
     if (field === 'crossBorder') {
@@ -5797,10 +5794,9 @@ const deleteVehicle = async (id: string) => {
         newVehicleState.crossBorder = { ...v.crossBorder!, tasks: newItems };
     } else {
         updateData = { [field]: newItems };
-        newVehicleState[field] = newItems as any; // 強制轉型
+        newVehicleState[field] = newItems as any; 
     }
 
-    // 使用 currentDb
     await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), updateData);
     
     if (editingVehicle && editingVehicle.id === vehicleId) {
@@ -5835,6 +5831,18 @@ const deleteVehicle = async (id: string) => {
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
     updateSubItem(vehicleId, 'expenses', [...(v.expenses || []), expense]);
+  };
+
+  // ★★★ 新增：對客附加收費管理 ★★★
+  const addSalesAddon = (vehicleId: string, addon: {id: string, name: string, amount: number}) => {
+    const v = inventory.find(v => v.id === vehicleId);
+    if (!v) return;
+    updateSubItem(vehicleId, 'salesAddons', [...((v as any).salesAddons || []), addon]);
+  };
+  const deleteSalesAddon = (vehicleId: string, addonId: string) => {
+    const v = inventory.find(v => v.id === vehicleId);
+    if (!v) return;
+    updateSubItem(vehicleId, 'salesAddons', ((v as any).salesAddons || []).filter((a:any) => a.id !== addonId));
   };
 
   // Cross Border Tasks Management
@@ -6155,11 +6163,13 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v19.6: 進貨 Vendor 連動常用公司下拉選單) ★★★
+// ★★★ 1. Vehicle Form Modal (v20.0: 新增對客附加收費 + 完美財務分離) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
-    updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc, 
+    updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc,
+    // ★ 接收剛剛新增的函數
+    addSalesAddon = () => {}, deleteSalesAddon = () => {}
 }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -6207,16 +6217,28 @@ const VehicleFormModal = ({
     const HK_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
     const MO_PORTS = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
 
+    // ★★★ 修正與優化財務邏輯 ★★★
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
-    const totalRevenue = (v.price || 0) + cbFees;
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-    const generalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-    const totalExpenses = generalExpenses + cbFees;
-    const balance = (totalRevenue + generalExpenses) - totalReceived; 
+    
+    // 內部支出
+    const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+    
+    // 對客附加費 (Sales Add-ons)
+    const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.amount || 0), 0);
+    
+    // 應收總額 = 車價 + 中港代辦費 + 一般附加費
+    const totalRevenue = (v.price || 0) + cbFees + salesAddonsTotal;
+    
+    // 客戶欠款餘額 = 應收總額 - 已收訂金
+    const balance = totalRevenue - totalReceived; 
+
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
+    // ★ 新增附加費輸入狀態
+    const [newAddon, setNewAddon] = useState({ name: '文件費', amount: '' });
 
     useEffect(() => {
         if (acqType === 'Import') {
@@ -6343,10 +6365,12 @@ const VehicleFormModal = ({
     const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
     const displayPhotos = (isOneForOne && carPhotos.length === 0) ? [oneForOnePlaceholder] : carPhotos;
 
+
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden">
         <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[98vw] xl:max-w-[1500px] 2xl:max-w-[1600px] h-full md:h-[92vh] flex flex-col overflow-hidden border border-slate-600">
           
+          {/* Header */}
           <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20 safe-area-top">
             <div className="flex items-center gap-3">
                 <button type="button" onClick={handleClose} className="md:hidden p-2 -ml-2 mr-1 text-slate-300 hover:text-white"><ChevronLeft size={28} /></button>
@@ -6364,8 +6388,10 @@ const VehicleFormModal = ({
 
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0">
             
-            {/* ================= 左側欄 ================= */}
+            {/* ================= 左側欄 (VRD & Photos) ================= */}
             <div className="w-full lg:w-[30%] md:w-[35%] min-w-[320px] bg-slate-200/50 border-r border-slate-300 flex flex-col flex-none md:h-full md:overflow-hidden relative order-1 md:order-1">
+                 
+                 {/* VRD 搜尋遮罩 */}
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫</h3><button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button></div>
@@ -6486,6 +6512,29 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
+                        {/* ★★★ 新增：對客附加收費 (Sales Surcharges) ★★★ */}
+                        <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                            <h4 className="font-bold text-sm text-indigo-800 mb-3 flex justify-between items-center">
+                                <span>對客附加收費 (Sales Add-ons)</span>
+                                <span className="text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full text-xs">總附加費: {formatCurrency(salesAddonsTotal)}</span>
+                            </h4>
+                            <div className="space-y-2 mb-4">
+                                {((v as any).salesAddons || []).map((addon: any) => (
+                                    <div key={addon.id} className="flex items-center justify-between gap-2 text-xs p-2 bg-white border border-indigo-100 rounded shadow-sm">
+                                        <div className="font-bold text-slate-700 flex-1 pl-2">{addon.name}</div>
+                                        <div className="font-mono font-bold text-indigo-600">{formatCurrency(addon.amount)}</div>
+                                        <button type="button" onClick={() => deleteSalesAddon(v.id!, addon.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded"><Trash2 size={14}/></button>
+                                    </div>
+                                ))}
+                                {((v as any).salesAddons || []).length === 0 && <div className="text-center text-xs text-indigo-300 py-2">無附加收費</div>}
+                            </div>
+                            <div className="flex gap-2">
+                                <input type="text" placeholder="收費項目 (例如: 文件費, 過戶費)..." value={newAddon.name} onChange={e => setNewAddon({...newAddon, name: e.target.value})} className="flex-1 text-xs p-2 border border-indigo-200 rounded outline-none bg-white"/>
+                                <input type="text" placeholder="$ 金額" value={newAddon.amount} onChange={e => setNewAddon({...newAddon, amount: formatNumberInput(e.target.value)})} className="w-28 text-sm p-2 border border-indigo-200 rounded outline-none bg-white text-right font-mono font-bold text-indigo-600"/>
+                                <button type="button" onClick={() => {const amt=Number(newAddon.amount.replace(/,/g,'')); if(amt>0 && v.id) { addSalesAddon(v.id, {id:Date.now().toString(), name: newAddon.name, amount:amt}); setNewAddon({name:'', amount:''}); }}} className="bg-indigo-600 text-white text-xs px-4 rounded-lg hover:bg-indigo-700 font-bold active:scale-95 transition-transform whitespace-nowrap">加入收費</button>
+                            </div>
+                        </div>
+
                         {/* 收款記錄 */}
                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                             <h4 className="font-bold text-sm text-gray-700 mb-3 flex justify-between items-center"><span>收款記錄 (Payments Received)</span><span className="text-green-600 bg-green-100 px-3 py-1 rounded-full text-xs">總已收: {formatCurrency(totalReceived)}</span></h4>
@@ -6505,7 +6554,6 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                 ))}
-                                {/* 待收中港款項提示 */}
                                 {pendingCbTasks.map((task: any) => (
                                     <div key={task.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs p-2.5 bg-amber-50 border border-amber-200 rounded shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊載入收款欄">
                                         <div className="flex items-center gap-2 md:flex-1 min-w-0">
@@ -6563,17 +6611,9 @@ const VehicleFormModal = ({
                             {acqType === 'Import' ? (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {/* ★★★ 這裡換成 Combobox ★★★ */}
                                         <div className="col-span-2">
                                             <label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label>
-                                            <input 
-                                                name="acq_vendor" 
-                                                list="vendor_list"
-                                                value={acqVendor} 
-                                                onChange={e => setAcqVendor(e.target.value)} 
-                                                className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" 
-                                                placeholder="供應商 / 拍賣場名稱 (可下拉或手填)"
-                                            />
+                                            <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="供應商 / 拍賣場名稱 (可下拉或手填)"/>
                                             <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
                                         </div>
                                         <div><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-100 p-2 rounded text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono"/></div>
@@ -6616,17 +6656,9 @@ const VehicleFormModal = ({
                             ) : (
                                 /* ★★★ 本地收車表單 ★★★ */
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {/* ★★★ 這裡換成 Combobox ★★★ */}
                                     <div className="col-span-2">
                                         <label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label>
-                                        <input 
-                                            name="acq_vendor" 
-                                            list="vendor_list"
-                                            value={acqVendor} 
-                                            onChange={e => setAcqVendor(e.target.value)} 
-                                            className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" 
-                                            placeholder="收車對象名稱 (輸入'一換一'套用優惠圖)"
-                                        />
+                                        <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none focus:ring-2 focus:ring-red-200" placeholder="收車對象名稱 (輸入'一換一'套用優惠圖)"/>
                                         <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
                                     </div>
                                     <div className="col-span-2"><label className="block text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-100 p-2 rounded text-sm outline-none font-bold text-slate-700"><option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option></select></div>
