@@ -5732,14 +5732,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         const engineSize = getNum('engineSize', true);
         const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
-        // ★★★ 修正點 1：從 formData 或編輯物件安全讀取 acqType ★★★
         const currentAcqType = (formData.get('acq_type') as string) || (editingVehicle as any)?.acquisition?.type || 'Local';
         const isImport = currentAcqType === 'Import';
         const isLocal = currentAcqType === 'Local';
 
-        // ★ 進貨與成本資料 (受保護)
         const acquisitionData = {
-            type: currentAcqType, // 使用修正後的變數
+            type: currentAcqType,
             vendor: formData.get('acq_vendor') as string || '',
             currency: getStr('acq_currency', isImport, (editingVehicle as any)?.acquisition?.currency) || 'HKD',
             exchangeRate: getNum('acq_exchangeRate', isImport, (editingVehicle as any)?.acquisition?.exchangeRate) || 1,
@@ -5752,43 +5750,41 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             paymentStatus: formData.get('acq_paymentStatus') as string || 'Unpaid',
             offsetAmount: getNum('acq_offsetAmount', isLocal, (editingVehicle as any)?.acquisition?.offsetAmount),
             advanceFee: getNum('acq_advanceFee', isLocal, (editingVehicle as any)?.acquisition?.advanceFee),
-            
-            // ★★★ 修正點 2：從 editingVehicle 中抓取傳遞過來的付款紀錄 ★★★
             payments: (editingVehicle as any)?.acqPayments || (editingVehicle as any)?.acquisition?.payments || []
         };
 
-        // ★ 中港車資料 (受保護)
-        const cbEnabled = formData.has('cb_isEnabled') ? (formData.get('cb_isEnabled') === 'on') : (editingVehicle?.crossBorder?.isEnabled || false);
+        // ★★★ 修正點：直接讀取 React 狀態中的 cbEnabled，不依賴 FormData ★★★
+        const isCbActive = cbEnabled; 
+
         const selectedPorts: string[] = [];
-        
-        if (cbEnabled) {
+        if (isCbActive) {
             ALL_CB_PORTS.forEach(port => {
                 if (formData.get(`cb_port_${port}`) === 'on') selectedPorts.push(port);
             });
         }
 
         const crossBorderData: CrossBorderData = {
-            isEnabled: cbEnabled,
-            mainlandPlate: getStr('cb_mainlandPlate', cbEnabled, editingVehicle?.crossBorder?.mainlandPlate),
-            hkCompany: getStr('cb_hkCompany', cbEnabled, editingVehicle?.crossBorder?.hkCompany),
-            mainlandCompany: getStr('cb_mainlandCompany', cbEnabled, editingVehicle?.crossBorder?.mainlandCompany),
-            driver1: getStr('cb_driver1', cbEnabled, editingVehicle?.crossBorder?.driver1),
-            driver2: getStr('cb_driver2', cbEnabled, editingVehicle?.crossBorder?.driver2),
-            driver3: getStr('cb_driver3', cbEnabled, editingVehicle?.crossBorder?.driver3),
-            insuranceAgent: getStr('cb_insuranceAgent', cbEnabled, editingVehicle?.crossBorder?.insuranceAgent),
-            quotaNumber: getStr('cb_quotaNumber', cbEnabled, editingVehicle?.crossBorder?.quotaNumber),
-            ports: cbEnabled ? selectedPorts : (editingVehicle?.crossBorder?.ports || []),
+            isEnabled: isCbActive, // ★ 精準寫入開關狀態
+            mainlandPlate: getStr('cb_mainlandPlate', isCbActive, editingVehicle?.crossBorder?.mainlandPlate),
+            hkCompany: getStr('cb_hkCompany', isCbActive, editingVehicle?.crossBorder?.hkCompany),
+            mainlandCompany: getStr('cb_mainlandCompany', isCbActive, editingVehicle?.crossBorder?.mainlandCompany),
+            driver1: getStr('cb_driver1', isCbActive, editingVehicle?.crossBorder?.driver1),
+            driver2: getStr('cb_driver2', isCbActive, editingVehicle?.crossBorder?.driver2),
+            driver3: getStr('cb_driver3', isCbActive, editingVehicle?.crossBorder?.driver3),
+            insuranceAgent: getStr('cb_insuranceAgent', isCbActive, editingVehicle?.crossBorder?.insuranceAgent),
+            quotaNumber: getStr('cb_quotaNumber', isCbActive, editingVehicle?.crossBorder?.quotaNumber),
+            ports: isCbActive ? selectedPorts : (editingVehicle?.crossBorder?.ports || []),
             
-            dateHkInsurance: getStr('cb_dateHkInsurance', cbEnabled, editingVehicle?.crossBorder?.dateHkInsurance),
-            dateReservedPlate: getStr('cb_dateReservedPlate', cbEnabled, editingVehicle?.crossBorder?.dateReservedPlate),
-            dateBr: getStr('cb_dateBr', cbEnabled, editingVehicle?.crossBorder?.dateBr),
-            dateLicenseFee: getStr('cb_dateLicenseFee', cbEnabled, editingVehicle?.crossBorder?.dateLicenseFee),
-            dateMainlandJqx: getStr('cb_dateMainlandJqx', cbEnabled, editingVehicle?.crossBorder?.dateMainlandJqx),
-            dateMainlandSyx: getStr('cb_dateMainlandSyx', cbEnabled, editingVehicle?.crossBorder?.dateMainlandSyx),
-            dateClosedRoad: getStr('cb_dateClosedRoad', cbEnabled, editingVehicle?.crossBorder?.dateClosedRoad),
-            dateApproval: getStr('cb_dateApproval', cbEnabled, editingVehicle?.crossBorder?.dateApproval),
-            dateMainlandLicense: getStr('cb_dateMainlandLicense', cbEnabled, editingVehicle?.crossBorder?.dateMainlandLicense),
-            dateHkInspection: getStr('cb_dateHkInspection', cbEnabled, editingVehicle?.crossBorder?.dateHkInspection),
+            dateHkInsurance: getStr('cb_dateHkInsurance', isCbActive, editingVehicle?.crossBorder?.dateHkInsurance),
+            dateReservedPlate: getStr('cb_dateReservedPlate', isCbActive, editingVehicle?.crossBorder?.dateReservedPlate),
+            dateBr: getStr('cb_dateBr', isCbActive, editingVehicle?.crossBorder?.dateBr),
+            dateLicenseFee: getStr('cb_dateLicenseFee', isCbActive, editingVehicle?.crossBorder?.dateLicenseFee),
+            dateMainlandJqx: getStr('cb_dateMainlandJqx', isCbActive, editingVehicle?.crossBorder?.dateMainlandJqx),
+            dateMainlandSyx: getStr('cb_dateMainlandSyx', isCbActive, editingVehicle?.crossBorder?.dateMainlandSyx),
+            dateClosedRoad: getStr('cb_dateClosedRoad', isCbActive, editingVehicle?.crossBorder?.dateClosedRoad),
+            dateApproval: getStr('cb_dateApproval', isCbActive, editingVehicle?.crossBorder?.dateApproval),
+            dateMainlandLicense: getStr('cb_dateMainlandLicense', isCbActive, editingVehicle?.crossBorder?.dateMainlandLicense),
+            dateHkInspection: getStr('cb_dateHkInspection', isCbActive, editingVehicle?.crossBorder?.dateHkInspection),
             
             tasks: editingVehicle?.crossBorder?.tasks || [],
             documentLogs: editingVehicle?.crossBorder?.documentLogs || []
