@@ -344,7 +344,7 @@ type Vehicle = {
   customerAddress?: string;
   
   payments?: Payment[]; 
-  
+  salesAddons?: any[];
   soldDate?: any;
   soldPrice?: number;
   deposit?: number;
