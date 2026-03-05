@@ -4196,12 +4196,12 @@ const SettingsManager = ({
     };
 
 
-    // ★★★ 智能資料救援：從 JSON 備份檔提取中港資料並合併到現有車輛 ★★★
+    // ★★★ 智能資料救援 2.0：依據「車牌」比對，且「系統現有資料優先」 ★★★
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !db || !appId) return;
         
-        if(!confirm("⚠️ 進階復原啟動：\n\n即將從備份檔中讀取「中港車管家」的舊資料，並合併回目前的車輛庫存中。\n\n(放心：這只會復原中港相關欄位，絕對不會影響您現有的車價、成本、維修與銷售紀錄。)\n\n確定執行？")) {
+        if(!confirm("⚠️ 智能復原啟動：\n\n系統將會透過「車牌 (Reg Mark)」比對，將上傳的資料合併到車庫中。\n\n💡 規則：【系統資料優先】。如果系統裡原本就有某個日期的資料，將會保留系統的；只有系統裡是「空白」的欄位，才會把上傳的資料補進去。\n\n確定執行？")) {
             e.target.value = '';
             return;
         }
@@ -4216,25 +4216,56 @@ const SettingsManager = ({
                 }
 
                 let restoreCount = 0;
-                const batch = writeBatch(db); // 使用批次寫入，確保效能與安全性
+                const batch = writeBatch(db); 
 
                 // 遍歷當前 Firebase 裡的車輛
                 for (const currentCar of inventory) {
-                    // 在備份檔中尋找同一台車 (透過 ID 比對)
-                    const backupCar = data.inventory.find((v: any) => v.id === currentCar.id);
+                    if (!currentCar.regMark) continue;
+
+                    // 1. 透過車牌尋找備份檔中的資料 (忽略大小寫與空格)
+                    const currentPlate = currentCar.regMark.replace(/\s+/g, '').toUpperCase();
+                    const backupCar = data.inventory.find((v: any) => 
+                        v.regMark && v.regMark.replace(/\s+/g, '').toUpperCase() === currentPlate
+                    );
                     
                     if (backupCar && backupCar.crossBorder) {
-                        const cb = backupCar.crossBorder;
+                        const currentCb = currentCar.crossBorder || { isEnabled: false };
+                        const importCb = backupCar.crossBorder;
                         
-                        // 如果備份檔裡的中港資料是有內容的 (有車牌、有指標、有打勾、或有任務)
-                        if (cb.mainlandPlate || cb.quotaNumber || cb.isEnabled || (cb.tasks && cb.tasks.length > 0)) {
+                        let isUpdated = false;
+                        const mergedCb: any = { ...currentCb };
+
+                        // 2. 逐一比對欄位，系統空白才補上
+                        const keysToCheck = [
+                            'mainlandPlate', 'hkCompany', 'mainlandCompany', 
+                            'driver1', 'driver2', 'driver3', 'insuranceAgent', 'quotaNumber',
+                            'dateHkInsurance', 'dateReservedPlate', 'dateBr', 'dateLicenseFee',
+                            'dateMainlandJqx', 'dateMainlandSyx', 'dateClosedRoad', 'dateApproval',
+                            'dateMainlandLicense', 'dateHkInspection'
+                        ];
+
+                        keysToCheck.forEach(key => {
+                            // 如果系統沒有值，且匯入檔有值，就填入
+                            if (!mergedCb[key] && importCb[key]) {
+                                mergedCb[key] = importCb[key];
+                                isUpdated = true;
+                            }
+                        });
+
+                        // 處理口岸 (陣列)
+                        if ((!mergedCb.ports || mergedCb.ports.length === 0) && importCb.ports && importCb.ports.length > 0) {
+                            mergedCb.ports = importCb.ports;
+                            isUpdated = true;
+                        }
+
+                        // 如果有補入任何新資料，強制開啟中港功能
+                        if (isUpdated) {
+                            mergedCb.isEnabled = true;
                             
                             const carRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', currentCar.id);
-                            
-                            // ★ 核心安全機制：只 update 'crossBorder' 這一個節點，其他資料原封不動！
                             batch.update(carRef, {
-                                crossBorder: cb,
-                                updatedAt: serverTimestamp() // 刷新更新時間
+                                crossBorder: mergedCb,
+                                updatedAt: serverTimestamp() 
                             });
                             restoreCount++;
                         }
@@ -4243,14 +4274,14 @@ const SettingsManager = ({
 
                 if (restoreCount > 0) {
                     await batch.commit();
-                    alert(`✅ 奇蹟復原成功！\n系統已成功找回並合併了 ${restoreCount} 台車輛的中港業務資料！\n請重整網頁或切換分頁查看。`);
+                    alert(`✅ 智能合併成功！\n系統已成功比對並補齊了 ${restoreCount} 台車輛的缺失資料！\n(原有的資料已安全保留)`);
                 } else {
-                    alert('分析完畢：沒有找到需要復原的中港資料。');
+                    alert('分析完畢：沒有發現需要補齊的缺失資料。');
                 }
 
             } catch (err) {
                 console.error(err);
-                alert('處理備份檔案時發生錯誤，請確保上傳的是正確的 JSON 備份檔。');
+                alert('處理備份檔案時發生錯誤，請檢查檔案格式。');
             }
         };
         reader.readAsText(file);
