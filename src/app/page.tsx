@@ -8015,6 +8015,8 @@ const CreateDocModule = ({
                   addSystemLog={addSystemLog}
                   allSalesDocs={allSalesDocs} 
                   onJumpToDoc={handleJumpToDoc}
+                  addSalesAddon={addSalesAddon}
+                  deleteSalesAddon={deleteSalesAddon}
               />
           )}
 
