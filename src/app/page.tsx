@@ -8122,7 +8122,7 @@ const CreateDocModule = ({
           )}
 
           
-          {/* Dashboard Tab (v16.1: 移出圖片，優化庫存天數標籤排版) */}
+          {/* Dashboard Tab (v16.2: 修復滾動穿透與表格列高問題) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
                 
@@ -8281,7 +8281,7 @@ const CreateDocModule = ({
                       return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
                   });
 
-                  // ★★★ 微調的庫存天數標籤樣式 (更柔和、適合當作標籤) ★★★
+                  // ★★★ 改為純文字樣式，不帶背景色框，避免撐開表格高度 ★★★
                   const getInventoryAging = (car: any) => {
                       if (!car.stockInDate) return null;
                       const start = new Date(car.stockInDate).getTime();
@@ -8294,12 +8294,12 @@ const CreateDocModule = ({
                       const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
                       if (days < 30) return null;
                       
-                      // 調整為更適合與狀態標籤並排的清爽樣式
-                      if (days >= 365) return { label: `${prefix} 1年+ (${days}天)`, style: 'bg-black text-red-500 border-red-900 animate-pulse' };
-                      if (days >= 270) return { label: `${prefix} 9個月+`, style: 'bg-red-600 text-white border-red-700 shadow-sm' };
-                      if (days >= 180) return { label: `${prefix} 6個月+`, style: 'bg-red-100 text-red-700 border-red-300' };
-                      if (days >= 90) return { label: `${prefix} 3個月+`, style: 'bg-orange-100 text-orange-700 border-orange-300' };
-                      if (days >= 30) return { label: `${prefix} 1個月+`, style: 'bg-yellow-50 text-yellow-700 border-yellow-300' };
+                      // 純顏色文字，無 Padding 和 Border
+                      if (days >= 365) return { label: `${prefix} 1年+ (${days}天)`, style: 'text-red-600 font-black animate-pulse' };
+                      if (days >= 270) return { label: `${prefix} 9個月+`, style: 'text-red-700 font-bold' };
+                      if (days >= 180) return { label: `${prefix} 6個月+`, style: 'text-red-500 font-bold' };
+                      if (days >= 90) return { label: `${prefix} 3個月+`, style: 'text-orange-500 font-bold' };
+                      if (days >= 30) return { label: `${prefix} 1個月+`, style: 'text-yellow-600 font-bold' };
                       return null;
                   };
 
@@ -8330,14 +8330,14 @@ const CreateDocModule = ({
 
                                   return (
                                       <div key={car.id} onClick={() => setEditingVehicle(car)} className="p-3 border-b border-slate-100 active:bg-slate-50 transition-colors relative">
-                                          {/* 上排：狀態 + 天數標籤 (改用 flex-wrap 避免擁擠) */}
+                                          {/* 上排：狀態 + 天數標籤 */}
                                           <div className="flex justify-between items-start mb-2">
                                               <div className="flex flex-wrap items-center gap-1.5">
                                                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}`}>{statusText}</span>
                                                   
-                                                  {/* ★★★ 移至此處：庫存天數標籤 ★★★ */}
+                                                  {/* 手機版純文字庫存天數 */}
                                                   {aging && (
-                                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex items-center ${aging.style}`}>
+                                                      <span className={`text-[10px] flex items-center ${aging.style}`}>
                                                           <Clock size={10} className="mr-0.5" /> {aging.label}
                                                       </span>
                                                   )}
@@ -8365,7 +8365,6 @@ const CreateDocModule = ({
                                           </div>
 
                                           <div className="flex gap-3">
-                                              {/* 圖片區域乾淨無遮擋 */}
                                               <div className="w-24 h-16 bg-slate-800 rounded-md overflow-hidden flex-shrink-0 border border-slate-200 flex items-center justify-center relative shadow-inner">
                                                     {thumbUrl ? (
                                                         <>
@@ -8399,10 +8398,10 @@ const CreateDocModule = ({
 
                           {/* --- 電腦版視圖 --- */}
                           <table className="hidden md:table w-full text-left text-sm whitespace-nowrap relative">
-                            <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm text-slate-600 font-bold text-xs uppercase">
+                            {/* ★★★ 將 z-10 改為 z-30，徹底解決被下方圖片覆蓋的問題 ★★★ */}
+                            <thead className="sticky top-0 bg-slate-100 z-30 shadow-sm text-slate-600 font-bold text-xs uppercase">
                                 <tr className="border-b">
                                     <th className="p-3 w-10 text-center">Act</th>
-                                    {/* 加寬狀態列以容納標籤 */}
                                     <th className="p-3 w-28">狀態</th>
                                     <th className="p-3">車輛資料 (Vehicle)</th>
                                     <th className="p-3">規格 (Spec)</th>
@@ -8448,12 +8447,12 @@ const CreateDocModule = ({
                                     <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group text-xs md:text-sm" onClick={() => setEditingVehicle(car)}>
                                       <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button></td>
                                       
-                                      {/* ★★★ 移至此處：狀態與天數堆疊顯示 ★★★ */}
-                                      <td className="p-3 align-top pt-4">
-                                          <div className="flex flex-col items-start gap-1">
-                                              <span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span>
+                                      {/* ★★★ 移除了過大的 Padding，改用緊湊的純文字標籤 ★★★ */}
+                                      <td className="p-3">
+                                          <div className="flex flex-col items-start justify-center gap-1">
+                                              <span className={`px-2 py-0.5 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span>
                                               {aging && (
-                                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex items-center ${aging.style}`}>
+                                                  <span className={`text-[10px] flex items-center whitespace-nowrap ${aging.style}`}>
                                                       <Clock size={10} className="mr-0.5" /> {aging.label}
                                                   </span>
                                               )}
