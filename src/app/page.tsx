@@ -5626,77 +5626,84 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!db || !staffId) return;
         const formData = new FormData(e.currentTarget);
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         
-        const status = formData.get('status') as any;
-        const priceRaw = formData.get('price') as string;
-        const costPriceRaw = formData.get('costPrice') as string;
-        const mileageRaw = formData.get('mileage') as string;
-        
-        const priceA1Raw = formData.get('priceA1') as string;
-        const priceTaxRaw = formData.get('priceTax') as string;
-        const valA1 = Number(priceA1Raw?.replace(/,/g, '') || 0);
-        const valTax = Number(priceTaxRaw?.replace(/,/g, '') || 0);
-        const valRegistered = valA1 + valTax;
-
-        const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
-        const transmission = formData.get('transmission') as 'Automatic' | 'Manual';
-        const engineSizeRaw = formData.get('engineSize') as string;
-        const engineSize = Number(engineSizeRaw?.replace(/,/g, '') || 0);
-        const licenseFee = calculateLicenseFee(fuelType, engineSize);
-
-        // ★★★ 升級版：擷取進貨與成本資料 (Acquisition) ★★★
-        const acquisitionData = {
-            type: formData.get('acq_type') as string || 'Local',
-            vendor: formData.get('acq_vendor') as string || '',
-            currency: formData.get('acq_currency') as string || 'HKD',
-            foreignPrice: Number((formData.get('acq_foreignPrice') as string)?.replace(/,/g, '') || 0),
-            exchangeRate: Number((formData.get('acq_exchangeRate') as string) || 1),
-            // 新增：當地費用、A1與稅金
-            localChargesForeign: Number((formData.get('acq_localChargesForeign') as string)?.replace(/,/g, '') || 0),
-            portFee: Number((formData.get('acq_portFee') as string)?.replace(/,/g, '') || 0),
-            a1Price: Number((formData.get('acq_a1Price') as string)?.replace(/,/g, '') || 0),
-            frtTax: Number((formData.get('acq_frtTax') as string)?.replace(/,/g, '') || 0),
-            
-            eta: formData.get('acq_eta') as string || '',
-            paymentStatus: formData.get('acq_paymentStatus') as string || 'Unpaid',
-            offsetAmount: Number((formData.get('acq_offsetAmount') as string)?.replace(/,/g, '') || 0),
-            advanceFee: Number((formData.get('acq_advanceFee') as string)?.replace(/,/g, '') || 0),
-            // 寫入進貨付款紀錄 (透過外掛屬性傳入)
-            payments: (editingVehicle as any)?.acqPayments || []
+        // ★★★ 終極防呆函數 1：安全讀取數字 (若欄位被隱藏，則保留原本資料) ★★★
+        const getSafeNum = (key: string, originalVal?: any) => {
+            if (!formData.has(key)) return originalVal || 0; // 若沒渲染該欄位，保留舊值
+            const val = formData.get(key);
+            if (!val) return 0;
+            return Number(String(val).replace(/,/g, '')) || 0;
         };
 
-        // Cross Border Data Capture
-        const cbEnabled = formData.get('cb_isEnabled') === 'on';
+        // ★★★ 終極防呆函數 2：安全讀取文字 (若欄位被隱藏，則保留原本資料) ★★★
+        const getSafeStr = (key: string, originalVal?: any) => {
+            if (!formData.has(key)) return originalVal || ''; // 若沒渲染該欄位，保留舊值
+            return formData.get(key) as string;
+        };
+
+        const status = formData.get('status') as any;
+        const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
+        const transmission = formData.get('transmission') as 'Automatic' | 'Manual';
+        
+        const valA1 = getSafeNum('priceA1', editingVehicle?.priceA1);
+        const valTax = getSafeNum('priceTax', editingVehicle?.priceTax);
+        const valRegistered = valA1 + valTax;
+        const engineSize = getSafeNum('engineSize', editingVehicle?.engineSize);
+        const licenseFee = calculateLicenseFee(fuelType, engineSize);
+
+        // 擷取進貨與成本資料 (受保護)
+        const acquisitionData = {
+            type: getSafeStr('acq_type', (editingVehicle as any)?.acquisition?.type) || 'Local',
+            vendor: getSafeStr('acq_vendor', (editingVehicle as any)?.acquisition?.vendor),
+            currency: getSafeStr('acq_currency', (editingVehicle as any)?.acquisition?.currency) || 'HKD',
+            exchangeRate: getSafeNum('acq_exchangeRate', (editingVehicle as any)?.acquisition?.exchangeRate) || 1,
+            foreignPrice: getSafeNum('acq_foreignPrice', (editingVehicle as any)?.acquisition?.foreignPrice),
+            localChargesForeign: getSafeNum('acq_localChargesForeign', (editingVehicle as any)?.acquisition?.localChargesForeign),
+            portFee: getSafeNum('acq_portFee', (editingVehicle as any)?.acquisition?.portFee),
+            a1Price: getSafeNum('acq_a1Price', (editingVehicle as any)?.acquisition?.a1Price),
+            frtTax: getSafeNum('acq_frtTax', (editingVehicle as any)?.acquisition?.frtTax),
+            eta: getSafeStr('acq_eta', (editingVehicle as any)?.acquisition?.eta),
+            paymentStatus: getSafeStr('acq_paymentStatus', (editingVehicle as any)?.acquisition?.paymentStatus) || 'Unpaid',
+            offsetAmount: getSafeNum('acq_offsetAmount', (editingVehicle as any)?.acquisition?.offsetAmount),
+            advanceFee: getSafeNum('acq_advanceFee', (editingVehicle as any)?.acquisition?.advanceFee),
+            payments: (editingVehicle as any)?.acqPayments || (editingVehicle as any)?.acquisition?.payments || []
+        };
+
+        // 中港車資料擷取 (受保護)
+        const cbEnabled = formData.has('cb_isEnabled') ? (formData.get('cb_isEnabled') === 'on') : (editingVehicle?.crossBorder?.isEnabled || false);
+        const isCbMounted = formData.has('cb_mainlandPlate'); // 判斷中港表單是否在畫面上
+
         const selectedPorts: string[] = [];
-        ALL_CB_PORTS.forEach(port => {
-            if (formData.get(`cb_port_${port}`) === 'on') {
-                selectedPorts.push(port);
-            }
-        });
+        if (isCbMounted) {
+            ALL_CB_PORTS.forEach(port => {
+                if (formData.get(`cb_port_${port}`) === 'on') selectedPorts.push(port);
+            });
+        }
 
         const crossBorderData: CrossBorderData = {
             isEnabled: cbEnabled,
-            mainlandPlate: formData.get('cb_mainlandPlate') as string || '',
-            hkCompany: formData.get('cb_hkCompany') as string || '',
-            mainlandCompany: formData.get('cb_mainlandCompany') as string || '',
-            driver1: formData.get('cb_driver1') as string || '',
-            driver2: formData.get('cb_driver2') as string || '',
-            driver3: formData.get('cb_driver3') as string || '',
-            insuranceAgent: formData.get('cb_insuranceAgent') as string || '',
-            quotaNumber: formData.get('cb_quotaNumber') as string || '',
-            ports: selectedPorts,
-            dateHkInsurance: formData.get('cb_dateHkInsurance') as string || '',
-            dateReservedPlate: formData.get('cb_dateReservedPlate') as string || '',
-            dateBr: formData.get('cb_dateBr') as string || '',
-            dateLicenseFee: formData.get('cb_dateLicenseFee') as string || '',
-            dateMainlandJqx: formData.get('cb_dateMainlandJqx') as string || '',
-            dateMainlandSyx: formData.get('cb_dateMainlandSyx') as string || '',
-            dateClosedRoad: formData.get('cb_dateClosedRoad') as string || '',
-            dateApproval: formData.get('cb_dateApproval') as string || '',
-            dateMainlandLicense: formData.get('cb_dateMainlandLicense') as string || '',
-            dateHkInspection: formData.get('cb_dateHkInspection') as string || '',
-            tasks: editingVehicle?.crossBorder?.tasks || []
+            // 只要表單有打開過，就抓取表單的值；如果被摺疊隱藏了，就無條件繼承資料庫原本的舊值
+            mainlandPlate: getSafeStr('cb_mainlandPlate', editingVehicle?.crossBorder?.mainlandPlate),
+            hkCompany: getSafeStr('cb_hkCompany', editingVehicle?.crossBorder?.hkCompany),
+            mainlandCompany: getSafeStr('cb_mainlandCompany', editingVehicle?.crossBorder?.mainlandCompany),
+            driver1: getSafeStr('cb_driver1', editingVehicle?.crossBorder?.driver1),
+            driver2: getSafeStr('cb_driver2', editingVehicle?.crossBorder?.driver2),
+            driver3: getSafeStr('cb_driver3', editingVehicle?.crossBorder?.driver3),
+            insuranceAgent: getSafeStr('cb_insuranceAgent', editingVehicle?.crossBorder?.insuranceAgent),
+            quotaNumber: getSafeStr('cb_quotaNumber', editingVehicle?.crossBorder?.quotaNumber),
+            ports: isCbMounted ? selectedPorts : (editingVehicle?.crossBorder?.ports || []),
+            dateHkInsurance: getSafeStr('cb_dateHkInsurance', editingVehicle?.crossBorder?.dateHkInsurance),
+            dateReservedPlate: getSafeStr('cb_dateReservedPlate', editingVehicle?.crossBorder?.dateReservedPlate),
+            dateBr: getSafeStr('cb_dateBr', editingVehicle?.crossBorder?.dateBr),
+            dateLicenseFee: getSafeStr('cb_dateLicenseFee', editingVehicle?.crossBorder?.dateLicenseFee),
+            dateMainlandJqx: getSafeStr('cb_dateMainlandJqx', editingVehicle?.crossBorder?.dateMainlandJqx),
+            dateMainlandSyx: getSafeStr('cb_dateMainlandSyx', editingVehicle?.crossBorder?.dateMainlandSyx),
+            dateClosedRoad: getSafeStr('cb_dateClosedRoad', editingVehicle?.crossBorder?.dateClosedRoad),
+            dateApproval: getSafeStr('cb_dateApproval', editingVehicle?.crossBorder?.dateApproval),
+            dateMainlandLicense: getSafeStr('cb_dateMainlandLicense', editingVehicle?.crossBorder?.dateMainlandLicense),
+            dateHkInspection: getSafeStr('cb_dateHkInspection', editingVehicle?.crossBorder?.dateHkInspection),
+            tasks: editingVehicle?.crossBorder?.tasks || [],
+            documentLogs: editingVehicle?.crossBorder?.documentLogs || []
         };
 
         const vData = {
@@ -5711,13 +5718,16 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             chassisNo: (formData.get('chassisNo') as string)?.toUpperCase() || '',
             engineNo: (formData.get('engineNo') as string)?.toUpperCase() || '',
             licenseExpiry: formData.get('licenseExpiry') || '',
-            price: Number(priceRaw?.replace(/,/g, '') || 0),
-            costPrice: Number(costPriceRaw?.replace(/,/g, '') || 0),
+            
+            // 使用安全函數讀取基礎數字
+            price: getSafeNum('price', editingVehicle?.price),
+            costPrice: getSafeNum('costPrice', editingVehicle?.costPrice),
+            mileage: getSafeNum('mileage', editingVehicle?.mileage),
+            
             previousOwners: formData.get('previousOwners') || '', 
-            mileage: Number(mileageRaw?.replace(/,/g, '') || 0), 
             remarks: formData.get('remarks') || '', 
             seating: Number(formData.get('seating') || 5), 
-            priceA1: valA1, // 這裡保留的是「出車給客人的A1」
+            priceA1: valA1, 
             priceTax: valTax,
             priceRegistered: valRegistered,
             fuelType: fuelType,
@@ -5734,6 +5744,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
             expenses: editingVehicle?.expenses || [], 
             payments: editingVehicle?.payments || [], 
+            salesAddons: (editingVehicle as any)?.salesAddons || [], 
             updatedAt: serverTimestamp(),
             crossBorder: crossBorderData
         };
@@ -5748,7 +5759,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                     ...vData,
                     createdAt: serverTimestamp(),
                     expenses: [],
-                    payments: []
+                    payments: [],
+                    salesAddons: []
                 });
                 addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
                 alert('新車輛已入庫');
