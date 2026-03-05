@@ -5682,7 +5682,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         const formData = new FormData(e.currentTarget);
         
         // ★★★ 終極防呆：智能讀取函數 ★★★
-        // 如果該區塊被隱藏 (isMounted 為 false)，系統會無條件保留舊資料 (oldVal)，絕不覆寫為空！
         const getStr = (key: string, isMounted: boolean, oldVal?: string) => {
             return isMounted ? (formData.get(key) as string || '') : (oldVal || '');
         };
@@ -5702,12 +5701,14 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         const engineSize = getNum('engineSize', true);
         const licenseFee = calculateLicenseFee(fuelType, engineSize);
 
-        // ★ 進貨與成本資料 (受保護)
-        const isImport = acqType === 'Import';
-        const isLocal = acqType === 'Local';
+        // ★★★ 修正點 1：從 formData 或編輯物件安全讀取 acqType ★★★
+        const currentAcqType = (formData.get('acq_type') as string) || (editingVehicle as any)?.acquisition?.type || 'Local';
+        const isImport = currentAcqType === 'Import';
+        const isLocal = currentAcqType === 'Local';
 
+        // ★ 進貨與成本資料 (受保護)
         const acquisitionData = {
-            type: acqType,
+            type: currentAcqType, // 使用修正後的變數
             vendor: formData.get('acq_vendor') as string || '',
             currency: getStr('acq_currency', isImport, (editingVehicle as any)?.acquisition?.currency) || 'HKD',
             exchangeRate: getNum('acq_exchangeRate', isImport, (editingVehicle as any)?.acquisition?.exchangeRate) || 1,
@@ -5720,12 +5721,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             paymentStatus: formData.get('acq_paymentStatus') as string || 'Unpaid',
             offsetAmount: getNum('acq_offsetAmount', isLocal, (editingVehicle as any)?.acquisition?.offsetAmount),
             advanceFee: getNum('acq_advanceFee', isLocal, (editingVehicle as any)?.acquisition?.advanceFee),
-            payments: acqPayments
+            
+            // ★★★ 修正點 2：從 editingVehicle 中抓取傳遞過來的付款紀錄 ★★★
+            payments: (editingVehicle as any)?.acqPayments || (editingVehicle as any)?.acquisition?.payments || []
         };
 
         // ★ 中港車資料 (受保護)
-        // 直接使用 React 的 cbEnabled 狀態來判斷欄位是否在畫面上
+        const cbEnabled = formData.has('cb_isEnabled') ? (formData.get('cb_isEnabled') === 'on') : (editingVehicle?.crossBorder?.isEnabled || false);
         const selectedPorts: string[] = [];
+        
         if (cbEnabled) {
             ALL_CB_PORTS.forEach(port => {
                 if (formData.get(`cb_port_${port}`) === 'on') selectedPorts.push(port);
@@ -5734,7 +5738,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
         const crossBorderData: CrossBorderData = {
             isEnabled: cbEnabled,
-            // 如果 cbEnabled 是 false，就會直接拿 editingVehicle 裡的舊資料保留下來！
             mainlandPlate: getStr('cb_mainlandPlate', cbEnabled, editingVehicle?.crossBorder?.mainlandPlate),
             hkCompany: getStr('cb_hkCompany', cbEnabled, editingVehicle?.crossBorder?.hkCompany),
             mainlandCompany: getStr('cb_mainlandCompany', cbEnabled, editingVehicle?.crossBorder?.mainlandCompany),
@@ -5756,7 +5759,6 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             dateMainlandLicense: getStr('cb_dateMainlandLicense', cbEnabled, editingVehicle?.crossBorder?.dateMainlandLicense),
             dateHkInspection: getStr('cb_dateHkInspection', cbEnabled, editingVehicle?.crossBorder?.dateHkInspection),
             
-            // 任務與日誌陣列保持不變
             tasks: editingVehicle?.crossBorder?.tasks || [],
             documentLogs: editingVehicle?.crossBorder?.documentLogs || []
         };
