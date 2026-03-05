@@ -6000,6 +6000,32 @@ const deleteVehicle = async (id: string) => {
   };
   const stats = dashboardStats();
 
+  const getInventoryAging = (car: any) => {
+      if (!car.stockInDate) return null; // 沒有入庫日則無法計算
+      
+      const start = new Date(car.stockInDate).getTime();
+      let end = new Date().getTime();
+      let prefix = car.status === 'Sold' ? '售出耗時' : '在庫';
+      
+      // 如果已售出，計算入庫到出庫的天數
+      if (car.status === 'Sold') {
+          if (!car.stockOutDate) return null;
+          end = new Date(car.stockOutDate).getTime();
+      }
+      
+      const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+      
+      if (days < 30) return null; // 30天內不顯示警告
+      
+      if (days >= 365) return { label: `${prefix} 1年+ (${days}天)`, style: 'bg-black text-red-500 border border-red-500 animate-pulse' };
+      if (days >= 270) return { label: `${prefix} 9個月+ (${days}天)`, style: 'bg-red-900 text-white shadow-md' };
+      if (days >= 180) return { label: `${prefix} 6個月+ (${days}天)`, style: 'bg-red-600 text-white shadow-md' };
+      if (days >= 90) return { label: `${prefix} 3個月+ (${days}天)`, style: 'bg-orange-500 text-white shadow-md' };
+      if (days >= 30) return { label: `${prefix} 1個月+ (${days}天)`, style: 'bg-yellow-400 text-yellow-900 shadow-sm' };
+      
+      return null;
+  };
+
   // --- Cross Border Logic ---
   const crossBorderStats = () => {
       // ★ 這裡原本是 inventory.filter，改成 visibleInventory.filter
@@ -8096,7 +8122,7 @@ const CreateDocModule = ({
           )}
 
           
-          {/* Dashboard Tab (v15.9: 擬真車牌 + 智能縮圖 + 完整排序) */}
+          {/* Dashboard Tab (v16.0: 增加庫存天數懸浮提醒) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
                 
@@ -8128,7 +8154,7 @@ const CreateDocModule = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
-              {/* 提醒中心 (修復版：使用 visibleInventory) */}
+              {/* 提醒中心 */}
               {(() => {
                   const docAlerts: any[] = [];
                   
@@ -8142,7 +8168,7 @@ const CreateDocModule = ({
                       } 
                   });
 
-                  // 2. ★★★ 新增：處理車輛牌費提醒 ★★★
+                  // 2. 處理車輛牌費提醒
                   visibleInventory.forEach(v => {
                       if (v.licenseExpiry) {
                           const days = getDaysRemaining(v.licenseExpiry);
@@ -8207,9 +8233,7 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      // ★ 恢復：手機版左右並排 (grid-cols-2)，保持小巧精緻
                       <div className="grid grid-cols-2 gap-2 flex-none">
-                          
                           {/* 左卡片：中港提醒 */}
                           <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
                               <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
@@ -8221,11 +8245,9 @@ const CreateDocModule = ({
                                       <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
                                   </div>
                               </div>
-                              {/* 電腦版：顯示詳細清單 */}
                               <div className="hidden md:block flex-1">
                                   <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
                               </div>
-                              {/* 手機版：隱藏清單，點擊整張卡片跳轉 */}
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
@@ -8240,7 +8262,6 @@ const CreateDocModule = ({
                                       <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
                                   </div>
                               </div>
-                              {/* 電腦版：顯示詳細清單與智慧跳轉 */}
                               <div className="hidden md:block flex-1">
                                   <AlertList items={docAlerts} onItemClick={(item:any) => { 
                                       if (item.source === 'vehicle') {
@@ -8253,10 +8274,8 @@ const CreateDocModule = ({
                                       }
                                   }} />
                               </div>
-                              {/* 手機版：隱藏清單，點擊跳轉至資料庫 (要看明細可點右上角鈴鐺) */}
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
                           </div>
-                          
                       </div>
                   );
               })()}
@@ -8270,37 +8289,9 @@ const CreateDocModule = ({
                           if (v.status === 'Sold') {
                               const received = (v.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                               const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                              const totalReceivable = (v.price || 0) + cbFees;
-                              const balance = totalReceivable - received;
-                              const unpaidExps = (v.expenses || []).filter(e => e.status === 'Unpaid').length;
-                              const pendingCb = (v.crossBorder?.tasks || []).filter(t => !t.isPaid).length;
-                              if (balance > 0 || unpaidExps > 0 || pendingCb > 0) return 3; 
-                              return 4;
-                          }
-                          if (v.status === 'Withdrawn') return 5;
-                          return 6;
-                      };
-                      const scoreA = getScore(a);
-                      const scoreB = getScore(b);
-                      if (scoreA !== scoreB) return scoreA - scoreB;
-                      return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
-                  });
-
-                  return (
-                      <div className="bg-white rounded-lg shadow-sm p-4 flex-1 flex flex-col overflow-hidden min-h-0">
-                        <div className="flex-1 overflow-y-auto border rounded-lg">
-                          {/* 3. 庫存列表 (排序 + 擬真車牌 + 縮圖) - 響應式修復版 */}
-              {(() => {
-                  const sortedList = [...visibleInventory].sort((a,b) => {
-                      // ... (排序邏輯保持不變，為節省篇幅省略，請保留您原本的排序代碼) ...
-                      const getScore = (v: Vehicle) => {
-                          if (v.status === 'In Stock') return 1;
-                          if (v.status === 'Reserved') return 2;
-                          if (v.status === 'Sold') {
-                              // ... (保留原本邏輯)
-                              const received = (v.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
-                              const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                              const totalReceivable = (v.price || 0) + cbFees;
+                              // 加入附加收費計算
+                              const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
+                              const totalReceivable = (v.price || 0) + cbFees + salesAddonsTotal;
                               const balance = totalReceivable - received;
                               const unpaidExps = (v.expenses || []).filter(e => e.status === 'Unpaid').length;
                               const pendingCb = (v.crossBorder?.tasks || []).filter(t => !t.isPaid).length;
@@ -8325,7 +8316,8 @@ const CreateDocModule = ({
                               {sortedList.map(car => {
                                   const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                                   const cbFees = (car.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                                  const totalReceivable = (car.price || 0) + cbFees;
+                                  const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
+                                  const totalReceivable = (car.price || 0) + cbFees + salesAddonsTotal;
                                   const balance = totalReceivable - received;
                                   
                                   let statusText = '在庫';
@@ -8334,19 +8326,19 @@ const CreateDocModule = ({
                                   else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
                                   else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
 
-                                  // ★★★ 智能讀取封面圖與一換一預設圖 ★★★
-                                    const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
-                                    const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
-                                    const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
-                                    const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
+                                  const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                                  const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                                  const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+                                  const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
+
+                                  // ★★★ 取得庫存天數標籤 ★★★
+                                  const aging = getInventoryAging(car);
 
                                   return (
                                       <div key={car.id} onClick={() => setEditingVehicle(car)} className="p-3 border-b border-slate-100 active:bg-slate-50 transition-colors relative">
-                                          {/* 上排：狀態 + 車牌 */}
                                           <div className="flex justify-between items-start mb-2">
                                               <div className="flex items-center gap-2">
                                                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}`}>{statusText}</span>
-                                                  {/* ★★★ 新增：牌費狀態顯示 (儀表板手機版) ★★★ */}
                                                   {car.licenseExpiry && (() => {
                                                       const today = new Date(); today.setHours(0,0,0,0);
                                                       const expDate = new Date(car.licenseExpiry);
@@ -8369,9 +8361,8 @@ const CreateDocModule = ({
                                               <div className="font-bold text-slate-800 text-sm">{formatCurrency(car.price)}</div>
                                           </div>
 
-                                          {/* 中排：圖片 + 資料 */}
                                           <div className="flex gap-3">
-                                              <div className="w-20 h-14 bg-slate-800 rounded-md overflow-hidden flex-shrink-0 border border-slate-200 flex items-center justify-center relative shadow-inner">
+                                              <div className="w-24 h-16 bg-slate-800 rounded-md overflow-hidden flex-shrink-0 border border-slate-200 flex items-center justify-center relative shadow-inner">
                                                     {thumbUrl ? (
                                                         <>
                                                             <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-125" />
@@ -8380,9 +8371,15 @@ const CreateDocModule = ({
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100"><Car size={16}/></div>
                                                     )}
+                                                    
+                                                    {/* ★★★ 手機版圖片右上角的庫存天數標籤 ★★★ */}
+                                                    {aging && (
+                                                        <div className={`absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[8px] font-bold flex items-center z-20 ${aging.style}`}>
+                                                            <Clock size={8} className="mr-0.5" /> {aging.label}
+                                                        </div>
+                                                    )}
                                                 </div>
                                               <div className="flex-1 min-w-0">
-                                                  {/* ★★★ 這裡補回了年份 car.year ★★★ */}
                                                   <div className="font-bold text-sm text-slate-700 truncate">
                                                       {car.year} {car.make} {car.model}
                                                   </div>
@@ -8391,12 +8388,10 @@ const CreateDocModule = ({
                                                       <span>{car.mileage ? `${Number(car.mileage).toLocaleString()}km` : '-'}</span>
                                                       <span>{car.seating}座</span>
                                                   </div>
-                                                  {/* 財務狀態 (如有欠款) */}
                                                   {balance > 0 && <div className="text-blue-600 font-bold text-xs mt-1">欠款: {formatCurrency(balance)}</div>}
                                               </div>
                                           </div>
                                           
-                                          {/* 分享按鈕 */}
                                           <button onClick={(e)=>{e.stopPropagation(); setShareVehicle(car);}} className="absolute bottom-3 right-3 p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 rounded-full border border-slate-200">
                                               <Share2 size={16}/>
                                           </button>
@@ -8405,7 +8400,7 @@ const CreateDocModule = ({
                               })}
                           </div>
 
-                          {/* --- 電腦版視圖 (Desktop Table View) - 保持原本表格，但預設 hidden --- */}
+                          {/* --- 電腦版視圖 (Desktop Table View) --- */}
                           <table className="hidden md:table w-full text-left text-sm whitespace-nowrap relative">
                             <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm text-slate-600 font-bold text-xs uppercase">
                                 <tr className="border-b">
@@ -8422,7 +8417,8 @@ const CreateDocModule = ({
                               {sortedList.map(car => {
                                   const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                                   const cbFees = (car.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                                  const totalReceivable = (car.price || 0) + cbFees;
+                                  const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
+                                  const totalReceivable = (car.price || 0) + cbFees + salesAddonsTotal;
                                   const balance = totalReceivable - received;
                                   const unpaidExps = (car.expenses || []).filter(e => e.status === 'Unpaid').length || 0;
                                   
@@ -8432,13 +8428,11 @@ const CreateDocModule = ({
                                   else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-50 text-blue-600 border-blue-100"; }
                                   else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-200 text-gray-500 border-gray-300 decoration-line-through"; }
 
-                                  // ★★★ 智能讀取封面圖與一換一預設圖 ★★★
-                                    const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
-                                    const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
-                                    const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
-                                    const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
+                                  const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                                  const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                                  const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+                                  const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
 
-                                  // 標籤邏輯
                                   const getTags = () => {
                                       const tags = [];
                                       const ports = car.crossBorder?.ports || [];
@@ -8451,6 +8445,9 @@ const CreateDocModule = ({
                                   };
                                   const cbTags = getTags();
 
+                                  // ★★★ 取得庫存天數標籤 ★★★
+                                  const aging = getInventoryAging(car);
+
                                   return (
                                     <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group text-xs md:text-sm" onClick={() => setEditingVehicle(car)}>
                                       <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button></td>
@@ -8458,7 +8455,7 @@ const CreateDocModule = ({
                                       
                                       <td className="p-3">
                                           <div className="flex items-center gap-3">
-                                              <div className="w-12 h-9 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-slate-800 shadow-sm flex items-center justify-center">
+                                              <div className="w-16 h-12 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-slate-800 shadow-sm flex items-center justify-center">
                                                     {thumbUrl ? (
                                                         <>
                                                             <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-125" alt="bg" />
@@ -8466,6 +8463,13 @@ const CreateDocModule = ({
                                                         </>
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100"><Car size={16}/></div>
+                                                    )}
+                                                    
+                                                    {/* ★★★ 電腦版圖片右上角的庫存天數標籤 ★★★ */}
+                                                    {aging && (
+                                                        <div className={`absolute top-0 right-0 px-1 py-0.5 rounded-bl text-[8px] font-bold flex items-center z-20 ${aging.style}`}>
+                                                            <Clock size={8} className="mr-0.5" /> {aging.label}
+                                                        </div>
                                                     )}
                                                 </div>
                                               
@@ -8482,7 +8486,6 @@ const CreateDocModule = ({
                                                           </span>
                                                       )}
                                                   </div>
-                                                  {/* ★★★ 這裡補回了年份 car.year ★★★ */}
                                                   <div className="text-xs text-slate-600 font-bold">{car.year} {car.make} {car.model}</div>
                                                   <div className="flex gap-1">{cbTags.map((t,i)=><span key={i} className={`text-[8px] px-1 rounded ${t.color}`}>{t.label}</span>)}</div>
                                               </div>
@@ -8516,10 +8519,6 @@ const CreateDocModule = ({
                               })}
                             </tbody>
                           </table>
-                        </div>
-                      </div>
-                  );
-              })()}
                         </div>
                       </div>
                   );
