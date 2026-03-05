@@ -8122,7 +8122,7 @@ const CreateDocModule = ({
           )}
 
           
-          {/* Dashboard Tab (v16.0: 增加庫存天數懸浮提醒) */}
+          {/* Dashboard Tab (v16.1: 移出圖片，優化庫存天數標籤排版) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
                 
@@ -8130,23 +8130,16 @@ const CreateDocModule = ({
 
                 {/* 儀表板頂部：標題、快訊、鈴鐺 */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
-                    
-                    {/* 1. 標題 */}
                     <h2 className="text-2xl font-bold text-slate-800 whitespace-nowrap">業務儀表板</h2>
-                    
-                    {/* 2. 中間的一行字 AI 快訊 (會自動佔滿剩餘空間) */}
                     <div className="flex-1 w-full min-w-0 px-0 md:px-4">
                         <SmartNewsTicker />
                     </div>
-
-                    {/* 3. 右側鈴鐺 */}
                     <div className="absolute right-0 top-0 md:static">
                         <SmartNotificationCenter inventory={visibleInventory} settings={settings} />
                     </div>
-                    
                 </div>
               
-              {/* 卡片統計 (保持不變) */}
+              {/* 卡片統計 */}
               <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 flex-none">
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><p className="text-xs text-gray-500 uppercase">庫存總值</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalStockValue)}</p></div>
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500"><p className="text-xs text-gray-500 uppercase">未付費用</p><p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalPayable)}</p></div>
@@ -8157,8 +8150,6 @@ const CreateDocModule = ({
               {/* 提醒中心 */}
               {(() => {
                   const docAlerts: any[] = [];
-                  
-                  // 1. 處理資料庫文件提醒
                   dbEntries.forEach(d => { 
                       if (d.reminderEnabled && d.expiryDate) { 
                           const days = getDaysRemaining(d.expiryDate); 
@@ -8168,25 +8159,17 @@ const CreateDocModule = ({
                       } 
                   });
 
-                  // 2. 處理車輛牌費提醒
                   visibleInventory.forEach(v => {
                       if (v.licenseExpiry) {
                           const days = getDaysRemaining(v.licenseExpiry);
                           if (days !== null && days <= 30) {
                               docAlerts.push({ 
-                                  id: v.id, 
-                                  title: v.regMark || '未出牌', 
-                                  desc: '牌費到期', 
-                                  date: v.licenseExpiry, 
-                                  days, 
-                                  status: days < 0 ? 'expired' : 'soon', 
-                                  raw: v, 
-                                  source: 'vehicle' 
+                                  id: v.id, title: v.regMark || '未出牌', desc: '牌費到期', 
+                                  date: v.licenseExpiry, days, status: days < 0 ? 'expired' : 'soon', raw: v, source: 'vehicle' 
                               });
                           }
                       }
                   });
-
                   docAlerts.sort((a, b) => a.days - b.days);
 
                   const cbAlerts: any[] = [];
@@ -8234,7 +8217,6 @@ const CreateDocModule = ({
 
                   return (
                       <div className="grid grid-cols-2 gap-2 flex-none">
-                          {/* 左卡片：中港提醒 */}
                           <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
                               <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
                                   <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
@@ -8251,7 +8233,6 @@ const CreateDocModule = ({
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
-                          {/* 右卡片：文件與牌費提醒 */}
                           <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
                               <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
                                   <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
@@ -8264,14 +8245,8 @@ const CreateDocModule = ({
                               </div>
                               <div className="hidden md:block flex-1">
                                   <AlertList items={docAlerts} onItemClick={(item:any) => { 
-                                      if (item.source === 'vehicle') {
-                                          setActiveTab('inventory');
-                                          setEditingVehicle(item.raw);
-                                      } else {
-                                          setActiveTab('database'); 
-                                          setEditingEntry(item.raw); 
-                                          setIsDbEditing(true); 
-                                      }
+                                      if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
+                                      else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
                                   }} />
                               </div>
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
@@ -8280,7 +8255,7 @@ const CreateDocModule = ({
                   );
               })()}
               
-              {/* 3. 庫存列表 (排序 + 擬真車牌 + 縮圖) */}
+              {/* 3. 庫存列表 */}
               {(() => {
                   const sortedList = [...visibleInventory].sort((a,b) => {
                       const getScore = (v: Vehicle) => {
@@ -8289,7 +8264,6 @@ const CreateDocModule = ({
                           if (v.status === 'Sold') {
                               const received = (v.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
                               const cbFees = (v.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
-                              // 加入附加收費計算
                               const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
                               const totalReceivable = (v.price || 0) + cbFees + salesAddonsTotal;
                               const balance = totalReceivable - received;
@@ -8307,11 +8281,33 @@ const CreateDocModule = ({
                       return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
                   });
 
+                  // ★★★ 微調的庫存天數標籤樣式 (更柔和、適合當作標籤) ★★★
+                  const getInventoryAging = (car: any) => {
+                      if (!car.stockInDate) return null;
+                      const start = new Date(car.stockInDate).getTime();
+                      let end = new Date().getTime();
+                      let prefix = car.status === 'Sold' ? '售出耗時' : '在庫';
+                      if (car.status === 'Sold') {
+                          if (!car.stockOutDate) return null;
+                          end = new Date(car.stockOutDate).getTime();
+                      }
+                      const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+                      if (days < 30) return null;
+                      
+                      // 調整為更適合與狀態標籤並排的清爽樣式
+                      if (days >= 365) return { label: `${prefix} 1年+ (${days}天)`, style: 'bg-black text-red-500 border-red-900 animate-pulse' };
+                      if (days >= 270) return { label: `${prefix} 9個月+`, style: 'bg-red-600 text-white border-red-700 shadow-sm' };
+                      if (days >= 180) return { label: `${prefix} 6個月+`, style: 'bg-red-100 text-red-700 border-red-300' };
+                      if (days >= 90) return { label: `${prefix} 3個月+`, style: 'bg-orange-100 text-orange-700 border-orange-300' };
+                      if (days >= 30) return { label: `${prefix} 1個月+`, style: 'bg-yellow-50 text-yellow-700 border-yellow-300' };
+                      return null;
+                  };
+
                   return (
                       <div className="bg-white rounded-lg shadow-sm p-0 md:p-4 flex-1 flex flex-col overflow-hidden min-h-0">
                         <div className="flex-1 overflow-y-auto md:border md:rounded-lg">
                           
-                          {/* --- 手機版視圖 (Mobile Card View) --- */}
+                          {/* --- 手機版視圖 --- */}
                           <div className="md:hidden">
                               {sortedList.map(car => {
                                   const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
@@ -8330,15 +8326,22 @@ const CreateDocModule = ({
                                   const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
                                   const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
                                   const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
-
-                                  // ★★★ 取得庫存天數標籤 ★★★
                                   const aging = getInventoryAging(car);
 
                                   return (
                                       <div key={car.id} onClick={() => setEditingVehicle(car)} className="p-3 border-b border-slate-100 active:bg-slate-50 transition-colors relative">
+                                          {/* 上排：狀態 + 天數標籤 (改用 flex-wrap 避免擁擠) */}
                                           <div className="flex justify-between items-start mb-2">
-                                              <div className="flex items-center gap-2">
+                                              <div className="flex flex-wrap items-center gap-1.5">
                                                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}`}>{statusText}</span>
+                                                  
+                                                  {/* ★★★ 移至此處：庫存天數標籤 ★★★ */}
+                                                  {aging && (
+                                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex items-center ${aging.style}`}>
+                                                          <Clock size={10} className="mr-0.5" /> {aging.label}
+                                                      </span>
+                                                  )}
+
                                                   {car.licenseExpiry && (() => {
                                                       const today = new Date(); today.setHours(0,0,0,0);
                                                       const expDate = new Date(car.licenseExpiry);
@@ -8358,10 +8361,11 @@ const CreateDocModule = ({
                                                       </span>
                                                   )}
                                               </div>
-                                              <div className="font-bold text-slate-800 text-sm">{formatCurrency(car.price)}</div>
+                                              <div className="font-bold text-slate-800 text-sm ml-2">{formatCurrency(car.price)}</div>
                                           </div>
 
                                           <div className="flex gap-3">
+                                              {/* 圖片區域乾淨無遮擋 */}
                                               <div className="w-24 h-16 bg-slate-800 rounded-md overflow-hidden flex-shrink-0 border border-slate-200 flex items-center justify-center relative shadow-inner">
                                                     {thumbUrl ? (
                                                         <>
@@ -8370,13 +8374,6 @@ const CreateDocModule = ({
                                                         </>
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100"><Car size={16}/></div>
-                                                    )}
-                                                    
-                                                    {/* ★★★ 手機版圖片右上角的庫存天數標籤 ★★★ */}
-                                                    {aging && (
-                                                        <div className={`absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[8px] font-bold flex items-center z-20 ${aging.style}`}>
-                                                            <Clock size={8} className="mr-0.5" /> {aging.label}
-                                                        </div>
                                                     )}
                                                 </div>
                                               <div className="flex-1 min-w-0">
@@ -8400,12 +8397,13 @@ const CreateDocModule = ({
                               })}
                           </div>
 
-                          {/* --- 電腦版視圖 (Desktop Table View) --- */}
+                          {/* --- 電腦版視圖 --- */}
                           <table className="hidden md:table w-full text-left text-sm whitespace-nowrap relative">
                             <thead className="sticky top-0 bg-slate-100 z-10 shadow-sm text-slate-600 font-bold text-xs uppercase">
                                 <tr className="border-b">
                                     <th className="p-3 w-10 text-center">Act</th>
-                                    <th className="p-3 w-20">狀態</th>
+                                    {/* 加寬狀態列以容納標籤 */}
+                                    <th className="p-3 w-28">狀態</th>
                                     <th className="p-3">車輛資料 (Vehicle)</th>
                                     <th className="p-3">規格 (Spec)</th>
                                     <th className="p-3 hidden lg:table-cell">詳情</th>
@@ -8444,17 +8442,27 @@ const CreateDocModule = ({
                                       return tags;
                                   };
                                   const cbTags = getTags();
-
-                                  // ★★★ 取得庫存天數標籤 ★★★
                                   const aging = getInventoryAging(car);
 
                                   return (
                                     <tr key={car.id} className="border-b hover:bg-blue-50 cursor-pointer transition-colors group text-xs md:text-sm" onClick={() => setEditingVehicle(car)}>
                                       <td className="p-3 text-center" onClick={e=>e.stopPropagation()}><button onClick={() => setShareVehicle(car)} className="text-slate-400 hover:text-blue-600 p-1"><Share2 size={16}/></button></td>
-                                      <td className="p-3"><span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span></td>
+                                      
+                                      {/* ★★★ 移至此處：狀態與天數堆疊顯示 ★★★ */}
+                                      <td className="p-3 align-top pt-4">
+                                          <div className="flex flex-col items-start gap-1">
+                                              <span className={`px-2 py-1 rounded text-[10px] md:text-xs font-bold border ${statusClass}`}>{statusText}</span>
+                                              {aging && (
+                                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border flex items-center ${aging.style}`}>
+                                                      <Clock size={10} className="mr-0.5" /> {aging.label}
+                                                  </span>
+                                              )}
+                                          </div>
+                                      </td>
                                       
                                       <td className="p-3">
                                           <div className="flex items-center gap-3">
+                                              {/* 圖片區域乾淨無遮擋 */}
                                               <div className="w-16 h-12 flex-none relative rounded-md overflow-hidden border border-slate-200 bg-slate-800 shadow-sm flex items-center justify-center">
                                                     {thumbUrl ? (
                                                         <>
@@ -8463,13 +8471,6 @@ const CreateDocModule = ({
                                                         </>
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-slate-400 bg-slate-100"><Car size={16}/></div>
-                                                    )}
-                                                    
-                                                    {/* ★★★ 電腦版圖片右上角的庫存天數標籤 ★★★ */}
-                                                    {aging && (
-                                                        <div className={`absolute top-0 right-0 px-1 py-0.5 rounded-bl text-[8px] font-bold flex items-center z-20 ${aging.style}`}>
-                                                            <Clock size={8} className="mr-0.5" /> {aging.label}
-                                                        </div>
                                                     )}
                                                 </div>
                                               
