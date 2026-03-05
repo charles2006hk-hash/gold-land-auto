@@ -5753,8 +5753,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             payments: (editingVehicle as any)?.acqPayments || (editingVehicle as any)?.acquisition?.payments || []
         };
 
-        // ★★★ 修正點：直接讀取 React 狀態中的 cbEnabled，不依賴 FormData ★★★
-        const isCbActive = cbEnabled; 
+        // ★★★ 修正點：從隱藏欄位安全讀取真實的中港開關狀態 ★★★
+        const isCbActive = formData.get('cb_isEnabled_hidden') === 'true'; 
 
         const selectedPorts: string[] = [];
         if (isCbActive) {
@@ -5764,7 +5764,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         }
 
         const crossBorderData: CrossBorderData = {
-            isEnabled: isCbActive, // ★ 精準寫入開關狀態
+            isEnabled: isCbActive,
             mainlandPlate: getStr('cb_mainlandPlate', isCbActive, editingVehicle?.crossBorder?.mainlandPlate),
             hkCompany: getStr('cb_hkCompany', isCbActive, editingVehicle?.crossBorder?.hkCompany),
             mainlandCompany: getStr('cb_mainlandCompany', isCbActive, editingVehicle?.crossBorder?.mainlandCompany),
@@ -6469,8 +6469,24 @@ const VehicleFormModal = ({
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        
+        // ★★★ 關鍵修復：把 React 狀態強制塞入表單中，解決外層函數取不到變數的問題 ★★★
+        if (!e.currentTarget.querySelector('[name="cb_isEnabled_hidden"]')) {
+            const hiddenCb = document.createElement('input');
+            hiddenCb.type = 'hidden';
+            hiddenCb.name = 'cb_isEnabled_hidden';
+            hiddenCb.value = cbEnabled ? 'true' : 'false';
+            e.currentTarget.appendChild(hiddenCb);
+        }
+
         const formData = new FormData(e.currentTarget);
-        if(!formData.has('mileage')) { const hiddenMileage = document.createElement('input'); hiddenMileage.type = 'hidden'; hiddenMileage.name = 'mileage'; hiddenMileage.value = mileageStr.replace(/,/g, ''); e.currentTarget.appendChild(hiddenMileage); }
+        if(!formData.has('mileage')) { 
+            const hiddenMileage = document.createElement('input'); 
+            hiddenMileage.type = 'hidden'; 
+            hiddenMileage.name = 'mileage'; 
+            hiddenMileage.value = (mileageStr || '').replace(/,/g, ''); 
+            e.currentTarget.appendChild(hiddenMileage); 
+        }
         
         if(editingVehicle) {
             editingVehicle.photos = carPhotos;
