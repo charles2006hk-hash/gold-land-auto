@@ -4196,11 +4196,65 @@ const SettingsManager = ({
     };
 
 
+    // ★★★ 智能資料救援：從 JSON 備份檔提取中港資料並合併到現有車輛 ★★★
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file || !db) return;
-        if(!confirm("⚠️ 這是進階功能：將從 CSV 匯入中港資料並合併到現有車輛。\n確定執行？")) return;
-        alert("功能已啟動，請查看 Console");
+        if (!file || !db || !appId) return;
+        
+        if(!confirm("⚠️ 進階復原啟動：\n\n即將從備份檔中讀取「中港車管家」的舊資料，並合併回目前的車輛庫存中。\n\n(放心：這只會復原中港相關欄位，絕對不會影響您現有的車價、成本、維修與銷售紀錄。)\n\n確定執行？")) {
+            e.target.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            try {
+                const data = JSON.parse(ev.target?.result as string);
+                if (!data.inventory || !Array.isArray(data.inventory)) {
+                    alert('檔案格式不正確，找不到庫存備份資料');
+                    return;
+                }
+
+                let restoreCount = 0;
+                const batch = writeBatch(db); // 使用批次寫入，確保效能與安全性
+
+                // 遍歷當前 Firebase 裡的車輛
+                for (const currentCar of inventory) {
+                    // 在備份檔中尋找同一台車 (透過 ID 比對)
+                    const backupCar = data.inventory.find((v: any) => v.id === currentCar.id);
+                    
+                    if (backupCar && backupCar.crossBorder) {
+                        const cb = backupCar.crossBorder;
+                        
+                        // 如果備份檔裡的中港資料是有內容的 (有車牌、有指標、有打勾、或有任務)
+                        if (cb.mainlandPlate || cb.quotaNumber || cb.isEnabled || (cb.tasks && cb.tasks.length > 0)) {
+                            
+                            const carRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', currentCar.id);
+                            
+                            // ★ 核心安全機制：只 update 'crossBorder' 這一個節點，其他資料原封不動！
+                            batch.update(carRef, {
+                                crossBorder: cb,
+                                updatedAt: serverTimestamp() // 刷新更新時間
+                            });
+                            restoreCount++;
+                        }
+                    }
+                }
+
+                if (restoreCount > 0) {
+                    await batch.commit();
+                    alert(`✅ 奇蹟復原成功！\n系統已成功找回並合併了 ${restoreCount} 台車輛的中港業務資料！\n請重整網頁或切換分頁查看。`);
+                } else {
+                    alert('分析完畢：沒有找到需要復原的中港資料。');
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert('處理備份檔案時發生錯誤，請確保上傳的是正確的 JSON 備份檔。');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
     };
 
     // --- Render ---
@@ -4638,10 +4692,10 @@ const SettingsManager = ({
                         </div>
                         <div className="bg-red-50 p-5 rounded-xl border border-red-200 mt-6 relative overflow-hidden">
                             <h4 className="font-bold text-red-800 mb-2">進階資料修復 (Data Rescue)</h4>
-                            <p className="text-xs text-red-700/80 mb-4">此功能用於從舊 CSV 檔案「合併」中港資料到現有車輛中。</p>
+                            <p className="text-xs text-red-700/80 mb-4">從舊版的 JSON 備份檔中，無損提取並合併「中港車管家」的資料到現有車輛。</p>
                             <label className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 cursor-pointer shadow-sm inline-flex items-center">
-                                <Upload size={16} className="mr-2"/> 上傳 CSV 進行修復
-                                <input type="file" accept=".csv" className="hidden" onChange={handleRescueImport} />
+                                <Upload size={16} className="mr-2"/> 上傳 JSON 備份檔合併修復
+                                <input type="file" accept=".json" className="hidden" onChange={handleRescueImport} />
                             </label>
                         </div>
                     </div>
