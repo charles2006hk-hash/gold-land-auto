@@ -7553,44 +7553,70 @@ const CreateDocModule = ({
     const handleSelectCar = (car: Vehicle) => {
         setSelectedCarId(car.id);
         
-        // 1. 重置表單基本資料
+        // 1. 重置表單基本資料與車價
         setFormData(prev => ({
             ...prev,
             regMark: car.regMark || '', make: car.make || '', model: car.model || '',
             chassisNo: car.chassisNo || '', engineNo: car.engineNo || '', year: car.year || '',
-            // ★★★ 修改：導入外觀與內飾顏色 ★★★
-            // 車輛庫是 colorInt，合約表單是 colorInterior，這裡做了轉換
             color: (car as any).colorExt || (car as any).color || '',
             colorInterior: (car as any).colorInt || (car as any).colorInterior || (car as any).innerColor || '',
             seat: car.seating ? car.seating.toString() : '',
+            
+            // ★ 自動載入車輛價格
             price: car.price ? car.price.toString() : '',
+            
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
             customerId: car.customerID || '', customerAddress: car.customerAddress || '',
             
-            // 重置為當前時間
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         }));
 
-        // 2. 自動帶入車輛訂金到「收款列表」
-        setDepositItems([
-            { id: 'dep_1', label: 'Deposit (訂金)', amount: Number(car.deposit) || 0 }
-        ]);
+        // 2. ★★★ 自動帶入車輛已收的所有款項 (Payments) ★★★
+        const autoPayments: { id: string, label: string, amount: number }[] = [];
+        if (car.payments && car.payments.length > 0) {
+            // 將車輛詳情中記錄的每一筆收款，轉為單據上的扣除項目
+            car.payments.forEach(p => {
+                autoPayments.push({
+                    id: p.id,
+                    label: `${p.type} ${p.method ? `(${p.method})` : ''}`, // 例如: "Deposit (Cash)"
+                    amount: Number(p.amount) || 0
+                });
+            });
+        } else {
+            // 如果沒有收款紀錄，給一個預設的空白訂金欄位
+            autoPayments.push({ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 });
+        }
+        setDepositItems(autoPayments);
         
-        // 3. 重置條款顯示
         setShowTerms(true);
 
-        // 4. 自動帶入額外收費 (★ 修改：不再加入車價，只加入中港代辦費 ★)
+        // 3. ★★★ 自動帶入對客附加收費 (Sales Add-ons) 與中港代辦費 ★★★
         const items: any[] = [];
-        // 移除舊的 car_price 推送邏輯
         
-        // 只加入中港代辦費
+        // A. 抓取中港代辦費 (CrossBorder Tasks)
         if (car.crossBorder?.tasks) {
             car.crossBorder.tasks.forEach((t: any, i: number) => {
-                if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `Service: ${t.item}`, amount: t.fee, isSelected: false });
+                // 自動帶入並預設勾選 (isSelected: true)
+                if (t.fee > 0) {
+                    items.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true });
+                }
             });
         }
+        
+        // B. 抓取一般附加收費 (過戶費、文件費等 Sales Add-ons)
+        if ((car as any).salesAddons && (car as any).salesAddons.length > 0) {
+            (car as any).salesAddons.forEach((addon: any, i: number) => {
+                // 自動帶入並預設勾選
+                if (addon.amount > 0) {
+                    items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true });
+                }
+            });
+        }
+        
         setDocItems(items);
+        
+        // 手機版切換到編輯分頁
         setMobileStep('edit');
     };
 
