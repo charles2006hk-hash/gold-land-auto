@@ -3548,6 +3548,53 @@ const CrossBorderView = ({
 };
 
 // ------------------------------------------------------------------
+// ★★★ 新增：系統啟動與資料同步 Loading 畫面 ★★★
+// ------------------------------------------------------------------
+const GlobalDataLoadingScreen = () => {
+    const [loadingText, setLoadingText] = useState('建立安全連線中...');
+    
+    useEffect(() => {
+        const texts = ['正在同步雲端資料庫...', '載入車輛庫存清單...', '更新最新報表數據...', '驗證使用者權限...', '即將完成...'];
+        let i = 0;
+        const timer = setInterval(() => {
+            i = (i + 1) % texts.length;
+            setLoadingText(texts[i]);
+        }, 800); // 每 0.8 秒換一句話，讓畫面感覺很忙碌在做事
+        return () => clearInterval(timer);
+    }, []);
+
+    return (
+        <div className="fixed inset-0 z-[9999] bg-slate-900 flex flex-col items-center justify-center overflow-hidden">
+            {/* 科技感背景光暈裝飾 */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-30 pointer-events-none">
+                <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-600 rounded-full blur-[120px] animate-pulse"></div>
+                <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-yellow-500 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+            </div>
+            
+            <div className="relative z-10 flex flex-col items-center">
+                {/* Logo 彈跳與發光效果 */}
+                <div className="w-24 h-24 bg-white rounded-3xl shadow-[0_0_50px_rgba(255,255,255,0.15)] p-3 mb-8 animate-bounce" style={{ animationDuration: '2s' }}>
+                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; }}/>
+                </div>
+                
+                <h1 className="text-3xl font-black text-white tracking-widest mb-2 drop-shadow-lg">GOLD LAND AUTO</h1>
+                <p className="text-yellow-500 font-bold text-sm tracking-[0.3em] mb-12 uppercase drop-shadow-md">DMS System</p>
+                
+                {/* 現代化漸層進度條 (無限流動效果) */}
+                <div className="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4 shadow-inner relative">
+                    <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-transparent via-blue-500 to-yellow-400 w-1/2 animate-[marquee-inline_1.5s_ease-in-out_infinite]"></div>
+                </div>
+                
+                {/* 動態狀態文字 */}
+                <div className="text-slate-400 text-xs font-mono flex items-center h-4">
+                    <Loader2 size={12} className="animate-spin mr-2 text-blue-400"/> {loadingText}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
 // ★★★ 新增：AI 智能新聞快訊 (實時股票指數 + 匯率翻頁版) ★★★
 // ------------------------------------------------------------------
 const SmartNewsTicker = () => {
@@ -5183,6 +5230,7 @@ export default function GoldLandAutoDMS() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
   const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
+  const [isDataSyncing, setIsDataSyncing] = useState(true);
 
   // ★★★ 終極喚醒主畫面機制 (解決重新整理後空白問題) ★★★
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -5553,16 +5601,26 @@ export default function GoldLandAutoDMS() {
     
     const invRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory');
     const q = query(invRef, orderBy('createdAt', 'desc')); 
-    const unsubInv = onSnapshot(q, (snapshot) => {
+    
+    // ★ 為了避免網路極快時畫面閃爍，強制 Loading 畫面最少顯示 1.5 秒
+    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const unsubInv = onSnapshot(q, async (snapshot) => {
       const list: Vehicle[] = [];
       snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() } as Vehicle));
       setInventory(list);
-    }, (err) => console.error("Inv sync error", err));
-
-    
+      
+      // 等待最少 1.5 秒，且確保資料已經塞入 state 後，才關閉 Loading 畫面
+      await minLoadingTime;
+      setIsDataSyncing(false);
+      
+    }, (err) => {
+        console.error("Inv sync error", err);
+        setIsDataSyncing(false); // 如果發生斷線錯誤，也要解除 Loading，免得畫面卡死
+    });
 
     return () => { unsubInv(); };
-  }, [staffId]);
+  }, [staffId, db, appId]);
 
 useEffect(() => {
         if (!db || !staffId) return;
@@ -8129,6 +8187,7 @@ const CreateDocModule = ({
 
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
+      {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
       <Sidebar 
       activeTab={activeTab}
           setActiveTab={setActiveTab}
