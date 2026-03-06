@@ -194,6 +194,7 @@ type DatabaseEntry = {
     renewalCount?: number;          // 續期次數
     renewalDuration?: number;       // 續期區間數值 (例如: 1)
     renewalUnit?: 'year' | 'month'; // 續期區間單位 (年/月)
+    customReminders?: any[];
 };
 
 // --- 新增：媒體庫數據結構 ---
@@ -1567,7 +1568,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             renewalCount: editingEntry.renewalCount || 0,
             renewalDuration: editingEntry.renewalDuration || 1,
             renewalUnit: editingEntry.renewalUnit || 'year',
-            
+            customReminders: editingEntry.customReminders || [],
+
             // ★ 新增/編輯時，確保負責人欄位正確 (若為空則預設為當前員工)
             managedBy: editingEntry.managedBy || staffId, 
 
@@ -1928,6 +1930,81 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             </div>
                                         )}
                                     </div>
+                                    {/* 2. ★★★ 附加多重提醒模塊 (最多5個，加上主模塊共6個) ★★★ */}
+                                    {(editingEntry.customReminders || []).map((rem: any, idx: number) => (
+                                        <div key={rem.id} className="p-4 rounded-lg border bg-blue-50/50 border-blue-200 mt-3 animate-fade-in relative shadow-sm">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <div className="flex-1 mr-4">
+                                                    <input 
+                                                        type="text"
+                                                        disabled={!isDbEditing} 
+                                                        value={rem.title} 
+                                                        onChange={e => {
+                                                            const newR = [...editingEntry.customReminders!];
+                                                            newR[idx].title = e.target.value;
+                                                            setEditingEntry({...editingEntry, customReminders: newR});
+                                                        }} 
+                                                        placeholder="輸入文件名稱 (例如：體檢報告、保險)..." 
+                                                        className="w-full bg-transparent border-b border-blue-300 font-bold text-blue-800 outline-none focus:border-blue-600 pb-1 text-sm" 
+                                                    />
+                                                </div>
+                                                {isDbEditing && (
+                                                    <button type="button" onClick={() => {
+                                                        const newR = editingEntry.customReminders!.filter((r:any) => r.id !== rem.id);
+                                                        setEditingEntry({...editingEntry, customReminders: newR});
+                                                    }} className="text-red-400 hover:text-red-600 p-1 bg-white rounded-full shadow-sm border border-red-100"><X size={14}/></button>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="col-span-2 md:col-span-1">
+                                                    <label className="block text-xs font-bold text-blue-800 mb-1">到期日</label>
+                                                    <input type="date" disabled={!isDbEditing} value={rem.expiryDate || ''} onChange={e => {
+                                                        const newR = [...editingEntry.customReminders!];
+                                                        newR[idx].expiryDate = e.target.value;
+                                                        setEditingEntry({...editingEntry, customReminders: newR});
+                                                    }} className="w-full p-2 border border-blue-300 rounded text-sm bg-white font-bold focus:ring-2 focus:ring-blue-400 outline-none" />
+                                                    <div className="mt-1"><DateStatusBadge date={rem.expiryDate} label="狀態" /></div>
+                                                </div>
+                                                <div className="col-span-2 md:col-span-1 bg-white p-2 rounded border border-blue-100">
+                                                    <label className="block text-xs font-bold text-gray-500 mb-1">獨立續期規則</label>
+                                                    <div className="flex gap-2 mb-2">
+                                                        <input type="number" disabled={!isDbEditing} value={rem.renewalDuration} onChange={e => {
+                                                            const newR = [...editingEntry.customReminders!];
+                                                            newR[idx].renewalDuration = Number(e.target.value);
+                                                            setEditingEntry({...editingEntry, customReminders: newR});
+                                                        }} className="w-16 p-1 border rounded text-center text-sm" min="1" />
+                                                        <select disabled={!isDbEditing} value={rem.renewalUnit} onChange={e => {
+                                                            const newR = [...editingEntry.customReminders!];
+                                                            newR[idx].renewalUnit = e.target.value;
+                                                            setEditingEntry({...editingEntry, customReminders: newR});
+                                                        }} className="flex-1 p-1 border rounded text-sm"><option value="year">年</option><option value="month">月</option></select>
+                                                    </div>
+                                                    {isDbEditing && (
+                                                        <button type="button" onClick={() => {
+                                                            if (!rem.expiryDate) { alert("請先設定到期日"); return; }
+                                                            const newR = [...editingEntry.customReminders!];
+                                                            const currentDate = new Date(rem.expiryDate);
+                                                            if (rem.renewalUnit === 'year') currentDate.setFullYear(currentDate.getFullYear() + rem.renewalDuration);
+                                                            else currentDate.setMonth(currentDate.getMonth() + rem.renewalDuration);
+                                                            newR[idx].expiryDate = currentDate.toISOString().split('T')[0];
+                                                            newR[idx].renewalCount = (rem.renewalCount || 0) + 1;
+                                                            setEditingEntry({...editingEntry, customReminders: newR});
+                                                        }} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm"><RefreshCw size={12} className="mr-1"/> 立即續期 ({rem.renewalCount || 0})</button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {/* 3. 新增按鈕 (滿 5 個就自動隱藏) */}
+                                    {isDbEditing && (editingEntry.customReminders?.length || 0) < 5 && (
+                                        <button type="button" onClick={() => {
+                                            const newRem = { id: Date.now().toString(), title: '', expiryDate: '', renewalCount: 0, renewalDuration: 1, renewalUnit: 'year' };
+                                            setEditingEntry({...editingEntry, customReminders: [...(editingEntry.customReminders || []), newRem]});
+                                        }} className="w-full mt-3 py-2.5 border-2 border-dashed border-blue-300 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors flex justify-center items-center">
+                                            <Plus size={16} className="mr-1"/> 增加其他文件提醒 (已用 {(editingEntry.customReminders?.length || 0) + 1} / 6)
+                                        </button>
+                                    )}
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">備註</label><textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/></div>
                                     <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
                                 </div>
@@ -8346,13 +8423,36 @@ const CreateDocModule = ({
               {/* 提醒中心 */}
               {(() => {
                   const docAlerts: any[] = [];
+                  // 1. 處理資料庫文件提醒 (升級：支援多重提醒掃描)
                   dbEntries.forEach(d => { 
+                      // A. 主要提醒
                       if (d.reminderEnabled && d.expiryDate) { 
                           const days = getDaysRemaining(d.expiryDate); 
                           if (days !== null && days <= 30) { 
                               docAlerts.push({ id: d.id, title: d.name, desc: d.docType || '文件', date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d, source: 'database' }); 
                           } 
                       } 
+                      // B. ★★★ 掃描新增的自訂提醒模塊 ★★★
+                      if (d.customReminders && d.customReminders.length > 0) {
+                          d.customReminders.forEach((rem: any) => {
+                              if (rem.expiryDate) {
+                                  const days = getDaysRemaining(rem.expiryDate);
+                                  if (days !== null && days <= 30) {
+                                      // 將自訂提醒也推送到首頁警報陣列中
+                                      docAlerts.push({ 
+                                          id: `${d.id}_${rem.id}`, 
+                                          title: d.name, 
+                                          desc: rem.title || '附加文件', 
+                                          date: rem.expiryDate, 
+                                          days, 
+                                          status: days < 0 ? 'expired' : 'soon', 
+                                          raw: d, 
+                                          source: 'database' 
+                                      });
+                                  }
+                              }
+                          });
+                      }
                   });
 
                   visibleInventory.forEach(v => {
