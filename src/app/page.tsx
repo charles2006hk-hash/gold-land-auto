@@ -2697,6 +2697,29 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         }
     };
 
+    // ★★★ 新增：將圖片退回「待處理區 (Inbox)」 ★★★
+    const handleReturnToInbox = async (item: MediaLibraryItem) => {
+        if (!confirm("確定要將此圖片退回「待處理區」並解除車輛綁定嗎？")) return;
+        if (!db) return;
+        try {
+            const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
+            await updateDoc(docRef, {
+                status: 'unassigned',
+                relatedVehicleId: null, // 解除綁定
+                updatedAt: serverTimestamp()
+            });
+            // 如果退回的是當前選中的大圖，清空預覽狀態
+            setActiveGroupImages(prev => {
+                const newState = { ...prev };
+                delete newState[item.relatedVehicleId || ''];
+                return newState;
+            });
+        } catch (err) {
+            console.error(err);
+            alert("退回失敗");
+        }
+    };
+
     const handleClassify = async () => {
         if (!db || selectedInboxIds.length === 0) return;
         const batch = writeBatch(db);
@@ -2864,80 +2887,111 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {libraryGroups.map(group => {
                                 const isExpanded = expandedGroupKey === group.key;
-                                const primaryImage = group.items[0]; 
+                                
+                                // ★ 取得目前這組正在查看的「當前圖片 (Active Item)」
+                                const currentActiveImgUrl = activeGroupImages[group.key] || group.items[0]?.url;
+                                const activeItem = group.items.find(img => img.url === currentActiveImgUrl) || group.items[0];
+
                                 return (
-                                    <div key={group.key} className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all ${isExpanded ? 'col-span-full ring-2 ring-blue-200' : 'hover:border-blue-300'}`}>
-                                        <div className="p-3 flex justify-between items-center cursor-pointer bg-white border-b border-slate-100" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
+                                    <div key={group.key} className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-500/50 shadow-lg' : 'hover:border-blue-300'}`}>
+                                        
+                                        {/* ===================================== */}
+                                        {/* 1. 頂部標題與現代化工具列 */}
+                                        {/* ===================================== */}
+                                        <div className="p-3 flex justify-between items-center bg-white border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
+                                            
+                                            {/* 左側：車輛資訊 */}
                                             <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className="w-12 h-12 rounded bg-slate-200 flex-shrink-0 overflow-hidden relative">
-                                                    {primaryImage ? (
-                                                         <img src={primaryImage.url} className="w-full h-full object-cover"/>
+                                                <div className="w-12 h-12 rounded-lg bg-slate-200 flex-shrink-0 overflow-hidden relative shadow-sm">
+                                                    {group.items[0] ? (
+                                                         <img src={group.items[0].url} className="w-full h-full object-cover"/>
                                                     ) : (
                                                          <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
                                                     )}
                                                 </div>
                                                 <div className="min-w-0">
-                                                    <h4 className="font-bold text-sm truncate">{group.title}</h4>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        <span className="text-[10px] text-slate-500">{group.items.length} 張圖片</span>
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded border ${group.status==='In Stock'?'bg-green-100 text-green-700 border-green-200':'bg-gray-100 text-gray-500'}`}>{group.status}</span>
+                                                    <h4 className="font-bold text-sm text-slate-800 truncate">{group.title}</h4>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="text-[10px] text-slate-500 font-medium">{group.items.length} 張圖片</span>
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${group.status==='In Stock'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}`}>{group.status}</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            {isExpanded ? <Minimize2 size={16} className="text-slate-400"/> : <Maximize2 size={16} className="text-slate-400"/>}
+
+                                            {/* 右側：工具列 + 展開按鈕 */}
+                                            <div className="flex items-center gap-4 pr-1">
+                                                {/* ★ 只有在展開且有選中圖片時，才顯示工具列 */}
+                                                {isExpanded && activeItem && (
+                                                    <div className="flex items-center bg-slate-100 p-1 rounded-lg shadow-inner" onClick={e => e.stopPropagation()}>
+                                                        
+                                                        <button onClick={() => handleReturnToInbox(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-blue-600 transition-colors tooltip-trigger" title="退回待處理區">
+                                                            <Upload size={16} className="transform rotate-180"/>
+                                                        </button>
+                                                        
+                                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                                        
+                                                        <button onClick={() => handleSetPrimary(activeItem.id, group.items)} className={`p-1.5 rounded-md transition-colors ${activeItem.isPrimary ? 'bg-yellow-500 text-white shadow-sm' : 'hover:bg-white text-slate-500 hover:text-yellow-600'}`} title="設為車輛封面">
+                                                            <Star size={16} className={activeItem.isPrimary ? 'fill-white' : ''}/>
+                                                        </button>
+                                                        
+                                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+
+                                                        <button onClick={() => setEditingMedia(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-indigo-600 transition-colors" title="編輯圖片 (排版/遮車牌)">
+                                                            <Edit size={16}/>
+                                                        </button>
+                                                        
+                                                        <button onClick={() => handleDeleteImage(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-red-500 transition-colors" title="永久刪除">
+                                                            <Trash2 size={16}/>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* 展開/收合圖示 */}
+                                                <div className="text-slate-400 bg-slate-50 p-2 rounded-full hover:bg-slate-200 transition-colors">
+                                                    {isExpanded ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}
+                                                </div>
+                                            </div>
                                         </div>
                                         
-                                        {isExpanded && (() => {
-                                            // 取得當前群組應該顯示的大圖 (如果有選取過就用選取的，否則用封面圖)
-                                            const currentActiveImgUrl = activeGroupImages[group.key] || primaryImage?.url;
-
-                                            return (
-                                            <div>
-                                                {/* 上方：大預覽圖 (點擊才會全螢幕放大) */}
-                                                <div className="w-full h-64 bg-slate-900 relative cursor-zoom-in group overflow-hidden" onClick={() => setPreviewImage(currentActiveImgUrl)}>
-                                                    {currentActiveImgUrl ? (
-                                                        <>
-                                                            <img src={currentActiveImgUrl} className="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110" />
-                                                            <img src={currentActiveImgUrl} className="relative z-10 w-full h-full object-contain drop-shadow-xl p-1" />
-                                                        </>
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-slate-500">無圖片</div>
-                                                    )}
-                                                    <div className="absolute bottom-2 right-2 z-20 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">點擊全螢幕預覽</div>
+                                        {/* ===================================== */}
+                                        {/* 2. 展開後的內容區：大圖預覽 + 乾淨縮圖列 */}
+                                        {/* ===================================== */}
+                                        {isExpanded && activeItem && (
+                                            <div className="p-4 bg-slate-50/50 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+                                                
+                                                {/* 上方：嚴格 4:3 的完美大圖預覽 */}
+                                                <div className="w-full max-w-4xl aspect-[4/3] bg-slate-900 rounded-xl relative overflow-hidden shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] cursor-zoom-in group mb-4" onClick={() => setPreviewImage(activeItem.url)}>
+                                                    <img src={activeItem.url} className="absolute inset-0 w-full h-full object-cover blur-xl opacity-40 scale-125 transition-transform duration-700" />
+                                                    <img src={activeItem.url} className="relative z-10 w-full h-full object-contain drop-shadow-2xl transition-transform duration-500 group-hover:scale-105" />
+                                                    <div className="absolute bottom-3 right-3 z-20 bg-black/60 text-white text-[10px] px-3 py-1.5 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        點擊全螢幕放大
+                                                    </div>
                                                 </div>
                                                 
-                                                {/* 下方：小圖列表 */}
-                                                <div className="p-3 bg-slate-50 border-t border-slate-100">
-                                                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+                                                {/* 下方：乾淨的縮圖導航列 */}
+                                                <div className="w-full max-w-4xl bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                                    <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-300">
                                                         {group.items.map(img => (
                                                             <div 
                                                                 key={img.id} 
-                                                                className={`relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${currentActiveImgUrl === img.url ? 'border-blue-500 shadow-md ring-2 ring-blue-200' : (img.isPrimary ? 'border-yellow-400 shadow-sm' : 'border-transparent hover:border-slate-300')}`}
+                                                                onClick={() => setActiveGroupImages(prev => ({...prev, [group.key]: img.url}))}
+                                                                className={`relative w-24 aspect-[4/3] flex-shrink-0 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${activeItem.id === img.id ? 'ring-4 ring-blue-500 ring-offset-1 border-transparent scale-95' : 'border-2 border-transparent hover:border-slate-300 opacity-70 hover:opacity-100'}`}
                                                             >
-                                                                <img 
-                                                                    src={img.url} 
-                                                                    className="w-full h-full object-cover" 
-                                                                    // ★ 點擊小圖：只更新上方的大預覽框
-                                                                    onClick={() => setActiveGroupImages(prev => ({...prev, [group.key]: img.url}))}
-                                                                    // ★ 雙擊小圖：直接全螢幕放大
-                                                                    onDoubleClick={() => setPreviewImage(img.url)}
-                                                                />
+                                                                <img src={img.url} className="w-full h-full object-cover" />
                                                                 
-                                                                {/* ★ 修復按鈕重疊：右上角群組 (編輯 + 刪除並排) */}
-                                                                <div className="absolute top-1 right-1 flex items-center gap-1 z-20">
-                                                                    <button onClick={(e) => { e.stopPropagation(); setEditingMedia(img); }} className="p-1.5 bg-black/50 hover:bg-blue-500 text-white rounded-full backdrop-blur-sm transition-colors" title="進入編輯排版模式"><Edit size={12}/></button>
-                                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(img); }} className="p-1.5 bg-black/50 hover:bg-red-500 text-white rounded-full backdrop-blur-sm transition-colors" title="永久刪除"><Trash2 size={12}/></button>
-                                                                </div>
-                                                                
-                                                                {/* ★ 左上角：設為封面 (星星) */}
-                                                                <button onClick={(e) => { e.stopPropagation(); handleSetPrimary(img.id, group.items); }} className={`absolute top-1 left-1 p-1.5 rounded-full shadow-sm backdrop-blur-sm transition-all z-20 ${img.isPrimary ? 'bg-yellow-500 text-white' : 'bg-black/50 text-white/70 hover:bg-yellow-500 hover:text-white'}`} title="設為封面圖"><Star size={12} className={img.isPrimary ? 'fill-white' : ''}/></button>
+                                                                {/* 僅用微小的角標提示是否為封面 */}
+                                                                {img.isPrimary && (
+                                                                    <div className="absolute top-1 left-1 bg-yellow-500/90 rounded-full p-1 backdrop-blur-sm shadow-sm">
+                                                                        <Star size={10} className="text-white fill-white"/>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>
                                                 </div>
+
                                             </div>
-                                            );
-                                        })()}
+                                        )}
                                     </div>
                                 );
                             })}
