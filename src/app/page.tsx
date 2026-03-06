@@ -1529,6 +1529,17 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
+    
+    // ★★★ 請把這段 Toast 控制器貼在這裡！ ★★★
+    // ==========================================
+    const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
+
+    const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+        setToastMsg({text, type});
+        setTimeout(() => setToastMsg(null), 3000); // 3秒後自動消失
+    };
+    // ==========================================
+
     // ★★★ 儲存邏輯 (含自動指派負責人) ★★★
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
