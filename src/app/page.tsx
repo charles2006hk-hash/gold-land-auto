@@ -5350,6 +5350,14 @@ export default function GoldLandAutoDMS() {
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
   const [isDataSyncing, setIsDataSyncing] = useState(true);
 
+  // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
+  const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
+
+  const showGlobalToast = (text: string, type: 'success' | 'error' = 'success') => {
+      setGlobalToast({text, type});
+      setTimeout(() => setGlobalToast(null), 3000); // 3秒後自動消失
+  };
+
   // ★★★ 終極喚醒主畫面機制 (解決重新整理後空白問題) ★★★
   const [hasInitialized, setHasInitialized] = useState(false);
 
@@ -6020,7 +6028,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             if (editingVehicle && editingVehicle.id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
                 addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`);
-                alert('車輛資料已更新');
+                
+                // ★ 移除 alert，改用全域 Toast
+                showGlobalToast('✅ 車輛資料已成功更新！');
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
                     ...vData,
@@ -6030,7 +6040,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                     salesAddons: []
                 });
                 addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
-                alert('新車輛已入庫');
+                
+                // ★ 移除 alert，改用全域 Toast
+                showGlobalToast('✅ 新車輛已成功入庫！');
             }
 
             if (vData.customerName) {
@@ -6046,7 +6058,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             if (activeTab === 'inventory_add') {
                 setActiveTab('inventory');
             }
-        } catch (e) { alert('儲存失敗'); console.error(e); }
+        } catch (e) { 
+            console.error(e); 
+            // ★ 移除 alert，改用全域 Toast
+            showGlobalToast('❌ 儲存失敗，請檢查網路連線', 'error'); 
+        }
     };
 
 const deleteVehicle = async (id: string) => {
@@ -8313,6 +8329,17 @@ const CreateDocModule = ({
 
   return (
     <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
+
+      {/* 全域資料載入畫面 */}
+      {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
+
+      {/* ★★★ 全域 Toast 提示框 UI ★★★ */}
+      {globalToast && (
+          <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${globalToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+              {globalToast.text}
+          </div>
+      )}
+
       {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
       <Sidebar 
       activeTab={activeTab}
