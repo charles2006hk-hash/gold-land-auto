@@ -1532,10 +1532,17 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     // ★★★ 儲存邏輯 (含自動指派負責人) ★★★
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
+        
+        // ★★★ 防死鎖：強制收起手機虛擬鍵盤，避免瀏覽器卡死 ★★★
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+
         if (!db || !staffId || !editingEntry) return;
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
+        // 100% 保留您所有的欄位資料！
         const finalEntry = { 
             ...editingEntry, 
             phone: editingEntry.phone || '',
@@ -1603,18 +1610,24 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
                 const cleanData = JSON.parse(JSON.stringify(finalEntry));
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
-                alert('資料已更新');
                 setIsDbEditing(false); 
+                // ★ 改用 Toast，徹底消滅原生的 alert 死鎖
+                showToast('✅ 資料已成功更新！'); 
             } else {
                 const { id, ...dataToSave } = finalEntry;
                 const colRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
                 const cleanData = JSON.parse(JSON.stringify(dataToSave));
                 const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
                 setEditingEntry({ ...finalEntry, id: newRef.id }); 
-                alert('新資料已建立');
                 setIsDbEditing(false);
+                // ★ 改用 Toast，徹底消滅原生的 alert 死鎖
+                showToast('✅ 新資料已建立！'); 
             }
-        } catch (err) { console.error("Save Error:", err); alert('儲存失敗'); }
+        } catch (err) { 
+            console.error("Save Error:", err); 
+            // ★ 改用 Toast 報錯
+            showToast('❌ 儲存失敗，請檢查網路連線', 'error'); 
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -5428,6 +5441,14 @@ export default function GoldLandAutoDMS() {
   // ★★★ 新增：將資料庫編輯狀態提升到這裡，讓 Dashboard 也能控制 ★★★
   const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
   const [isDbEditing, setIsDbEditing] = useState(false);
+
+// ★★★ 新增：現代化自動消失提示 (Toast) 狀態 ★★★
+    const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
+
+    const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+        setToastMsg({text, type});
+        setTimeout(() => setToastMsg(null), 3000); // 3秒後自動消失
+    };
 
   // Cross Border UI State
   const [activeCbVehicleId, setActiveCbVehicleId] = useState<string | null>(null);
