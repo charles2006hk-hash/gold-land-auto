@@ -8464,6 +8464,14 @@ const CreateDocModule = ({
                           if (cbTags.length === 0) cbTags.push({ label: '中港', color: 'bg-slate-700' });
                       }
 
+                      // ★★★ 新增：萃取與精簡車輛規格資料 ★★★
+                      const specs = [];
+                      if (car.previousOwners !== undefined && car.previousOwners !== '') specs.push(`${car.previousOwners}手`);
+                      if (car.engineSize) specs.push(`${car.engineSize}cc`);
+                      if (car.transmission) specs.push(car.transmission === 'Manual' ? 'MT' : 'Auto');
+                      if (car.colorExt) specs.push(car.colorExt.split(' ')[0].replace(/[()]/g, '')); // 擷取第一個字例如 "白"
+                      if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
+
                       return (
                           <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex bg-white p-3 rounded-xl border border-slate-100 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group">
                               
@@ -8488,13 +8496,26 @@ const CreateDocModule = ({
                               {/* 右側：車輛重點資訊 */}
                               <div className="ml-3 flex-1 min-w-0 flex flex-col justify-between py-0.5">
                                   <div>
-                                      <div className="font-bold text-sm text-slate-800 leading-tight line-clamp-2">{car.year} {car.make} {car.model}</div>
+                                      {/* 車型標題改為單行截斷，騰出空間給規格列 */}
+                                      <div className="font-bold text-sm text-slate-800 leading-tight line-clamp-1">{car.year} {car.make} {car.model}</div>
                                       
                                       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                           <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 rounded-[2px] shadow-sm">{car.regMark || '未出牌'}</span>
-                                          {car.crossBorder?.mainlandPlate && <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1.5 rounded-[2px] shadow-sm`}>{car.crossBorder.mainlandPlate}</span>}
-                                          {cbTags.map((t,i) => <span key={i} className={`text-[8px] text-white px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
+                                          {car.crossBorder?.mainlandPlate && <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1 rounded-[2px] shadow-sm`}>{car.crossBorder.mainlandPlate}</span>}
+                                          {cbTags.map((t:any,i:number) => <span key={i} className={`text-[8px] text-white px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
                                       </div>
+
+                                      {/* ★★★ 新增：無縫融入的微型規格列 (圓點分隔) ★★★ */}
+                                      {specs.length > 0 && (
+                                          <div className="flex flex-wrap items-center mt-1.5 text-[9px] text-slate-500 font-medium leading-none truncate">
+                                              {specs.map((spec, idx) => (
+                                                  <span key={idx} className="flex items-center">
+                                                      {idx > 0 && <span className="mx-1 text-slate-300">•</span>}
+                                                      {spec}
+                                                  </span>
+                                              ))}
+                                          </div>
+                                      )}
                                   </div>
 
                                   <div className="flex justify-between items-end mt-2">
