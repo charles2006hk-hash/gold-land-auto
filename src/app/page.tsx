@@ -1942,6 +1942,15 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                     )}
 
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
+                                    
+                                    {/* ★★★ 全域現代化提示 (Toast) ★★★ */}
+                                    {toastMsg && (
+                                        <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${toastMsg.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                                            {toastMsg.text}
+                                        </div>
+                                    )}
+
+                                    {/* 1. 主要提醒模塊 */}
                                     <div className={`p-4 rounded-lg border transition-all ${editingEntry.reminderEnabled ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                                         <div className="flex justify-between items-center mb-3">
                                             <label className="flex items-center cursor-pointer"><input type="checkbox" disabled={!isDbEditing} checked={editingEntry.reminderEnabled || false} onChange={e => setEditingEntry({ ...editingEntry, reminderEnabled: e.target.checked })} className="w-4 h-4 text-amber-600 rounded mr-2" /><span className={`text-sm font-bold flex items-center ${editingEntry.reminderEnabled ? 'text-amber-800' : 'text-gray-500'}`}><Bell size={16} className="mr-1"/> 啟用到期提醒功能</span></label>
@@ -1954,6 +1963,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             </div>
                                         )}
                                     </div>
+                                    
                                     {/* 2. ★★★ 附加多重提醒模塊 (最多5個，加上主模塊共6個) ★★★ */}
                                     {(editingEntry.customReminders || []).map((rem: any, idx: number) => (
                                         <div key={rem.id} className="p-4 rounded-lg border bg-blue-50/50 border-blue-200 mt-3 animate-fade-in relative shadow-sm">
@@ -1964,8 +1974,10 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                         disabled={!isDbEditing} 
                                                         value={rem.title} 
                                                         onChange={e => {
-                                                            const newR = [...editingEntry.customReminders!];
-                                                            newR[idx].title = e.target.value;
+                                                            // ★ 安全的資料更新方式，避免畫面卡死
+                                                            const newR = editingEntry.customReminders!.map((r:any, i:number) => 
+                                                                i === idx ? { ...r, title: e.target.value } : r
+                                                            );
                                                             setEditingEntry({...editingEntry, customReminders: newR});
                                                         }} 
                                                         placeholder="輸入文件名稱 (例如：體檢報告、保險)..." 
@@ -1983,8 +1995,9 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                 <div className="col-span-2 md:col-span-1">
                                                     <label className="block text-xs font-bold text-blue-800 mb-1">到期日</label>
                                                     <input type="date" disabled={!isDbEditing} value={rem.expiryDate || ''} onChange={e => {
-                                                        const newR = [...editingEntry.customReminders!];
-                                                        newR[idx].expiryDate = e.target.value;
+                                                        const newR = editingEntry.customReminders!.map((r:any, i:number) => 
+                                                            i === idx ? { ...r, expiryDate: e.target.value } : r
+                                                        );
                                                         setEditingEntry({...editingEntry, customReminders: newR});
                                                     }} className="w-full p-2 border border-blue-300 rounded text-sm bg-white font-bold focus:ring-2 focus:ring-blue-400 outline-none" />
                                                     <div className="mt-1"><DateStatusBadge date={rem.expiryDate} label="狀態" /></div>
@@ -1993,25 +2006,28 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                     <label className="block text-xs font-bold text-gray-500 mb-1">獨立續期規則</label>
                                                     <div className="flex gap-2 mb-2">
                                                         <input type="number" disabled={!isDbEditing} value={rem.renewalDuration} onChange={e => {
-                                                            const newR = [...editingEntry.customReminders!];
-                                                            newR[idx].renewalDuration = Number(e.target.value);
+                                                            const newR = editingEntry.customReminders!.map((r:any, i:number) => 
+                                                                i === idx ? { ...r, renewalDuration: Number(e.target.value) } : r
+                                                            );
                                                             setEditingEntry({...editingEntry, customReminders: newR});
                                                         }} className="w-16 p-1 border rounded text-center text-sm" min="1" />
                                                         <select disabled={!isDbEditing} value={rem.renewalUnit} onChange={e => {
-                                                            const newR = [...editingEntry.customReminders!];
-                                                            newR[idx].renewalUnit = e.target.value;
+                                                            const newR = editingEntry.customReminders!.map((r:any, i:number) => 
+                                                                i === idx ? { ...r, renewalUnit: e.target.value } : r
+                                                            );
                                                             setEditingEntry({...editingEntry, customReminders: newR});
                                                         }} className="flex-1 p-1 border rounded text-sm"><option value="year">年</option><option value="month">月</option></select>
                                                     </div>
                                                     {isDbEditing && (
                                                         <button type="button" onClick={() => {
-                                                            if (!rem.expiryDate) { alert("請先設定到期日"); return; }
-                                                            const newR = [...editingEntry.customReminders!];
+                                                            if (!rem.expiryDate) { showToast("請先設定到期日", "error"); return; }
                                                             const currentDate = new Date(rem.expiryDate);
                                                             if (rem.renewalUnit === 'year') currentDate.setFullYear(currentDate.getFullYear() + rem.renewalDuration);
                                                             else currentDate.setMonth(currentDate.getMonth() + rem.renewalDuration);
-                                                            newR[idx].expiryDate = currentDate.toISOString().split('T')[0];
-                                                            newR[idx].renewalCount = (rem.renewalCount || 0) + 1;
+                                                            
+                                                            const newR = editingEntry.customReminders!.map((r:any, i:number) => 
+                                                                i === idx ? { ...r, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (r.renewalCount || 0) + 1 } : r
+                                                            );
                                                             setEditingEntry({...editingEntry, customReminders: newR});
                                                         }} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center shadow-sm"><RefreshCw size={12} className="mr-1"/> 立即續期 ({rem.renewalCount || 0})</button>
                                                     )}
@@ -2029,6 +2045,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                             <Plus size={16} className="mr-1"/> 增加其他文件提醒 (已用 {(editingEntry.customReminders?.length || 0) + 1} / 6)
                                         </button>
                                     )}
+                                    
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">備註</label><textarea disabled={!isDbEditing} value={editingEntry.description || ''} onChange={e => setEditingEntry({...editingEntry, description: e.target.value})} className="w-full p-2 border rounded text-sm h-24" placeholder="輸入詳細說明..."/></div>
                                     <div><label className="block text-xs font-bold text-slate-500">標籤</label><div className="flex gap-2 mb-2 flex-wrap">{editingEntry.tags?.map(tag => <span key={tag} className="bg-slate-200 px-2 py-1 rounded text-xs flex items-center">{tag} {isDbEditing && <button type="button" onClick={() => setEditingEntry({...editingEntry, tags: editingEntry.tags.filter(t => t !== tag)})} className="ml-1 text-slate-500 hover:text-red-500"><X size={10}/></button>}</span>)}</div>{isDbEditing && <div className="flex gap-1"><input value={tagInput} onChange={e => setTagInput(e.target.value)} className="flex-1 p-1.5 border rounded text-xs" placeholder="新增..." onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} /><button type="button" onClick={addTag} className="bg-slate-200 px-3 py-1 rounded text-xs"><Plus size={12}/></button></div>}</div>
                                 </div>
@@ -8464,13 +8481,12 @@ const CreateDocModule = ({
                               docAlerts.push({ id: d.id, title: d.name, desc: d.docType || '文件', date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d, source: 'database' }); 
                           } 
                       } 
-                      // B. ★★★ 掃描新增的自訂提醒模塊 ★★★
+                      // B. 掃描自訂提醒模塊
                       if (d.customReminders && d.customReminders.length > 0) {
                           d.customReminders.forEach((rem: any) => {
                               if (rem.expiryDate) {
                                   const days = getDaysRemaining(rem.expiryDate);
                                   if (days !== null && days <= 30) {
-                                      // 將自訂提醒也推送到首頁警報陣列中
                                       docAlerts.push({ 
                                           id: `${d.id}_${rem.id}`, 
                                           title: d.name, 
