@@ -5844,44 +5844,50 @@ useEffect(() => {
 
   // --- CRUD Actions ---
 
-// ★★★ 新增：自動同步資料至資料庫中心 (連動邏輯) ★★★
-  const syncToDatabase = async (data: { name: string, phone?: string, plate?: string, quota?: string }, role: string) => {
-      // 確保 db 存在且有姓名才執行
-      if (!db || !staffId || !data.name) return;
-      const currentDb = db;
-      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      const dbRef = collection(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-      
-      try {
-          // 1. 檢查是否已存在 (根據姓名和分類)
-          // 這裡我們假設主要檢查 'Person' 類別
-          const q = query(dbRef, where('category', '==', 'Person'), where('name', '==', data.name));
-          const snapshot = await getDocs(q);
+// ★★★ 防死鎖版的同步函數 ★★★
+    const syncToDatabase = async (data: any, category: string) => {
+        if (!db || !appId || !staffId) return;
+        
+        // 1. 強制收起虛擬鍵盤，避免 iOS 鎖死
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
 
-          if (snapshot.empty) {
-              // 2. 若不存在，自動建立新檔案
-              await addDoc(dbRef, {
-                  category: 'Person',
-                  name: data.name,
-                  phone: data.phone || '',
-                  roles: [role], // 自動標記角色 (客戶/司機)
-                  plateNoCN: data.plate || '', // 如果是司機，帶入內地車牌
-                  quotaNo: data.quota || '',   // 如果是司機，帶入指標號
-                  description: `[系統自動建立] 來源: ${role} - ${new Date().toLocaleDateString()}`,
-                  tags: ['自動同步', role],
-                  attachments: [],
-                  createdAt: serverTimestamp(),
-                  updatedAt: serverTimestamp()
-              });
-              console.log(`[DMS] 已自動將 ${data.name} 加入資料庫`);
-          } else {
-              // 3. 若已存在，可選擇是否更新 (這裡暫時選擇不覆蓋，避免誤刪用戶編輯過的資料)
-              console.log(`[DMS] ${data.name} 已存在於資料庫，跳過同步`);
-          }
-      } catch (e) {
-          console.error("Auto-sync failed:", e);
-      }
-  };
+        try {
+            const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
+            // 檢查是否已存在
+            const q = query(dbRef, where('name', '==', data.name), where('category', '==', category));
+            const snapshot = await getDocs(q);
+            
+            if (snapshot.empty) {
+                // 不存在，新增資料
+                await addDoc(dbRef, {
+                    ...data,
+                    category,
+                    managedBy: staffId,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+                
+                // ★ 關鍵修復：延遲 150 毫秒彈出，讓 UI 有時間冷卻
+                setTimeout(() => alert(`✅ 已成功連動並新增至「${category}」資料庫！`), 150);
+            } else {
+                // 已存在，更新資料
+                const docId = snapshot.docs[0].id;
+                await updateDoc(doc(dbRef, docId), {
+                    ...data,
+                    updatedAt: serverTimestamp()
+                });
+                
+                // ★ 關鍵修復：延遲 150 毫秒彈出
+                setTimeout(() => alert(`✅ 已成功同步更新「${category}」資料庫的現有資料！`), 150);
+            }
+        } catch (e) {
+            console.error("Sync error", e);
+            // ★ 關鍵修復：延遲 150 毫秒彈出
+            setTimeout(() => alert('❌ 同步至資料庫失敗，請檢查網路'), 150);
+        }
+    };
 
 // --- 核心功能：更新單一車輛資料 (通用函數) ---
     const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
