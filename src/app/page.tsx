@@ -39,6 +39,45 @@ import {
 import { getMessaging, getToken } from "firebase/messaging";
 
 // ------------------------------------------------------------------
+// ★★★ 終極防死鎖魔法：全域攔截系統 alert 轉為 HTML Toast ★★★
+// ------------------------------------------------------------------
+if (typeof window !== 'undefined') {
+    window.alert = function(message) {
+        // 移除畫面上舊的提示，避免重疊
+        const existing = document.getElementById('global-custom-toast');
+        if (existing && existing.parentNode) {
+            existing.parentNode.removeChild(existing);
+        }
+        
+        const toast = document.createElement('div');
+        toast.id = 'global-custom-toast';
+        const isError = String(message).includes('失敗') || String(message).includes('錯誤') || String(message).includes('Error');
+        
+        toast.className = `fixed top-10 left-1/2 transform -translate-x-1/2 z-[999999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center text-white transition-all duration-300 opacity-0 translate-y-[-20px] ${isError ? 'bg-red-600' : 'bg-emerald-600'}`;
+        toast.innerText = message;
+        
+        document.body.appendChild(toast);
+        
+        // 觸發滑入動畫
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 0)';
+        }, 10);
+        
+        // 3秒後滑出並銷毀
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translate(-50%, -20px)';
+            setTimeout(() => {
+                if (document.body.contains(toast)) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    };
+}
+
+// ------------------------------------------------------------------
 // ★★★ Firebase 設定 (已鎖定) ★★★
 // ------------------------------------------------------------------
 const firebaseConfig = {
@@ -6045,8 +6084,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                 await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
                 addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`);
                 
-                // ★ 移除 alert，改用全域 Toast
-                showGlobalToast('✅ 車輛資料已成功更新！');
+                // ★ 已經全域攔截，直接呼叫 alert 就會彈出漂亮的 Toast，且保證編譯成功！
+                alert('✅ 車輛資料已成功更新！');
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
                     ...vData,
@@ -6057,8 +6096,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                 });
                 addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
                 
-                // ★ 移除 alert，改用全域 Toast
-                showGlobalToast('✅ 新車輛已成功入庫！');
+                // ★ 已經全域攔截，直接呼叫 alert 就會彈出漂亮的 Toast！
+                alert('✅ 新車輛已成功入庫！');
             }
 
             if (vData.customerName) {
@@ -6076,8 +6115,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             }
         } catch (e) { 
             console.error(e); 
-            // ★ 移除 alert，改用全域 Toast
-            showGlobalToast('❌ 儲存失敗，請檢查網路連線', 'error'); 
+            // ★ 已經全域攔截，直接呼叫 alert 就會彈出漂亮的 Toast！
+            alert('❌ 儲存失敗，請檢查網路連線'); 
         }
     };
 
