@@ -5357,6 +5357,16 @@ export default function GoldLandAutoDMS() {
       setGlobalToast({text, type});
       setTimeout(() => setGlobalToast(null), 3000); // 3秒後自動消失
   };
+  
+  // ★★★ 終極魔法：全域攔截所有原生的 alert ★★★
+  useEffect(() => {
+      // 只要代碼裡呼叫了 alert('xxx')，全部都會被導向我們安全又漂亮的 Toast！
+      window.alert = (message: string) => {
+          // 如果訊息包含"失敗"或"錯誤"，就顯示紅色，否則顯示綠色
+          const isError = message.includes('失敗') || message.includes('錯誤') || message.includes('Error');
+          showGlobalToast(message, isError ? 'error' : 'success');
+      };
+  }, []);
 
   // ★★★ 終極喚醒主畫面機制 (解決重新整理後空白問題) ★★★
   const [hasInitialized, setHasInitialized] = useState(false);
