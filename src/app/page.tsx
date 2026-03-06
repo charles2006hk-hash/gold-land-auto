@@ -6664,23 +6664,45 @@ const VehicleFormModal = ({
             let matchedMake = settings.makes.find((m: string) => m.toLowerCase() === rawMake.toLowerCase()) || settings.makes.find((m: string) => rawMake.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(rawMake.toLowerCase()));
             setSelectedMake(matchedMake || rawMake);
         }
-        setFieldValue('model', vrdData.model || ''); setFieldValue('year', vrdData.manufactureYear || vrdData.year || '');
-        setFieldValue('chassisNo', vrdData.chassisNo || ''); setFieldValue('engineNo', vrdData.engineNo || '');
+        setFieldValue('model', vrdData.model || ''); 
+        setFieldValue('year', vrdData.manufactureYear || vrdData.year || '');
+        setFieldValue('chassisNo', vrdData.chassisNo || ''); 
+        setFieldValue('engineNo', vrdData.engineNo || '');
         setFieldValue('colorExt', vrdData.vehicleColor || vrdData.color || '');
         if (vrdData.engineSize) setEngineSizeStr(formatNumberInput(vrdData.engineSize.toString()));
         if (vrdData.priceA1) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
         if (vrdData.priceTax) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
         if (vrdData.prevOwners !== undefined) setFieldValue('previousOwners', vrdData.prevOwners.toString());
+        
+        let alertMessage = "✅ VRD 導入成功";
+
         const ownerName = vrdData.registeredOwnerName || vrdData.owner;
         if (ownerName) {
             const exist = clients.find((c: any) => c.name === ownerName);
             if (exist) {
-                setFieldValue('customerName', exist.name); setFieldValue('customerPhone', exist.phone || '');
-                setFieldValue('customerID', exist.idNumber || exist.hkid || ''); setFieldValue('customerAddress', exist.address || '');
-                setVrdOwnerRaw(''); alert(`自動配對客戶：${exist.name}`);
-            } else { setVrdOwnerRaw(ownerName); setFieldValue('customerName', ownerName); if(vrdData.registeredOwnerId) setFieldValue('customerID', vrdData.registeredOwnerId); alert(`系統無客戶檔案，已暫填姓名。`); }
-        } else { alert("VRD 導入成功"); }
-        setVrdResults([]); setVrdSearch(''); setShowVrdOverlay(false);
+                setFieldValue('customerName', exist.name); 
+                setFieldValue('customerPhone', exist.phone || '');
+                setFieldValue('customerID', exist.idNumber || exist.hkid || ''); 
+                setFieldValue('customerAddress', exist.address || '');
+                setVrdOwnerRaw(''); 
+                alertMessage = `✅ 自動配對客戶：${exist.name}`;
+            } else { 
+                setVrdOwnerRaw(ownerName); 
+                setFieldValue('customerName', ownerName); 
+                if(vrdData.registeredOwnerId) setFieldValue('customerID', vrdData.registeredOwnerId); 
+                alertMessage = `⚠️ 系統無客戶檔案，已暫填姓名。`; 
+            }
+        } 
+
+        // 1. 先安全地關閉所有彈窗與狀態
+        setVrdResults([]); 
+        setVrdSearch(''); 
+        setShowVrdOverlay(false);
+
+        // 2. ★★★ 延遲 150 毫秒再彈出提示，讓 React 有時間把視窗收乾淨，完美避開死鎖！ ★★★
+        setTimeout(() => {
+            alert(alertMessage);
+        }, 150);
     };
 
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
