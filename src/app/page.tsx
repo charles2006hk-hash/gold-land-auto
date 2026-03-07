@@ -1377,17 +1377,36 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 setEditingEntry((prev: any) => {
                     if (!prev) return null;
 
-                    // ★ 新增：數字清洗工具 (專門去除字串中的逗號和非數字字元)
+                    // ★ 數字清洗工具 (專門去除字串中的逗號)
                     const parseNum = (val: any) => {
-                        if (!val) return undefined;
-                        // 如果已經是數字型態就直接回傳
+                        if (val === undefined || val === null || val === '') return undefined;
                         if (typeof val === 'number') return val;
-                        // 將字串中的非數字和小數點的字元清掉 (例如把 "227,500" 變成 "227500")
                         const clean = String(val).replace(/[^0-9.]/g, '');
                         return clean ? Number(clean) : undefined;
                     };
 
-                    // 1. 智能匹配文件類型 (防呆機制：確保 UI 能正確展開藍色區塊)
+                    // ★★★ 終極防呆：從 AI 備註中強行搶救漏抓的資料 ★★★
+                    let finalA1 = data.priceA1;
+                    let finalTax = data.priceTax;
+                    let finalColor = data.vehicleColor || data.color;
+
+                    // 如果 AI 把資料塞進了備註 (description)，我們用 Regex 強行挖出來
+                    if (data.description) {
+                        if (!finalA1) {
+                            const matchA1 = data.description.match(/(應課稅值|登記稅值|A1)[^\d]*([0-9,]+(\.\d+)?)/);
+                            if (matchA1) finalA1 = matchA1[2];
+                        }
+                        if (!finalTax) {
+                            const matchTax = data.description.match(/(已繳付|已繳稅)[^\d]*([0-9,]+(\.\d+)?)/);
+                            if (matchTax) finalTax = matchTax[2];
+                        }
+                        if (!finalColor) {
+                            const matchColor = data.description.match(/顏色[:：]?\s*([A-Za-z\u4e00-\u9fa5]+)/i);
+                            if (matchColor) finalColor = matchColor[1];
+                        }
+                    }
+
+                    // 1. 智能匹配文件類型
                     let matchedDocType = prev.docType;
                     const aiDocStr = (data.documentType || '').toLowerCase();
                     if (!matchedDocType || matchedDocType === '其他') {
@@ -1396,38 +1415,27 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         else matchedDocType = data.documentType;
                     }
 
-                    // 2. 處理自動標籤 (Tags)
                     const currentTags = Array.isArray(prev.tags) ? prev.tags : [];
                     const aiTags = Array.isArray(data.tags) ? data.tags : [];
                     const mergedTags = Array.from(new Set([...currentTags, ...aiTags, matchedDocType])).filter(Boolean);
 
-                    // 3. ★★★ 強制寫入動態擴充欄位 (extractedData) ★★★
-                    // 不再依賴精準字串比對，只要 AI 有回傳這些保險/BR資料，直接存入！
+                    // 處理動態 JSON 欄位 (給保險、BR等使用)
                     const newExtractedData = { ...(prev.extractedData || {}) };
-                    
-                    // 保險類
                     if (data.insuranceCompany) newExtractedData.insuranceCompany = data.insuranceCompany;
                     if (data.policyNumber) newExtractedData.policyNumber = data.policyNumber;
                     if (data.insuranceType) newExtractedData.insuranceType = data.insuranceType;
                     if (data.insuredPerson) newExtractedData.insuredPerson = data.insuredPerson;
-                    
-                    // BR 類 (預留)
                     if (data.brNumber) newExtractedData.brNumber = data.brNumber;
                     if (data.brExpiryDate) newExtractedData.brExpiryDate = data.brExpiryDate;
                     if (data.natureOfBusiness) newExtractedData.natureOfBusiness = data.natureOfBusiness;
 
-                    // 4. ★★★ 修復姓名空白問題 ★★★
-                    // 優先順序：AI的名稱 -> 登記車主 -> 受保人 -> 原本輸入的名稱
                     const finalName = data.name || data.registeredOwnerName || data.insuredPerson || prev.name;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
-                    // 5. 回傳完整合併後的資料結構
                     return {
                         ...prev,
-                        
-                        // --- A. 基礎通用與 VRD 牌簿固定欄位 ---
-                        name: finalName, // ★ 這裡已修復，會自動填入 LAM NGAI CHARLES
-                        docType: matchedDocType, // ★ 確保文件類型正確
+                        name: finalName, 
+                        docType: matchedDocType, 
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
                         address: data.address || prev.address,
@@ -1440,17 +1448,18 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         engineNo: data.engineNo || prev.engineNo,
                         manufactureYear: data.manufactureYear || prev.manufactureYear,
                         firstRegCondition: data.firstRegCondition || prev.firstRegCondition,
-                        vehicleColor: data.vehicleColor || prev.vehicleColor,
+                        
+                        // ★★★ 使用搶救回來的資料，並經過數字清洗 ★★★
+                        vehicleColor: finalColor || prev.vehicleColor,
+                        engineSize: parseNum(data.engineSize) ?? prev.engineSize,
+                        priceA1: parseNum(finalA1) ?? prev.priceA1,
+                        priceTax: parseNum(finalTax) ?? prev.priceTax,
+                        prevOwners: parseNum(data.prevOwners) ?? prev.prevOwners,
+
                         registeredOwnerName: data.registeredOwnerName || prev.registeredOwnerName,
                         registeredOwnerId: finalOwnerId,
                         
-                        // ★★★ 使用 parseNum 清洗可能帶有逗號的數字欄位 ★★★
-                        engineSize: parseNum(data.engineSize) ?? prev.engineSize,
-                        priceA1: parseNum(data.priceA1) ?? prev.priceA1,
-                        priceTax: parseNum(data.priceTax) ?? prev.priceTax,
-                        prevOwners: parseNum(data.prevOwners) ?? prev.prevOwners,
-                        
-                        // --- B. 四證八面資料接收映射 (保持不變) ---
+                        // --- 四證八面保持不變 ---
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
                         hkid_dob: data.hkid_dob || prev.hkid_dob,
@@ -1468,8 +1477,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         cndl_issueLoc: data.cndl_issueLoc || prev.cndl_issueLoc,
                         cndl_fileNum: data.cndl_fileNum || prev.cndl_fileNum,
                         
-                        // --- C. 動態數據與 AI 備註 ---
-                        extractedData: newExtractedData, // ★ 保險公司、單號現在會正確存入這裡
+                        extractedData: newExtractedData,
                         tags: mergedTags,
                         description: prev.description + (data.description ? `\n[AI 識別摘要]: ${data.description}` : '')
                     };
