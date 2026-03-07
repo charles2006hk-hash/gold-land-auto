@@ -101,6 +101,11 @@ export async function POST(req: Request) {
           - prevOwners: 前任車主數目 (純數字)
           - engineSize: 汽缸容量 (純數字)
           
+          // ★★★ 補回缺失的 3 個重要欄位 ★★★
+          - vehicleColor: 車身顏色 (Colour)
+          - priceA1: 首次登記稅值 (First Registration Taxable Value，請回傳純數字，不要有 $ 符號和逗號)
+          - priceTax: 已繳付登記稅 (First Registration Tax Paid，請回傳純數字，不要有 $ 符號和逗號)
+          
           // 🛡️ 保險 (Cover Note / Policy) 專屬欄位
           - insuranceCompany: 保險公司名稱 (例如 Ping An, Bank of China 等)
           - policyNumber: 保單號碼或 Cover Note No.
