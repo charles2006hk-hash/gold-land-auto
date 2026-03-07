@@ -3091,7 +3091,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                                 </div>
                                             </div>
                                         ))}
-                                    </div>
+                                    
                                         {/* 空狀態提示 */}
                                         {zoneItems.length === 0 && (
                                             <div className={`col-span-3 py-8 text-center text-xs font-bold border-2 border-dashed rounded-xl m-1 ${zoneType === 'vehicle' ? 'text-slate-400 border-slate-300' : 'text-indigo-300 border-indigo-200'}`}>
