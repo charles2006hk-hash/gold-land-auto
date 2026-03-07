@@ -256,6 +256,7 @@ type MediaLibraryItem = {
         color?: string;
         type?: string;
     };
+    mediaType?: 'vehicle' | 'document';
 };
 
 // --- 類型定義 ---
@@ -1316,6 +1317,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
     const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
     const [searchTerm, setSearchTerm] = useState('');
     const [tagInput, setTagInput] = useState('');
+    const [showMediaPicker, setShowMediaPicker] = useState(false);
+    const [availableDocs, setAvailableDocs] = useState<any[]>([]);
     
     // 重複資料處理狀態
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
@@ -2094,6 +2097,22 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                     <div className="flex justify-between items-center">
                                         <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
                                         <div className="flex gap-2">
+                                            {/* ★★★ 新增：從智能圖庫導入按鈕 ★★★ */}
+                                            {isDbEditing && (
+                                                <button 
+                                                    type="button" 
+                                                    onClick={async () => {
+                                                        // 抓取圖庫中未分類的「文件」
+                                                        const q = query(collection(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), where('status', '==', 'unassigned'), where('mediaType', '==', 'document'));
+                                                        const snap = await getDocs(q);
+                                                        setAvailableDocs(snap.docs.map(d => ({id: d.id, ...d.data()})));
+                                                        setShowMediaPicker(true);
+                                                    }} 
+                                                    className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full hover:bg-indigo-100 flex items-center border border-indigo-200 shadow-sm transition-colors font-bold"
+                                                >
+                                                    <DownloadCloud size={14} className="mr-1"/> 從 Inbox 導入
+                                                </button>
+                                            )}
                                             {/* ★★★ A4 排版按鈕 (當有選取圖片時才會顯示) ★★★ */}
                                             {selectedForPrint.length > 0 && (
                                                 <button 
@@ -2179,6 +2198,51 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     onClose={() => setShowA4Printer(false)} 
                 />
             )}
+
+            {/* 👇👇👇 第四步的 Modal 請貼在這裡 👇👇👇 */}
+            {/* ★★★ 智能圖庫文件選取器 (Modal) ★★★ */}
+            {showMediaPicker && (
+                <div className="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+                        <div className="p-4 bg-indigo-600 text-white flex justify-between items-center">
+                            <h3 className="font-bold flex items-center"><FileText className="mr-2"/> 選擇 Inbox 中的文件</h3>
+                            <button onClick={() => setShowMediaPicker(false)} className="hover:bg-white/20 p-1 rounded-full"><X/></button>
+                        </div>
+                        <div className="p-4 grid grid-cols-3 md:grid-cols-4 gap-4 overflow-y-auto bg-slate-50 flex-1">
+                            {availableDocs.map(doc => (
+                                <div key={doc.id} className="relative aspect-auto bg-white p-1 rounded-lg border-2 border-slate-200 shadow-sm hover:border-indigo-400 group cursor-pointer"
+                                    onClick={async () => {
+                                        try {
+                                            // 1. 將圖片轉為 Base64 以符合資料庫格式
+                                            const res = await fetch(doc.url);
+                                            const blob = await res.blob();
+                                            const reader = new FileReader();
+                                            reader.readAsDataURL(blob);
+                                            reader.onloadend = async () => {
+                                                const base64data = reader.result as string;
+                                                // 2. 加入到當前編輯的附件中
+                                                setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: doc.fileName || 'Inbox文件', data: base64data }] } : null);
+                                                // 3. 從圖庫的 Inbox 移除它
+                                                await deleteDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', doc.id));
+                                                // 4. 更新畫面
+                                                setAvailableDocs(prev => prev.filter(d => d.id !== doc.id));
+                                                showToast('✅ 成功導入一張文件！');
+                                            };
+                                        } catch (e) { alert("導入失敗"); }
+                                    }}
+                                >
+                                    <img src={doc.url} className="w-full h-32 object-contain" />
+                                    <div className="absolute inset-0 bg-indigo-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center font-bold text-sm transition-opacity rounded-lg">
+                                        點擊導入
+                                    </div>
+                                </div>
+                            ))}
+                            {availableDocs.length === 0 && <div className="col-span-full py-10 text-center text-slate-400">智能圖庫的 Inbox 中目前沒有文件。</div>}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* 👆👆👆 貼在這裡 👆👆👆 */}
         </div>
     );
 };
@@ -2601,29 +2665,89 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         return Object.values(groups).sort((a, b) => b.timestamp - a.timestamp);
     }, [mediaItems, inventory, searchQuery]);
 
-    // ★★★ 修改點：使用標準壓縮工具 compressImage (目標 130KB) ★★★
-    const handleSmartUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || !storage) return;
+    // ★★★ 超級上傳引擎：支援 HEIC, PDF 拆解, 與智能分類 ★★★
+    const handleSmartUpload = async (e: any, forcedType?: 'vehicle' | 'document') => {
+        // 同時支援點擊上傳 (target.files) 與拖曳上傳 (dataTransfer.files)
+        const files = e.target?.files || e.dataTransfer?.files;
+        if (!files || !storage || files.length === 0) return;
         setUploading(true);
+
         for (let i = 0; i < files.length; i++) {
-            const file = files[i];
+            let file = files[i];
+            const lowerName = file.name.toLowerCase();
+
+            // --- 智能分類邏輯 ---
+            // 如果有強制指定 (例如拖曳到特定區域)，就用指定的；否則由 AI 檔名判斷
+            let autoType: 'vehicle' | 'document' = forcedType || 'vehicle';
+            if (!forcedType) {
+                if (file.type === 'application/pdf' || lowerName.includes('id') || lowerName.includes('br') || lowerName.includes('scan') || lowerName.includes('doc')) {
+                    autoType = 'document';
+                }
+            }
+
             try {
-                // 1. 調用 utils 中的壓縮工具，設定目標為 130KB
-                const compressedBase64 = await compressImage(file, 130);
-                
-                // 2. 上傳到 Firebase Storage (使用 uploadString 上傳 Base64)
-                const filePath = `media/${appId}/${Date.now()}_${file.name}`;
-                const storageRef = ref(storage, filePath);
-                
-                // 注意：uploadBytes 改為 uploadString，因為 compressImage 回傳的是 data_url 字串
-                await uploadString(storageRef, compressedBase64, 'data_url');
-                
-                const downloadURL = await getDownloadURL(storageRef);
-                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), { url: downloadURL, path: filePath, fileName: file.name, tags: ["Inbox"], status: 'unassigned', aiData: {}, createdAt: serverTimestamp(), uploadedBy: staffId });
-            } catch (err) { console.error(err); }
+                // --- 1. 處理 PDF (自動拆解成多張 JPG) ---
+                if (file.type === 'application/pdf') {
+                    const pdfjsLib = await import('pdfjs-dist');
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    
+                    const MAX_PAGES = Math.min(pdf.numPages, 10); // 最多拆 10 頁保護機制
+                    for (let p = 1; p <= MAX_PAGES; p++) {
+                        const page = await pdf.getPage(p);
+                        const viewport = page.getViewport({ scale: 2.0 });
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = viewport.width; 
+                        canvas.height = viewport.height;
+                        if (ctx) {
+                            await page.render({ canvasContext: ctx, viewport }).promise;
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                            // PDF 拆出來的圖片，強制歸類為 document
+                            await uploadToStorage(dataUrl, `${file.name}_P${p}.jpg`, 'document');
+                        }
+                    }
+                    continue; // 處理完 PDF 直接換下一個檔案
+                }
+
+                // --- 2. 處理 HEIC/HEIF (iPhone 專有格式轉換) ---
+                if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif')) {
+                    const heic2any = (await import('heic2any')).default;
+                    const convertedBlob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 }) as Blob;
+                    file = new File([convertedBlob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
+                }
+
+                // --- 3. 一般圖片壓縮與上傳 ---
+                // 文件保留較高畫質 (250KB)，車輛照片維持 (130KB)
+                const compressedBase64 = await compressImage(file, autoType === 'document' ? 250 : 130); 
+                await uploadToStorage(compressedBase64, file.name, autoType);
+
+            } catch (err) { 
+                console.error(`處理 ${file.name} 失敗:`, err); 
+            }
         }
         setUploading(false);
+    };
+
+    // ★★★ 輔助函數：核心上傳寫入資料庫 ★★★
+    const uploadToStorage = async (base64Data: string, fileName: string, type: 'vehicle' | 'document') => {
+        const filePath = `media/${appId}/${Date.now()}_${fileName}`;
+        const storageRef = ref(storage, filePath);
+        await uploadString(storageRef, base64Data, 'data_url');
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), { 
+            url: downloadURL, 
+            path: filePath, 
+            fileName: fileName, 
+            tags: ["Inbox"], 
+            status: 'unassigned', 
+            mediaType: type, // ★ 寫入新的分類標籤
+            aiData: {}, 
+            createdAt: serverTimestamp(), 
+            uploadedBy: staffId 
+        });
     };
 
     // ★★★ Feature 3: 剪貼簿貼上上傳 (iPhone 友善) ★★★
@@ -2767,60 +2891,101 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
             <div className="flex flex-1 md:flex-row h-full gap-4 overflow-hidden">
                 
-                {/* --- 左欄：來源 (Inbox) --- */}
-                {/* 邏輯：手機上只在 mobileTab === 'inbox' 時顯示，電腦上永遠顯示 */}
-                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px] transition-all duration-200 ${mobileTab === 'inbox' ? 'flex' : 'hidden md:flex'}`}
-                            // ★ 加入拖曳特效：當圖片拖到上方時，整個框框會發出藍光
-                            onDragOver={(e) => { 
-                                e.preventDefault(); 
-                                e.currentTarget.classList.add('ring-4', 'ring-blue-400', 'bg-blue-50/50'); 
-                            }}
-                            // ★ 離開時恢復原狀
-                            onDragLeave={(e) => { 
-                                e.preventDefault(); 
-                                e.currentTarget.classList.remove('ring-4', 'ring-blue-400', 'bg-blue-50/50'); 
-                            }}
-                            // ★ 鬆開滑鼠時：自動壓縮並上傳
-                            onDrop={(e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.remove('ring-4', 'ring-blue-400', 'bg-blue-50/50');
-                                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                                    // 完美呼叫原本含有 130KB 壓縮邏輯的函數！
-                                    const mockEvent = { target: { files: e.dataTransfer.files } } as any;
-                                    handleSmartUpload(mockEvent);
-                                }
-                            }}
-                        >   
-                    <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 待處理 ({inboxItems.length})</h3>
+                {/* --- 左欄：來源 (Inbox) 智能上下分層版 --- */}
+                <div className={`w-full md:w-[28%] bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[500px] transition-all duration-300 ${mobileTab === 'inbox' ? 'flex' : 'hidden md:flex'}`}>
+                    
+                    {/* 頂部工具列 (保留了貼上功能) */}
+                    <div className="p-3 border-b bg-slate-50 flex justify-between items-center flex-none">
+                        <h3 className="font-bold text-slate-800 flex items-center"><Upload size={16} className="mr-2 text-blue-600"/> 待處理區 ({inboxItems.length})</h3>
                         <div className="flex gap-2">
-                            {/* ★★★ 新增貼上按鈕 ★★★ */}
-                            <button onClick={handlePasteUpload} disabled={uploading} className="bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-100 flex items-center shadow-sm disabled:opacity-50">
+                            <button onClick={handlePasteUpload} disabled={uploading} className="bg-white border border-slate-300 text-slate-600 px-2 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-100 flex items-center shadow-sm disabled:opacity-50">
                                 <Clipboard size={14} className="mr-1"/> 貼上
                             </button>
-                        <label className={`bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                            {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>} 匯入
-                            <input type="file" multiple accept="image/*" className="hidden" onChange={handleSmartUpload} disabled={uploading}/>
-                        </label>
+                            <label className={`bg-blue-600 text-white px-2 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 flex items-center shadow-sm ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                {uploading ? <Loader2 className="animate-spin mr-1" size={12}/> : <Plus size={12} className="mr-1"/>} 匯入
+                                {/* ★ 支援選擇 PDF 與 HEIC 檔案 */}
+                                <input type="file" multiple accept="image/*,application/pdf,.heic,.heif" className="hidden" onChange={(e) => handleSmartUpload(e)} disabled={uploading}/>
+                            </label>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1 content-start">
-                        {inboxItems.map(item => (
-                            <div 
-                                key={item.id} 
-                                onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} 
-                                className={`relative aspect-square rounded overflow-hidden cursor-pointer transition-all group ${selectedInboxIds.includes(item.id) ? 'ring-2 ring-blue-500 opacity-100' : 'opacity-80 hover:opacity-100'}`}
-                            >
-                                <img src={item.url} className="w-full h-full object-cover"/>
-                                {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10"><Check size={10}/></div>}
-                                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                    <button onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} className="p-1 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm" title="預覽"><Maximize2 size={12} /></button>
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingMedia(item); }} className="p-1 rounded-full bg-blue-600/70 hover:bg-blue-600 text-white backdrop-blur-sm" title="編輯圖片"><Edit size={12} /></button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} className="p-1 rounded-full bg-red-600/70 hover:bg-red-600 text-white backdrop-blur-sm" title="刪除"><Trash2 size={12} /></button>
+
+                    {/* 下方雙層區域 (車輛相片區 & 文件資料區) */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {['vehicle', 'document'].map((zoneType) => {
+                            // 過濾屬於該區的圖片 (預設沒有標籤的也算在 vehicle 區)
+                            const zoneItems = inboxItems.filter(i => (zoneType === 'vehicle' ? i.mediaType !== 'document' : i.mediaType === 'document'));
+                            
+                            return (
+                                <div 
+                                    key={zoneType}
+                                    className={`flex-1 flex flex-col border-b-4 border-slate-300 relative transition-all duration-200`}
+                                    // ★★★ 拖曳感應特效 ★★★
+                                    onDragOver={(e) => { 
+                                        e.preventDefault(); 
+                                        e.currentTarget.classList.add(zoneType === 'vehicle' ? 'bg-slate-200' : 'bg-indigo-100', 'ring-4', zoneType === 'vehicle' ? 'ring-slate-400' : 'ring-indigo-400', 'ring-inset'); 
+                                    }}
+                                    onDragLeave={(e) => { 
+                                        e.preventDefault(); 
+                                        e.currentTarget.classList.remove('bg-slate-200', 'bg-indigo-100', 'ring-4', 'ring-slate-400', 'ring-indigo-400', 'ring-inset'); 
+                                    }}
+                                    onDrop={async (e) => {
+                                        e.preventDefault();
+                                        e.currentTarget.classList.remove('bg-slate-200', 'bg-indigo-100', 'ring-4', 'ring-slate-400', 'ring-indigo-400', 'ring-inset');
+                                        
+                                        // 1. 處理「內部圖片上下拖曳」 (改變分類)
+                                        const dragId = e.dataTransfer.getData('text/plain');
+                                        if (dragId) {
+                                            const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', dragId);
+                                            await updateDoc(docRef, { mediaType: zoneType, updatedAt: serverTimestamp() });
+                                            return;
+                                        }
+                                        
+                                        // 2. 處理「從電腦外部拖檔案進來」 (指定分類上傳)
+                                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                                            const mockEvent = { target: { files: e.dataTransfer.files } };
+                                            handleSmartUpload(mockEvent, zoneType as any); // 強制分類
+                                        }
+                                    }}
+                                >
+                                    {/* 區域標題條 */}
+                                    <div className={`p-1.5 text-[10px] font-bold text-center text-white shadow-md flex items-center justify-center gap-2 ${zoneType === 'vehicle' ? 'bg-slate-800' : 'bg-indigo-600'}`}>
+                                        {zoneType === 'vehicle' ? <><Car size={14}/> 🚗 車輛相片區 (Vehicle)</> : <><FileText size={14}/> 📄 文件資料區 (Document)</>}
+                                    </div>
+                                    
+                                    {/* 圖片網格 */}
+                                    <div className={`flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1.5 content-start ${zoneType === 'vehicle' ? 'bg-slate-100' : 'bg-indigo-50/50'}`}>
+                                        {zoneItems.map(item => (
+                                            <div 
+                                                key={item.id} 
+                                                draggable // ★ 允許拖曳
+                                                onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)} // 記錄被拖曳的 ID
+                                                onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} 
+                                                className={`relative aspect-square rounded-lg overflow-hidden cursor-grab active:cursor-grabbing transition-all group shadow-sm ${selectedInboxIds.includes(item.id) ? 'ring-4 ring-blue-500 opacity-100 scale-95' : 'opacity-90 hover:opacity-100 hover:shadow-md'}`}
+                                            >
+                                                {/* 圖片預覽 (PDF 已經被後端轉成 JPG 了，所以直接顯示即可) */}
+                                                <img src={item.url} className="w-full h-full object-cover"/>
+                                                
+                                                {/* 選取打勾 */}
+                                                {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10 rounded-bl-md"><Check size={12}/></div>}
+                                                
+                                                {/* 懸浮操作按鈕 */}
+                                                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                                    <button onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} className="p-1 rounded-full bg-black/60 hover:bg-blue-500 text-white backdrop-blur-sm" title="預覽"><Maximize2 size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setEditingMedia(item); }} className="p-1 rounded-full bg-black/60 hover:bg-amber-500 text-white backdrop-blur-sm" title="編輯圖片"><Edit size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} className="p-1 rounded-full bg-black/60 hover:bg-red-500 text-white backdrop-blur-sm" title="刪除"><Trash2 size={12} /></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {/* 空狀態提示 */}
+                                        {zoneItems.length === 0 && (
+                                            <div className={`col-span-3 py-8 text-center text-xs font-bold border-2 border-dashed rounded-xl m-1 ${zoneType === 'vehicle' ? 'text-slate-400 border-slate-300' : 'text-indigo-300 border-indigo-200'}`}>
+                                                拖曳 {zoneType === 'vehicle' ? '相片' : '文件或 PDF'} 至此
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                        {inboxItems.length === 0 && <div className="col-span-3 py-10 text-center text-slate-300 text-xs">暫無新圖片</div>}
+                            );
+                        })}
                     </div>
                 </div>
 
