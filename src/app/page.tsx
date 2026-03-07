@@ -2321,9 +2321,10 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                     setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: mediaItem.fileName || 'Inbox文件', data: base64data }] } : null);
                                                     
                                                     const { updateDoc, serverTimestamp, doc } = await import('firebase/firestore');
-                                                    // ★ 這裡使用 mediaItem.id
+                                                    
                                                     await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', mediaItem.id), {
-                                                        status: 'linked',
+                                                        // ★ 關鍵修改：改成 database_linked，這樣圖庫就不會把它抓走了！
+                                                        status: 'database_linked', 
                                                         updatedAt: serverTimestamp()
                                                     });
 
@@ -2973,7 +2974,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         setSelectedInboxIds([]); setTargetVehicleId('');
     };
 
-    const inboxItems = mediaItems.filter(i => i.status !== 'linked');
+    const inboxItems = mediaItems.filter(i => i.status === 'unassigned' || !i.status);
 
     return (
         <div className="flex flex-col h-full bg-slate-100 p-2 overflow-hidden relative">
@@ -3031,7 +3032,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                             return (
                                 <div 
                                     key={zoneType}
-                                    className={`flex-1 flex flex-col border-b-4 border-slate-300 relative transition-all duration-200`}
+                                    className={`h-1/2 flex flex-col border-b-4 border-slate-300 relative transition-all duration-200`}
                                     // ★★★ 拖曳感應特效 ★★★
                                     onDragOver={(e) => { 
                                         e.preventDefault(); 
