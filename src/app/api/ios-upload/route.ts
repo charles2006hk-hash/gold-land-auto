@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
+// ★ 新增：引入驗證模組
+import { getAuth, signInAnonymously } from 'firebase/auth'; 
 
-// 系統的 Firebase 設定 (與您 page.tsx 相同)
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
   authDomain: "gold-land-auto.firebaseapp.com",
@@ -17,9 +18,14 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
+// ★ 新增：初始化 Auth
+const auth = getAuth(app); 
 
 export async function POST(request: Request) {
     try {
+        // ★ 關鍵修復：讓這支 API 取得「匿名寫入權限」，這樣 Firebase 就不會阻擋了！
+        await signInAnonymously(auth);
+
         // 接收來自 iPhone 捷徑的資料
         const body = await request.json();
         const { fileBase64, fileName, staffId } = body;
@@ -28,8 +34,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "沒有收到圖片資料" }, { status: 400 });
         }
 
+        // 確保檔名安全 (過濾掉奇怪的符號)
+        const safeFileName = fileName ? fileName.replace(/[^a-zA-Z0-9.\-_]/g, '') : 'image.jpg';
+        
         // 1. 上傳圖片到 Firebase Storage
-        const filePath = `media/gold-land-auto/ios_${Date.now()}_${fileName || 'image.jpg'}`;
+        const filePath = `media/gold-land-auto/ios_${Date.now()}_${safeFileName}`;
         const storageRef = ref(storage, filePath);
         
         // 將 Base64 解碼並上傳
