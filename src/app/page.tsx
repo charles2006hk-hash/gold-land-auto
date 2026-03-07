@@ -2769,7 +2769,28 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                 
                 {/* --- 左欄：來源 (Inbox) --- */}
                 {/* 邏輯：手機上只在 mobileTab === 'inbox' 時顯示，電腦上永遠顯示 */}
-                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px] ${mobileTab === 'inbox' ? 'flex' : 'hidden md:flex'}`}>
+                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden min-h-[200px] transition-all duration-200 ${mobileTab === 'inbox' ? 'flex' : 'hidden md:flex'}`}
+                            // ★ 加入拖曳特效：當圖片拖到上方時，整個框框會發出藍光
+                            onDragOver={(e) => { 
+                                e.preventDefault(); 
+                                e.currentTarget.classList.add('ring-4', 'ring-blue-400', 'bg-blue-50/50'); 
+                            }}
+                            // ★ 離開時恢復原狀
+                            onDragLeave={(e) => { 
+                                e.preventDefault(); 
+                                e.currentTarget.classList.remove('ring-4', 'ring-blue-400', 'bg-blue-50/50'); 
+                            }}
+                            // ★ 鬆開滑鼠時：自動壓縮並上傳
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove('ring-4', 'ring-blue-400', 'bg-blue-50/50');
+                                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                                    // 完美呼叫原本含有 130KB 壓縮邏輯的函數！
+                                    const mockEvent = { target: { files: e.dataTransfer.files } } as any;
+                                    handleSmartUpload(mockEvent);
+                                }
+                            }}
+                        >   
                     <div className="p-3 border-b bg-slate-50 flex justify-between items-center">
                         <h3 className="font-bold text-slate-700 flex items-center"><Upload size={16} className="mr-2"/> 待處理 ({inboxItems.length})</h3>
                         <div className="flex gap-2">
