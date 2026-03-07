@@ -69,37 +69,46 @@ export async function POST(req: Request) {
           - name: 為了系統兼容，請將識別到的主要姓名填入此欄 (例如 "葉葳劼")
         `;
     } else {
+        // --- B. 針對其他文件 (包含牌簿、保險等) 的強化指令 ---
         prompt = `
-          你是一個專業的資料輸入員。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
-          請直接回傳純 JSON 格式，不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
+          你是一個專業的香港汽車銷售行政助理。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
+          請直接回傳純 JSON 格式，絕對不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
           如果找不到該欄位，請回傳空字串 ""。
+
+          【★★★ 全局指令 ★★★】
+          1. 所有日期 (簽發日、到期日等) 必須轉換為 "YYYY-MM-DD" 格式。
+          2. 請根據文件內容，自動產生 2~3 個適合搜尋的陣列標籤 (tags)，例如：["牌簿", "Tesla"] 或 ["保險", "三保", "PingAn"]。
+          3. 如果是牌簿 (VRD) 的車主名稱，通常會有中英文兩行，請務必合併為單一字串回傳 (例如: "陳大文 CHAN TAI MAN")。
+
+          目標欄位與對應內容：
+          - tags: [此為陣列格式，請填入你自動產生的標籤]
+          - documentType: 判斷這張圖片最可能是什麼文件 (例如 "車輛登記文件", "汽車保險 Cover Note", "買賣合約", "身分證", "其他")
           
-          特別注意：
-          1. 對於牌薄 (VRD) 的車主名稱，通常會有中文和英文兩行。
-          2. 請務必將這兩行合併為單一字串回傳 (例如: "陳大文 CHAN TAI MAN")。
-          
-          目標欄位：
-          - name: 標題名稱 (如果是牌薄 VRD，請抓取 Registered Owner，務必合併中文與英文姓名)
+          // 🚘 牌簿 (VRD) 相關欄位
+          - name: 標題名稱 (如果是牌簿，請抓取 Registered Owner，務必合併中英文姓名)
           - registeredOwnerName: 登記車主名稱
-          - idNumber: 身份證號 / 商業登記號 / 車牌號
+          - idNumber: 身份證號 / 商業登記號
           - registeredOwnerId: 登記車主身份證號
           - phone: 電話號碼
           - address: 地址
-          - expiryDate: 到期日 (格式 YYYY-MM-DD)
-          - quotaNo: 指標號
-          - plateNoHK: 香港車牌
-          - chassisNo: 底盤號碼
-          - engineNo: 引擎號碼
-          - prevOwners: 前任車主數目 (純數字)
-          - priceA1: 首次登記稅值 (純數字)
-          - priceTax: 已繳付登記稅 (純數字)
-          - make: 廠名
-          - model: 型號
-          - manufactureYear: 出廠年份
-          - vehicleColor: 車身顏色
+          - plateNoHK: 香港車牌 (Registration Mark)
+          - chassisNo: 底盤號碼 (Chassis No.)
+          - engineNo: 引擎號碼 (Engine No.)
+          - make: 廠名 (Make)
+          - model: 型號 (Model)
+          - manufactureYear: 出廠年份 (Year of Manufacture)
           - firstRegCondition: 首次登記狀況
+          - prevOwners: 前任車主數目 (純數字)
           - engineSize: 汽缸容量 (純數字)
-          - description: 其他重要備註摘要
+          
+          // 🛡️ 保險 (Cover Note / Policy) 專屬欄位
+          - insuranceCompany: 保險公司名稱 (例如 Ping An, Bank of China 等)
+          - policyNumber: 保單號碼或 Cover Note No.
+          - expiryDate: 到期日 (Expiry Date)
+          - insuranceType: 保險類型 (請判斷為 "三保 Third Party" 或 "全保 Comprehensive")
+          - insuredPerson: 受保人姓名 (Insured Name)
+          
+          - description: 其他重要備註摘要 (若有其他你覺得重要的資訊，請寫在這裡)
         `;
     }
 
