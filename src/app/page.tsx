@@ -1377,6 +1377,16 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 setEditingEntry((prev: any) => {
                     if (!prev) return null;
 
+                    // ★ 新增：數字清洗工具 (專門去除字串中的逗號和非數字字元)
+                    const parseNum = (val: any) => {
+                        if (!val) return undefined;
+                        // 如果已經是數字型態就直接回傳
+                        if (typeof val === 'number') return val;
+                        // 將字串中的非數字和小數點的字元清掉 (例如把 "227,500" 變成 "227500")
+                        const clean = String(val).replace(/[^0-9.]/g, '');
+                        return clean ? Number(clean) : undefined;
+                    };
+
                     // 1. 智能匹配文件類型 (防呆機制：確保 UI 能正確展開藍色區塊)
                     let matchedDocType = prev.docType;
                     const aiDocStr = (data.documentType || '').toLowerCase();
@@ -1433,10 +1443,12 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         vehicleColor: data.vehicleColor || prev.vehicleColor,
                         registeredOwnerName: data.registeredOwnerName || prev.registeredOwnerName,
                         registeredOwnerId: finalOwnerId,
-                        engineSize: data.engineSize ? Number(data.engineSize) : prev.engineSize,
-                        priceA1: data.priceA1 ? Number(data.priceA1) : prev.priceA1,
-                        priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
-                        prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : prev.prevOwners,
+                        
+                        // ★★★ 使用 parseNum 清洗可能帶有逗號的數字欄位 ★★★
+                        engineSize: parseNum(data.engineSize) ?? prev.engineSize,
+                        priceA1: parseNum(data.priceA1) ?? prev.priceA1,
+                        priceTax: parseNum(data.priceTax) ?? prev.priceTax,
+                        prevOwners: parseNum(data.prevOwners) ?? prev.prevOwners,
                         
                         // --- B. 四證八面資料接收映射 (保持不變) ---
                         hkid_name: data.hkid_name || prev.hkid_name,
@@ -2284,12 +2296,12 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                             <button onClick={() => setShowMediaPicker(false)} className="hover:bg-white/20 p-1 rounded-full"><X/></button>
                         </div>
                         <div className="p-4 grid grid-cols-3 md:grid-cols-4 gap-4 overflow-y-auto bg-slate-50 flex-1">
-                            {availableDocs.map(doc => (
-                                <div key={doc.id} className="relative aspect-auto bg-white p-1 rounded-lg border-2 border-slate-200 shadow-sm hover:border-indigo-400 group cursor-pointer"
+                            {/* ★ 把 doc 改成 mediaItem，避免跟 Firebase 函數撞名 ★ */}
+                            {availableDocs.map(mediaItem => (
+                                <div key={mediaItem.id} className="relative aspect-auto bg-white p-1 rounded-lg border-2 border-slate-200 shadow-sm hover:border-indigo-400 group cursor-pointer"
                                     onClick={async () => {
                                         try {
-                                            // 1. 下載圖片並準備轉換
-                                            const res = await fetch(doc.url);
+                                            const res = await fetch(mediaItem.url);
                                             const blob = await res.blob();
                                             const reader = new FileReader();
                                             reader.readAsDataURL(blob);
@@ -2298,19 +2310,16 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                 try {
                                                     const base64data = reader.result as string;
                                                     
-                                                    // 2. 將圖片加入到當前編輯的附件中
-                                                    setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: doc.fileName || 'Inbox文件', data: base64data }] } : null);
+                                                    setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: mediaItem.fileName || 'Inbox文件', data: base64data }] } : null);
                                                     
-                                                    // 3. ★ 核心修復：使用 updateDoc 繞過刪除權限限制
-                                                    const { updateDoc, serverTimestamp } = await import('firebase/firestore');
-                                                    await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', doc.id), {
-                                                        status: 'linked', // 標記為已連結，Inbox 就不會再抓取它了
+                                                    const { updateDoc, serverTimestamp, doc } = await import('firebase/firestore');
+                                                    // ★ 這裡使用 mediaItem.id
+                                                    await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', mediaItem.id), {
+                                                        status: 'linked',
                                                         updatedAt: serverTimestamp()
                                                     });
 
-                                                    // 4. 同步更新畫面，從彈窗中剔除
-                                                    setAvailableDocs(prev => prev.filter(d => d.id !== doc.id)); 
-                                                    
+                                                    setAvailableDocs(prev => prev.filter(d => d.id !== mediaItem.id)); 
                                                     showToast('✅ 成功導入文件！');
                                                     
                                                 } catch (innerError) {
@@ -2324,7 +2333,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                         }
                                     }}
                                 >
-                                    <img src={doc.url} className="w-full h-32 object-contain" />
+                                    <img src={mediaItem.url} className="w-full h-32 object-contain" />
                                     <div className="absolute inset-0 bg-indigo-600/80 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center font-bold text-sm transition-opacity rounded-lg">
                                         點擊導入
                                     </div>
@@ -7033,48 +7042,70 @@ const VehicleFormModal = ({
 
     const applyVrdData = (vrdData: any) => {
         if (!vrdData) return;
-        setFieldValue('regMark', vrdData.plateNoHK || vrdData.regNo || '');
-        const rawMake = vrdData.make || vrdData.brand || ''; 
-        if (rawMake) {
-            let matchedMake = settings.makes.find((m: string) => m.toLowerCase() === rawMake.toLowerCase()) || settings.makes.find((m: string) => rawMake.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(rawMake.toLowerCase()));
-            setSelectedMake(matchedMake || rawMake);
-        }
-        setFieldValue('model', vrdData.model || ''); 
-        setFieldValue('year', vrdData.manufactureYear || vrdData.year || '');
-        setFieldValue('chassisNo', vrdData.chassisNo || ''); 
-        setFieldValue('engineNo', vrdData.engineNo || '');
-        setFieldValue('colorExt', vrdData.vehicleColor || vrdData.color || '');
+
+        // 1. 處理獨立的字串狀態 (金額顯示)
         if (vrdData.engineSize) setEngineSizeStr(formatNumberInput(vrdData.engineSize.toString()));
         if (vrdData.priceA1) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
         if (vrdData.priceTax) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
-        if (vrdData.prevOwners !== undefined) setFieldValue('previousOwners', vrdData.prevOwners.toString());
+
+        // 2. 處理廠牌配對
+        const rawMake = vrdData.make || vrdData.brand || ''; 
+        let matchedMake = rawMake;
+        if (rawMake) {
+            matchedMake = settings.makes.find((m: string) => m.toLowerCase() === rawMake.toLowerCase()) || 
+                          settings.makes.find((m: string) => rawMake.toLowerCase().includes(m.toLowerCase()) || m.toLowerCase().includes(rawMake.toLowerCase())) || rawMake;
+            setSelectedMake(matchedMake);
+        }
         
+        // 3. 處理客戶邏輯
         let alertMessage = "✅ VRD 導入成功";
+        let finalCName = '';
+        let finalCPhone = '';
+        let finalCID = vrdData.registeredOwnerId || '';
+        let finalCAddress = '';
 
         const ownerName = vrdData.registeredOwnerName || vrdData.owner;
         if (ownerName) {
             const exist = clients.find((c: any) => c.name === ownerName);
             if (exist) {
-                setFieldValue('customerName', exist.name); 
-                setFieldValue('customerPhone', exist.phone || '');
-                setFieldValue('customerID', exist.idNumber || exist.hkid || ''); 
-                setFieldValue('customerAddress', exist.address || '');
+                finalCName = exist.name;
+                finalCPhone = exist.phone || '';
+                finalCID = exist.idNumber || exist.hkid || finalCID;
+                finalCAddress = exist.address || '';
                 setVrdOwnerRaw(''); 
                 alertMessage = `✅ 自動配對客戶：${exist.name}`;
             } else { 
                 setVrdOwnerRaw(ownerName); 
-                setFieldValue('customerName', ownerName); 
-                if(vrdData.registeredOwnerId) setFieldValue('customerID', vrdData.registeredOwnerId); 
+                finalCName = ownerName;
                 alertMessage = `⚠️ 系統無客戶檔案，已暫填姓名。`; 
             }
         } 
 
-        // 1. 先安全地關閉所有彈窗與狀態
+        // 4. ★★★ 核心修復：用 setEditingVehicle 直接更新 React 狀態，防止資料跳走 ★★★
+        setEditingVehicle((prev: any) => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                regMark: vrdData.plateNoHK || vrdData.regNo || prev.regMark,
+                make: matchedMake,
+                model: vrdData.model || prev.model,
+                year: vrdData.manufactureYear || vrdData.year || prev.year,
+                chassisNo: vrdData.chassisNo || prev.chassisNo,
+                engineNo: vrdData.engineNo || prev.engineNo,
+                colorExt: vrdData.vehicleColor || vrdData.color || prev.colorExt,
+                previousOwners: vrdData.prevOwners !== undefined ? vrdData.prevOwners.toString() : prev.previousOwners,
+                customerName: finalCName || prev.customerName,
+                customerPhone: finalCPhone || prev.customerPhone,
+                customerID: finalCID || prev.customerID,
+                customerAddress: finalCAddress || prev.customerAddress
+            };
+        });
+
+        // 5. 關閉搜尋視窗與狀態
         setVrdResults([]); 
         setVrdSearch(''); 
         setShowVrdOverlay(false);
 
-        // 2. ★★★ 延遲 150 毫秒再彈出提示，讓 React 有時間把視窗收乾淨，完美避開死鎖！ ★★★
         setTimeout(() => {
             alert(alertMessage);
         }, 150);
