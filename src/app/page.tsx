@@ -619,6 +619,20 @@ const DB_CATEGORIES = [
     { id: 'CrossBorder', label: '中港指標文件 (Quota Doc)' }
 ];
 
+const DOCUMENT_FIELD_SCHEMA: Record<string, { key: string, label: string, type: string }[]> = {
+    '香港保險': [
+        { key: 'insuranceCompany', label: '保險公司', type: 'text' },
+        { key: 'policyNumber', label: '保單/暫保單號碼', type: 'text' },
+        { key: 'insuranceType', label: '保險類型', type: 'text' }, // 三保/全保
+        { key: 'insuredPerson', label: '受保人', type: 'text' }
+    ],
+    '商業登記(BR)': [
+        { key: 'brNumber', label: 'BR 號碼', type: 'text' },
+        { key: 'brExpiryDate', label: '屆滿日期', type: 'date' }
+    ],
+    // 注意：這裡不放 VRD 和 四證八面，因為它們已經有固定位置了
+};
+
 // ... existing code ...
 const formatNumberInput = (value: string) => {
   // 1. 移除非數字、非小數點、非負號的字符
@@ -1362,41 +1376,30 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 setEditingEntry((prev: any) => {
                     if (!prev) return null;
 
-                    // 1. 合併原有的 Owner 邏輯
+                    // 1. 處理自動標籤 (Tags)：合併現有、AI 產生與文件類型，並自動去重複
+                    const currentTags = Array.isArray(prev.tags) ? prev.tags : [];
+                    const aiTags = Array.isArray(data.tags) ? data.tags : [];
+                    const mergedTags = Array.from(new Set([...currentTags, ...aiTags, data.documentType])).filter(Boolean);
+
+                    // 2. 處理動態擴充欄位 (extractedData)：
+                    // 根據 DOCUMENT_FIELD_SCHEMA 定義，將符合的欄位自動填入百寶袋
+                    const newExtractedData = { ...(prev.extractedData || {}) };
+                    const currentSchema = DOCUMENT_FIELD_SCHEMA[data.documentType || prev.docType] || [];
+                    currentSchema.forEach(field => {
+                        if (data[field.key]) {
+                            newExtractedData[field.key] = data[field.key];
+                        }
+                    });
+
+                    // 3. 處理 Owner 邏輯 (優先從 AI 結果中抓取姓名與編號)
                     const finalOwnerName = data.registeredOwnerName || data.name || prev.registeredOwnerName;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
-                    // 2. ★ 處理自動標籤 (Tags) ★
-                    const currentTags = Array.isArray(prev.tags) ? prev.tags : [];
-                    const aiTags = Array.isArray(data.tags) ? data.tags : [];
-                    // 自動去重複，並加入文件類型作為標籤
-                    const mergedTags = Array.from(new Set([...currentTags, ...aiTags, data.documentType]));
-
-                    // 3. ★ 處理保險專屬資料 (排版進備註欄) ★
-                    let newDescription = prev.description || '';
-                    if (data.insuranceCompany || data.policyNumber) {
-                        const insuranceInfoBlock = `
-【保險資料自動識別】
-📄 文件類型：${data.documentType || '保險文件'}
-🏢 保險公司：${data.insuranceCompany || '未識別'}
-🔢 保單號碼：${data.policyNumber || '未識別'}
-⏳ 到期日期：${data.expiryDate || '未識別'}
-🛡️ 保險類型：${data.insuranceType || '未識別'}
-👤 受保人：${data.insuredPerson || '未識別'}
-------------------------\n`;
-                        // 將新資訊加到原有的描述上方
-                        newDescription = insuranceInfoBlock + newDescription;
-                    } 
-                    // 如果不是保險，但也有一班的 description，就接在後面
-                    else if (data.description) {
-                        newDescription += `\n[AI]: ${data.description}`;
-                    }
-
-                    // 4. 回傳完整合併後的資料
+                    // 4. 回傳完整合併後的資料結構
                     return {
                         ...prev,
                         
-                        // --- 基礎通用與 VRD 欄位 ---
+                        // --- A. 基礎通用與 VRD 牌簿固定欄位 ---
                         name: data.name || prev.name,
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
@@ -1418,7 +1421,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
                         prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : prev.prevOwners,
                         
-                        // --- 四證八面資料接收 ---
+                        // --- B. 四證八面資料接收映射 ---
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
                         hkid_dob: data.hkid_dob || prev.hkid_dob,
@@ -1436,18 +1439,17 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         cndl_issueLoc: data.cndl_issueLoc || prev.cndl_issueLoc,
                         cndl_fileNum: data.cndl_fileNum || prev.cndl_fileNum,
                         
-                        // ★ 套用剛剛處理好的 Tags 和 Description ★
-                        tags: mergedTags.filter(Boolean),
-                        description: newDescription
+                        // --- C. 動態數據與 AI 備註 ---
+                        extractedData: newExtractedData, // 存入結構化動態欄位
+                        tags: mergedTags,
+                        description: prev.description + (data.description ? `\n[AI 識別摘要]: ${data.description}` : '')
                     };
                 });
                 
-                // ★ 將原來的 alert 改為系統的漂亮 Toast
-                showToast('✨ AI 識別成功！資料已自動填入。');
+                showToast('✨ AI 識別成功！已按文件標準自動填入。');
             }
         } catch (error: any) {
             console.error("AI Scan Error:", error);
-            // 順便把錯誤也換成 Toast
             showToast(`識別失敗: ${error.message}`, 'error');
         }
         setIsScanning(false);
@@ -1624,7 +1626,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
-        // 100% 保留您所有的欄位資料！
+        // 100% 保留您所有的欄位資料，並加入動態擴充欄位支援！
         const finalEntry = { 
             ...editingEntry, 
             phone: editingEntry.phone || '',
@@ -1659,11 +1661,14 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             renewalUnit: editingEntry.renewalUnit || 'year',
             customReminders: editingEntry.customReminders || [],
 
-            // ★ 新增/編輯時，確保負責人欄位正確 (若為空則預設為當前員工)
+            // ★★★ 核心新增：確保動態欄位百寶袋被儲存 ★★★
+            extractedData: editingEntry.extractedData || {},
+
+            // ★ 新增/編輯時，確保負責人欄位正確
             managedBy: editingEntry.managedBy || staffId, 
 
             // ==========================================
-            // ★★★ 把四證八面的代碼貼在這裡！ ★★★
+            // ★★★ 四證八面固定欄位映射 ★★★
             // ==========================================
             hkid_name: editingEntry.hkid_name || '',
             hkid_code: editingEntry.hkid_code || '',
@@ -1684,7 +1689,6 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             cndl_validPeriod: editingEntry.cndl_validPeriod || '',
             cndl_issueLoc: editingEntry.cndl_issueLoc || '',
             cndl_fileNum: editingEntry.cndl_fileNum || ''
-            // ==========================================
         };
 
         try {
@@ -2014,6 +2018,31 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
                                     <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
                                     
+                                    {/* ★★★ 新增：動態專屬欄位顯示區 (僅限定義過的文件) ★★★ */}
+                                    {editingEntry.docType && DOCUMENT_FIELD_SCHEMA[editingEntry.docType] && (
+                                        <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 mt-2 animate-fade-in space-y-3">
+                                            <div className="text-[10px] font-bold text-blue-600 flex items-center mb-1">
+                                                <ShieldCheck size={14} className="mr-1"/> {editingEntry.docType} 專屬數據欄位
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                {DOCUMENT_FIELD_SCHEMA[editingEntry.docType].map((field) => (
+                                                    <div key={field.key} className={field.type === 'date' ? 'col-span-1' : 'col-span-2 md:col-span-1'}>
+                                                        <label className="block text-[10px] text-slate-400 font-bold mb-1">{field.label}</label>
+                                                        <input 
+                                                            type={field.type} 
+                                                            disabled={!isDbEditing} 
+                                                            value={editingEntry.extractedData?.[field.key] || ''} 
+                                                            onChange={e => {
+                                                                const newExtData = { ...(editingEntry.extractedData || {}), [field.key]: e.target.value };
+                                                                setEditingEntry({ ...editingEntry, extractedData: newExtData });
+                                                            }} 
+                                                            className="w-full p-2 border border-slate-200 rounded text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none font-medium" 
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                     {/* ★★★ 全域現代化提示 (Toast) ★★★ */}
                                     {toastMsg && (
                                         <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${toastMsg.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
