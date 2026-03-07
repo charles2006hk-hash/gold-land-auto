@@ -2702,7 +2702,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                         canvas.width = viewport.width; 
                         canvas.height = viewport.height;
                         if (ctx) {
-                            await page.render({ canvasContext: ctx, viewport }).promise;
+                            await page.render({ canvasContext: ctx, viewport } as any).promise;
                             const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                             // PDF 拆出來的圖片，強制歸類為 document
                             await uploadToStorage(dataUrl, `${file.name}_P${p}.jpg`, 'document');
