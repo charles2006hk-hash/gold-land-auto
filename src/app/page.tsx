@@ -2233,13 +2233,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                         updatedAt: serverTimestamp()
                                                     });
 
-                                                    // 4. 同步更新畫面，讓它瞬間從所有地方消失
-                                                    setAvailableDocs(prev => prev.filter(d => d.id !== doc.id)); // 從彈窗消失
-                                                    
-                                                    // ★ 新增：如果 setInboxItems 存在，就同時讓左側 Inbox 的畫面也瞬間清除
-                                                    if (typeof setInboxItems === 'function') {
-                                                        setInboxItems(prev => prev.filter(item => item.id !== doc.id)); 
-                                                    }
+                                                    // 4. 同步更新畫面，從彈窗中剔除
+                                                    setAvailableDocs(prev => prev.filter(d => d.id !== doc.id)); 
                                                     
                                                     showToast('✅ 成功導入文件！');
                                                     
