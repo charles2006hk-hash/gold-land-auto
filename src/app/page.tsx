@@ -1359,14 +1359,44 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             };
 
             if (data) {
-                setEditingEntry(prev => {
+                setEditingEntry((prev: any) => {
                     if (!prev) return null;
+
+                    // 1. 合併原有的 Owner 邏輯
                     const finalOwnerName = data.registeredOwnerName || data.name || prev.registeredOwnerName;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
+                    // 2. ★ 處理自動標籤 (Tags) ★
+                    const currentTags = Array.isArray(prev.tags) ? prev.tags : [];
+                    const aiTags = Array.isArray(data.tags) ? data.tags : [];
+                    // 自動去重複，並加入文件類型作為標籤
+                    const mergedTags = Array.from(new Set([...currentTags, ...aiTags, data.documentType]));
+
+                    // 3. ★ 處理保險專屬資料 (排版進備註欄) ★
+                    let newDescription = prev.description || '';
+                    if (data.insuranceCompany || data.policyNumber) {
+                        const insuranceInfoBlock = `
+【保險資料自動識別】
+📄 文件類型：${data.documentType || '保險文件'}
+🏢 保險公司：${data.insuranceCompany || '未識別'}
+🔢 保單號碼：${data.policyNumber || '未識別'}
+⏳ 到期日期：${data.expiryDate || '未識別'}
+🛡️ 保險類型：${data.insuranceType || '未識別'}
+👤 受保人：${data.insuredPerson || '未識別'}
+------------------------\n`;
+                        // 將新資訊加到原有的描述上方
+                        newDescription = insuranceInfoBlock + newDescription;
+                    } 
+                    // 如果不是保險，但也有一班的 description，就接在後面
+                    else if (data.description) {
+                        newDescription += `\n[AI]: ${data.description}`;
+                    }
+
+                    // 4. 回傳完整合併後的資料
                     return {
                         ...prev,
-                        // --- 原有通用與 VRD 欄位 ---
+                        
+                        // --- 基礎通用與 VRD 欄位 ---
                         name: data.name || prev.name,
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
@@ -1388,38 +1418,37 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
                         prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : prev.prevOwners,
                         
-                        // ==========================================================
-                        // ★★★ 新增：四證八面資料接收映射 ★★★
-                        // ==========================================================
+                        // --- 四證八面資料接收 ---
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
                         hkid_dob: data.hkid_dob || prev.hkid_dob,
                         hkid_issueDate: data.hkid_issueDate || prev.hkid_issueDate,
-                        
                         hrp_nameCN: data.hrp_nameCN || prev.hrp_nameCN,
                         hrp_expiry: data.hrp_expiry || prev.hrp_expiry,
                         hrp_num: data.hrp_num || prev.hrp_num,
-                        
                         hkdl_num: data.hkdl_num || prev.hkdl_num,
                         hkdl_validTo: data.hkdl_validTo || prev.hkdl_validTo,
                         hkdl_ref: data.hkdl_ref || prev.hkdl_ref,
-                        
                         cndl_num: data.cndl_num || prev.cndl_num,
                         cndl_address: data.cndl_address || prev.cndl_address,
                         cndl_firstIssue: data.cndl_firstIssue || prev.cndl_firstIssue,
                         cndl_validPeriod: data.cndl_validPeriod || prev.cndl_validPeriod,
                         cndl_issueLoc: data.cndl_issueLoc || prev.cndl_issueLoc,
                         cndl_fileNum: data.cndl_fileNum || prev.cndl_fileNum,
-                        // ==========================================================
-
-                        description: prev.description + (data.description ? `\n[AI]: ${data.description}` : '')
+                        
+                        // ★ 套用剛剛處理好的 Tags 和 Description ★
+                        tags: mergedTags.filter(Boolean),
+                        description: newDescription
                     };
                 });
-                alert("AI 識別成功！資料已自動填入。");
+                
+                // ★ 將原來的 alert 改為系統的漂亮 Toast
+                showToast('✨ AI 識別成功！資料已自動填入。');
             }
         } catch (error: any) {
             console.error("AI Scan Error:", error);
-            alert(`識別失敗: ${error.message}`);
+            // 順便把錯誤也換成 Toast
+            showToast(`識別失敗: ${error.message}`, 'error');
         }
         setIsScanning(false);
     };
