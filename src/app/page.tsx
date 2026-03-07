@@ -2713,6 +2713,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
 
                 // --- 2. 處理 HEIC/HEIF (iPhone 專有格式轉換) ---
                 if (lowerName.endsWith('.heic') || lowerName.endsWith('.heif')) {
+                    // @ts-ignore (略過 TypeScript 對無型別套件的報錯)
                     const heic2any = (await import('heic2any')).default;
                     const convertedBlob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 }) as Blob;
                     file = new File([convertedBlob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
