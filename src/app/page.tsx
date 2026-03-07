@@ -3066,18 +3066,19 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                         {zoneType === 'vehicle' ? <><Car size={14}/> 🚗 車輛相片區 (Vehicle)</> : <><FileText size={14}/> 📄 文件資料區 (Document)</>}
                                     </div>
                                     
-                                    {/* 圖片網格 */}
-                                    <div className={`flex-1 overflow-y-auto p-2 grid grid-cols-3 gap-1.5 content-start ${zoneType === 'vehicle' ? 'bg-slate-100' : 'bg-indigo-50/50'}`}>
+                                   {/* 圖片網格 (完美防重疊瀑布流版) */}
+                                    <div className={`flex-1 overflow-y-auto p-2 columns-2 md:columns-3 gap-2 space-y-2 ${zoneType === 'vehicle' ? 'bg-slate-100' : 'bg-indigo-50/50'}`}>
                                         {zoneItems.map(item => (
                                             <div 
                                                 key={item.id} 
                                                 draggable // ★ 允許拖曳
                                                 onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)} // 記錄被拖曳的 ID
                                                 onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} 
-                                                className={`relative aspect-square rounded-lg overflow-hidden cursor-grab active:cursor-grabbing transition-all group shadow-sm ${selectedInboxIds.includes(item.id) ? 'ring-4 ring-blue-500 opacity-100 scale-95' : 'opacity-90 hover:opacity-100 hover:shadow-md'}`}
+                                                // ★ 核心修復：加入 break-inside-avoid, inline-block, w-full，並移除強制正方形的 aspect-square
+                                                className={`relative rounded-lg overflow-hidden cursor-grab active:cursor-grabbing transition-all group shadow-sm break-inside-avoid inline-block w-full ${selectedInboxIds.includes(item.id) ? 'ring-4 ring-blue-500 opacity-100 scale-95' : 'opacity-90 hover:opacity-100 hover:shadow-md'}`}
                                             >
-                                                {/* 圖片預覽 (PDF 已經被後端轉成 JPG 了，所以直接顯示即可) */}
-                                                <img src={item.url} className="w-full h-full object-cover"/>
+                                                {/* 圖片預覽 (改為自然高度 h-auto，不再強制裁切) */}
+                                                <img src={item.url} className="w-full h-auto block bg-black/5"/>
                                                 
                                                 {/* 選取打勾 */}
                                                 {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10 rounded-bl-md"><Check size={12}/></div>}
@@ -3090,6 +3091,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
                                         {/* 空狀態提示 */}
                                         {zoneItems.length === 0 && (
                                             <div className={`col-span-3 py-8 text-center text-xs font-bold border-2 border-dashed rounded-xl m-1 ${zoneType === 'vehicle' ? 'text-slate-400 border-slate-300' : 'text-indigo-300 border-indigo-200'}`}>
