@@ -2213,22 +2213,45 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 <div key={doc.id} className="relative aspect-auto bg-white p-1 rounded-lg border-2 border-slate-200 shadow-sm hover:border-indigo-400 group cursor-pointer"
                                     onClick={async () => {
                                         try {
-                                            // 1. 將圖片轉為 Base64 以符合資料庫格式
+                                            // 1. 下載圖片並準備轉換
                                             const res = await fetch(doc.url);
                                             const blob = await res.blob();
                                             const reader = new FileReader();
                                             reader.readAsDataURL(blob);
+                                            
                                             reader.onloadend = async () => {
-                                                const base64data = reader.result as string;
-                                                // 2. 加入到當前編輯的附件中
-                                                setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: doc.fileName || 'Inbox文件', data: base64data }] } : null);
-                                                // 3. 從圖庫的 Inbox 移除它
-                                                await deleteDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', doc.id));
-                                                // 4. 更新畫面
-                                                setAvailableDocs(prev => prev.filter(d => d.id !== doc.id));
-                                                showToast('✅ 成功導入一張文件！');
+                                                try {
+                                                    const base64data = reader.result as string;
+                                                    
+                                                    // 2. 將圖片加入到當前編輯的附件中
+                                                    setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: doc.fileName || 'Inbox文件', data: base64data }] } : null);
+                                                    
+                                                    // 3. ★ 核心修復：使用 updateDoc 繞過刪除權限限制
+                                                    const { updateDoc, serverTimestamp } = await import('firebase/firestore');
+                                                    await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', doc.id), {
+                                                        status: 'linked', // 標記為已連結，Inbox 就不會再抓取它了
+                                                        updatedAt: serverTimestamp()
+                                                    });
+
+                                                    // 4. 同步更新畫面，讓它瞬間從所有地方消失
+                                                    setAvailableDocs(prev => prev.filter(d => d.id !== doc.id)); // 從彈窗消失
+                                                    
+                                                    // ★ 新增：如果 setInboxItems 存在，就同時讓左側 Inbox 的畫面也瞬間清除
+                                                    if (typeof setInboxItems === 'function') {
+                                                        setInboxItems(prev => prev.filter(item => item.id !== doc.id)); 
+                                                    }
+                                                    
+                                                    showToast('✅ 成功導入文件！');
+                                                    
+                                                } catch (innerError) {
+                                                    console.error("更新 Firebase 狀態失敗:", innerError);
+                                                    alert("圖片已抓取，但 Firebase 狀態更新失敗，請檢查權限。");
+                                                }
                                             };
-                                        } catch (e) { alert("導入失敗"); }
+                                        } catch (e) { 
+                                            console.error("下載圖片失敗:", e);
+                                            alert("導入失敗：無法讀取圖片資料"); 
+                                        }
                                     }}
                                 >
                                     <img src={doc.url} className="w-full h-32 object-contain" />
