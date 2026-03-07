@@ -1377,31 +1377,47 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                 setEditingEntry((prev: any) => {
                     if (!prev) return null;
 
-                    // 1. 處理自動標籤 (Tags)：合併現有、AI 產生與文件類型，並自動去重複
+                    // 1. 智能匹配文件類型 (防呆機制：確保 UI 能正確展開藍色區塊)
+                    let matchedDocType = prev.docType;
+                    const aiDocStr = (data.documentType || '').toLowerCase();
+                    if (!matchedDocType || matchedDocType === '其他') {
+                        if (aiDocStr.includes('保險') || aiDocStr.includes('insurance') || aiDocStr.includes('cover')) matchedDocType = '香港保險';
+                        else if (aiDocStr.includes('br') || aiDocStr.includes('商業登記')) matchedDocType = '商業登記(BR)';
+                        else matchedDocType = data.documentType;
+                    }
+
+                    // 2. 處理自動標籤 (Tags)
                     const currentTags = Array.isArray(prev.tags) ? prev.tags : [];
                     const aiTags = Array.isArray(data.tags) ? data.tags : [];
-                    const mergedTags = Array.from(new Set([...currentTags, ...aiTags, data.documentType])).filter(Boolean);
+                    const mergedTags = Array.from(new Set([...currentTags, ...aiTags, matchedDocType])).filter(Boolean);
 
-                    // 2. 處理動態擴充欄位 (extractedData)：
-                    // 根據 DOCUMENT_FIELD_SCHEMA 定義，將符合的欄位自動填入百寶袋
+                    // 3. ★★★ 強制寫入動態擴充欄位 (extractedData) ★★★
+                    // 不再依賴精準字串比對，只要 AI 有回傳這些保險/BR資料，直接存入！
                     const newExtractedData = { ...(prev.extractedData || {}) };
-                    const currentSchema = DOCUMENT_FIELD_SCHEMA[data.documentType || prev.docType] || [];
-                    currentSchema.forEach(field => {
-                        if (data[field.key]) {
-                            newExtractedData[field.key] = data[field.key];
-                        }
-                    });
+                    
+                    // 保險類
+                    if (data.insuranceCompany) newExtractedData.insuranceCompany = data.insuranceCompany;
+                    if (data.policyNumber) newExtractedData.policyNumber = data.policyNumber;
+                    if (data.insuranceType) newExtractedData.insuranceType = data.insuranceType;
+                    if (data.insuredPerson) newExtractedData.insuredPerson = data.insuredPerson;
+                    
+                    // BR 類 (預留)
+                    if (data.brNumber) newExtractedData.brNumber = data.brNumber;
+                    if (data.brExpiryDate) newExtractedData.brExpiryDate = data.brExpiryDate;
+                    if (data.natureOfBusiness) newExtractedData.natureOfBusiness = data.natureOfBusiness;
 
-                    // 3. 處理 Owner 邏輯 (優先從 AI 結果中抓取姓名與編號)
-                    const finalOwnerName = data.registeredOwnerName || data.name || prev.registeredOwnerName;
+                    // 4. ★★★ 修復姓名空白問題 ★★★
+                    // 優先順序：AI的名稱 -> 登記車主 -> 受保人 -> 原本輸入的名稱
+                    const finalName = data.name || data.registeredOwnerName || data.insuredPerson || prev.name;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
-                    // 4. 回傳完整合併後的資料結構
+                    // 5. 回傳完整合併後的資料結構
                     return {
                         ...prev,
                         
                         // --- A. 基礎通用與 VRD 牌簿固定欄位 ---
-                        name: data.name || prev.name,
+                        name: finalName, // ★ 這裡已修復，會自動填入 LAM NGAI CHARLES
+                        docType: matchedDocType, // ★ 確保文件類型正確
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
                         address: data.address || prev.address,
@@ -1414,15 +1430,15 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         engineNo: data.engineNo || prev.engineNo,
                         manufactureYear: data.manufactureYear || prev.manufactureYear,
                         firstRegCondition: data.firstRegCondition || prev.firstRegCondition,
-                        vehicleColor: cleanColor(data.vehicleColor) || prev.vehicleColor,
-                        registeredOwnerName: finalOwnerName,
+                        vehicleColor: data.vehicleColor || prev.vehicleColor,
+                        registeredOwnerName: data.registeredOwnerName || prev.registeredOwnerName,
                         registeredOwnerId: finalOwnerId,
                         engineSize: data.engineSize ? Number(data.engineSize) : prev.engineSize,
                         priceA1: data.priceA1 ? Number(data.priceA1) : prev.priceA1,
                         priceTax: data.priceTax ? Number(data.priceTax) : prev.priceTax,
                         prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : prev.prevOwners,
                         
-                        // --- B. 四證八面資料接收映射 ---
+                        // --- B. 四證八面資料接收映射 (保持不變) ---
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
                         hkid_dob: data.hkid_dob || prev.hkid_dob,
@@ -1441,7 +1457,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         cndl_fileNum: data.cndl_fileNum || prev.cndl_fileNum,
                         
                         // --- C. 動態數據與 AI 備註 ---
-                        extractedData: newExtractedData, // 存入結構化動態欄位
+                        extractedData: newExtractedData, // ★ 保險公司、單號現在會正確存入這裡
                         tags: mergedTags,
                         description: prev.description + (data.description ? `\n[AI 識別摘要]: ${data.description}` : '')
                     };
