@@ -234,6 +234,7 @@ type DatabaseEntry = {
     renewalDuration?: number;       // 續期區間數值 (例如: 1)
     renewalUnit?: 'year' | 'month'; // 續期區間單位 (年/月)
     customReminders?: any[];
+    extractedData?: any;
 };
 
 // --- 新增：媒體庫數據結構 ---
