@@ -7188,7 +7188,32 @@ const VehicleFormModal = ({
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-6 animate-in fade-in duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫</h3><button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button></div>
                         <div className="flex flex-col h-full overflow-hidden pb-10">
-                            <div className="flex gap-2 mb-4 flex-none"><input value={vrdSearch} onChange={e => setVrdSearch(e.target.value.toUpperCase())} placeholder="車牌或底盤號" className="flex-1 p-3 border-2 border-blue-200 rounded-lg font-mono uppercase focus:border-blue-500 outline-none" autoFocus onKeyDown={e => e.key === 'Enter' && handleSearchVRD()} /><button type="button" onClick={handleSearchVRD} disabled={searching} className="bg-blue-600 text-white px-6 rounded-lg font-bold hover:bg-blue-700">{searching ? <Loader2 className="animate-spin"/> : '搜尋'}</button></div>
+                            <div className="flex gap-2 mb-4 flex-none">
+                                <input 
+                                    value={vrdSearch} 
+                                    onChange={e => setVrdSearch(e.target.value.toUpperCase())} 
+                                    placeholder="車牌或底盤號" 
+                                    className="flex-1 p-3 border-2 border-blue-200 rounded-lg font-mono uppercase focus:border-blue-500 outline-none" 
+                                    autoFocus 
+                                    // ★★★ 核心替換：攔截 Enter 鍵並加入智能判斷 ★★★
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault(); // 1. 絕對攔截！防止觸發外層表單儲存並跳走
+                                            
+                                            if (vrdResults && vrdResults.length > 0) {
+                                                // 2. 如果下方已經有搜尋結果，直接自動導入第一筆！
+                                                applyVrdData(vrdResults[0]);
+                                            } else if (vrdSearch.trim() !== '') {
+                                                // 3. 如果還沒有結果，就執行搜尋
+                                                handleSearchVRD(); 
+                                            }
+                                        }
+                                    }} 
+                                />
+                                <button type="button" onClick={handleSearchVRD} disabled={searching} className="bg-blue-600 text-white px-6 rounded-lg font-bold hover:bg-blue-700">
+                                    {searching ? <Loader2 className="animate-spin"/> : '搜尋'}
+                                </button>
+                            </div>
                             <div className="flex-1 overflow-y-auto space-y-2">{vrdResults.map((res, idx) => (<div key={idx} className="bg-blue-50 border border-blue-200 p-3 rounded-xl flex justify-between items-center hover:bg-blue-100"><div><div className="font-bold text-lg text-slate-800">{res.plateNoHK || res.regNo}</div><div className="text-xs text-slate-600">{res.manufactureYear} {res.make} {res.model}</div></div><button type="button" onClick={() => applyVrdData(res)} className="bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-xs">導入</button></div>))}</div>
                         </div>
                     </div>
