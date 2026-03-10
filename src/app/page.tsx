@@ -3153,7 +3153,7 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                             <div>
                                 <label className="text-[10px] font-bold text-slate-500 mb-1 block">Type</label>
                                 <div className="flex gap-1">
-                                    {['外觀', '內飾', '細節'].map(t => (
+                                    {['外觀', '內飾', '文件'].map(t => (
                                         <button key={t} onClick={() => setClassifyForm({...classifyForm, type: t as any})} className={`text-[10px] py-1 px-2 rounded border ${classifyForm.type.includes(t) ? 'bg-blue-600 text-white' : 'bg-white'}`}>{t}</button>
                                     ))}
                                 </div>
@@ -7057,10 +7057,10 @@ const VehicleFormModal = ({
     const applyVrdData = (vrdData: any) => {
         if (!vrdData) return;
 
-        // 1. 處理獨立的字串狀態 (金額顯示)
-        if (vrdData.engineSize) setEngineSizeStr(formatNumberInput(vrdData.engineSize.toString()));
-        if (vrdData.priceA1) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
-        if (vrdData.priceTax) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
+        // 1. 處理獨立的字串狀態 (金額顯示) - ★ 增強判斷，避免數值為0時被忽略
+        if (vrdData.engineSize !== undefined && vrdData.engineSize !== null) setEngineSizeStr(formatNumberInput(vrdData.engineSize.toString()));
+        if (vrdData.priceA1 !== undefined && vrdData.priceA1 !== null) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
+        if (vrdData.priceTax !== undefined && vrdData.priceTax !== null) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
 
         // 2. 處理廠牌配對
         const rawMake = vrdData.make || vrdData.brand || ''; 
@@ -7106,6 +7106,7 @@ const VehicleFormModal = ({
                 year: vrdData.manufactureYear || vrdData.year || prev.year,
                 chassisNo: vrdData.chassisNo || prev.chassisNo,
                 engineNo: vrdData.engineNo || prev.engineNo,
+                engineSize: vrdData.engineSize || prev.engineSize,
                 colorExt: vrdData.vehicleColor || vrdData.color || prev.colorExt,
                 previousOwners: vrdData.prevOwners !== undefined ? vrdData.prevOwners.toString() : prev.previousOwners,
                 customerName: finalCName || prev.customerName,
