@@ -2192,18 +2192,32 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                     <div className="flex justify-between items-center">
                                         <label className="block text-xs font-bold text-slate-500">文件圖片 ({editingEntry.attachments?.length || 0})</label>
                                         <div className="flex gap-2">
-                                            {/* ★★★ 新增：從智能圖庫導入按鈕 ★★★ */}
+                                            {/* ★★★ 新增：從智能圖庫導入按鈕 (防當機升級版) ★★★ */}
                                             {isDbEditing && (
                                                 <button 
                                                     type="button" 
                                                     onClick={async () => {
-                                                        // 抓取圖庫中未分類的「文件」
-                                                        const q = query(collection(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), where('status', '==', 'unassigned'), where('mediaType', '==', 'document'));
-                                                        const snap = await getDocs(q);
-                                                        setAvailableDocs(snap.docs.map(d => ({id: d.id, ...d.data()})));
-                                                        setShowMediaPicker(true);
+                                                        try {
+                                                            // ★ 核心修復：只使用單一條件查詢，避開 Firebase 的複合索引限制
+                                                            const q = query(
+                                                                collection(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), 
+                                                                where('status', '==', 'unassigned')
+                                                            );
+                                                            const snap = await getDocs(q);
+                                                            
+                                                            // ★ 在拿到資料後，使用 JavaScript 進行第二層過濾 (只要 document)
+                                                            const docs = snap.docs
+                                                                .map(d => ({id: d.id, ...d.data()}))
+                                                                .filter((d: any) => d.mediaType === 'document');
+                                                            
+                                                            setAvailableDocs(docs);
+                                                            setShowMediaPicker(true);
+                                                        } catch (error: any) {
+                                                            console.error("載入 Inbox 失敗:", error);
+                                                            alert(`無法讀取 Inbox，請檢查網路。\n錯誤訊息: ${error.message}`);
+                                                        }
                                                     }} 
-                                                    className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full hover:bg-indigo-100 flex items-center border border-indigo-200 shadow-sm transition-colors font-bold"
+                                                    className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full hover:bg-indigo-100 flex items-center border border-indigo-200 shadow-sm transition-colors font-bold active:scale-95"
                                                 >
                                                     <DownloadCloud size={14} className="mr-1"/> 從 Inbox 導入
                                                 </button>
