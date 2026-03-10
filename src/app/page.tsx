@@ -6959,11 +6959,14 @@ const VehicleFormModal = ({
     // 對客附加費 (Sales Add-ons)
     const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.amount || 0), 0);
     
-    // 應收總額 = 車價 + 中港代辦費 + 一般附加費
-    const totalRevenue = (v.price || 0) + cbFees + salesAddonsTotal;
+    // ★ 核心修復：讀取實時輸入的 priceStr，而不是舊的 v.price
+    const currentRealTimePrice = Number(priceStr.replace(/,/g, '')) || 0;
+    
+    // 應收總額 = 實時車價 + 中港代辦費 + 一般附加費
+    const totalRevenue = currentRealTimePrice + cbFees + salesAddonsTotal;
     
     // 客戶欠款餘額 = 應收總額 - 已收訂金
-    const balance = totalRevenue - totalReceived; 
+    const balance = totalRevenue - totalReceived;
 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
@@ -7325,7 +7328,27 @@ const VehicleFormModal = ({
                             </div>
                             <div className="flex justify-between items-center mt-2 px-1 text-xs">
                                 <span className="text-gray-400">牌簿價: <span className="font-mono text-slate-600">{calcRegisteredPrice()}</span></span>
-                                <span className="font-bold text-blue-600 text-sm bg-blue-50 px-3 py-1 rounded border border-blue-100">客戶欠款餘額: {formatCurrency(balance)}</span>
+                                
+                                <div className="flex items-center gap-2">
+                                    {/* ★★★ 新增：中港業務連動跳轉按鈕 (僅在啟用中港模塊時顯示) ★★★ */}
+                                    {v.crossBorder?.isEnabled && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingVehicle(null); // 關閉當前視窗
+                                                setActiveTab('cross_border'); // 跳轉到中港業務
+                                                alert(`已為您跳轉至「中港業務」。\n請在左側列表選擇車牌 ${v.regMark || ''} 進行進階管理。`);
+                                            }}
+                                            className="flex items-center text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-1 rounded hover:bg-purple-100 transition-colors shadow-sm"
+                                            title="點擊跳轉至中港模塊"
+                                        >
+                                            <Globe size={12} className="mr-1"/> 
+                                            中港代辦: {formatCurrency(cbFees)} 
+                                            (已收: {formatCurrency((v.payments || []).filter((p:any) => p.relatedTaskId).reduce((sum:number, p:any) => sum + (p.amount || 0), 0))})
+                                        </button>
+                                    )}
+                                    <span className="font-bold text-blue-600 text-sm bg-blue-50 px-3 py-1 rounded border border-blue-100">客戶欠款餘額: {formatCurrency(balance)}</span>
+                                </div>
                             </div>
                         </div>
 
@@ -7668,6 +7691,17 @@ const VehicleFormModal = ({
                     </div>
                 </div>
             </div>
+
+            {/* ★★★ 核心修復：車輛詳情專用的圖片放大預覽 Modal ★★★ */}
+            {previewImage && (
+                <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in" onClick={() => setPreviewImage(null)}>
+                    <img src={previewImage} className="max-w-full max-h-full object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
+                    <button type="button" onClick={() => setPreviewImage(null)} className="absolute top-6 right-6 text-white p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-50">
+                        <X size={24}/>
+                    </button>
+                </div>
+            )}
+
           </form>
         </div>
       </div>
@@ -8073,6 +8107,51 @@ const CreateDocModule = ({
 
     // ★★★ 新增：控制條款顯示 ★★★
     const [showTerms, setShowTerms] = useState(true);
+
+    // ★★★ 新增：過濾器與搜尋狀態 ★★★
+    const [filterType, setFilterType] = useState<string>('All');
+    const [docSearchTerm, setDocSearchTerm] = useState('');
+    const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
+    const [filterStartDate, setFilterStartDate] = useState(() => {
+        const date = new Date();
+        return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [filterEndDate, setFilterEndDate] = useState(() => {
+        const date = new Date();
+        return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+    });
+
+    // ★★★ 新增：執行過濾邏輯 ★★★
+    const filteredDocHistory = savedDocs.filter((doc: any) => {
+        // 1. 類型過濾
+        if (filterType !== 'All' && doc.type !== filterType) return false;
+        
+        // 2. 關鍵字過濾 (摘要、車牌、客戶)
+        if (docSearchTerm) {
+            const searchLower = docSearchTerm.toLowerCase();
+            const summary = (doc.summary || '').toLowerCase();
+            const regMark = (doc.formData?.regMark || '').toLowerCase();
+            const customer = (doc.formData?.customerName || '').toLowerCase();
+            if (!summary.includes(searchLower) && !regMark.includes(searchLower) && !customer.includes(searchLower)) {
+                return false;
+            }
+        }
+
+        // 3. 日期過濾 (依據單據建立/更新日期)
+        if (isDateFilterEnabled) {
+            let docDateStr = '';
+            if (doc.updatedAt?.toDate) {
+                // 將 Firestore Timestamp 轉為 YYYY-MM-DD 格式 (避免時區偏移，使用字串處理)
+                const d = doc.updatedAt.toDate();
+                docDateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            }
+            if (!docDateStr) return false; // 舊資料無日期則隱藏
+            if (filterStartDate && docDateStr < filterStartDate) return false;
+            if (filterEndDate && docDateStr > filterEndDate) return false;
+        }
+
+        return true;
+    });
 
     // 放在 CreateDocModule 組件外部或內部皆可
     const DEFAULT_REMARKS = "匯豐銀行香港賬戶：747-057347-838\n賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO\n「轉數快」識別碼 6134530";
@@ -8530,58 +8609,81 @@ const CreateDocModule = ({
                     <h2 className="text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2"/> 單據紀錄 (Document History)</h2>
                     <button onClick={startNewDoc} className="px-4 py-2 bg-blue-600 text-white rounded font-bold text-sm hover:bg-blue-700 flex items-center"><Plus size={16} className="mr-1"/> 開新單據</button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                    {docHistory.length === 0 ? <div className="text-center text-slate-400 py-10">暫無紀錄</div> : (
-                        <table className="w-full text-sm text-left border-collapse"><thead className="bg-slate-100 text-slate-600 border-b"><tr><th className="p-3">日期</th><th className="p-3">類型</th><th className="p-3">摘要</th><th className="p-3 text-right">操作</th></tr></thead>
-                            {/* ★★★ 修改列表渲染：顯示中文類型 + 新摘要格式 ★★★ */}
-                        <tbody className="divide-y divide-slate-100">
-                            {savedDocs.map((doc: any) => {
-                                // 1. 定義中文類型對照表
-                                const typeMap: Record<string, string> = {
-                                    'sales_contract': '買賣合約',
-                                    'purchase_contract': '收車合約',
-                                    'consignment_contract': '寄賣合約',
-                                    'invoice': '發票',
-                                    'receipt': '收據'
-                                };
-                                
-                                // 2. 獲取中文名稱 (如果找不到就顯示原文)
-                                const typeName = typeMap[doc.type] || doc.type;
+                
+                {/* ★★★ 新增：現代化過濾器工具列 ★★★ */}
+                <div className="bg-white p-3 border-b border-slate-200 flex flex-wrap gap-4 items-center shadow-sm z-10">
+                    {/* 類型過濾 */}
+                    <div className="flex items-center gap-2">
+                        <label className="text-[10px] font-bold text-slate-500">類型:</label>
+                        <select value={filterType} onChange={e => setFilterType(e.target.value)} className="border p-1.5 rounded text-xs font-bold text-slate-700 outline-none bg-slate-50 focus:ring-2 ring-blue-100 cursor-pointer">
+                            <option value="All">全部單據</option>
+                            <option value="sales_contract">買賣合約</option>
+                            <option value="purchase_contract">收車合約</option>
+                            <option value="consignment_contract">寄賣合約</option>
+                            <option value="invoice">發票</option>
+                            <option value="receipt">收據</option>
+                        </select>
+                    </div>
+                    
+                    {/* 關鍵字搜尋 */}
+                    <div className="flex items-center gap-2 relative">
+                        <label className="text-[10px] font-bold text-slate-500">搜尋:</label>
+                        <div className="relative">
+                            <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400"/>
+                            <input value={docSearchTerm} onChange={e => setDocSearchTerm(e.target.value)} placeholder="車牌/客戶/摘要..." className="pl-7 pr-2 py-1.5 border rounded text-xs outline-none focus:border-blue-500 w-48 bg-slate-50"/>
+                        </div>
+                    </div>
 
-                                // 3. 組合摘要 (優先使用即時資料，舊資料則用 saved summary)
-                                const summaryText = doc.formData 
-                                ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.year || ''} ${doc.formData.make || ''} ${doc.formData.model || ''}`
-                                : doc.summary;
+                    {/* 日期區間鎖定 */}
+                    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg ml-auto">
+                        <label className="flex items-center text-[10px] font-bold text-gray-700 cursor-pointer mr-2">
+                            <input type="checkbox" checked={isDateFilterEnabled} onChange={(e) => setIsDateFilterEnabled(e.target.checked)} className="mr-1.5 accent-blue-600"/>
+                            鎖定日期區間
+                        </label>
+                        <div className={`flex items-center gap-1 transition-opacity ${!isDateFilterEnabled ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                            <input type="date" value={filterStartDate} onChange={e => { setFilterStartDate(e.target.value); setIsDateFilterEnabled(true); }} className="border-b border-gray-300 p-0.5 text-xs outline-none bg-transparent cursor-pointer" tabIndex={!isDateFilterEnabled ? -1 : 0}/>
+                            <span className="text-gray-400 text-xs">至</span>
+                            <input type="date" value={filterEndDate} onChange={e => { setFilterEndDate(e.target.value); setIsDateFilterEnabled(true); }} className="border-b border-gray-300 p-0.5 text-xs outline-none bg-transparent cursor-pointer" tabIndex={!isDateFilterEnabled ? -1 : 0}/>
+                        </div>
+                    </div>
+                </div>
 
-                                return (
-                                    <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer text-xs" onClick={() => editDoc(doc)}>
-                                        <td className="p-3 font-mono text-slate-500">{doc.updatedAt?.toDate().toLocaleDateString()}</td>
-                                        
-                                        {/* 顯示中文類型 */}
-                                        <td className="p-3 font-bold text-blue-600">
-                                            {typeName}
-                                        </td>
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50">
+                    {filteredDocHistory.length === 0 ? <div className="text-center text-slate-400 py-10">找不到符合過濾條件的紀錄</div> : (
+                        <table className="w-full text-sm text-left border-collapse bg-white shadow-sm rounded-lg overflow-hidden">
+                            <thead className="bg-slate-100 text-slate-600 border-b">
+                                <tr><th className="p-3">日期</th><th className="p-3">類型</th><th className="p-3">摘要</th><th className="p-3 text-right">操作</th></tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {/* ★ 這裡改成跑 filteredDocHistory，而不是 savedDocs ★ */}
+                                {filteredDocHistory.map((doc: any) => {
+                                    const typeMap: Record<string, string> = {
+                                        'sales_contract': '買賣合約', 'purchase_contract': '收車合約',
+                                        'consignment_contract': '寄賣合約', 'invoice': '發票', 'receipt': '收據'
+                                    };
+                                    const typeName = typeMap[doc.type] || doc.type;
+                                    const summaryText = doc.formData 
+                                        ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.year || ''} ${doc.formData.make || ''} ${doc.formData.model || ''}`
+                                        : doc.summary;
 
-                                        {/* 顯示摘要 */}
-                                        <td className="p-3 text-slate-700">
-                                            {summaryText}
-                                        </td>
-
-                                        <td className="p-3 text-right">
-                                            <button onClick={(e) => { e.stopPropagation(); if(confirm('刪除此單據?')) deleteDocRecord(doc.id); }} className="text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
+                                    return (
+                                        <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer text-xs" onClick={() => editDoc(doc)}>
+                                            <td className="p-3 font-mono text-slate-500">{doc.updatedAt?.toDate().toLocaleDateString()}</td>
+                                            <td className="p-3 font-bold text-blue-600">{typeName}</td>
+                                            <td className="p-3 text-slate-700">{summaryText}</td>
+                                            <td className="p-3 text-right">
+                                                <button onClick={(e) => { e.stopPropagation(); if(confirm('刪除此單據?')) deleteDocRecord(doc.id); }} className="text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
                         </table>
                     )}
                 </div>
             </div>
         );
     }
-
-    // ... (歷史列表的 return 保持不變) ...
 
     // ★★★ 編輯模式的 Return (手機版分步優化) ★★★
     return (
