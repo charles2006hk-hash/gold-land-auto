@@ -7483,8 +7483,38 @@ const VehicleFormModal = ({
     <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
         <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
         <div className="p-4 space-y-3">
-            <div className="flex justify-between items-center"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)</h3><button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm"><Link size={10} className="mr-1"/> 連結資料庫</button></div>
-            
+            <div className="flex justify-between items-center">
+                <h3 className="font-bold text-red-800 text-sm flex items-center">
+                    <FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)
+                </h3>
+                <div className="flex items-center gap-2">
+                    {/* ★ 新增：查牌費按鈕 (自動複製車牌 + 開新視窗) */}
+                    <button 
+                        type="button" 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            // 動態抓取當前輸入框內的車牌 (即使還沒儲存也能抓到)
+                            const plateInput = document.querySelector('input[name="regMark"]') as HTMLInputElement;
+                            const currentPlate = plateInput ? plateInput.value : (v.regMark || '');
+                            
+                            if (currentPlate && currentPlate !== '未出牌') {
+                                navigator.clipboard.writeText(currentPlate);
+                                alert(`✅ 已複製車牌：${currentPlate}\n您可以直接在運輸署網站貼上！`);
+                            }
+                            // 打開運輸署網站
+                            window.open('https://vehiclelicence2.td.gov.hk/evlweb/eVehicleLicence', '_blank');
+                        }} 
+                        className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded hover:bg-amber-100 flex items-center shadow-sm transition-colors"
+                        title="複製車牌並前往運輸署查詢"
+                    >
+                        <Search size={10} className="mr-1"/> 查牌費
+                    </button>
+                    
+                    <button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm transition-colors">
+                        <Link size={10} className="mr-1"/> 連結資料庫
+                    </button>
+                </div>
+            </div>
             <div className="space-y-1 relative"><label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label><input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-[#FFD600] border-[3px] border-black p-2 text-2xl font-black font-mono text-center text-black focus:ring-4 focus:ring-yellow-200 rounded-md uppercase"/></div>
             
             <div className="grid grid-cols-2 gap-3">
