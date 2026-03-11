@@ -3317,6 +3317,16 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                         {/* ===================================== */}
                                         {isExpanded && activeItem && (
                                             <div className="p-4 bg-slate-50/50 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+
+                                                {/* ★★★ 新增：展開時顯示完整的「年份 + 廠牌 + 型號」 ★★★ */}
+                                                <div className="w-full max-w-4xl mb-3 flex justify-between items-center px-1">
+                                                    <span className="text-sm font-bold text-slate-700 bg-white px-4 py-1.5 rounded-full shadow-sm border border-slate-200 flex items-center">
+                                                        <Car size={14} className="mr-2 text-blue-500"/>
+                                                        {/* 利用 split(' (')[0] 自動去掉括號內的車牌，只顯示乾淨的車型資訊 */}
+                                                        {group.title.split(' (')[0] || '未分類車輛'}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400 hidden md:block">點擊圖片可全螢幕預覽</span>
+                                                </div>
                                                 
                                                 {/* 上方：嚴格 4:3 的完美大圖預覽 */}
                                                 <div className="w-full max-w-4xl aspect-[4/3] bg-slate-900 rounded-xl relative overflow-hidden shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] cursor-zoom-in group mb-4" onClick={() => setPreviewImage(activeItem.url)}>
