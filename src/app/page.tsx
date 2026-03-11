@@ -3229,20 +3229,50 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
                                         {/* ===================================== */}
                                         <div className="p-3 flex justify-between items-center bg-white border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
                                             
-                                            {/* 左側：車輛資訊 */}
+                                            {/* 左側：車輛資訊 (修復排版：只顯示車牌、數量、狀態) */}
                                             <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className="w-12 h-12 rounded-lg bg-slate-200 flex-shrink-0 overflow-hidden relative shadow-sm">
+                                                
+                                                {/* 縮圖優化：改為 4:3 比例，更適合車輛照片 */}
+                                                <div className="w-16 h-12 rounded-md bg-slate-900 flex-shrink-0 overflow-hidden relative shadow-inner">
                                                     {group.items[0] ? (
-                                                         <img src={group.items[0].url} className="w-full h-full object-cover"/>
+                                                         <img src={group.items[0].url} className="w-full h-full object-cover opacity-90"/>
                                                     ) : (
                                                          <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
                                                     )}
                                                 </div>
-                                                <div className="min-w-0">
-                                                    <h4 className="font-bold text-sm text-slate-800 truncate">{group.title}</h4>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-[10px] text-slate-500 font-medium">{group.items.length} 張圖片</span>
-                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${group.status==='In Stock'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}`}>{group.status}</span>
+                                                
+                                                {/* 資訊區 (鎖死防走位) */}
+                                                <div className="flex flex-col justify-center min-w-0 gap-1.5">
+                                                    {(() => {
+                                                        // 從庫存中找對應的車輛來抓取車牌
+                                                        const linkedCar = inventory.find((v:any) => v.id === group.key);
+                                                        const displayPlate = linkedCar?.regMark || '';
+                                                        
+                                                        return displayPlate ? (
+                                                            // 顯示搶眼的黃底黑字車牌
+                                                            <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[11px] px-1.5 py-0.5 rounded-[3px] shadow-sm w-max truncate leading-none">
+                                                                {displayPlate}
+                                                            </span>
+                                                        ) : (
+                                                            // 如果是未關聯的車輛，顯示原本的 AI 識別短標題
+                                                            <span className="font-bold text-sm text-slate-800 truncate w-full">
+                                                                {group.title.split(' (')[0]}
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                    
+                                                    {/* 數量與狀態 (加上 whitespace-nowrap 強制同行顯示，絕對不換行) */}
+                                                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                        <span className="text-[10px] text-slate-600 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-[4px] flex items-center leading-none">
+                                                            <ImageIcon size={10} className="mr-1"/> {group.items.length}
+                                                        </span>
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-[4px] font-bold shadow-sm leading-none ${
+                                                            group.status === 'In Stock' ? 'bg-green-500 text-white' : 
+                                                            group.status === 'Reserved' ? 'bg-yellow-500 text-white' :
+                                                            group.status === 'Sold' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'
+                                                        }`}>
+                                                            {group.status === 'In Stock' ? '在庫' : group.status === 'Reserved' ? '已訂' : group.status === 'Sold' ? '已售' : group.status}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
