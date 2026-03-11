@@ -175,7 +175,8 @@ type DatabaseEntry = {
     prevOwners?: number;        // 前任車主數目
     registeredOwnerName?: string; // 登記車主名
     registeredOwnerId?: string;   // 登記車主身分證
-    
+    registeredOwnerDate?: string;
+
     // 1. 人員資料
     roles?: string[]; // 角色: 客戶/員工/司機/代辦 (可多選)
     name: string; // 姓名 或 公司名稱
@@ -356,6 +357,7 @@ type Vehicle = {
   colorExt: string; 
   colorInt: string; 
   licenseExpiry: string;
+  registeredOwnerDate?: string;
   transmission?: 'Automatic' | 'Manual';
   photos?: string[];
   
