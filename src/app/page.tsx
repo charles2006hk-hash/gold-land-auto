@@ -7488,24 +7488,51 @@ const VehicleFormModal = ({
                     <FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)
                 </h3>
                 <div className="flex items-center gap-2">
-                    {/* ★ 新增：查牌費按鈕 (自動複製車牌 + 開新視窗) */}
+                    {/* ★ 終極升級版：查牌費按鈕 (獨立小視窗 + 智慧日期提示) */}
                     <button 
                         type="button" 
                         onClick={(e) => {
                             e.stopPropagation();
-                            // 動態抓取當前輸入框內的車牌 (即使還沒儲存也能抓到)
+                            
+                            // 1. 動態抓取車牌
                             const plateInput = document.querySelector('input[name="regMark"]') as HTMLInputElement;
                             const currentPlate = plateInput ? plateInput.value : (v.regMark || '');
                             
+                            // 2. 動態抓取車主登記日期
+                            const dateInput = document.querySelector('input[name="registeredOwnerDate"]') as HTMLInputElement;
+                            const ownerDate = dateInput ? dateInput.value : (v.registeredOwnerDate || '');
+                            
+                            // 3. 轉換日期格式 (系統存 YYYY-MM-DD，運輸署要 DD/MM/YYYY)
+                            let tdFormatDate = '未填寫日期';
+                            if (ownerDate && ownerDate.includes('-')) {
+                                const parts = ownerDate.split('-');
+                                if (parts.length === 3) {
+                                    tdFormatDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                }
+                            }
+
+                            // 4. 複製車牌並顯示超大提示
                             if (currentPlate && currentPlate !== '未出牌') {
                                 navigator.clipboard.writeText(currentPlate);
-                                alert(`✅ 已複製車牌：${currentPlate}\n您可以直接在運輸署網站貼上！`);
                             }
-                            // 打開運輸署網站
-                            window.open('https://vehiclelicence2.td.gov.hk/evlweb/eVehicleLicence', '_blank');
+                            
+                            alert(`✅ 已自動複製車牌：${currentPlate}\n(可直接在第一步貼上)\n\n📆 第二步需要的【車主登記日期】為：\n👉👉   ${tdFormatDate}   👈👈\n\n(視窗將以獨立小框彈出，查完直接關閉即可)`);
+
+                            // 5. 開啟「純淨版」獨立小視窗 (模擬內嵌框框的體驗)
+                            const w = 500; // 視窗寬度
+                            const h = 750; // 視窗高度
+                            // 讓視窗顯示在螢幕正中間
+                            const left = (window.screen.width / 2) - (w / 2);
+                            const top = (window.screen.height / 2) - (h / 2);
+                            
+                            window.open(
+                                'https://vehiclelicence2.td.gov.hk/evlweb/eVehicleLicence', 
+                                'TD_License_Check', 
+                                `width=${w},height=${h},top=${top},left=${left},toolbar=no,location=no,directories=no,status=no,menubar=no,scrollbars=yes,resizable=no`
+                            );
                         }} 
                         className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded hover:bg-amber-100 flex items-center shadow-sm transition-colors"
-                        title="複製車牌並前往運輸署查詢"
+                        title="開啟純淨小視窗查詢牌費"
                     >
                         <Search size={10} className="mr-1"/> 查牌費
                     </button>
