@@ -11,7 +11,7 @@ import {
   Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
   Check, AlertCircle, Link, Share2, Key, Sun, Crop, Move, MousePointer2,
   CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
-  Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing
+  Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing, MessageCircle, Send, ListTodo
 } from 'lucide-react';
 
 import { compressImage } from '@/utils/imageHelpers';
@@ -4517,7 +4517,182 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
     );
 };
 
+// ------------------------------------------------------------------
+// ★★★ 9. Team Hub Drawer (團隊對話與任務中心) ★★★
+// ------------------------------------------------------------------
+const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers }: any) => {
+    const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat');
+    
+    const [messages, setMessages] = useState<any[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    
+    const [tasks, setTasks] = useState<any[]>([]);
+    const [newTask, setNewTask] = useState('');
+    const [assignee, setAssignee] = useState('');
 
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // 1. 監聽對話庫
+    useEffect(() => {
+        if (!db || !isOpen) return;
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), orderBy('timestamp', 'asc'), limit(100));
+        const unsub = onSnapshot(q, (snap) => {
+            setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            // 自動捲動到最新訊息
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        });
+        return () => unsub();
+    }, [db, appId, isOpen]);
+
+    // 2. 監聽任務庫
+    useEffect(() => {
+        if (!db || !isOpen) return;
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), orderBy('timestamp', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [db, appId, isOpen]);
+
+    // 發送訊息
+    const handleSendMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newMessage.trim() || !db) return;
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), {
+            sender: staffId,
+            text: newMessage.trim(),
+            timestamp: serverTimestamp()
+        });
+        setNewMessage('');
+    };
+
+    // 新增任務
+    const handleAddTask = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newTask.trim() || !assignee || !db) return;
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), {
+            assigner: staffId,
+            assignee: assignee,
+            content: newTask.trim(),
+            status: 'pending',
+            timestamp: serverTimestamp()
+        });
+        setNewTask('');
+    };
+
+    // 切換任務狀態
+    const toggleTask = async (task: any) => {
+        if (!db) return;
+        const newStatus = task.status === 'pending' ? 'completed' : 'pending';
+        await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks', task.id), {
+            status: newStatus,
+            completedAt: newStatus === 'completed' ? serverTimestamp() : null
+        });
+    };
+
+    // 刪除任務
+    const deleteTask = async (taskId: string) => {
+        if (!db || !confirm("確定刪除此任務？")) return;
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks', taskId));
+    };
+
+    return (
+        <>
+            {/* 半透明背景遮罩 (手機版點擊可關閉) */}
+            {isOpen && <div className="fixed inset-0 bg-black/20 z-[9998] md:bg-transparent md:pointer-events-none" onClick={onClose}></div>}
+            
+            {/* 右側滑出面板 */}
+            <div className={`fixed top-0 right-0 h-full w-full md:w-[400px] bg-slate-50 shadow-2xl z-[9999] transform transition-transform duration-300 flex flex-col border-l border-slate-200 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                
+                {/* Header */}
+                <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md flex-none">
+                    <div className="flex items-center gap-2">
+                        <MessageCircle size={20} className="text-yellow-400"/>
+                        <h3 className="font-bold text-lg tracking-wide">團隊協作中心</h3>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex border-b border-slate-200 bg-white flex-none">
+                    <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'chat' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><MessageCircle size={16} className="mr-2"/> 內部對話</button>
+                    <button onClick={() => setActiveTab('tasks')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'tasks' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><ListTodo size={16} className="mr-2"/> 任務指派</button>
+                </div>
+
+                {/* --- 內容區：對話 (Chat) --- */}
+                {activeTab === 'chat' && (
+                    <div className="flex-1 flex flex-col overflow-hidden bg-slate-100/50">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {messages.map((msg, idx) => {
+                                const isMe = msg.sender === staffId;
+                                const timeStr = msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : '';
+                                return (
+                                    <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                        <span className="text-[10px] text-slate-400 mb-1 px-1">{isMe ? '您' : msg.sender} • {timeStr}</span>
+                                        <div className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none'}`}>
+                                            {msg.text}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div ref={messagesEndRef} />
+                        </div>
+                        <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex gap-2 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
+                            <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="輸入訊息..." className="flex-1 bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white rounded-full px-4 py-2 text-sm outline-none transition-colors" />
+                            <button type="submit" disabled={!newMessage.trim()} className="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 transition-colors shadow-sm"><Send size={16}/></button>
+                        </form>
+                    </div>
+                )}
+
+                {/* --- 內容區：任務 (Tasks) --- */}
+                {activeTab === 'tasks' && (
+                    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+                        {/* 新增任務區 (限主管/指派者) */}
+                        <form onSubmit={handleAddTask} className="p-4 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none shadow-sm z-10">
+                            <input value={newTask} onChange={e => setNewTask(e.target.value)} placeholder="任務內容 (例如: 聯絡陳生收尾數)" className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 ring-blue-100" />
+                            <div className="flex gap-2">
+                                <select value={assignee} onChange={e => setAssignee(e.target.value)} className="flex-1 border border-slate-200 rounded-lg p-2 text-sm outline-none bg-slate-50">
+                                    <option value="">-- 指派給 --</option>
+                                    {systemUsers.map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
+                                    <option value="ALL">所有人 (All)</option>
+                                </select>
+                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors whitespace-nowrap shadow-sm"><Plus size={16} className="inline mr-1"/> 發佈</button>
+                            </div>
+                        </form>
+                        
+                        {/* 任務列表 */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {tasks.map(task => {
+                                const isCompleted = task.status === 'completed';
+                                const isMyTask = task.assignee === staffId || task.assignee === 'ALL';
+                                return (
+                                    <div key={task.id} className={`p-3 rounded-xl border flex gap-3 shadow-sm transition-all ${isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-blue-200 hover:shadow-md'}`}>
+                                        <button onClick={() => toggleTask(task)} className={`mt-0.5 flex-none rounded-full w-5 h-5 flex items-center justify-center border transition-colors ${isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-blue-500 text-transparent hover:text-blue-200'}`}>
+                                            <Check size={12}/>
+                                        </button>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-sm font-bold ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`}>{task.content}</p>
+                                            <div className="flex justify-between items-center mt-2">
+                                                <div className="text-[10px] text-slate-400 font-medium">
+                                                    <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
+                                                    由 {task.assigner} 指派
+                                                </div>
+                                                {(task.assigner === staffId || staffId === 'BOSS') && (
+                                                    <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={12}/></button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {tasks.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">目前沒有任何任務</div>}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+};
 
 // ------------------------------------------------------------------
 // ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
@@ -5758,6 +5933,7 @@ export default function GoldLandAutoDMS() {
   const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
   const [isDataSyncing, setIsDataSyncing] = useState(true);
+  const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
 
   // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
   const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
@@ -9664,18 +9840,42 @@ const CreateDocModule = ({
         
 
         {activeTab === 'media_center' && (
-            <MediaLibraryModule 
-                db={db} 
-                storage={storage} 
-                staffId={staffId} 
-                appId={appId} 
-                settings={settings}   // 新增
-                inventory={visibleInventory} // 新增
-            />
-        )}
+              <MediaLibraryModule 
+                  db={db} 
+                  storage={storage} 
+                  staffId={staffId} 
+                  appId={appId} 
+                  settings={settings}
+                  inventory={visibleInventory} 
+              />
+          )}
 
          </div>       
       </main>
+
+      {/* ★★★ 新增：右下角全域懸浮按鈕 (FAB) ★★★ */}
+      {staffId && (
+          <button 
+              onClick={() => setIsTeamHubOpen(true)}
+              className="fixed bottom-6 right-6 z-[9000] w-14 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 group"
+              title="打開團隊協作中心"
+          >
+              <MessageCircle size={24} className="group-hover:animate-pulse"/>
+              {/* 這裡可以做一個小紅點提示，目前先放靜態裝飾 */}
+              <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
+          </button>
+      )}
+
+      {/* ★★★ 新增：掛載團隊協作抽屜 ★★★ */}
+      <TeamHubDrawer 
+          isOpen={isTeamHubOpen}
+          onClose={() => setIsTeamHubOpen(false)}
+          db={db}
+          staffId={staffId}
+          appId={appId}
+          systemUsers={systemUsers}
+      />
+
     </div>
   );
 }
