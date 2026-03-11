@@ -9421,26 +9421,30 @@ const CreateDocModule = ({
                   };
 
                   return (
-                      // ★ 核心優化：手機版取消 gap，並使用 -mx-4 達成螢幕滿版 (Edge-to-Edge)
-                      <div className="flex flex-col lg:flex-row gap-0 lg:gap-4 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0">
+                      // ★ 修復 1：外層改為永遠 overflow-hidden，強迫鎖死版面，上下平分剩餘空間
+                      <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 flex-1 min-h-0 overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0">
                           
                           {/* 左側看板：在庫優先 */}
-                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl md:border border-slate-200 shadow-sm md:overflow-hidden mb-2 lg:mb-0">
-                              <div className="p-3 border-y md:border-t-0 border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
+                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl border-y md:border border-slate-200 shadow-sm overflow-hidden min-h-0">
+                              {/* ★ 修復 2：移除 sticky，改用 flex-none 獨立出來，加上陰影，徹底解決穿透問題 */}
+                              <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-none z-10 shadow-sm relative">
                                   <h3 className="font-bold text-slate-800 flex items-center text-sm"><Layout size={16} className="mr-2 text-green-600"/> 在庫待售 <span className="ml-2 text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{inStockCars.length} 台</span></h3>
                               </div>
-                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin">
+                              {/* ★ 修復 3：獨立的內部滾動區塊 */}
+                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin relative z-0">
                                   {inStockCars.map(car => renderDashboardCard(car))}
                                   {inStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">目前無在庫車輛</div>}
                               </div>
                           </div>
 
                           {/* 右側看板：已訂 / 待跟進 */}
-                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl md:border border-slate-200 shadow-sm md:overflow-hidden">
-                              <div className="p-3 border-y md:border-t-0 border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
+                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl border-y md:border border-slate-200 shadow-sm overflow-hidden min-h-0">
+                              {/* ★ 同樣改為 flex-none */}
+                              <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-none z-10 shadow-sm relative">
                                   <h3 className="font-bold text-slate-800 flex items-center text-sm"><FileCheck size={16} className="mr-2 text-amber-500"/> 已訂與待結清 <span className="ml-2 text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{actionCars.length} 台</span></h3>
                               </div>
-                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin">
+                              {/* ★ 獨立的內部滾動區塊 */}
+                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin relative z-0">
                                   {actionCars.map(car => renderDashboardCard(car))}
                                   {actionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center"><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</div>}
                               </div>
