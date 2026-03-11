@@ -76,7 +76,7 @@ export async function POST(req: Request) {
           如果找不到該欄位，請回傳空字串 ""。
 
           【★★★ 全局指令 ★★★】
-          1. 所有日期 (簽發日、到期日等) 必須轉換為 "YYYY-MM-DD" 格式。
+          1. 所有日期 (簽發日、到期日、車主登記日等) 必須轉換為 "YYYY-MM-DD" 格式。
           2. 請根據文件內容，自動產生 2~3 個適合搜尋的陣列標籤 (tags)，例如：["牌簿", "Tesla"] 或 ["保險", "三保", "PingAn"]。
           3. 如果是牌簿 (VRD) 的車主名稱，通常會有中英文兩行，請務必合併為單一字串回傳 (例如: "陳大文 CHAN TAI MAN")。
 
@@ -101,10 +101,14 @@ export async function POST(req: Request) {
           - prevOwners: 前任車主數目 (純數字)
           - engineSize: 汽缸容量 (純數字)
           
-          // ★★★ 補回缺失的 3 個重要欄位 ★★★
+          // ★★★ 補回缺失的重要欄位 ★★★
           - vehicleColor: 車身顏色 (Colour)
           - priceA1: 首次登記稅值 (First Registration Taxable Value，請回傳純數字，不要有 $ 符號和逗號)
           - priceTax: 已繳付登記稅 (First Registration Tax Paid，請回傳純數字，不要有 $ 符號和逗號)
+
+          // ★★★ 新增：車主登記日期與牌費到期日 ★★★
+          - registeredOwnerDate: 登記為車主日期 (Date of Registration as Owner)，請務必轉換為 YYYY-MM-DD
+          - licenseExpiry: 牌照有效日期 / 牌費到期日 (如文件上有顯示)，請轉換為 YYYY-MM-DD
           
           // 🛡️ 保險 (Cover Note / Policy) 專屬欄位
           - insuranceCompany: 保險公司名稱 (例如 Ping An, Bank of China 等)
