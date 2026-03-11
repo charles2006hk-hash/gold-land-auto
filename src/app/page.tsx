@@ -6527,11 +6527,58 @@ const deleteVehicle = async (id: string) => {
     }
   };
 
-  const addPayment = (vehicleId: string, payment: Payment) => {
+  const addPayment = async (vehicleId: string, payment: Payment) => {
+    if (!db || !appId) return; 
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
+    
+    // 1. 更新車輛本身的收款紀錄 (保留原本的功能)
     updateSubItem(vehicleId, 'payments', [...(v.payments || []), payment]);
+
+    // ★★★ 2. 新增：自動於「開單系統」生成對應的收據 (Receipt) ★★★
+    try {
+        const receiptData = {
+            type: 'receipt', // 指定為收據
+            formData: {
+                companyNameEn: "GOLD LAND AUTO", companyNameCh: "金田汽車",
+                companyAddress: COMPANY_INFO.address_ch, 
+                companyPhone: COMPANY_INFO.phone, 
+                companyEmail: COMPANY_INFO.email,
+                customerName: v.customerName || '未填寫客戶', 
+                customerId: v.customerID || '', 
+                customerAddress: v.customerAddress || '', 
+                customerPhone: v.customerPhone || '',
+                regMark: v.regMark || '', 
+                make: v.make || '', 
+                model: v.model || '', 
+                chassisNo: v.chassisNo || '', 
+                engineNo: v.engineNo || '', 
+                year: v.year || '',
+                price: v.price ? v.price.toString() : '0', 
+                deliveryDate: payment.date, // 使用收款日期
+                paymentMethod: payment.method || 'Cash',
+                remarks: payment.note || ''
+            },
+            checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+            docItems: [], // 額外收費項目留空
+            // 將本次收款轉化為收據上的明細
+            depositItems: [{ id: payment.id, label: `收款項目: ${payment.type}`, amount: Number(payment.amount) || 0 }],
+            showTerms: false, 
+            summary: `${v.customerName || '未填寫客戶'} - ${v.regMark || '無車牌'} - 自動生成收據 (${payment.type})`,
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp()
+        };
+        
+        // 寫入開單系統的資料庫
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), receiptData);
+        
+        // 彈出成功提示
+        alert(`✅ 收款已記錄！\n系統已自動於開單模塊生成一張「正式收據」。`);
+    } catch (e) {
+        console.error("自動生成收據失敗:", e);
+    }
   };
+
   const deletePayment = (vehicleId: string, paymentId: string) => {
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
@@ -9374,25 +9421,26 @@ const CreateDocModule = ({
                   };
 
                   return (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden mt-2">
+                      // ★ 核心優化：手機版取消 gap，並使用 -mx-4 達成螢幕滿版 (Edge-to-Edge)
+                      <div className="flex flex-col lg:flex-row gap-0 lg:gap-4 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0">
                           
-                          {/* 左側看板：在庫優先 (Sales Focus) */}
-                          <div className="bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shadow-sm">
-                              <div className="p-3.5 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
+                          {/* 左側看板：在庫優先 */}
+                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl md:border border-slate-200 shadow-sm md:overflow-hidden mb-2 lg:mb-0">
+                              <div className="p-3 border-y md:border-t-0 border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
                                   <h3 className="font-bold text-slate-800 flex items-center text-sm"><Layout size={16} className="mr-2 text-green-600"/> 在庫待售 <span className="ml-2 text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{inStockCars.length} 台</span></h3>
                               </div>
-                              <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/30 scrollbar-thin">
+                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin">
                                   {inStockCars.map(car => renderDashboardCard(car))}
                                   {inStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">目前無在庫車輛</div>}
                               </div>
                           </div>
 
-                          {/* 右側看板：已訂 / 待跟進 (Ops/Finance Focus) */}
-                          <div className="bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shadow-sm">
-                              <div className="p-3.5 border-b border-slate-100 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
+                          {/* 右側看板：已訂 / 待跟進 */}
+                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl md:border border-slate-200 shadow-sm md:overflow-hidden">
+                              <div className="p-3 border-y md:border-t-0 border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10">
                                   <h3 className="font-bold text-slate-800 flex items-center text-sm"><FileCheck size={16} className="mr-2 text-amber-500"/> 已訂與待結清 <span className="ml-2 text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{actionCars.length} 台</span></h3>
                               </div>
-                              <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50/30 scrollbar-thin">
+                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin">
                                   {actionCars.map(car => renderDashboardCard(car))}
                                   {actionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center"><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</div>}
                               </div>
