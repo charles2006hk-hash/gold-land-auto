@@ -1458,6 +1458,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
                         registeredOwnerName: data.registeredOwnerName || prev.registeredOwnerName,
                         registeredOwnerId: finalOwnerId,
+                        registeredOwnerDate: data.registeredOwnerDate || data.ownerRegDate || data.dateOfRegAsOwner || prev.registeredOwnerDate,
                         
                         // --- 四證八面保持不變 ---
                         hkid_name: data.hkid_name || prev.hkid_name,
@@ -1537,6 +1538,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : 0,
                     registeredOwnerName: data.registeredOwnerName || '',
                     registeredOwnerId: data.registeredOwnerId || '',
+                    registeredOwnerDate: data.registeredOwnerDate || '',
                     createdAt: data.createdAt, 
                     updatedAt: data.updatedAt,
                     reminderEnabled: data.reminderEnabled || false, 
@@ -1684,6 +1686,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             firstRegCondition: editingEntry.firstRegCondition || '',
             registeredOwnerName: editingEntry.registeredOwnerName || '',
             registeredOwnerId: editingEntry.registeredOwnerId || '',
+            registeredOwnerDate: editingEntry.registeredOwnerDate || '',
             engineSize: Number(editingEntry.engineSize) || 0,
             priceA1: Number(editingEntry.priceA1) || 0,
             priceTax: Number(editingEntry.priceTax) || 0,
@@ -1978,7 +1981,15 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                     <div><label className="text-[10px] text-gray-500">已繳稅款</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceTax || ''} onChange={e => setEditingEntry({...editingEntry, priceTax: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                     <div><label className="text-[10px] text-gray-500">手數</label><input type="number" disabled={!isDbEditing} value={editingEntry.prevOwners || ''} onChange={e => setEditingEntry({...editingEntry, prevOwners: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                 </div>
-                                                <div className="bg-white p-2 rounded border border-slate-100"><label className="text-[10px] font-bold text-slate-400 mb-1 block">VRD 登記車主</label><div className="grid grid-cols-3 gap-2"><div className="col-span-2"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerName || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerName: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="車主全名"/></div><div className="col-span-1"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerId || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerId: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="身份證號碼"/></div></div></div>
+                                                <div className="bg-white p-2 rounded border border-slate-100">
+                                                    <label className="text-[10px] font-bold text-slate-400 mb-1 block">VRD 登記車主</label>
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <div className="col-span-2"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerName || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerName: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="車主全名"/></div>
+                                                        <div className="col-span-1"><input disabled={!isDbEditing} value={editingEntry.registeredOwnerId || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerId: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="身份證號碼"/></div>
+                                                        {/* ★ 新增：登記為車主日期輸入框 */}
+                                                        <div className="col-span-1"><input type="date" disabled={!isDbEditing} value={editingEntry.registeredOwnerDate || ''} onChange={e => setEditingEntry({...editingEntry, registeredOwnerDate: e.target.value})} className="w-full p-1.5 border rounded text-xs text-slate-500" title="登記為車主日期"/></div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </>
                                     )}
@@ -6595,6 +6606,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             chassisNo: (formData.get('chassisNo') as string)?.toUpperCase() || '',
             engineNo: (formData.get('engineNo') as string)?.toUpperCase() || '',
             licenseExpiry: formData.get('licenseExpiry') || '',
+            registeredOwnerDate: formData.get('registeredOwnerDate') as string || '', // ★ 新增儲存：登記為車主日期
             
             price: getNum('price', true),
             costPrice: getNum('costPrice', true),
@@ -7344,8 +7356,12 @@ const VehicleFormModal = ({
                 chassisNo: vrdData.chassisNo || prev.chassisNo,
                 engineNo: vrdData.engineNo || prev.engineNo,
                 engineSize: vrdData.engineSize || prev.engineSize,
+                priceA1: vrdData.priceA1 || prev.priceA1,
+                priceTax: vrdData.priceTax || prev.priceTax,
                 colorExt: vrdData.vehicleColor || vrdData.color || prev.colorExt,
                 previousOwners: vrdData.prevOwners !== undefined ? vrdData.prevOwners.toString() : prev.previousOwners,
+                // ★ 新增：接收來自資料庫的登記為車主日期
+                registeredOwnerDate: vrdData.registeredOwnerDate || prev.registeredOwnerDate,
                 customerName: finalCName || prev.customerName,
                 customerPhone: finalCPhone || prev.customerPhone,
                 customerID: finalCID || prev.customerID,
@@ -7461,41 +7477,60 @@ const VehicleFormModal = ({
                  )}
 
                  <div className="flex-1 overflow-y-auto md:overflow-y-auto p-4 space-y-4 scrollbar-thin">
-                     {/* VRD Card */}
-                     <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
-                        <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
-                        <div className="p-4 space-y-3">
-                            <div className="flex justify-between items-center"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)</h3><button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm"><Link size={10} className="mr-1"/> 連結資料庫</button></div>
-                            
-                            <div className="space-y-1 relative"><label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label><input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-[#FFD600] border-[3px] border-black p-2 text-2xl font-black font-mono text-center text-black focus:ring-4 focus:ring-yellow-200 rounded-md uppercase"/></div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Make</label><select name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"><option value="">--</option>{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</select></div>
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
-                                <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/></div>
-                                <div className="col-span-1 bg-red-50/50 rounded px-1"><label className="text-[9px] text-red-400 font-bold uppercase">Lic. Expiry</label><input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent border-b border-red-200 p-1 text-xs font-mono text-right text-red-700 outline-none"/></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 pt-2">
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label><input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs"/></div>
-                            </div>
-                            <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
-                            <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
-                            <div className="grid grid-cols-2 gap-3 pt-2">
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">{fuelType === 'Electric' ? 'Rated Power (KW)' : 'Cyl. Cap. (cc)'}</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" /></div>
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 5} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Petrol">Petrol</option><option value="Diesel">Diesel</option><option value="Electric">Electric</option></select></div>
-                                <div><label className="text-[9px] text-slate-400 font-bold uppercase">Transmission</label><select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Automatic">Auto</option><option value="Manual">Manual</option></select></div>
-                            </div>
+    {/* VRD Card */}
+    <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
+        <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
+        <div className="p-4 space-y-3">
+            <div className="flex justify-between items-center"><h3 className="font-bold text-red-800 text-sm flex items-center"><FileText size={14} className="mr-1"/> 車輛登記文件 (VRD)</h3><button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 flex items-center shadow-sm"><Link size={10} className="mr-1"/> 連結資料庫</button></div>
+            
+            <div className="space-y-1 relative"><label className="text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label><input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-[#FFD600] border-[3px] border-black p-2 text-2xl font-black font-mono text-center text-black focus:ring-4 focus:ring-yellow-200 rounded-md uppercase"/></div>
+            
+            {/* ★ 修復 1：Make 改為 input + datalist，確保 AI 辨識的文字不會消失 */}
+            <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-[9px] text-slate-400 font-bold uppercase">Make</label>
+                            <input list="make_list" name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/>
+                            <datalist id="make_list">{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</datalist>
                         </div>
-                     </div>
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono"/></div>
+                        <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm font-mono text-right" placeholder="km"/></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="col-span-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label><input name="previousOwners" defaultValue={v.previousOwners} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-sm text-right"/></div>
+                        <div className="col-span-1 bg-red-50/50 rounded px-1"><label className="text-[9px] text-red-400 font-bold uppercase">Lic. Expiry</label><input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent border-b border-red-200 p-1 text-xs font-mono text-right text-red-700 outline-none"/></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label><input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs"/><datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist></div>
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label><input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs"/></div>
+                    </div>
+                    
+                    <div className="space-y-1 pt-2 border-t border-dashed border-slate-200"><label className="text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label><input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
+                    <div className="space-y-1"><label className="text-[9px] text-slate-400 font-bold uppercase">Engine No.</label><input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider uppercase"/></div>
+                    
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">{fuelType === 'Electric' ? 'Rated Power (KW)' : 'Cyl. Cap. (cc)'}</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right font-mono" /></div>
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 5} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs text-right"/></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-slate-200">
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Petrol">Petrol</option><option value="Diesel">Diesel</option><option value="Electric">Electric</option></select></div>
+                        <div><label className="text-[9px] text-slate-400 font-bold uppercase">Transmission</label><select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs outline-none"><option value="Automatic">Auto</option><option value="Manual">Manual</option></select></div>
+                    </div>
+
+                    {/* ★ 修復 2：新增登記為車主日期 */}
+                    <div className="space-y-1 pt-2 border-t border-dashed border-slate-200">
+                        <label className="text-[9px] text-slate-400 font-bold uppercase">Date of Reg. as Owner (車主登記日期)</label>
+                        <input type="date" name="registeredOwnerDate" defaultValue={v.registeredOwnerDate} className="w-full bg-slate-50 border-b border-slate-200 p-1 text-xs font-mono tracking-wider outline-none text-slate-600"/>
+                    </div>
+
+                </div>
+            </div>
 
                      {/* Photos Card */}
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
