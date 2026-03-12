@@ -4679,15 +4679,16 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                         plate: v.regMark || '未出牌', 
                         make: v.make, 
                         model: v.model,
+                        year: v.year || '未填寫', 
                         status: v.status, 
                         daysInStock: v.stockInDate ? Math.floor((new Date().getTime() - new Date(v.stockInDate).getTime()) / (1000 * 60 * 60 * 24)) : 0,
                         targetPrice: v.price || 0, 
                         totalReceived: received,
                         outstandingBalance: balance > 0 ? balance : 0,
-                        managedBy: v.managedBy || '未指派'
-                        licenseExpiry: v.licenseExpiry || '未填寫', // ★ 新增牌費到期日
-                        previousOwners: v.previousOwners || '未填寫', // ★ 新增手數
-                        ownerName: v.registeredOwnerName || '未填寫' // ★ 新增車主姓名
+                        managedBy: v.managedBy || '未指派', // ★ 補返呢度個逗號！
+                        licenseExpiry: v.licenseExpiry || '未填寫', 
+                        previousOwners: v.previousOwners || '未填寫', 
+                        ownerName: v.registeredOwnerName || '未填寫' 
                     };
                 });
 
