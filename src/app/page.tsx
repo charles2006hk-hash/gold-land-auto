@@ -4571,27 +4571,29 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
 };
 
 // ------------------------------------------------------------------
-// ★★★ 9. Team Hub Drawer (團隊對話與任務中心) ★★★
+// ★★★ 9. Team Hub Drawer (團隊協作中心 - AI 智聯粵語版) ★★★
 // ------------------------------------------------------------------
-const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers }: any) => {
+const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle }: any) => {
     const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat');
     
     const [messages, setMessages] = useState<any[]>([]);
     const [newMessage, setNewMessage] = useState('');
+    const [chatLinkedCar, setChatLinkedCar] = useState(''); 
     
     const [tasks, setTasks] = useState<any[]>([]);
     const [newTask, setNewTask] = useState('');
     const [assignee, setAssignee] = useState('');
+    const [taskLinkedCar, setTaskLinkedCar] = useState(''); 
 
+    const [isAiThinking, setIsAiThinking] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // 1. 監聽對話庫
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), orderBy('timestamp', 'asc'), limit(100));
-        const unsub = onSnapshot(q, (snap) => {
-            setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-            // 自動捲動到最新訊息
+        const unsub = onSnapshot(q, (snap: any) => {
+            setMessages(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         });
         return () => unsub();
@@ -4601,39 +4603,113 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers }: any
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), orderBy('timestamp', 'desc'));
-        const unsub = onSnapshot(q, (snap) => {
-            setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const unsub = onSnapshot(q, (snap: any) => {
+            setTasks(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
         });
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // 發送訊息
+    // ★★★ 發送訊息與 AI 處理邏輯 ★★★
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newMessage.trim() || !db) return;
+        const msgText = newMessage.trim();
+        if (!msgText || !db) return;
+
+        // 智能解析對話文字中的 @車牌
+        let finalLinkedCar = chatLinkedCar;
+        if (!finalLinkedCar) {
+            const match = msgText.match(/@([a-zA-Z0-9]+)/);
+            if (match) {
+                const plate = match[1].toUpperCase();
+                if (inventory.some((v:any) => v.regMark === plate)) finalLinkedCar = plate;
+            }
+        }
+
+        // 1. 儲存使用者的訊息
         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), {
             sender: staffId,
-            text: newMessage.trim(),
+            text: msgText,
+            linkedRegMark: finalLinkedCar || null, 
             timestamp: serverTimestamp()
         });
+        
         setNewMessage('');
+        setChatLinkedCar('');
+        
+        // 2. 如果包含 @AI，觸發智能分析
+        if (msgText.includes('@AI') || msgText.includes('@ai')) {
+            setIsAiThinking(true);
+            try {
+                // 幫 AI 算好每台車的財務總帳
+                const miniInventory = inventory.map((v:any) => {
+                    const received = (v.payments || []).reduce((acc:number, p:any) => acc + (Number(p.amount) || 0), 0);
+                    const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (Number(t.fee) || 0), 0);
+                    const salesAddonsTotal = (v.salesAddons || []).reduce((sum: number, addon: any) => sum + (Number(addon.amount) || 0), 0);
+                    const totalReceivable = (Number(v.price) || 0) + cbFees + salesAddonsTotal;
+                    const balance = totalReceivable - received;
+
+                    return {
+                        plate: v.regMark || '未出牌', 
+                        make: v.make, 
+                        model: v.model,
+                        status: v.status, 
+                        daysInStock: v.stockInDate ? Math.floor((new Date().getTime() - new Date(v.stockInDate).getTime()) / (1000 * 60 * 60 * 24)) : 0,
+                        targetPrice: v.price || 0, 
+                        totalReceived: received,
+                        outstandingBalance: balance > 0 ? balance : 0,
+                        managedBy: v.managedBy || '未指派'
+                    };
+                });
+
+                const response = await fetch('/api/assistant', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: msgText, inventory: miniInventory })
+                });
+
+                const data = await response.json();
+                
+                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), {
+                    sender: '🤖 金田 (AI助理)',
+                    text: data.reply || "Sorry呀，我個腦突然 hang 咗機，請稍後再試下啦。",
+                    linkedRegMark: finalLinkedCar || null,
+                    timestamp: serverTimestamp()
+                });
+            } catch (err) {
+                console.error("AI Error:", err);
+            } finally {
+                setIsAiThinking(false);
+            }
+        }
     };
 
-    // 新增任務
+    // ★★★ 新增任務 (升級智能 @ 解析) ★★★
     const handleAddTask = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newTask.trim() || !assignee || !db) return;
+        const taskText = newTask.trim();
+        if (!taskText || !assignee || !db) return;
+
+        let finalLinkedCar = taskLinkedCar;
+        if (!finalLinkedCar) {
+            const match = taskText.match(/@([a-zA-Z0-9]+)/);
+            if (match) {
+                const plate = match[1].toUpperCase();
+                if (inventory.some((v:any) => v.regMark === plate)) finalLinkedCar = plate;
+            }
+        }
+
         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), {
             assigner: staffId,
             assignee: assignee,
-            content: newTask.trim(),
+            content: taskText,
+            linkedRegMark: finalLinkedCar || null, 
             status: 'pending',
             timestamp: serverTimestamp()
         });
         setNewTask('');
+        setTaskLinkedCar('');
     };
 
-    // 切換任務狀態
     const toggleTask = async (task: any) => {
         if (!db) return;
         const newStatus = task.status === 'pending' ? 'completed' : 'pending';
@@ -4643,89 +4719,113 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers }: any
         });
     };
 
-    // 刪除任務
     const deleteTask = async (taskId: string) => {
         if (!db || !confirm("確定刪除此任務？")) return;
         await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks', taskId));
     };
 
+    const openCarDetails = (regMark: string) => {
+        const car = inventory.find((v:any) => v.regMark === regMark);
+        if (car && setEditingVehicle) setEditingVehicle(car);
+        else alert(`找不到車牌 ${regMark} 的詳細資料`);
+    };
+
     return (
         <>
-            {/* 半透明背景遮罩 (手機版點擊可關閉) */}
             {isOpen && <div className="fixed inset-0 bg-black/20 z-[9998] md:bg-transparent md:pointer-events-none" onClick={onClose}></div>}
             
-            {/* 右側滑出面板 */}
-            <div className={`fixed top-0 right-0 h-full w-full md:w-[400px] bg-slate-50 shadow-2xl z-[9999] transform transition-transform duration-300 flex flex-col border-l border-slate-200 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`fixed top-0 right-0 h-full w-full md:w-[420px] bg-slate-50 shadow-2xl z-[9999] transform transition-transform duration-300 flex flex-col border-l border-slate-200 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 
-                {/* Header */}
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md flex-none">
-                    <div className="flex items-center gap-2">
-                        <MessageCircle size={20} className="text-yellow-400"/>
-                        <h3 className="font-bold text-lg tracking-wide">團隊協作中心</h3>
-                    </div>
+                    <div className="flex items-center gap-2"><MessageCircle size={20} className="text-yellow-400"/><h3 className="font-bold text-lg tracking-wide">團隊協作中心</h3></div>
                     <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
-                {/* Tabs */}
                 <div className="flex border-b border-slate-200 bg-white flex-none">
                     <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'chat' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><MessageCircle size={16} className="mr-2"/> 內部對話</button>
                     <button onClick={() => setActiveTab('tasks')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'tasks' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><ListTodo size={16} className="mr-2"/> 任務指派</button>
                 </div>
 
-                {/* --- 內容區：對話 (Chat) --- */}
                 {activeTab === 'chat' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-100/50">
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
                             {messages.map((msg, idx) => {
                                 const isMe = msg.sender === staffId;
+                                const isAI = msg.sender.includes('AI') || msg.sender.includes('金田');
                                 const timeStr = msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : '';
                                 return (
                                     <div key={idx} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                                         <span className="text-[10px] text-slate-400 mb-1 px-1">{isMe ? '您' : msg.sender} • {timeStr}</span>
-                                        <div className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none'}`}>
-                                            {msg.text}
+                                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : (isAI ? 'bg-gradient-to-r from-indigo-100 to-blue-50 border border-indigo-200 text-indigo-900 rounded-tl-none' : 'bg-white text-slate-700 border border-slate-200 rounded-tl-none')}`}>
+                                            {msg.linkedRegMark && (
+                                                <div onClick={() => openCarDetails(msg.linkedRegMark)} className="mb-2 inline-flex items-center text-[10px] bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded cursor-pointer hover:bg-yellow-300 font-mono font-bold shadow-sm active:scale-95 transition-transform">
+                                                    <Car size={10} className="mr-1"/> {msg.linkedRegMark}
+                                                </div>
+                                            )}
+                                            <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
                                         </div>
                                     </div>
                                 );
                             })}
+                            {isAiThinking && (
+                                <div className="flex items-start">
+                                    <div className="bg-indigo-50 border border-indigo-100 text-indigo-500 p-3 rounded-2xl rounded-tl-none text-xs flex items-center shadow-sm"><Loader2 size={14} className="animate-spin mr-2"/> 金田 AI 正在思考中...</div>
+                                </div>
+                            )}
                             <div ref={messagesEndRef} />
                         </div>
-                        <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex gap-2 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)]">
-                            <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="輸入訊息..." className="flex-1 bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white rounded-full px-4 py-2 text-sm outline-none transition-colors" />
-                            <button type="submit" disabled={!newMessage.trim()} className="bg-blue-600 text-white p-2.5 rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:bg-slate-400 transition-colors shadow-sm"><Send size={16}/></button>
-                        </form>
+                        
+                        <div className="bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] p-3">
+                            <div className="flex gap-2 mb-2">
+                                <select value={chatLinkedCar} onChange={e => setChatLinkedCar(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600">
+                                    <option value="">🔗 不關聯車輛 (可輸入 @車牌)</option>
+                                    {inventory.filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
+                                </select>
+                                <button onClick={() => setNewMessage(prev => prev + '@AI ')} className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-200 transition-colors">呼叫 @AI</button>
+                            </div>
+                            <form onSubmit={handleSendMessage} className="flex gap-2">
+                                <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="輸入訊息... (如: @AI @VELLFIRE 收咗幾多錢？)" className="flex-1 bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white rounded-lg px-3 py-2 text-sm outline-none transition-colors" />
+                                <button type="submit" disabled={!newMessage.trim() || isAiThinking} className="bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"><Send size={16}/></button>
+                            </form>
+                        </div>
                     </div>
                 )}
 
-                {/* --- 內容區：任務 (Tasks) --- */}
                 {activeTab === 'tasks' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-                        {/* 新增任務區 (限主管/指派者) */}
-                        <form onSubmit={handleAddTask} className="p-4 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none shadow-sm z-10">
-                            <input value={newTask} onChange={e => setNewTask(e.target.value)} placeholder="任務內容 (例如: 聯絡陳生收尾數)" className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 ring-blue-100" />
+                        <form onSubmit={handleAddTask} className="p-3 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none shadow-sm z-10">
+                            <select value={taskLinkedCar} onChange={e => setTaskLinkedCar(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600 mb-1">
+                                <option value="">🔗 選擇關聯車輛 (選填，或輸入 @車牌)</option>
+                                {inventory.filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make} {v.model})</option>)}
+                            </select>
+                            
+                            <input value={newTask} onChange={e => setNewTask(e.target.value)} placeholder="任務內容 (例如: @VELLFIRE 聯絡車主收尾數)" className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 ring-blue-100" />
                             <div className="flex gap-2">
                                 <select value={assignee} onChange={e => setAssignee(e.target.value)} className="flex-1 border border-slate-200 rounded-lg p-2 text-sm outline-none bg-slate-50">
                                     <option value="">-- 指派給 --</option>
                                     {systemUsers.map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
                                     <option value="ALL">所有人 (All)</option>
                                 </select>
-                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors whitespace-nowrap shadow-sm"><Plus size={16} className="inline mr-1"/> 發佈</button>
+                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors shadow-sm"><Plus size={16} className="inline mr-1"/> 發佈</button>
                             </div>
                         </form>
                         
-                        {/* 任務列表 */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
                             {tasks.map(task => {
                                 const isCompleted = task.status === 'completed';
-                                const isMyTask = task.assignee === staffId || task.assignee === 'ALL';
                                 return (
                                     <div key={task.id} className={`p-3 rounded-xl border flex gap-3 shadow-sm transition-all ${isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-blue-200 hover:shadow-md'}`}>
                                         <button onClick={() => toggleTask(task)} className={`mt-0.5 flex-none rounded-full w-5 h-5 flex items-center justify-center border transition-colors ${isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-blue-500 text-transparent hover:text-blue-200'}`}>
                                             <Check size={12}/>
                                         </button>
                                         <div className="flex-1 min-w-0">
+                                            {task.linkedRegMark && (
+                                                <div onClick={() => openCarDetails(task.linkedRegMark)} className={`mb-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded cursor-pointer font-mono font-bold border transition-colors ${isCompleted ? 'bg-gray-200 text-gray-500 border-gray-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200'}`}>
+                                                    <Car size={10} className="mr-1"/> {task.linkedRegMark}
+                                                </div>
+                                            )}
                                             <p className={`text-sm font-bold ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`}>{task.content}</p>
-                                            <div className="flex justify-between items-center mt-2">
+                                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
                                                 <div className="text-[10px] text-slate-400 font-medium">
                                                     <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
                                                     由 {task.assigner} 指派
