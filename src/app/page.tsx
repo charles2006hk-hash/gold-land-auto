@@ -9774,16 +9774,28 @@ const CreateDocModule = ({
                     const balance = ((car.price || 0) + cbFees + salesAddonsTotal) - received;
                     const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
 
-                                // ★★★ 新增：計算海外訂車的到港天數 (支援 eta 或 arrivalDate 欄位) ★★★
-                    let daysToArrive = null;
-                    const etaDate = car.eta || car.arrivalDate; 
+                    // ★★★ 升級版：計算海外訂車的到港天數 (支援深度欄位與已到港狀態) ★★★
+                    let daysToArrive: number | null = null;
+                    let isArrived = false;
+                    let hasValidEta = false;
+                    
+                    // 擴大搜尋範圍：ETA 通常會放喺 acquisition (採購) 或 logistics 裡面
+                    const etaDate = car.eta || car.arrivalDate || car.acquisition?.eta || car.acquisition?.arrivalDate || (car as any).logistics?.eta; 
+
                     if (etaDate) {
                         const arr = new Date(etaDate);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        const diff = arr.getTime() - today.getTime();
-                        if (diff > 0) {
+                        if (!isNaN(arr.getTime())) { // 確保日期格式正確
+                            hasValidEta = true;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            arr.setHours(0, 0, 0, 0); // 只比較日期，不比較時間
+                            
+                            const diff = arr.getTime() - today.getTime();
                             daysToArrive = Math.ceil(diff / (1000 * 60 * 60 * 24));
+                            
+                            if (daysToArrive <= 0) {
+                                isArrived = true; // 今日或之前 = 已到港
+                            }
                         }
                     }
 
@@ -9899,16 +9911,21 @@ const CreateDocModule = ({
                                       {/* 右下：財務與物流狀態區 */}
                                       <div className="text-right flex flex-col gap-1.5 items-end">
                                           
-                                          {/* ★ 1. 海外訂車狀態 (已付款 + 船期倒數) */}
-                                          {daysToArrive !== null && (
+                                          {/* ★ 1. 海外訂車狀態 (已付款 + 船期倒數 / 已到港) ★ */}
+                                          {hasValidEta && (
                                               <div className="flex items-center gap-1">
                                                   {received > 0 && (
                                                       <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-medium">
                                                           已付款
                                                       </span>
                                                   )}
-                                                  <span className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm">
-                                                      <Ship size={9} className="mr-1 opacity-70"/> 還有 {daysToArrive} 天到港
+                                                  <span className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border ${
+                                                      isArrived 
+                                                      ? 'text-green-600 bg-green-50 border-green-200' 
+                                                      : 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                                                  }`}>
+                                                      <Ship size={9} className="mr-1 opacity-70"/> 
+                                                      {isArrived ? '已到港' : `還有 ${daysToArrive} 天`}
                                                   </span>
                                               </div>
                                           )}
