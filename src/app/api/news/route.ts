@@ -74,9 +74,27 @@ export async function GET() {
         return NextResponse.json(content.news);
 
     } catch (error: any) {
-        console.error('Gemini News Fetch Error:', error);
-        return NextResponse.json([
-            { tag: '⚠️ 系統除錯', text: `API 發生錯誤: ${error.message}`, time: '00:00' }
-        ]);
+        console.error("AI 快訊 Error:", error);
+        
+        const errorMsg = error.message || String(error);
+        
+        // ★ 攔截 Google 伺服器塞車嘅錯誤
+        if (errorMsg.includes('high demand') || errorMsg.includes('503') || errorMsg.includes('overloaded')) {
+            return NextResponse.json({ 
+                reply: "📡 金田 AI 伺服器目前大塞車，請稍等幾分鐘後再試啦..." 
+            });
+        }
+        
+        // ★ 攔截 Quota 爆咗嘅錯誤 (429 Too Many Requests)
+        if (errorMsg.includes('429') || errorMsg.includes('quota')) {
+            return NextResponse.json({ 
+                reply: "⚠️ 金田 AI 已經用盡咗今日/今分鐘嘅免費額度，請稍後再試。" 
+            });
+        }
+
+        // 其他未知錯誤
+        return NextResponse.json({ 
+            reply: "⚠️ AI 暫時無法連線，請稍後再試。" 
+        }, { status: 500 });
     }
 }
