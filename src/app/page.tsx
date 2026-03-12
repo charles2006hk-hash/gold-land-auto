@@ -9737,108 +9737,115 @@ const CreateDocModule = ({
 
                   // 提取共用的精緻卡片渲染邏輯
                   const renderDashboardCard = (car: any) => {
-                      const received = (car.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
-                      const cbFees = (car.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (t.fee || 0), 0);
-                      const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
-                      const balance = ((car.price || 0) + cbFees + salesAddonsTotal) - received;
-                      const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
+                    const received = (car.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
+                    const cbFees = (car.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (t.fee || 0), 0);
+                    const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
+                    const balance = ((car.price || 0) + cbFees + salesAddonsTotal) - received;
+                    const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
 
-                      const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
-                      const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
-                      const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
-                      const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
-                      const aging = getInventoryAging(car);
+                    const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
+                    const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                    const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+                    const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
+                    const aging = getInventoryAging(car);
 
-                      let statusText = '在庫';
-                      let statusClass = "bg-green-500 text-white";
-                      if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
-                      else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
+                    let statusText = '在庫';
+                    let statusClass = "bg-green-500 text-white";
+                    if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
+                    else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
 
-                      const cbTags = [];
-                      const ports = car.crossBorder?.ports || [];
-                      if (car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate) {
-                          if (ports.some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p))) cbTags.push({ label: '粵港', color: 'bg-indigo-600' });
-                          if (ports.some((p:string) => ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'].includes(p))) cbTags.push({ label: '粵澳', color: 'bg-emerald-600' });
-                          if (cbTags.length === 0) cbTags.push({ label: '中港', color: 'bg-slate-700' });
-                      }
+                    const cbTags = [];
+                    const ports = car.crossBorder?.ports || [];
+                    if (car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate) {
+                        if (ports.some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p))) cbTags.push({ label: '粵港', color: 'bg-indigo-600' });
+                        if (ports.some((p:string) => ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'].includes(p))) cbTags.push({ label: '粵澳', color: 'bg-emerald-600' });
+                        if (cbTags.length === 0) cbTags.push({ label: '中港', color: 'bg-slate-700' });
+                    }
 
-                      // 萃取與精簡車輛規格資料
-                      const specs = [];
-                      if (car.previousOwners !== undefined && car.previousOwners !== '') specs.push(`${car.previousOwners}手`);
-                      if (car.engineSize) specs.push(`${car.engineSize}cc`);
-                      if (car.transmission) specs.push(car.transmission === 'Manual' ? 'MT' : 'Auto');
-                      if (car.colorExt) specs.push(car.colorExt.split(' ')[0].replace(/[()]/g, '')); 
-                      if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
+                    // 萃取與精簡車輛規格資料
+                    const specs = [];
+                    if (car.previousOwners !== undefined && car.previousOwners !== '') specs.push(`${car.previousOwners}手`);
+                    if (car.engineSize) specs.push(`${car.engineSize}cc`);
+                    if (car.transmission) specs.push(car.transmission === 'Manual' ? 'MT' : 'Auto');
+                    if (car.colorExt) specs.push(car.colorExt.split(' ')[0].replace(/[()]/g, '')); 
+                    if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
 
-                      return (
-                          <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex bg-white p-3 rounded-xl border border-slate-100 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
-                              
-                              {/* 左側：精緻 4:3 縮圖 */}
-                              <div className="w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-900 shadow-inner">
-                                  {thumbUrl ? (
-                                      <>
-                                          <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-110" />
-                                          <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-0.5 drop-shadow-md group-hover:scale-105 transition-transform" />
-                                      </>
-                                  ) : (
-                                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50"><Car size={20}/><span className="text-[8px] mt-1">No Img</span></div>
-                                  )}
-                                  
-                                  {/* 左上角狀態 */}
-                                  <div className="absolute top-1.5 left-1.5 z-20 flex flex-col gap-1">
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm ${statusClass}`}>{statusText}</span>
-                                      {aging && <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm ${aging.style}`}>{aging.label}</span>}
-                                  </div>
-                              </div>
+                    return (
+                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex bg-white p-3 rounded-xl border border-slate-100 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
+                            
+                            {/* 左側：精緻 4:3 縮圖 */}
+                            <div className="w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-900 shadow-inner">
+                                {thumbUrl ? (
+                                    <>
+                                        <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-110" />
+                                        <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-0.5 drop-shadow-md group-hover:scale-105 transition-transform" />
+                                    </>
+                                ) : (
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50"><Car size={20}/><span className="text-[8px] mt-1">No Img</span></div>
+                                )}
+                                
+                                {/* 左上角狀態 */}
+                                <div className="absolute top-1.5 left-1.5 z-20 flex flex-col gap-1">
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm ${statusClass}`}>{statusText}</span>
+                                    {aging && <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm ${aging.style}`}>{aging.label}</span>}
+                                </div>
+                            </div>
 
-                              {/* 右側：車輛重點資訊 */}
-                              <div className="ml-3 flex-1 min-w-0 flex flex-col justify-between py-0.5 relative">
-                                  
-                                  {/* ★★★ 補回：分享(對客預覽)按鈕 ★★★ */}
-                                  <button 
-                                      onClick={(e) => { e.stopPropagation(); setShareVehicle(car); }} 
-                                      className="absolute top-0 right-0 p-1.5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
-                                      title="產生對客推介單"
-                                  >
-                                      <Share2 size={14}/>
-                                  </button>
+                            {/* 右側：車輛重點資訊 */}
+                            <div className="ml-3 flex-1 min-w-0 flex flex-col justify-between py-0.5 relative">
+                                
+                                {/* ★★★ 補回：分享(對客預覽)按鈕 ★★★ */}
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); setShareVehicle(car); }} 
+                                    className="absolute top-0 right-0 p-1.5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
+                                    title="產生對客推介單"
+                                >
+                                    <Share2 size={14}/>
+                                </button>
 
-                                  <div>
-                                      {/* 車型標題改為單行截斷 (加入 pr-6 避免文字與分享按鈕重疊) */}
-                                      <div className="font-bold text-sm text-slate-800 leading-tight line-clamp-1 pr-6">{car.year} {car.make} {car.model}</div>
-                                      
-                                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                          <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 rounded-[2px] shadow-sm">{car.regMark || '未出牌'}</span>
-                                          {car.crossBorder?.mainlandPlate && <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1 rounded-[2px] shadow-sm`}>{car.crossBorder.mainlandPlate}</span>}
-                                          {cbTags.map((t:any,i:number) => <span key={i} className={`text-[8px] text-white px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
-                                      </div>
+                                <div>
+                                    {/* 車型標題改為單行截斷 (加入 pr-6 避免文字與分享按鈕重疊) */}
+                                    <div className="font-bold text-sm text-slate-800 leading-tight line-clamp-1 pr-6">{car.year} {car.make} {car.model}</div>
+                                    
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                        <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 rounded-[2px] shadow-sm">{car.regMark || '未出牌'}</span>
+                                        {car.crossBorder?.mainlandPlate && <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1 rounded-[2px] shadow-sm`}>{car.crossBorder.mainlandPlate}</span>}
+                                        {cbTags.map((t:any,i:number) => <span key={i} className={`text-[8px] text-white px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
+                                        
+                                        {/* ★★★ 新增：微型紅色牌費標籤 (接在車牌後面) ★★★ */}
+                                        {car.licenseExpiry && (
+                                            <span className="text-[9px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-[1px] rounded-[2px] shadow-sm font-mono flex items-center h-fit">
+                                                <Calendar size={8} className="mr-0.5"/> 牌費: {car.licenseExpiry}
+                                            </span>
+                                        )}
+                                    </div>
 
-                                      {/* 微型規格列 (圓點分隔) */}
-                                      {specs.length > 0 && (
-                                          <div className="flex flex-wrap items-center mt-1.5 text-[9px] text-slate-500 font-medium leading-none truncate">
-                                              {specs.map((spec, idx) => (
-                                                  <span key={idx} className="flex items-center">
-                                                      {idx > 0 && <span className="mx-1 text-slate-300">•</span>}
-                                                      {spec}
-                                                  </span>
-                                              ))}
-                                          </div>
-                                      )}
-                                  </div>
+                                    {/* 微型規格列 (圓點分隔) */}
+                                    {specs.length > 0 && (
+                                        <div className="flex flex-wrap items-center mt-1.5 text-[9px] text-slate-500 font-medium leading-none truncate">
+                                            {specs.map((spec, idx) => (
+                                                <span key={idx} className="flex items-center">
+                                                    {idx > 0 && <span className="mx-1 text-slate-300">•</span>}
+                                                    {spec}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
 
-                                  <div className="flex justify-between items-end mt-2">
-                                      <div className="font-black text-sm text-slate-800">{formatCurrency(car.price)}</div>
-                                      
-                                      {/* 財務狀態亮點 */}
-                                      <div className="text-right flex flex-col gap-1 items-end">
-                                          {balance > 0 && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded leading-none">欠款 {formatCurrency(balance)}</span>}
-                                          {unpaidExps > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded leading-none">有未付成本</span>}
-                                      </div>
-                                  </div>
-                              </div>
-                          </div>
-                      );
-                  };
+                                <div className="flex justify-between items-end mt-2">
+                                    <div className="font-black text-sm text-slate-800">{formatCurrency(car.price)}</div>
+                                    
+                                    {/* 財務狀態亮點 */}
+                                    <div className="text-right flex flex-col gap-1 items-end">
+                                        {balance > 0 && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded leading-none">欠款 {formatCurrency(balance)}</span>}
+                                        {unpaidExps > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded leading-none">有未付成本</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                };
 
                   return (
                       // ★ 修復 1：外層改為永遠 overflow-hidden，強迫鎖死版面，上下平分剩餘空間
