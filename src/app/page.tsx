@@ -3840,7 +3840,7 @@ const BusinessProcessModule = ({
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment,
-    updateVehicle // 必須傳入此函數以支援文件交收
+    updateVehicle, primaryImages // 必須傳入此函數以支援文件交收
 }: any) => {
     
     // --- 1. 狀態管理 ---
@@ -4008,14 +4008,19 @@ const CrossBorderView = ({
                             const cbTags = getTags();
 
                             return (
-                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-2.5 rounded-lg cursor-pointer border transition-all flex gap-3 items-center ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`}>
+                                <div 
+                                    key={car.id} 
+                                    onClick={() => setActiveCbVehicleId(car.id)} 
+                                    onDoubleClick={() => setEditingVehicle(car)} // ★ 新增：雙擊直接開啟車輛詳情大視窗
+                                    className={`p-2.5 rounded-lg cursor-pointer border transition-all flex gap-3 items-center ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`}
+                                    title="單擊切換右側中港資訊，雙擊開啟車輛詳細資料"
+                                >
                                     
-                                    {/* ★★★ 新增：左側縮圖 (優先讀取星星首圖) ★★★ */}
+                                    {/* ★★★ 修復：左側縮圖 (使用 primaryImages) ★★★ */}
                                     <div className="w-16 h-12 rounded overflow-visible relative flex-shrink-0 bg-slate-100 border border-slate-200 shadow-inner flex items-center justify-center">
                                         {(() => {
-                                            // 智能尋找首圖 (Primary Image) 或第一張照片
-                                            const primaryImage = (car.photos || []).find((p:any) => p.isPrimary);
-                                            const thumbUrl = primaryImage ? primaryImage.url : (car.photos && car.photos.length > 0 ? (typeof car.photos[0] === 'string' ? car.photos[0] : car.photos[0].url) : null);
+                                            // 完美讀取主儀表板已經解析好的星星首圖
+                                            const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? (typeof car.photos[0] === 'string' ? car.photos[0] : car.photos[0].url) : null);
                                             
                                             if (thumbUrl) {
                                                 return <img src={thumbUrl} className="w-full h-full object-cover rounded-[3px]" alt="thumbnail" />;
@@ -4024,7 +4029,7 @@ const CrossBorderView = ({
                                             }
                                         })()}
 
-                                        {/* ★ 狀態燈號巧妙融合：過期數字紅點 或 正常綠點 */}
+                                        {/* 狀態燈號：過期數字紅點 或 正常綠點 */}
                                         {expiredCount > 0 ? (
                                             <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 border border-white rounded-full flex items-center justify-center animate-pulse shadow-sm z-10">
                                                 <span className="text-[9px] text-white font-bold leading-none">{expiredCount}</span>
@@ -9504,7 +9509,7 @@ const CreateDocModule = ({
                     setActiveCbVehicleId={setActiveCbVehicleId}
                     setEditingVehicle={setEditingVehicle}
                     updateVehicle={updateVehicle}
-                    
+                    primaryImages={primaryImages}
                     // ★★★ 修正 1: 加入類型標註 (vid: string, task: CrossBorderTask) ★★★
                     addCbTask={(vid: string, task: CrossBorderTask) => {
                         const v = inventory.find(i => i.id === vid);
