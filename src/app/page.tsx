@@ -9754,6 +9754,17 @@ const CreateDocModule = ({
                     if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
                     else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
 
+                    // ★★★ 新增：判斷牌費是否已過期 ★★★
+                    let isLicenseExpired = false;
+                    if (car.licenseExpiry) {
+                        const expiry = new Date(car.licenseExpiry);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0); // 把今天的時間歸零，只比對日期
+                        if (expiry < today) {
+                            isLicenseExpired = true;
+                        }
+                    }
+
                     const cbTags = [];
                     const ports = car.crossBorder?.ports || [];
                     if (car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate) {
@@ -9814,7 +9825,11 @@ const CreateDocModule = ({
                                         
                                         {/* ★★★ 新增：微型紅色牌費標籤 (接在車牌後面) ★★★ */}
                                         {car.licenseExpiry && (
-                                            <span className="text-[9px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-[1px] rounded-[2px] shadow-sm font-mono flex items-center h-fit">
+                                            <span className={`text-[9px] px-1.5 py-[1px] rounded-[2px] shadow-sm font-mono flex items-center h-fit border ${
+                                                isLicenseExpired 
+                                                ? 'text-red-600 bg-red-50 border-red-200' 
+                                                : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                            }`}>
                                                 <Calendar size={8} className="mr-0.5"/> 牌費: {car.licenseExpiry}
                                             </span>
                                         )}
