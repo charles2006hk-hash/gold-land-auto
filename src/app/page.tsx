@@ -4008,44 +4008,66 @@ const CrossBorderView = ({
                             const cbTags = getTags();
 
                             return (
-                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-3 rounded-lg cursor-pointer border transition-all ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`}>
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="flex flex-col gap-1 items-start">
-                                            {/* 香港車牌 - 黃底黑字 */}
-                                            <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 rounded-[2px] leading-tight shadow-sm">
-                                                {car.regMark || '未出牌'}
-                                            </span>
-                                            {/* 內地車牌 - 黑底白字 (粵Z) 或 藍底白字 */}
-                                            {car.crossBorder?.mainlandPlate && (
-                                                <span className={`${
-                                                    car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'
-                                                } border font-bold font-mono text-[10px] px-1.5 rounded-[2px] leading-tight shadow-sm`}>
-                                                    {car.crossBorder.mainlandPlate}
+                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} className={`p-2.5 rounded-lg cursor-pointer border transition-all flex gap-3 items-center ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`}>
+                                    
+                                    {/* ★★★ 新增：左側縮圖 (優先讀取星星首圖) ★★★ */}
+                                    <div className="w-16 h-12 rounded overflow-visible relative flex-shrink-0 bg-slate-100 border border-slate-200 shadow-inner flex items-center justify-center">
+                                        {(() => {
+                                            // 智能尋找首圖 (Primary Image) 或第一張照片
+                                            const primaryImage = (car.photos || []).find((p:any) => p.isPrimary);
+                                            const thumbUrl = primaryImage ? primaryImage.url : (car.photos && car.photos.length > 0 ? (typeof car.photos[0] === 'string' ? car.photos[0] : car.photos[0].url) : null);
+                                            
+                                            if (thumbUrl) {
+                                                return <img src={thumbUrl} className="w-full h-full object-cover rounded-[3px]" alt="thumbnail" />;
+                                            } else {
+                                                return <Car size={18} className="text-slate-300"/>;
+                                            }
+                                        })()}
+
+                                        {/* ★ 狀態燈號巧妙融合：過期數字紅點 或 正常綠點 */}
+                                        {expiredCount > 0 ? (
+                                            <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 border border-white rounded-full flex items-center justify-center animate-pulse shadow-sm z-10">
+                                                <span className="text-[9px] text-white font-bold leading-none">{expiredCount}</span>
+                                            </div>
+                                        ) : (
+                                            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border border-white rounded-full shadow-sm z-10"></div>
+                                        )}
+                                    </div>
+
+                                    {/* 右側：車牌與標籤資訊 */}
+                                    <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
+                                        <div className="flex justify-between items-start mb-1.5">
+                                            <div className="flex flex-col gap-1 items-start">
+                                                {/* 香港車牌 - 黃底黑字 */}
+                                                <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 rounded-[2px] leading-tight shadow-sm">
+                                                    {car.regMark || '未出牌'}
                                                 </span>
-                                            )}
+                                                {/* 內地車牌 - 黑底白字 (粵Z) 或 藍底白字 */}
+                                                {car.crossBorder?.mainlandPlate && (
+                                                    <span className={`${
+                                                        car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'
+                                                    } border font-bold font-mono text-[10px] px-1.5 rounded-[2px] leading-tight shadow-sm`}>
+                                                        {car.crossBorder.mainlandPlate}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {/* 選擇狀態箭頭 */}
+                                            <ChevronRight size={16} className={`ml-auto mt-0.5 ${activeCbVehicleId === car.id ? 'text-blue-500' : 'text-gray-300'}`}/>
                                         </div>
-                                        {/* 狀態燈號 */}
-                                        <div className="text-right">
-                                            {expiredCount > 0 ? (
-                                                <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold text-[10px] animate-pulse block mb-1">{expiredCount} 過期</span>
-                                            ) : (
-                                                <div className="w-2 h-2 rounded-full bg-green-500 ml-auto mb-1"></div>
+                                        
+                                        {/* 標籤區 */}
+                                        <div className="flex flex-wrap gap-1 items-center justify-between mt-1">
+                                            <div className="flex gap-1">
+                                                {cbTags.map((tag: any, i: number) => (
+                                                    <span key={i} className={`text-[9px] px-1 py-0.5 rounded font-bold ${tag.color}`}>{tag.label}</span>
+                                                ))}
+                                            </div>
+                                            {car.crossBorder?.quotaNumber && (
+                                                <span className="text-[9px] font-mono text-gray-400 truncate max-w-[60px]">#{car.crossBorder.quotaNumber}</span>
                                             )}
-                                            <ChevronRight size={14} className="text-gray-300 ml-auto"/>
                                         </div>
                                     </div>
                                     
-                                    {/* 標籤區 */}
-                                    <div className="flex flex-wrap gap-1 items-center justify-between mt-1">
-                                        <div className="flex gap-1">
-                                            {cbTags.map((tag, i) => (
-                                                <span key={i} className={`text-[9px] px-1 py-0.5 rounded font-bold ${tag.color}`}>{tag.label}</span>
-                                            ))}
-                                        </div>
-                                        {car.crossBorder?.quotaNumber && (
-                                            <span className="text-[9px] font-mono text-gray-400">#{car.crossBorder.quotaNumber}</span>
-                                        )}
-                                    </div>
                                 </div>
                             );
                         })}
