@@ -10117,8 +10117,8 @@ const CreateDocModule = ({
           db={db}
           staffId={staffId}
           appId={appId}
-          systemUsers={systemUsers}       {/* <- 確保有這行 */}
-          inventory={visibleInventory}    {/* <- 確保有這行 */}
+          systemUsers={systemUsers}
+          inventory={visibleInventory}
           setEditingVehicle={setEditingVehicle}
       />
 
