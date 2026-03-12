@@ -4685,6 +4685,9 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                         totalReceived: received,
                         outstandingBalance: balance > 0 ? balance : 0,
                         managedBy: v.managedBy || '未指派'
+                        licenseExpiry: v.licenseExpiry || '未填寫', // ★ 新增牌費到期日
+                        previousOwners: v.previousOwners || '未填寫', // ★ 新增手數
+                        ownerName: v.registeredOwnerName || '未填寫' // ★ 新增車主姓名
                     };
                 });
 
