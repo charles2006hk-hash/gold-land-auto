@@ -4779,7 +4779,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                             <div className="flex gap-2 mb-2">
                                 <select value={chatLinkedCar} onChange={e => setChatLinkedCar(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600">
                                     <option value="">🔗 不關聯車輛 (可輸入 @車牌)</option>
-                                    {inventory.filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
+                                    {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
                                 </select>
                                 <button onClick={() => setNewMessage(prev => prev + '@AI ')} className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-200 transition-colors">呼叫 @AI</button>
                             </div>
@@ -4796,14 +4796,14 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                         <form onSubmit={handleAddTask} className="p-3 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none shadow-sm z-10">
                             <select value={taskLinkedCar} onChange={e => setTaskLinkedCar(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600 mb-1">
                                 <option value="">🔗 選擇關聯車輛 (選填，或輸入 @車牌)</option>
-                                {inventory.filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make} {v.model})</option>)}
+                                {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make} {v.model})</option>)}
                             </select>
                             
                             <input value={newTask} onChange={e => setNewTask(e.target.value)} placeholder="任務內容 (例如: @VELLFIRE 聯絡車主收尾數)" className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 ring-blue-100" />
                             <div className="flex gap-2">
                                 <select value={assignee} onChange={e => setAssignee(e.target.value)} className="flex-1 border border-slate-200 rounded-lg p-2 text-sm outline-none bg-slate-50">
                                     <option value="">-- 指派給 --</option>
-                                    {systemUsers.map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
+                                    {(systemUsers || []).map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
                                     <option value="ALL">所有人 (All)</option>
                                 </select>
                                 <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors shadow-sm"><Plus size={16} className="inline mr-1"/> 發佈</button>
@@ -7767,7 +7767,7 @@ const VehicleFormModal = ({
                             <span className="text-[10px] text-yellow-700 font-bold mr-2"><UserIcon size={12} className="inline mr-0.5"/>負責人:</span>
                             <select name="managedBy" defaultValue={v.id ? (v.managedBy || '') : (staffId || '')} className="text-xs font-bold text-slate-700 outline-none bg-transparent" disabled={!(staffId === 'BOSS' || (currentUser as any)?.modules?.includes('all'))}>
                                 <option value="">-- 未指派 --</option>
-                                {systemUsers.map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
+                                {(systemUsers || []).map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
                             </select>
                         </div>
                         <div className="flex gap-2 text-xs">
@@ -10117,7 +10117,9 @@ const CreateDocModule = ({
           db={db}
           staffId={staffId}
           appId={appId}
-          systemUsers={systemUsers}
+          systemUsers={systemUsers}       {/* <- 確保有這行 */}
+          inventory={visibleInventory}    {/* <- 確保有這行 */}
+          setEditingVehicle={setEditingVehicle}
       />
 
     </div>
