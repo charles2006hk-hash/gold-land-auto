@@ -9774,6 +9774,19 @@ const CreateDocModule = ({
                     const balance = ((car.price || 0) + cbFees + salesAddonsTotal) - received;
                     const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
 
+                                // ★★★ 新增：計算海外訂車的到港天數 (支援 eta 或 arrivalDate 欄位) ★★★
+                    let daysToArrive = null;
+                    const etaDate = car.eta || car.arrivalDate; 
+                    if (etaDate) {
+                        const arr = new Date(etaDate);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const diff = arr.getTime() - today.getTime();
+                        if (diff > 0) {
+                            daysToArrive = Math.ceil(diff / (1000 * 60 * 60 * 24));
+                        }
+                    }
+
                     const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
                     const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
                     const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
@@ -9880,14 +9893,45 @@ const CreateDocModule = ({
                                 </div>
 
                                 <div className="flex justify-between items-end mt-2">
-                                    <div className="font-black text-sm text-slate-800">{formatCurrency(car.price)}</div>
-                                    
-                                    {/* 財務狀態亮點 */}
-                                    <div className="text-right flex flex-col gap-1 items-end">
-                                        {balance > 0 && <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded leading-none">欠款 {formatCurrency(balance)}</span>}
-                                        {unpaidExps > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded leading-none">有未付成本</span>}
-                                    </div>
-                                </div>
+                                      {/* 左下：車價 */}
+                                      <div className="font-black text-sm text-slate-800 tracking-tight">{formatCurrency(car.price)}</div>
+                                      
+                                      {/* 右下：財務與物流狀態區 */}
+                                      <div className="text-right flex flex-col gap-1.5 items-end">
+                                          
+                                          {/* ★ 1. 海外訂車狀態 (已付款 + 船期倒數) */}
+                                          {daysToArrive !== null && (
+                                              <div className="flex items-center gap-1">
+                                                  {received > 0 && (
+                                                      <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-medium">
+                                                          已付款
+                                                      </span>
+                                                  )}
+                                                  <span className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm">
+                                                      <Ship size={9} className="mr-1 opacity-70"/> 還有 {daysToArrive} 天到港
+                                                  </span>
+                                              </div>
+                                          )}
+
+                                          <div className="flex items-center gap-1">
+                                              {/* ★ 2. 未付成本警示 */}
+                                              {unpaidExps > 0 && (
+                                                  <span className="text-[9px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-[3px] leading-none font-medium">
+                                                      有未付成本
+                                                  </span>
+                                              )}
+
+                                              {/* ★ 3. 待收餘額 (改為幼細的高級財務字體) */}
+                                              {balance > 0 && (
+                                                  <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-[3px] leading-none flex items-center shadow-sm">
+                                                      <span className="mr-1 font-medium opacity-80">待收</span>
+                                                      {/* 使用 font-mono (等寬) 與 font-light (幼細) 打造財務報表質感 */}
+                                                      <span className="font-mono font-light tracking-wide text-[11px]">{formatCurrency(balance)}</span>
+                                                  </span>
+                                              )}
+                                          </div>
+                                      </div>
+                                  </div>
                             </div>
                         </div>
                     );
