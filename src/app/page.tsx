@@ -9838,10 +9838,11 @@ const CreateDocModule = ({
                     if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
 
                     return (
-                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex bg-white p-3 rounded-xl border border-slate-100 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
+                        // ★ 手機版防搖晃：w-full box-border overflow-hidden
+                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex w-full box-border overflow-hidden bg-white p-3 rounded-xl border border-slate-100 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
                             
-                            {/* 左側：精緻 4:3 縮圖 */}
-                            <div className="w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-900 shadow-inner">
+                            {/* 左側：精緻 4:3 縮圖 (微調 w-28 md:w-32) */}
+                            <div className="w-28 md:w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-900 shadow-inner">
                                 {thumbUrl ? (
                                     <>
                                         <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-110" />
@@ -9864,17 +9865,18 @@ const CreateDocModule = ({
                                 {/* ★★★ 補回：分享(對客預覽)按鈕 ★★★ */}
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); setShareVehicle(car); }} 
-                                    className="absolute top-0 right-0 p-1.5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
+                                    className="absolute -top-1 -right-1 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
                                     title="產生對客推介單"
                                 >
                                     <Share2 size={14}/>
                                 </button>
 
-                                <div>
-                                    {/* 車型標題改為單行截斷 (加入 pr-6 避免文字與分享按鈕重疊) */}
-                                    <div className="font-bold text-sm text-slate-800 leading-tight line-clamp-1 pr-6">{car.year} {car.make} {car.model}</div>
+                                {/* ★ 手機版防搖晃：加入 pr-7 避開按鈕，加入 truncate */}
+                                <div className="w-full pr-7">
+                                    {/* 車型標題改為單行截斷 */}
+                                    <div className="font-bold text-sm text-slate-800 leading-tight truncate w-full">{car.year} {car.make} {car.model}</div>
                                     
-                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5 w-full">
                                         <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 rounded-[2px] shadow-sm">{car.regMark || '未出牌'}</span>
                                         {car.crossBorder?.mainlandPlate && <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1 rounded-[2px] shadow-sm`}>{car.crossBorder.mainlandPlate}</span>}
                                         {cbTags.map((t:any,i:number) => <span key={i} className={`text-[8px] text-white px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
@@ -9893,7 +9895,7 @@ const CreateDocModule = ({
 
                                     {/* 微型規格列 (圓點分隔) */}
                                     {specs.length > 0 && (
-                                        <div className="flex flex-wrap items-center mt-1.5 text-[9px] text-slate-500 font-medium leading-none truncate">
+                                        <div className="flex flex-wrap items-center mt-1.5 text-[9px] text-slate-500 font-medium leading-none w-full">
                                             {specs.map((spec, idx) => (
                                                 <span key={idx} className="flex items-center">
                                                     {idx > 0 && <span className="mx-1 text-slate-300">•</span>}
@@ -9904,51 +9906,51 @@ const CreateDocModule = ({
                                     )}
                                 </div>
 
-                                <div className="flex justify-between items-end mt-2">
-                                      {/* 左下：車價 */}
-                                      <div className="font-black text-sm text-slate-800 tracking-tight">{formatCurrency(car.price)}</div>
-                                      
-                                      {/* 右下：財務與物流狀態區 */}
-                                      <div className="text-right flex flex-col gap-1.5 items-end">
-                                          
-                                          {/* ★ 1. 海外訂車狀態 (已付款 + 船期倒數 / 已到港) ★ */}
-                                          {hasValidEta && (
-                                              <div className="flex items-center gap-1">
-                                                  {received > 0 && (
-                                                      <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-medium">
-                                                          已付款
-                                                      </span>
-                                                  )}
-                                                  <span className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border ${
-                                                      isArrived 
-                                                      ? 'text-green-600 bg-green-50 border-green-200' 
-                                                      : 'text-indigo-600 bg-indigo-50 border-indigo-200'
-                                                  }`}>
-                                                      <Ship size={9} className="mr-1 opacity-70"/> 
-                                                      {isArrived ? '已到港' : `還有 ${daysToArrive} 天`}
-                                                  </span>
-                                              </div>
-                                          )}
+                                {/* ★ 手機版防搖晃：底部財務區加入 flex-wrap 與 gap 適應窄螢幕 */}
+                                <div className="flex flex-wrap justify-between items-end mt-2 gap-x-2 gap-y-1.5 w-full">
+                                    {/* 左下：車價 */}
+                                    <div className="font-black text-sm text-slate-800 tracking-tight whitespace-nowrap">{formatCurrency(car.price)}</div>
+                                    
+                                    {/* 右下：財務與物流狀態區 */}
+                                    <div className="flex flex-col gap-1.5 items-end ml-auto max-w-full">
+                                        
+                                        {/* ★ 1. 海外訂車狀態 (已付款 + 船期倒數 / 已到港) ★ */}
+                                        {hasValidEta && (
+                                            <div className="flex flex-wrap justify-end items-center gap-1">
+                                                {received > 0 && (
+                                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-medium whitespace-nowrap">
+                                                        已付款
+                                                    </span>
+                                                )}
+                                                <span className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap ${
+                                                    isArrived 
+                                                    ? 'text-green-600 bg-green-50 border-green-200' 
+                                                    : 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                                                }`}>
+                                                    <Ship size={9} className="mr-1 opacity-70"/> 
+                                                    {isArrived ? '已到港' : `還有 ${daysToArrive} 天`}
+                                                </span>
+                                            </div>
+                                        )}
 
-                                          <div className="flex items-center gap-1">
-                                              {/* ★ 2. 未付成本警示 */}
-                                              {unpaidExps > 0 && (
-                                                  <span className="text-[9px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-[3px] leading-none font-medium">
-                                                      有未付成本
-                                                  </span>
-                                              )}
+                                        <div className="flex flex-wrap justify-end items-center gap-1">
+                                            {/* ★ 2. 未付成本警示 */}
+                                            {unpaidExps > 0 && (
+                                                <span className="text-[9px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-[3px] leading-none font-medium whitespace-nowrap">
+                                                    有未付成本
+                                                </span>
+                                            )}
 
-                                              {/* ★ 3. 待收餘額 (改為幼細的高級財務字體) */}
-                                              {balance > 0 && (
-                                                  <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-[3px] leading-none flex items-center shadow-sm">
-                                                      <span className="mr-1 font-medium opacity-80">待收</span>
-                                                      {/* 使用 font-mono (等寬) 與 font-light (幼細) 打造財務報表質感 */}
-                                                      <span className="font-mono font-light tracking-wide text-[11px]">{formatCurrency(balance)}</span>
-                                                  </span>
-                                              )}
-                                          </div>
-                                      </div>
-                                  </div>
+                                            {/* ★ 3. 待收餘額 (改為幼細的高級財務字體) */}
+                                            {balance > 0 && (
+                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap">
+                                                    <span className="mr-1 font-medium opacity-80">待收</span>
+                                                    <span className="font-mono font-light tracking-wide text-[11px]">{formatCurrency(balance)}</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     );
