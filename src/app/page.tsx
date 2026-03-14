@@ -347,6 +347,7 @@ type CrossBorderData = {
 type Vehicle = {
   id: string;
   managedBy?: string; // ★ 新增：負責員工 ID (Email)
+  isPublic?: boolean;
   regMark: string;
   make: string;
   model: string;
@@ -6768,6 +6769,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         };
 
         const vData = {
+            isPublic: isPublic,
             purchaseType: formData.get('purchaseType'),
             acquisition: acquisitionData,
             regMark: (formData.get('regMark') as string)?.toUpperCase() || '',
@@ -7335,6 +7337,7 @@ const VehicleFormModal = ({
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
     const [rightTab, setRightTab] = useState<'sales' | 'cost' | 'cb'>('sales');
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
+    const [isPublic, setIsPublic] = useState(!!v.isPublic);
 
     const [acqVendor, setAcqVendor] = useState((v as any).acquisition?.vendor || '');
     const [acqType, setAcqType] = useState<'Local' | 'Import'>((v as any).acquisition?.type || 'Local');
@@ -7794,6 +7797,13 @@ const VehicleFormModal = ({
                     </div>
                     
                     <div className="flex items-center gap-3">
+                        {/* ★★★ 新增：發佈至官網開關 ★★★ */}
+                        <label className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 rounded-lg border shadow-sm transition-colors ${isPublic ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
+                            <Globe size={14} className={isPublic ? 'text-emerald-500' : 'text-slate-400'} />
+                            <span className="text-xs font-bold">官網展示</span>
+                            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="accent-emerald-600 w-4 h-4 cursor-pointer"/>
+                        </label>
+                        {/* ★★★ 新增結束 ★★★ */}
                         <div className="bg-yellow-50 rounded-lg p-1 border border-yellow-200 shadow-sm flex items-center px-2">
                             <span className="text-[10px] text-yellow-700 font-bold mr-2"><UserIcon size={12} className="inline mr-0.5"/>負責人:</span>
                             <select name="managedBy" defaultValue={v.id ? (v.managedBy || '') : (staffId || '')} className="text-xs font-bold text-slate-700 outline-none bg-transparent" disabled={!(staffId === 'BOSS' || (currentUser as any)?.modules?.includes('all'))}>
