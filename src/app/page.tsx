@@ -4599,9 +4599,9 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
 };
 
 // ------------------------------------------------------------------
-// ★★★ 9. Team Hub Drawer (團隊協作中心 - AI 智聯粵語版) ★★★
+// ★★★ 9. Team Hub Drawer (團隊協作中心 - 權限隔離升級版) ★★★
 // ------------------------------------------------------------------
-const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle }: any) => {
+const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle, currentUser }: any) => {
     const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat');
     
     const [messages, setMessages] = useState<any[]>([]);
@@ -4637,13 +4637,33 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // ★★★ 發送訊息與 AI 處理邏輯 ★★★
+    // ★★★ 核心升級：動態資料過濾邏輯 (權限隔離) ★★★
+    const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
+
+    const filteredMessages = messages.filter(msg => {
+        if (isAdmin) return true; // 管理員睇全部
+        if (msg.sender === staffId) return true; // 自己發嘅
+        if (msg.text?.includes(`@${staffId}`)) return true; // 訊息有 @ 提到自己嘅
+        if (msg.linkedRegMark) {
+            // 如果綁定咗車，檢查自己有無權限睇呢部車 (inventory 已經係自己有權睇嘅車)
+            return inventory.some((v:any) => v.regMark === msg.linkedRegMark);
+        }
+        return true; // 無綁定車輛嘅當作公開廣播 (所有人可見)
+    });
+
+    const filteredTasks = tasks.filter(task => {
+        if (isAdmin) return true; // 管理員睇全部
+        // 任務只睇：自己建立嘅、指派俾自己嘅、指派俾所有人(ALL)嘅
+        return task.assigner === staffId || task.assignee === staffId || task.assignee === 'ALL';
+    });
+
+
+    // 發送訊息與 AI 處理邏輯
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         const msgText = newMessage.trim();
         if (!msgText || !db) return;
 
-        // 智能解析對話文字中的 @車牌
         let finalLinkedCar = chatLinkedCar;
         if (!finalLinkedCar) {
             const match = msgText.match(/@([a-zA-Z0-9]+)/);
@@ -4653,7 +4673,6 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
             }
         }
 
-        // 1. 儲存使用者的訊息
         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), {
             sender: staffId,
             text: msgText,
@@ -4664,11 +4683,9 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         setNewMessage('');
         setChatLinkedCar('');
         
-        // 2. 如果包含 @AI，觸發智能分析
         if (msgText.includes('@AI') || msgText.includes('@ai')) {
             setIsAiThinking(true);
             try {
-                // 幫 AI 算好每台車的財務總帳
                 const miniInventory = inventory.map((v:any) => {
                     const received = (v.payments || []).reduce((acc:number, p:any) => acc + (Number(p.amount) || 0), 0);
                     const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (Number(t.fee) || 0), 0);
@@ -4678,18 +4695,11 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
 
                     return {
                         plate: v.regMark || '未出牌', 
-                        make: v.make, 
-                        model: v.model,
-                        year: v.year || '未填寫', 
-                        status: v.status, 
+                        make: v.make, model: v.model, year: v.year || '未填寫', status: v.status, 
                         daysInStock: v.stockInDate ? Math.floor((new Date().getTime() - new Date(v.stockInDate).getTime()) / (1000 * 60 * 60 * 24)) : 0,
-                        targetPrice: v.price || 0, 
-                        totalReceived: received,
-                        outstandingBalance: balance > 0 ? balance : 0,
-                        managedBy: v.managedBy || '未指派', // ★ 補返呢度個逗號！
-                        licenseExpiry: v.licenseExpiry || '未填寫', 
-                        previousOwners: v.previousOwners || '未填寫', 
-                        ownerName: v.registeredOwnerName || '未填寫' 
+                        targetPrice: v.price || 0, totalReceived: received, outstandingBalance: balance > 0 ? balance : 0,
+                        managedBy: v.managedBy || '未指派',
+                        licenseExpiry: v.licenseExpiry || '未填寫', previousOwners: v.previousOwners || '未填寫', ownerName: v.registeredOwnerName || '未填寫' 
                     };
                 });
 
@@ -4698,24 +4708,17 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt: msgText, inventory: miniInventory })
                 });
-
                 const data = await response.json();
                 
                 await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), {
-                    sender: '🤖 金田 (AI助理)',
-                    text: data.reply || "Sorry呀，我個腦突然 hang 咗機，請稍後再試下啦。",
-                    linkedRegMark: finalLinkedCar || null,
-                    timestamp: serverTimestamp()
+                    sender: '🤖 金田 (AI助理)', text: data.reply || "Sorry呀，我個腦突然 hang 咗機，請稍後再試下啦。",
+                    linkedRegMark: finalLinkedCar || null, timestamp: serverTimestamp()
                 });
-            } catch (err) {
-                console.error("AI Error:", err);
-            } finally {
-                setIsAiThinking(false);
-            }
+            } catch (err) { console.error("AI Error:", err); } finally { setIsAiThinking(false); }
         }
     };
 
-    // ★★★ 新增任務 (升級智能 @ 解析) ★★★
+    // 新增任務
     const handleAddTask = async (e: React.FormEvent) => {
         e.preventDefault();
         const taskText = newTask.trim();
@@ -4731,23 +4734,17 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         }
 
         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), {
-            assigner: staffId,
-            assignee: assignee,
-            content: taskText,
-            linkedRegMark: finalLinkedCar || null, 
-            status: 'pending',
-            timestamp: serverTimestamp()
+            assigner: staffId, assignee: assignee, content: taskText, linkedRegMark: finalLinkedCar || null, 
+            status: 'pending', timestamp: serverTimestamp()
         });
-        setNewTask('');
-        setTaskLinkedCar('');
+        setNewTask(''); setTaskLinkedCar('');
     };
 
     const toggleTask = async (task: any) => {
         if (!db) return;
         const newStatus = task.status === 'pending' ? 'completed' : 'pending';
         await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks', task.id), {
-            status: newStatus,
-            completedAt: newStatus === 'completed' ? serverTimestamp() : null
+            status: newStatus, completedAt: newStatus === 'completed' ? serverTimestamp() : null
         });
     };
 
@@ -4781,7 +4778,8 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                 {activeTab === 'chat' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-100/50">
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
-                            {messages.map((msg, idx) => {
+                            {/* ★ 使用 filteredMessages 渲染對話 */}
+                            {filteredMessages.map((msg, idx) => {
                                 const isMe = msg.sender === staffId;
                                 const isAI = msg.sender.includes('AI') || msg.sender.includes('金田');
                                 const timeStr = msg.timestamp?.toDate ? msg.timestamp.toDate().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) : '';
@@ -4843,7 +4841,8 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                         </form>
                         
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
-                            {tasks.map(task => {
+                            {/* ★ 使用 filteredTasks 渲染任務 */}
+                            {filteredTasks.map(task => {
                                 const isCompleted = task.status === 'completed';
                                 return (
                                     <div key={task.id} className={`p-3 rounded-xl border flex gap-3 shadow-sm transition-all ${isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-blue-200 hover:shadow-md'}`}>
@@ -4862,7 +4861,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                                     <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
                                                     由 {task.assigner} 指派
                                                 </div>
-                                                {(task.assigner === staffId || staffId === 'BOSS') && (
+                                                {(task.assigner === staffId || isAdmin) && (
                                                     <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={12}/></button>
                                                 )}
                                             </div>
@@ -4870,7 +4869,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                     </div>
                                 );
                             })}
-                            {tasks.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">目前沒有任何任務</div>}
+                            {filteredTasks.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">目前沒有與您相關的任務</div>}
                         </div>
                     </div>
                 )}
@@ -10248,6 +10247,7 @@ const CreateDocModule = ({
           systemUsers={systemUsers}
           inventory={visibleInventory}
           setEditingVehicle={setEditingVehicle}
+          currentUser={currentUser}
       />
 
     </div>
