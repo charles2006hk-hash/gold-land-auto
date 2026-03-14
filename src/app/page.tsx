@@ -6768,8 +6768,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             documentLogs: editingVehicle?.crossBorder?.documentLogs || []
         };
 
+        const isPublicFormValue = formData.get('isPublic_hidden') === 'true';
+
         const vData = {
-            isPublic: isPublic,
+            isPublic: isPublicFormValue,
             purchaseType: formData.get('purchaseType'),
             acquisition: acquisitionData,
             regMark: (formData.get('regMark') as string)?.toUpperCase() || '',
@@ -7558,6 +7560,14 @@ const VehicleFormModal = ({
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         
+        // ★★★ 新增：將 isPublic 狀態塞入隱藏表單 ★★★
+        if (!e.currentTarget.querySelector('[name="isPublic_hidden"]')) {
+            const hiddenPublic = document.createElement('input');
+            hiddenPublic.type = 'hidden';
+            hiddenPublic.name = 'isPublic_hidden';
+            hiddenPublic.value = isPublic ? 'true' : 'false';
+            e.currentTarget.appendChild(hiddenPublic);
+        }
         // ★★★ 關鍵修復：把 React 狀態強制塞入表單中，解決外層函數取不到變數的問題 ★★★
         if (!e.currentTarget.querySelector('[name="cb_isEnabled_hidden"]')) {
             const hiddenCb = document.createElement('input');
