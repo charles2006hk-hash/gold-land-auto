@@ -4599,16 +4599,17 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
 };
 
 // ------------------------------------------------------------------
-// ★★★ 9. Team Hub Drawer (團隊協作中心 - 加入「隨手記」與自動打卡) ★★★
+// ★★★ 9. Team Hub Drawer (團隊協作中心 - 防走位、摺疊與搜尋版) ★★★
 // ------------------------------------------------------------------
 const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle, currentUser }: any) => {
-    // ★ 預設打開第一個欄目：隨手記 (notes)
     const [activeTab, setActiveTab] = useState<'notes' | 'chat' | 'tasks'>('notes');
     
     // --- 隨手記 (Notes) 狀態 ---
     const [notes, setNotes] = useState<any[]>([]);
     const [newNote, setNewNote] = useState('');
     const [noteLinkedCar, setNoteLinkedCar] = useState('');
+    const [noteSearchQuery, setNoteSearchQuery] = useState(''); // ★ 新增：搜尋關鍵字
+    const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({}); // ★ 新增：記錄邊篇筆記被展開
 
     // --- 對話與任務狀態 ---
     const [messages, setMessages] = useState<any[]>([]);
@@ -4663,24 +4664,33 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // ★★★ 核心升級：動態資料過濾邏輯 (權限隔離) ★★★
+    // ★★★ 核心升級：動態資料過濾邏輯 (權限隔離 + 搜尋) ★★★
     const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
 
-    // 隨手記過濾：自己寫的、或是關聯到自己有權限的車輛 (Admin睇全部)
     const filteredNotes = notes.filter(note => {
-        if (isAdmin) return true; 
-        if (note.author === staffId) return true; 
-        if (note.linkedRegMark && inventory.some((v:any) => v.regMark === note.linkedRegMark)) return true;
-        return false;
+        // 1. 權限檢查
+        let hasAccess = false;
+        if (isAdmin) hasAccess = true; 
+        else if (note.author === staffId) hasAccess = true; 
+        else if (note.linkedRegMark && inventory.some((v:any) => v.regMark === note.linkedRegMark)) hasAccess = true;
+        
+        if (!hasAccess) return false;
+
+        // 2. 搜尋字眼過濾
+        if (noteSearchQuery) {
+            const query = noteSearchQuery.toLowerCase();
+            return (note.content || '').toLowerCase().includes(query) || 
+                   (note.linkedRegMark || '').toLowerCase().includes(query) ||
+                   (note.author || '').toLowerCase().includes(query);
+        }
+        return true;
     });
 
     const filteredMessages = messages.filter(msg => {
         if (isAdmin) return true; 
         if (msg.sender === staffId) return true; 
         if (msg.text?.includes(`@${staffId}`)) return true; 
-        if (msg.linkedRegMark) {
-            return inventory.some((v:any) => v.regMark === msg.linkedRegMark);
-        }
+        if (msg.linkedRegMark) return inventory.some((v:any) => v.regMark === msg.linkedRegMark);
         return true; 
     });
 
@@ -4711,7 +4721,6 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
             timestamp: serverTimestamp()
         });
         
-        // 儲存後清空，並自動補上新的時間戳方便下一筆
         const now = new Date();
         const timeStr = `${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
         setNewNote(`[${timeStr}] `);
@@ -4723,6 +4732,9 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_notes', noteId));
     };
 
+    const toggleNoteExpand = (noteId: string) => {
+        setExpandedNotes(prev => ({ ...prev, [noteId]: !prev[noteId] }));
+    };
 
     // --- 處理發送對話與 AI 處理邏輯 ---
     const handleSendMessage = async (e: React.FormEvent) => {
@@ -4851,28 +4863,46 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                 {activeTab === 'notes' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
                         {/* 輸入區 (黃色便條紙風格) */}
-                        <form onSubmit={handleAddNote} className="p-4 bg-yellow-50/80 border-b border-yellow-200 shadow-sm flex-none z-10 flex flex-col gap-2">
-                            <select value={noteLinkedCar} onChange={e => setNoteLinkedCar(e.target.value)} className="w-full bg-white border border-yellow-200 text-xs p-2 rounded-lg outline-none text-slate-600 shadow-sm">
-                                <option value="">🔗 關聯車輛 (選填，或輸入 @車牌)</option>
-                                {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
-                            </select>
-                            <textarea 
-                                value={newNote} 
-                                onChange={e => setNewNote(e.target.value)} 
-                                placeholder="快速記錄車輛狀況、洗車費用、過戶備註..." 
-                                className="w-full h-24 bg-white border border-yellow-300 rounded-lg p-3 text-sm outline-none focus:ring-2 ring-yellow-200 resize-none shadow-inner" 
-                            />
-                            <div className="flex justify-end">
-                                <button type="submit" disabled={!newNote.trim()} className="bg-yellow-500 text-yellow-950 px-6 py-2 rounded-lg text-sm font-black disabled:opacity-50 hover:bg-yellow-400 transition-colors shadow-sm active:scale-95"><Save size={16} className="inline mr-1"/> 儲存筆記</button>
+                        <div className="p-3 bg-yellow-50/80 border-b border-yellow-200 shadow-sm flex-none z-10">
+                            <form onSubmit={handleAddNote} className="flex flex-col gap-2">
+                                <select value={noteLinkedCar} onChange={e => setNoteLinkedCar(e.target.value)} className="w-full bg-white border border-yellow-200 text-xs p-2 rounded-lg outline-none text-slate-600 shadow-sm">
+                                    <option value="">🔗 關聯車輛 (選填，或輸入 @車牌)</option>
+                                    {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
+                                </select>
+                                <textarea 
+                                    value={newNote} 
+                                    onChange={e => setNewNote(e.target.value)} 
+                                    placeholder="快速記錄車輛狀況、洗車費用、過戶備註..." 
+                                    className="w-full h-20 bg-white border border-yellow-300 rounded-lg p-3 text-sm outline-none focus:ring-2 ring-yellow-200 resize-none shadow-inner" 
+                                />
+                                <div className="flex justify-end">
+                                    <button type="submit" disabled={!newNote.trim()} className="bg-yellow-500 text-yellow-950 px-6 py-2 rounded-lg text-sm font-black disabled:opacity-50 hover:bg-yellow-400 transition-colors shadow-sm active:scale-95"><Save size={16} className="inline mr-1"/> 儲存筆記</button>
+                                </div>
+                            </form>
+                            
+                            {/* ★ 搜尋列 */}
+                            <div className="mt-3 relative">
+                                <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    value={noteSearchQuery} 
+                                    onChange={e => setNoteSearchQuery(e.target.value)} 
+                                    placeholder="搜尋內容、車牌或作者..." 
+                                    className="w-full bg-white border border-yellow-200 rounded-full py-2 pl-9 pr-4 text-xs outline-none focus:ring-1 ring-yellow-400 shadow-sm"
+                                />
                             </div>
-                        </form>
+                        </div>
                         
                         {/* 筆記列表 */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
                             {filteredNotes.map(note => {
                                 const timeStr = note.timestamp?.toDate ? note.timestamp.toDate().toLocaleString('zh-HK', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                                const isExpanded = !!expandedNotes[note.id];
+                                // 判斷內容是否過長 (字數 > 150 或 行數 > 4)
+                                const isLong = (note.content || '').length > 150 || (note.content || '').split('\n').length > 4;
+
                                 return (
-                                    <div key={note.id} className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm relative group hover:border-yellow-300 transition-colors">
+                                    <div key={note.id} className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm relative group hover:border-yellow-300 transition-colors overflow-hidden">
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-bold text-slate-800 text-sm">{note.author}</span>
@@ -4884,10 +4914,24 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                                 )}
                                             </div>
                                             {(note.author === staffId || isAdmin) && (
-                                                <button onClick={() => deleteNote(note.id)} className="text-slate-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                                <button onClick={() => deleteNote(note.id)} className="text-slate-300 hover:text-red-500 p-1 flex-none ml-2"><Trash2 size={14}/></button>
                                             )}
                                         </div>
-                                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                                        
+                                        {/* ★ 修復排版撐破：加入 break-words, break-all */}
+                                        <p className={`text-sm text-slate-700 whitespace-pre-wrap break-words ${(!isExpanded && isLong) ? 'line-clamp-4' : ''}`} style={{ wordBreak: 'break-word' }}>
+                                            {note.content}
+                                        </p>
+                                        
+                                        {/* ★ 顯示更多按鈕 */}
+                                        {isLong && (
+                                            <button 
+                                                onClick={() => toggleNoteExpand(note.id)} 
+                                                className="text-blue-500 hover:text-blue-700 text-xs font-bold mt-2 flex items-center"
+                                            >
+                                                {isExpanded ? '收起內容' : '顯示更多...'}
+                                            </button>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -4900,7 +4944,6 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                 {activeTab === 'chat' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-100/50">
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
-                            {/* ★ 使用 filteredMessages 渲染對話 */}
                             {filteredMessages.map((msg, idx) => {
                                 const isMe = msg.sender === staffId;
                                 const isAI = msg.sender.includes('AI') || msg.sender.includes('金田');
@@ -4914,7 +4957,8 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                                     <Car size={10} className="mr-1"/> {msg.linkedRegMark}
                                                 </div>
                                             )}
-                                            <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
+                                            {/* ★ 順便幫聊天訊息也加上防撐破 */}
+                                            <div className="whitespace-pre-wrap leading-relaxed break-words" style={{ wordBreak: 'break-word' }}>{msg.text}</div>
                                         </div>
                                     </div>
                                 );
@@ -4964,7 +5008,6 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                         </form>
                         
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
-                            {/* ★ 使用 filteredTasks 渲染任務 */}
                             {filteredTasks.map(task => {
                                 const isCompleted = task.status === 'completed';
                                 return (
@@ -4978,7 +5021,8 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                                     <Car size={10} className="mr-1"/> {task.linkedRegMark}
                                                 </div>
                                             )}
-                                            <p className={`text-sm font-bold ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`}>{task.content}</p>
+                                            {/* ★ 順便幫任務內容加上防撐破 */}
+                                            <p className={`text-sm font-bold break-words ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`} style={{ wordBreak: 'break-word' }}>{task.content}</p>
                                             <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
                                                 <div className="text-[10px] text-slate-400 font-medium">
                                                     <span className="text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
