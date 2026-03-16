@@ -4599,11 +4599,18 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
 };
 
 // ------------------------------------------------------------------
-// ★★★ 9. Team Hub Drawer (團隊協作中心 - 權限隔離升級版) ★★★
+// ★★★ 9. Team Hub Drawer (團隊協作中心 - 加入「隨手記」與自動打卡) ★★★
 // ------------------------------------------------------------------
 const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle, currentUser }: any) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat');
+    // ★ 預設打開第一個欄目：隨手記 (notes)
+    const [activeTab, setActiveTab] = useState<'notes' | 'chat' | 'tasks'>('notes');
     
+    // --- 隨手記 (Notes) 狀態 ---
+    const [notes, setNotes] = useState<any[]>([]);
+    const [newNote, setNewNote] = useState('');
+    const [noteLinkedCar, setNoteLinkedCar] = useState('');
+
+    // --- 對話與任務狀態 ---
     const [messages, setMessages] = useState<any[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [chatLinkedCar, setChatLinkedCar] = useState(''); 
@@ -4616,7 +4623,26 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
     const [isAiThinking, setIsAiThinking] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // 1. 監聽對話庫
+    // ★ 自動插入時間戳魔法
+    useEffect(() => {
+        if (isOpen && activeTab === 'notes' && newNote === '') {
+            const now = new Date();
+            const timeStr = `${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            setNewNote(`[${timeStr}] `);
+        }
+    }, [isOpen, activeTab]);
+
+    // 1. 監聽隨手記 (Notes)
+    useEffect(() => {
+        if (!db || !isOpen) return;
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_notes'), orderBy('timestamp', 'desc'));
+        const unsub = onSnapshot(q, (snap: any) => {
+            setNotes(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [db, appId, isOpen]);
+
+    // 2. 監聽對話庫 (Chat)
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), orderBy('timestamp', 'asc'), limit(100));
@@ -4627,7 +4653,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // 2. 監聽任務庫
+    // 3. 監聽任務庫 (Tasks)
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), orderBy('timestamp', 'desc'));
@@ -4640,25 +4666,65 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
     // ★★★ 核心升級：動態資料過濾邏輯 (權限隔離) ★★★
     const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
 
+    // 隨手記過濾：自己寫的、或是關聯到自己有權限的車輛 (Admin睇全部)
+    const filteredNotes = notes.filter(note => {
+        if (isAdmin) return true; 
+        if (note.author === staffId) return true; 
+        if (note.linkedRegMark && inventory.some((v:any) => v.regMark === note.linkedRegMark)) return true;
+        return false;
+    });
+
     const filteredMessages = messages.filter(msg => {
-        if (isAdmin) return true; // 管理員睇全部
-        if (msg.sender === staffId) return true; // 自己發嘅
-        if (msg.text?.includes(`@${staffId}`)) return true; // 訊息有 @ 提到自己嘅
+        if (isAdmin) return true; 
+        if (msg.sender === staffId) return true; 
+        if (msg.text?.includes(`@${staffId}`)) return true; 
         if (msg.linkedRegMark) {
-            // 如果綁定咗車，檢查自己有無權限睇呢部車 (inventory 已經係自己有權睇嘅車)
             return inventory.some((v:any) => v.regMark === msg.linkedRegMark);
         }
-        return true; // 無綁定車輛嘅當作公開廣播 (所有人可見)
+        return true; 
     });
 
     const filteredTasks = tasks.filter(task => {
-        if (isAdmin) return true; // 管理員睇全部
-        // 任務只睇：自己建立嘅、指派俾自己嘅、指派俾所有人(ALL)嘅
+        if (isAdmin) return true; 
         return task.assigner === staffId || task.assignee === staffId || task.assignee === 'ALL';
     });
 
+    // --- 處理儲存隨手記 ---
+    const handleAddNote = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const text = newNote.trim();
+        if (!text || !db) return;
 
-    // 發送訊息與 AI 處理邏輯
+        let finalLinkedCar = noteLinkedCar;
+        if (!finalLinkedCar) {
+            const match = text.match(/@([a-zA-Z0-9]+)/);
+            if (match) {
+                const plate = match[1].toUpperCase();
+                if (inventory.some((v:any) => v.regMark === plate)) finalLinkedCar = plate;
+            }
+        }
+
+        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_notes'), {
+            author: staffId,
+            content: text,
+            linkedRegMark: finalLinkedCar || null,
+            timestamp: serverTimestamp()
+        });
+        
+        // 儲存後清空，並自動補上新的時間戳方便下一筆
+        const now = new Date();
+        const timeStr = `${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        setNewNote(`[${timeStr}] `);
+        setNoteLinkedCar('');
+    };
+
+    const deleteNote = async (noteId: string) => {
+        if (!db || !confirm("確定刪除此筆記？")) return;
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_notes', noteId));
+    };
+
+
+    // --- 處理發送對話與 AI 處理邏輯 ---
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         const msgText = newMessage.trim();
@@ -4718,7 +4784,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
         }
     };
 
-    // 新增任務
+    // --- 處理新增任務 ---
     const handleAddTask = async (e: React.FormEvent) => {
         e.preventDefault();
         const taskText = newTask.trim();
@@ -4765,16 +4831,72 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
             
             <div className={`fixed top-0 right-0 h-full w-full md:w-[420px] bg-slate-50 shadow-2xl z-[9999] transform transition-transform duration-300 flex flex-col border-l border-slate-200 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 
-                <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md flex-none">
-                    <div className="flex items-center gap-2"><MessageCircle size={20} className="text-yellow-400"/><h3 className="font-bold text-lg tracking-wide">團隊協作中心</h3></div>
+                {/* 頂部 Header */}
+                <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md flex-none safe-area-top">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-yellow-500 text-black p-1.5 rounded-lg"><Check size={20}/></div>
+                        <h3 className="font-bold text-lg tracking-wide">團隊協作中心</h3>
+                    </div>
                     <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
+                {/* ★ 3個分頁按鈕 */}
                 <div className="flex border-b border-slate-200 bg-white flex-none">
-                    <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'chat' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><MessageCircle size={16} className="mr-2"/> 內部對話</button>
-                    <button onClick={() => setActiveTab('tasks')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'tasks' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-slate-500 hover:bg-slate-50'}`}><ListTodo size={16} className="mr-2"/> 任務指派</button>
+                    <button onClick={() => setActiveTab('notes')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'notes' ? 'border-b-2 border-yellow-500 text-yellow-700 bg-yellow-50/50' : 'text-slate-500 hover:bg-slate-50'}`}><FileText size={16} className="mr-1.5"/> 隨手記</button>
+                    <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'chat' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}><MessageCircle size={16} className="mr-1.5"/> 內部對話</button>
+                    <button onClick={() => setActiveTab('tasks')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'tasks' ? 'border-b-2 border-purple-600 text-purple-600 bg-purple-50/50' : 'text-slate-500 hover:bg-slate-50'}`}><ListTodo size={16} className="mr-1.5"/> 任務指派</button>
                 </div>
 
+                {/* ===== Tab 1: 隨手記 (Quick Notes) ===== */}
+                {activeTab === 'notes' && (
+                    <div className="flex-1 flex flex-col overflow-hidden bg-slate-100">
+                        {/* 輸入區 (黃色便條紙風格) */}
+                        <form onSubmit={handleAddNote} className="p-4 bg-yellow-50/80 border-b border-yellow-200 shadow-sm flex-none z-10 flex flex-col gap-2">
+                            <select value={noteLinkedCar} onChange={e => setNoteLinkedCar(e.target.value)} className="w-full bg-white border border-yellow-200 text-xs p-2 rounded-lg outline-none text-slate-600 shadow-sm">
+                                <option value="">🔗 關聯車輛 (選填，或輸入 @車牌)</option>
+                                {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
+                            </select>
+                            <textarea 
+                                value={newNote} 
+                                onChange={e => setNewNote(e.target.value)} 
+                                placeholder="快速記錄車輛狀況、洗車費用、過戶備註..." 
+                                className="w-full h-24 bg-white border border-yellow-300 rounded-lg p-3 text-sm outline-none focus:ring-2 ring-yellow-200 resize-none shadow-inner" 
+                            />
+                            <div className="flex justify-end">
+                                <button type="submit" disabled={!newNote.trim()} className="bg-yellow-500 text-yellow-950 px-6 py-2 rounded-lg text-sm font-black disabled:opacity-50 hover:bg-yellow-400 transition-colors shadow-sm active:scale-95"><Save size={16} className="inline mr-1"/> 儲存筆記</button>
+                            </div>
+                        </form>
+                        
+                        {/* 筆記列表 */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
+                            {filteredNotes.map(note => {
+                                const timeStr = note.timestamp?.toDate ? note.timestamp.toDate().toLocaleString('zh-HK', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                                return (
+                                    <div key={note.id} className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm relative group hover:border-yellow-300 transition-colors">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-bold text-slate-800 text-sm">{note.author}</span>
+                                                <span className="text-[10px] text-slate-400 font-mono">{timeStr}</span>
+                                                {note.linkedRegMark && (
+                                                    <div onClick={() => openCarDetails(note.linkedRegMark)} className="inline-flex items-center text-[10px] bg-yellow-100 text-yellow-800 border border-yellow-300 px-1.5 py-0.5 rounded cursor-pointer hover:bg-yellow-200 font-mono font-bold transition-colors">
+                                                        <Car size={10} className="mr-1"/> {note.linkedRegMark}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {(note.author === staffId || isAdmin) && (
+                                                <button onClick={() => deleteNote(note.id)} className="text-slate-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                                    </div>
+                                );
+                            })}
+                            {filteredNotes.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">目前沒有隨手記紀錄</div>}
+                        </div>
+                    </div>
+                )}
+
+                {/* ===== Tab 2: 內部對話 (Chat) ===== */}
                 {activeTab === 'chat' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-100/50">
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
@@ -4821,6 +4943,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                     </div>
                 )}
 
+                {/* ===== Tab 3: 任務指派 (Tasks) ===== */}
                 {activeTab === 'tasks' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
                         <form onSubmit={handleAddTask} className="p-3 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none shadow-sm z-10">
@@ -4836,7 +4959,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                     {(systemUsers || []).map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
                                     <option value="ALL">所有人 (All)</option>
                                 </select>
-                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-slate-800 transition-colors shadow-sm"><Plus size={16} className="inline mr-1"/> 發佈</button>
+                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-purple-800 transition-colors shadow-sm"><Plus size={16} className="inline mr-1"/> 發佈</button>
                             </div>
                         </form>
                         
@@ -4858,7 +4981,7 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
                                             <p className={`text-sm font-bold ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`}>{task.content}</p>
                                             <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
                                                 <div className="text-[10px] text-slate-400 font-medium">
-                                                    <span className="text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
+                                                    <span className="text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
                                                     由 {task.assigner} 指派
                                                 </div>
                                                 {(task.assigner === staffId || isAdmin) && (
