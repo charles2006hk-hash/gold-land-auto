@@ -1065,9 +1065,10 @@ type SidebarProps = {
     setStaffId: (id: string | null) => void;
     // ★★★ 新增：接收當前用戶權限物件 ★★★
     currentUser: { email: string, modules: string[] } | null;
+    onOpenChangePwd: () => void; // ★ 新增這行
 };
 
-const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId, currentUser }: SidebarProps) => {
+const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId, currentUser, onOpenChangePwd }: SidebarProps) => {
     
     const handleLogout = () => {
         if (confirm("確定登出系統？(Confirm Logout?)")) {
@@ -1148,12 +1149,16 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                      <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
                  ) : (
                      <div className="flex items-center justify-between px-1">
-                         <div className="flex items-center space-x-2 overflow-hidden">
-                             <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500 border border-slate-700"><UserCircle size={16} /></div>
-                             <div className="flex-1 min-w-0"><p className="text-xs font-bold text-white truncate">{staffId}</p><p className="text-[9px] text-slate-500">在線</p></div>
-                         </div>
-                         <button onClick={handleLogout} className="text-slate-500 hover:text-red-400 transition p-1.5 hover:bg-slate-800 rounded"><LogOut size={16} /></button>
-                     </div>
+                        <div className="flex items-center space-x-2 overflow-hidden">
+                            <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500 border border-slate-700"><UserCircle size={16} /></div>
+                            <div className="flex-1 min-w-0"><p className="text-xs font-bold text-white truncate">{staffId}</p><p className="text-[9px] text-slate-500">在線</p></div>
+                        </div>
+                        {/* ★ 新增了修改密碼(Key)按鈕 */}
+                        <div className="flex items-center gap-1">
+                            <button onClick={onOpenChangePwd} className="text-slate-400 hover:text-yellow-400 transition p-1.5 hover:bg-slate-800 rounded" title="修改密碼"><Key size={14} /></button>
+                            <button onClick={handleLogout} className="text-slate-500 hover:text-red-400 transition p-1.5 hover:bg-slate-800 rounded" title="登出"><LogOut size={14} /></button>
+                        </div>
+                    </div>
                  )}
                  {isSidebarCollapsed && <button onClick={() => setIsSidebarCollapsed(false)} className="w-full mt-3 flex justify-center text-slate-600 hover:text-white py-1 md:flex hidden"><ChevronRight size={16} /></button>}
             </div>
@@ -4156,6 +4161,93 @@ const CrossBorderView = ({
 };
 
 // ------------------------------------------------------------------
+// ★★★ 新增：員工專用修改密碼彈窗 (Change Password Modal) ★★★
+// ------------------------------------------------------------------
+const ChangePasswordModal = ({ isOpen, onClose, staffId, systemUsers, updateSystemUsers }: any) => {
+    const [oldPwd, setOldPwd] = useState('');
+    const [newPwd, setNewPwd] = useState('');
+    const [confirmPwd, setConfirmPwd] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+        
+        const user = systemUsers.find((u:any) => u.email === staffId);
+        
+        // 1. 驗證邏輯
+        if (!user && staffId !== 'BOSS') { setError('找不到使用者資料'); setIsLoading(false); return; }
+        if (staffId !== 'BOSS' && user.password !== oldPwd) { setError('❌ 舊密碼輸入錯誤'); setIsLoading(false); return; }
+        if (newPwd !== confirmPwd) { setError('❌ 兩次輸入的新密碼不一致'); setIsLoading(false); return; }
+        if (newPwd.length < 6) { setError('❌ 新密碼長度至少需要 6 個字元'); setIsLoading(false); return; }
+
+        try {
+            // 2. 更新資料庫中的密碼
+            if (staffId !== 'BOSS') {
+                const newUsers = systemUsers.map((u:any) => u.email === staffId ? { ...u, password: newPwd } : u);
+                await updateSystemUsers(newUsers);
+            }
+            
+            // 3. 同步更新 Firebase Auth (如果適用)
+            const { getAuth, updatePassword } = await import('firebase/auth');
+            const auth = getAuth();
+            if (auth.currentUser && staffId !== 'BOSS') {
+                await updatePassword(auth.currentUser, newPwd).catch(err => console.warn('Firebase Auth 更新略過:', err));
+            }
+
+            alert('✅ 密碼修改成功！下次登入請使用新密碼。');
+            setOldPwd(''); setNewPwd(''); setConfirmPwd('');
+            onClose();
+        } catch (err) {
+            setError('密碼修改失敗，請稍後再試或聯絡管理員');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+                <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                    <h3 className="font-bold flex items-center"><Key size={18} className="mr-2 text-yellow-400"/> 修改登入密碼</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-5 space-y-4 bg-slate-50">
+                    {staffId === 'BOSS' ? (
+                        <div className="text-sm text-red-500 font-bold mb-4 bg-red-50 p-3 rounded-lg border border-red-200">
+                            BOSS 帳號為系統預設超級管理員，密碼固定為 8888，如需更改請從源碼調整。
+                        </div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">目前密碼 (Old Password)</label>
+                                <input type="password" value={oldPwd} onChange={e => setOldPwd(e.target.value)} className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500" required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-blue-600 mb-1">新密碼 (New Password)</label>
+                                <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} className="w-full border border-blue-300 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500" required minLength={6} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-blue-600 mb-1">確認新密碼 (Confirm Password)</label>
+                                <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} className="w-full border border-blue-300 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500" required minLength={6} />
+                            </div>
+                            {error && <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100 font-bold">{error}</div>}
+                            <button type="submit" disabled={isLoading} className="w-full mt-4 bg-blue-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 transition-colors flex justify-center items-center">
+                                {isLoading ? <Loader2 size={18} className="animate-spin"/> : '確認修改'}
+                            </button>
+                        </>
+                    )}
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
 // ★★★ 新增：系統啟動與資料同步 Loading 畫面 ★★★
 // ------------------------------------------------------------------
 const GlobalDataLoadingScreen = () => {
@@ -5702,7 +5794,18 @@ const SettingsManager = ({
                                                 </select>
                                             </div>
                                         </div>
-                                        <button onClick={() => handleRemoveUser(user.email)} className="text-red-400 hover:text-red-600 text-xs px-2 py-1 border border-red-200 rounded">移除用戶</button>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => {
+                                                const newPwd = prompt(`【BOSS 特權】\n請為 ${user.email} 設定新密碼：\n(留空則預設重置為 123456)`, "123456");
+                                                if (newPwd !== null) {
+                                                    const finalPwd = newPwd.trim() || "123456";
+                                                    handleUserPermissionChange(user.email, 'password', finalPwd);
+                                                    alert(`✅ 已強制重置 ${user.email} 的密碼為: ${finalPwd}\n請通知該員工使用新密碼登入。`);
+                                                }
+                                            }} className="text-amber-600 hover:text-amber-700 text-xs px-3 py-1.5 border border-amber-200 rounded bg-amber-50 font-bold shadow-sm active:scale-95 transition-transform">重置密碼</button>
+                                            
+                                            <button onClick={() => handleRemoveUser(user.email)} className="text-red-500 hover:text-red-700 text-xs px-3 py-1.5 border border-red-200 rounded bg-red-50 font-bold shadow-sm active:scale-95 transition-transform">移除</button>
+                                        </div>
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                         {/* ★ 改成 permissionGroups ★ */}
@@ -6285,6 +6388,7 @@ export default function GoldLandAutoDMS() {
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
   const [isDataSyncing, setIsDataSyncing] = useState(true);
   const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
+  const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
 
   // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
   const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
@@ -9623,7 +9727,8 @@ const CreateDocModule = ({
           setIsSidebarCollapsed={setIsSidebarCollapsed}
           staffId={staffId}
           setStaffId={setStaffId}
-          currentUser={currentUser}/>
+          currentUser={currentUser}
+          onOpenChangePwd={() => setIsChangePwdOpen(true)} />
            
 
       <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
@@ -10403,6 +10508,15 @@ const CreateDocModule = ({
               <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
           </button>
       )}
+
+      {/* ★★★ 新增：掛載修改密碼彈窗 ★★★ */}
+      <ChangePasswordModal 
+          isOpen={isChangePwdOpen}
+          onClose={() => setIsChangePwdOpen(false)}
+          staffId={staffId}
+          systemUsers={systemUsers}
+          updateSystemUsers={updateSystemUsers}
+      />
 
       {/* ★★★ 新增：掛載團隊協作抽屜 ★★★ */}
       <TeamHubDrawer 
