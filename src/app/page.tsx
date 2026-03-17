@@ -7687,7 +7687,7 @@ const VehicleFormModal = ({
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const acqOffsetAmount = acqType === 'Local' ? Number(((v as any).acquisition?.offsetAmount || '').replace(/,/g, '')) : 0;
+    const acqOffsetAmount = acqType === 'Local' ? Number(String((v as any).acquisition?.offsetAmount || '').replace(/,/g, '')) : 0;
     const acqBalance = Number(costStr.replace(/,/g, '')) - totalAcqPaid - acqOffsetAmount;
 
     const handleAddAcqPayment = () => {
