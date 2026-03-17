@@ -8187,13 +8187,14 @@ const VehicleFormModal = ({
                                 ))}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-200">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-200 w-full">
                                 <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold"/>
                                 <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
                                 <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value})} className="w-full sm:col-span-2 lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-blue-700"><option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option></select>
-                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white"/>
+                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white min-w-0"/>
                                 
-                                <div className="w-full sm:col-span-2 flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
+                                {/* ★ 修復：加入 lg:w-auto lg:flex-none，防止搶佔空間 */}
+                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border rounded-lg outline-none bg-white text-right font-mono font-black text-blue-600"/>
                                     <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: '', method: 'Cash'}); }}} className="w-full sm:w-auto bg-slate-900 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增收款</button>
                                 </div>
@@ -8329,8 +8330,10 @@ const VehicleFormModal = ({
                                     <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
                                         <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option>
                                     </select>
-                                    <input type="text" placeholder="付款備註..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="sm:col-span-2 lg:flex-1 w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white min-w-0"/>
-                                    <div className="sm:col-span-2 flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0 w-full">
+                                    <input type="text" placeholder="付款備註..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white min-w-0"/>
+                                    
+                                    {/* ★ 修復：加入 lg:w-auto lg:flex-none，防止搶佔空間 */}
+                                    <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                         <input type="text" placeholder="$ 金額" value={newAcqPayment.amount} onChange={e => setNewAcqPayment({...newAcqPayment, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-300 rounded-lg outline-none bg-white text-right font-mono font-black text-red-600 shadow-inner min-w-0"/>
                                         <button type="button" onClick={handleAddAcqPayment} className="w-full sm:w-auto bg-red-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-red-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增付款</button>
                                     </div>
@@ -8384,7 +8387,8 @@ const VehicleFormModal = ({
                                 <select value={newExpense.type} onChange={handleExpenseTypeChange} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-800 min-w-0"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
                                 <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"><option value="">選公司 / 車房...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
                                 
-                                <div className="w-full sm:col-span-2 flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
+                                {/* ★ 修復：加入 lg:w-auto lg:flex-none，防止搶佔空間 */}
+                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
                                     <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="w-full sm:w-auto bg-slate-800 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">記一筆支出</button>
                                 </div>
