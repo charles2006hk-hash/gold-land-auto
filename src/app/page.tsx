@@ -469,7 +469,7 @@ type Customer = {
   address: string;
 };
 
-type DocType = 'sales_contract' | 'purchase_contract' | 'consignment_contract' | 'invoice' | 'receipt';
+type DocType = 'sales_contract' | 'purchase_contract' | 'consignment_contract' | 'quotation' | 'invoice' | 'receipt';
 
 type DatabaseAttachment = {
     name: string; // 檔案名稱 (e.g. 身份證正面.jpg)
