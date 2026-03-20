@@ -6018,7 +6018,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
                         </div>
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積 (Engine)</span>
-                            <span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}cc` : '-'}</span>
+                            <span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</span>
                         </div>
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數 (Mileage)</span>
@@ -7167,7 +7167,7 @@ const deleteVehicle = async (id: string) => {
         });
     }
 
-    // 2. 背景寫入 Firebase (只更新指定的欄位，不影響整台車的其他數據)
+    // 2. 背景寫入 Firebase (只更新指定的陣列欄位，不影響整台車的其他數據)
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
 
@@ -7610,11 +7610,12 @@ const DatabaseSelector = ({
 };
 
 // ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v21.3: 完美防清洗 + Trade-in 對數) ★★★
+// ★★★ 1. Vehicle Form Modal (v21.3: 即時寫入防清洗 + Trade-in 對數 + Kw 單位) ★★★
 // ------------------------------------------------------------------
 const VehicleFormModal = ({ 
-    db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle,
-    addSystemLog, allSalesDocs, onJumpToDoc
+    db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
+    updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc,
+    addSalesAddon = () => {}, deleteSalesAddon = () => {}
 }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -7625,7 +7626,6 @@ const VehicleFormModal = ({
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
     
-    // ★★★ 核心升級：將 rightTab 預設改為 'vrd'，讓手機一打開先看到基本資料 ★★★
     const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb'>('vrd');
     
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
@@ -7666,15 +7666,6 @@ const VehicleFormModal = ({
     const HK_PORTS = ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'];
     const MO_PORTS = ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'];
 
-    // ★★★ 核心修復 1：防清洗 (Local State Updates) ★★★
-    const localAddPayment = (payment: any) => { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), payment] })); };
-    const localDeletePayment = (pid: string) => { setEditingVehicle((prev: any) => ({ ...prev, payments: (prev.payments || []).filter((p:any) => p.id !== pid) })); };
-    const localAddExpense = (expense: any) => { setEditingVehicle((prev: any) => ({ ...prev, expenses: [...(prev.expenses || []), expense] })); };
-    const localDeleteExpense = (eid: string) => { setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).filter((e:any) => e.id !== eid) })); };
-    const localUpdateExpenseStatus = (eid: string, status: 'Paid'|'Unpaid') => { setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e:any) => e.id === eid ? { ...e, status } : e) })); };
-    const localAddSalesAddon = (addon: any) => { setEditingVehicle((prev: any) => ({ ...prev, salesAddons: [...(prev.salesAddons || []), addon] })); };
-    const localDeleteSalesAddon = (aid: string) => { setEditingVehicle((prev: any) => ({ ...prev, salesAddons: (prev.salesAddons || []).filter((a:any) => a.id !== aid) })); };
-
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
     const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
@@ -7714,7 +7705,6 @@ const VehicleFormModal = ({
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    // ★ 修正 offsetAmount 可能造成的 replace is not a function 錯誤
     const acqOffsetAmount = acqType === 'Local' ? Number(String((v as any).acquisition?.offsetAmount || '').replace(/,/g, '')) : 0;
     const acqBalance = Number(costStr.replace(/,/g, '')) - totalAcqPaid - acqOffsetAmount;
 
@@ -7879,8 +7869,8 @@ const VehicleFormModal = ({
     const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
     const displayPhotos = (isOneForOne && carPhotos.length === 0) ? [oneForOnePlaceholder] : carPhotos;
 
+
     return (
-      // ★ 鎖死外層 w-full overflow-hidden，防止內容撐破螢幕
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden w-full">
         <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[100vw] overflow-hidden md:max-w-[98vw] xl:max-w-[1500px] h-full md:h-[92vh] flex flex-col border-0 md:border border-slate-600 relative">
           
@@ -7902,7 +7892,6 @@ const VehicleFormModal = ({
 
           <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full">
             
-            {/* ★★★ 手機版內部專用 4 分頁 ★★★ */}
             <div className="md:hidden flex border-b border-slate-200 px-2 gap-1 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide sticky top-0 z-40 w-full shadow-sm">
                 <button type="button" onClick={() => setRightTab('vrd')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'vrd' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}><FileText size={16} className="inline mr-1 mb-0.5"/>基本/VRD</button>
                 <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'sales' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售/收款</button>
@@ -8164,7 +8153,7 @@ const VehicleFormModal = ({
                                     <div key={addon.id} className="flex items-center justify-between gap-2 text-sm md:text-xs p-3 md:p-2 bg-white border border-indigo-100 rounded-lg shadow-sm">
                                         <div className="font-bold text-slate-700 flex-1 pl-1 min-w-0 truncate">{addon.name}</div>
                                         <div className="font-mono font-bold text-indigo-600 text-base md:text-sm flex-shrink-0">{formatCurrency(addon.amount)}</div>
-                                        <button type="button" onClick={() => localDeleteSalesAddon(addon.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 md:p-1.5 rounded-md flex-shrink-0"><Trash2 size={16}/></button>
+                                        <button type="button" onClick={() => deleteSalesAddon(v.id!, addon.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 md:p-1.5 rounded-md flex-shrink-0"><Trash2 size={16}/></button>
                                     </div>
                                 ))}
                                 {((v as any).salesAddons || []).length === 0 && <div className="text-center text-sm md:text-xs text-indigo-300 py-3">無附加收費</div>}
@@ -8173,7 +8162,7 @@ const VehicleFormModal = ({
                             <div className="flex flex-col sm:flex-row gap-3 md:gap-2">
                                 <input type="text" placeholder="收費項目 (例如: 文件費)..." value={newAddon.name} onChange={e => setNewAddon({...newAddon, name: e.target.value})} className="flex-1 w-full text-sm md:text-xs p-3 md:p-2 border border-indigo-200 rounded-lg outline-none bg-white min-w-0"/>
                                 <input type="text" placeholder="$ 金額" value={newAddon.amount} onChange={e => setNewAddon({...newAddon, amount: formatNumberInput(e.target.value)})} className="w-full sm:w-32 text-base md:text-sm p-3 md:p-2 border border-indigo-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-indigo-600"/>
-                                <button type="button" onClick={() => {const amt=Number(newAddon.amount.replace(/,/g,'')); if(amt>0 && v.id) { localAddSalesAddon({id:Date.now().toString(), name: newAddon.name, amount:amt}); setNewAddon({name:'', amount:''}); }}} className="bg-indigo-600 text-white text-sm md:text-xs p-3 md:px-4 rounded-lg hover:bg-indigo-700 font-bold active:scale-95 transition-transform whitespace-nowrap w-full sm:w-auto">加入收費</button>
+                                <button type="button" onClick={() => {const amt=Number(newAddon.amount.replace(/,/g,'')); if(amt>0 && v.id) { addSalesAddon(v.id!, {id:Date.now().toString(), name: newAddon.name, amount:amt}); setNewAddon({name:'', amount:''}); }}} className="bg-indigo-600 text-white text-sm md:text-xs p-3 md:px-4 rounded-lg hover:bg-indigo-700 font-bold active:scale-95 transition-transform whitespace-nowrap w-full sm:w-auto">加入收費</button>
                             </div>
                         </div>
 
@@ -8195,7 +8184,7 @@ const VehicleFormModal = ({
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
                                             <span className="font-mono font-black text-blue-700 text-lg md:text-base">{formatCurrency(p.amount)}</span>
-                                            {!p.relatedTaskId && <button type="button" onClick={() => localDeletePayment(p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2 md:p-1.5 rounded-md flex-shrink-0"><Trash2 size={16}/></button>}
+                                            {!p.relatedTaskId && <button type="button" onClick={() => deletePayment(v.id!, p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2 md:p-1.5 rounded-md flex-shrink-0"><Trash2 size={16}/></button>}
                                         </div>
                                     </div>
                                 ))}
@@ -8229,7 +8218,7 @@ const VehicleFormModal = ({
                                 {/* ★ 修復：加入 lg:w-auto lg:flex-none，防止搶佔空間 */}
                                 <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border rounded-lg outline-none bg-white text-right font-mono font-black text-blue-600"/>
-                                    <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { localAddPayment({id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: '', method: 'Cash'}); }}} className="w-full sm:w-auto bg-slate-900 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增收款</button>
+                                    <button type="button" onClick={() => {const amt=Number(newPayment.amount.replace(/,/g,'')); if(amt>0 && v.id) { addPayment(v.id!, {id:Date.now().toString(), ...newPayment, amount:amt} as any); setNewPayment({...newPayment, amount:'', note: '', relatedTaskId: '', method: 'Cash'}); }}} className="w-full sm:w-auto bg-slate-900 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增收款</button>
                                 </div>
                             </div>
                         </div>
@@ -8392,8 +8381,8 @@ const VehicleFormModal = ({
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
                                             <span className="font-mono font-black text-lg md:text-base text-slate-700">{formatCurrency(exp.amount)}</span>
                                             <div className="flex items-center gap-2">
-                                                <button type="button" onClick={() => localUpdateExpenseStatus(exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')} className={`px-3 py-1.5 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border transition-colors shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{exp.status === 'Paid' ? '已付' : '未付'}</button>
-                                                <button type="button" onClick={() => localDeleteExpense(exp.id)} className="text-gray-400 hover:text-white bg-gray-100 hover:bg-red-500 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><X size={16}/></button>
+                                                <button type="button" onClick={() => updateExpenseStatus(v.id!, exp.id, exp.status === 'Paid' ? 'Unpaid' : 'Paid')} className={`px-3 py-1.5 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border transition-colors shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{exp.status === 'Paid' ? '已付' : '未付'}</button>
+                                                <button type="button" onClick={() => deleteExpense(v.id!, exp.id)} className="text-gray-400 hover:text-white bg-gray-100 hover:bg-red-500 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><X size={16}/></button>
                                             </div>
                                         </div>
                                     </div>
@@ -8423,7 +8412,7 @@ const VehicleFormModal = ({
                                 {/* ★ 修復：加入 lg:w-auto lg:flex-none，防止搶佔空間 */}
                                 <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
-                                    <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { localAddExpense({id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="w-full sm:w-auto bg-slate-800 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">記一筆支出</button>
+                                    <button type="button" onClick={() => {const amt=Number(newExpense.amount.replace(/,/g,'')); if(amt>0 && v.id) { addExpense(v.id!, {id:Date.now().toString(), ...newExpense, amount:amt} as any); setNewExpense({...newExpense, amount:''}); }}} className="w-full sm:w-auto bg-slate-800 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">記一筆支出</button>
                                 </div>
                             </div>
                         </div>
@@ -10563,7 +10552,7 @@ const CreateDocModule = ({
                                 <div className="flex flex-wrap gap-1.5 mt-auto mb-4">
                                     {car.colorExt && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 flex items-center"><div className="w-2 h-2 rounded-full border border-gray-300 mr-1.5 shadow-inner" style={{backgroundColor: getColorHex(car.colorExt)}}></div>{car.colorExt}</span>}
                                     <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.previousOwners || 0}手</span>
-                                    {car.engineSize && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.engineSize}cc</span>}
+                                    {car.engineSize && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.engineSize}{car.fuelType === 'Electric' ? 'Kw' : 'cc'}</span>}
                                     {car.mileage ? <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{Number(car.mileage).toLocaleString()}km</span> : null}
                                 </div>
 
