@@ -7134,32 +7134,35 @@ const deleteVehicle = async (id: string) => {
     }
   };
 
-  // --- Sub-Item Management (FIXED: Updates Local State) ---
+  // --- Sub-Item Management (完美防清洗版：只更新陣列，絕對保留其他未 Save 的輸入資料) ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder'|'salesAddons', newItems: any) => {
     if (!db || !staffId) return;
     const currentDb = db;
+    
+    // 1. 立即安全地更新畫面 (只更新對應的陣列，絕對保留其他未 Save 的輸入資料)
+    if (editingVehicle && editingVehicle.id === vehicleId) {
+        setEditingVehicle(prev => {
+             if (!prev) return null;
+             if (field === 'crossBorder') {
+                 return { ...prev, crossBorder: { ...(prev.crossBorder || {} as any), tasks: newItems } };
+             } else {
+                 return { ...prev, [field]: newItems };
+             }
+        });
+    }
+
+    // 2. 背景寫入 Firebase (只更新指定的欄位，不影響整台車的其他數據)
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
 
     let updateData: any = {}; 
-    let newVehicleState = { ...v };
-
     if (field === 'crossBorder') {
         updateData = { crossBorder: { ...v.crossBorder, tasks: newItems } };
-        newVehicleState.crossBorder = { ...v.crossBorder!, tasks: newItems };
     } else {
         updateData = { [field]: newItems };
-        newVehicleState[field] = newItems as any; 
     }
 
     await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), updateData);
-    
-    if (editingVehicle && editingVehicle.id === vehicleId) {
-        setEditingVehicle(prev => {
-             if (!prev) return null;
-             return { ...prev, ...newVehicleState };
-        });
-    }
   };
 
   const addPayment = async (vehicleId: string, payment: Payment) => {
