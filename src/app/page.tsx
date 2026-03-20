@@ -5645,13 +5645,17 @@ const SettingsManager = ({
                             <h3 className="font-bold text-slate-700 mb-4">2. 型號管理 (Models)</h3>
                             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
                                 <label className="text-xs font-bold text-slate-500 block mb-1">選擇廠牌</label>
-                                <select value={selectedMake} onChange={e => setSelectedMake(e.target.value)} className="w-full p-2 border rounded text-sm mb-3"><option value="">-- 請選擇 --</option>{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</select>
+                                <select value={selectedMake} onChange={e => setSelectedMake(e.target.value)} className="w-full p-2 border rounded text-sm mb-3">
+                                    <option value="">-- 請選擇 --</option>
+                                    {(Array.isArray(settings.makes) ? settings.makes : []).map((m:string) => <option key={m} value={m}>{m}</option>)}
+                                </select>
                                 {selectedMake && (
                                     <div className="flex gap-2">
                                         <input value={newModel} onChange={e => setNewModel(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMake} 新型號...`} />
                                         <button onClick={() => {
                                             if(selectedMake && newModel) {
-                                                updateSettings('models', { ...settings.models, [selectedMake]: [...(settings.models[selectedMake] || []), newModel] });
+                                                const currentModels = Array.isArray(settings.models[selectedMake]) ? settings.models[selectedMake] : [];
+                                                updateSettings('models', { ...settings.models, [selectedMake]: [...currentModels, newModel] });
                                                 setNewModel('');
                                             }
                                         }} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button>
@@ -5660,11 +5664,15 @@ const SettingsManager = ({
                             </div>
                             {selectedMake && (
                                 <div className="flex flex-wrap gap-2">
-                                    {(settings.models[selectedMake] || []).length === 0 ? <span className="text-sm text-gray-400">暫無型號</span> : 
-                                    (settings.models[selectedMake] || []).map((m:string, i:number) => (
-                                        <span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => {
-                                            updateSettings('models', { ...settings.models, [selectedMake]: (settings.models[selectedMake] || []).filter((mm:string) => mm !== m) });
-                                        }}/></span>
+                                    {(!Array.isArray(settings.models[selectedMake]) || settings.models[selectedMake].length === 0) ? <span className="text-sm text-gray-400">暫無型號</span> : 
+                                    settings.models[selectedMake].map((m:string, i:number) => (
+                                        <span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">
+                                            {m} 
+                                            <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => {
+                                                const currentModels = Array.isArray(settings.models[selectedMake]) ? settings.models[selectedMake] : [];
+                                                updateSettings('models', { ...settings.models, [selectedMake]: currentModels.filter((mm:string) => mm !== m) });
+                                            }}/>
+                                        </span>
                                     ))}
                                 </div>
                             )}
@@ -6659,8 +6667,16 @@ export default function GoldLandAutoDMS() {
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
                       cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
                       
-                      // 2. 物件保護
-                      models: { ...defaultSettings.models, ...(dbData.models || {}) },
+                      // 2. 物件保護 (加入強力陣列轉換，防止 Firebase 舊資料格式錯誤導致 .map 當機)
+                      models: (() => {
+                          const merged: Record<string, string[]> = { ...defaultSettings.models };
+                          if (dbData.models) {
+                              Object.keys(dbData.models).forEach(k => {
+                                  merged[k] = Array.isArray((dbData.models as any)[k]) ? (dbData.models as any)[k] : [];
+                              });
+                          }
+                          return merged;
+                      })(),
                       
                       // 3. Reminders 全欄位保護 (加上 ?. 和最終預設值)
                       reminders: { 
