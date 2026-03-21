@@ -36,7 +36,7 @@ import {
   uploadBytes,      // 新增：處理 Blob/File 上傳
   getDownloadURL    // 新增：獲取下載連結
 } from "firebase/storage";
-import { getMessaging, getToken } from "firebase/messaging";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 // ------------------------------------------------------------------
 // ★★★ 終極防死鎖魔法：全域攔截系統 alert 轉為 HTML Toast ★★★
@@ -6435,6 +6435,25 @@ export default function GoldLandAutoDMS() {
           }, 10);
       }
   }, [currentUser, hasInitialized]);
+
+  // ★★★ 新增：監聽前景 (Foreground) 推送通知 ★★★
+  useEffect(() => {
+      if (typeof window !== 'undefined' && 'Notification' in window && app) {
+          try {
+              const messaging = getMessaging(app);
+              const unsub = onMessage(messaging, (payload) => {
+                  console.log("【前景收到通知】", payload);
+                  // 當使用者開住系統時，用我哋嘅全域 Toast 彈出通知
+                  const title = payload.notification?.title || '新通知';
+                  const body = payload.notification?.body || '';
+                  showGlobalToast(`🔔 ${title} : ${body}`, 'success');
+              });
+              return () => unsub();
+          } catch (e) {
+              console.log("前景通知監聽失敗:", e);
+          }
+      }
+  }, []);
 
   // --- User Management Helper (v13.1 新增) ---
     const updateSystemUsers = async (newUsers: any[]) => {
