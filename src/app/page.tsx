@@ -6994,6 +6994,30 @@ useEffect(() => {
         }
     };
 
+// ★★★ 新增：自動發送推送通知輔助函數 ★★★
+    const sendPushNotification = async (title: string, body: string) => {
+        if (!db || !appId || !settings.pushConfig?.isEnabled) return;
+        try {
+            const tokenRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tokens');
+            const tokenSnap = await getDocs(tokenRef);
+            const tokens: string[] = [];
+            tokenSnap.forEach(doc => {
+                if (doc.data().token) tokens.push(doc.data().token);
+            });
+
+            if (tokens.length === 0) return;
+
+            // 呼叫我們剛剛建立的 API
+            await fetch('/api/notify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tokens, title, body })
+            });
+        } catch (e) {
+            console.error("發送系統通知失敗", e);
+        }
+    };
+
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!db || !staffId) return;
@@ -7128,7 +7152,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                 await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
                 addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`);
                 
-                // ★ 已經全域攔截，直接呼叫 alert 就會彈出漂亮的 Toast，且保證編譯成功！
+                // ★ 判斷是否剛剛售出，若是則觸發通知
+                if (settings.pushConfig?.events?.sold && status === 'Sold' && editingVehicle.status !== 'Sold') {
+                    sendPushNotification('🎉 車輛已售出！', `車牌 ${vData.regMark || '未出牌'} (${vData.make} ${vData.model}) 剛剛已成功售出！`);
+                }
+                
                 alert('✅ 車輛資料已成功更新！');
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
@@ -7140,7 +7168,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                 });
                 addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
                 
-                // ★ 已經全域攔截，直接呼叫 alert 就會彈出漂亮的 Toast！
+                // ★ 新車入庫，觸發通知
+                if (settings.pushConfig?.events?.newCar) {
+                    sendPushNotification('🚗 新車入庫通知', `車牌 ${vData.regMark || '未出牌'} (${vData.make} ${vData.model}) 已成功加入庫存！`);
+                }
+                
                 alert('✅ 新車輛已成功入庫！');
             }
 
