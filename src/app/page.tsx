@@ -4693,7 +4693,7 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
 // ------------------------------------------------------------------
 // ★★★ 9. Team Hub Drawer (團隊協作中心 - 防走位、摺疊與搜尋版) ★★★
 // ------------------------------------------------------------------
-const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle, currentUser }: any) => {
+const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inventory, setEditingVehicle, currentUser, sendPushNotification }: any) => {
     const [activeTab, setActiveTab] = useState<'notes' | 'chat' | 'tasks'>('notes');
     
     // --- 隨手記 (Notes) 狀態 ---
@@ -4849,10 +4849,31 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
             linkedRegMark: finalLinkedCar || null, 
             timestamp: serverTimestamp()
         });
+
+        // ★★★ 新增：發送 @提及 推送通知 ★★★
+        if (sendPushNotification) {
+            // 搵出所有 @字眼
+            const mentions = msgText.match(/@([a-zA-Z0-9_\-\.]+)/g);
+            if (mentions) {
+                // 過濾出真正嘅「員工 ID」，排除車牌 (例如 @VELLFIRE)
+                const mentionedUsers = mentions
+                    .map(m => m.substring(1)) // 移除 @
+                    .filter(username => systemUsers.some((u:any) => u.email === username && username !== staffId)); // 確保係員工，且唔係自己@自己
+
+                if (mentionedUsers.length > 0) {
+                    sendPushNotification(
+                        `💬 ${staffId} 在對話中提及了您`, 
+                        msgText, 
+                        mentionedUsers
+                    );
+                }
+            }
+        }
         
         setNewMessage('');
         setChatLinkedCar('');
         
+        // ... 下面保留原本的 @AI 處理邏輯 ...
         if (msgText.includes('@AI') || msgText.includes('@ai')) {
             setIsAiThinking(true);
             try {
@@ -4907,6 +4928,25 @@ const TeamHubDrawer = ({ isOpen, onClose, db, staffId, appId, systemUsers, inven
             assigner: staffId, assignee: assignee, content: taskText, linkedRegMark: finalLinkedCar || null, 
             status: 'pending', timestamp: serverTimestamp()
         });
+
+        // ★★★ 新增：發送任務指派 推送通知 ★★★
+        if (sendPushNotification) {
+            if (assignee === 'ALL') {
+                // 廣播給所有人
+                sendPushNotification(
+                    `📋 新任務發佈`, 
+                    `${staffId} 發佈了一項全體任務：${taskText}`
+                ); 
+            } else if (assignee !== staffId) { 
+                // 指派給特定員工 (排除自己指派俾自己)
+                sendPushNotification(
+                    `📋 新任務指派`, 
+                    `${staffId} 指派了一項新任務給您：${taskText}`, 
+                    [assignee]
+                );
+            }
+        }
+
         setNewTask(''); setTaskLinkedCar('');
     };
 
@@ -6994,20 +7034,32 @@ useEffect(() => {
         }
     };
 
-// ★★★ 新增：自動發送推送通知輔助函數 ★★★
-    const sendPushNotification = async (title: string, body: string) => {
+// ★★★ 升級版：自動發送推送通知輔助函數 (支援廣播 及 指定員工) ★★★
+    // targetUsers: 如果留空，就發送俾所有人；如果傳入 ['sales01', 'admin']，就只發俾呢兩個人。
+    const sendPushNotification = async (title: string, body: string, targetUsers?: string[]) => {
         if (!db || !appId || !settings.pushConfig?.isEnabled) return;
         try {
             const tokenRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tokens');
             const tokenSnap = await getDocs(tokenRef);
             const tokens: string[] = [];
+            
             tokenSnap.forEach(doc => {
-                if (doc.data().token) tokens.push(doc.data().token);
+                const data = doc.data();
+                if (data.token) {
+                    // 如果有指定員工名單，就檢查呢個 token 屬唔屬於嗰個員工
+                    if (targetUsers && targetUsers.length > 0) {
+                        if (targetUsers.includes(data.user)) {
+                            tokens.push(data.token);
+                        }
+                    } else {
+                        // 如果無指定，就全部人都加落去 (廣播模式)
+                        tokens.push(data.token);
+                    }
+                }
             });
 
             if (tokens.length === 0) return;
 
-            // 呼叫我們剛剛建立的 API
             await fetch('/api/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -10787,6 +10839,7 @@ const CreateDocModule = ({
           inventory={visibleInventory}
           setEditingVehicle={setEditingVehicle}
           currentUser={currentUser}
+          sendPushNotification={sendPushNotification}
       />
 
     </div>
