@@ -5243,37 +5243,40 @@ const SettingsManager = ({
             setPermissionStatus(permission);
 
             if (permission === 'granted') {
+                // ★★★ 核心修復：強制註冊並綁定 Service Worker ★★★
+                const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                console.log('Service Worker 註冊成功:', registration);
+
                 const messaging = getMessaging(app);
+                
+                // ★ 獲取 Token，並明確指定使用我們剛註冊的 Service Worker
                 const token = await getToken(messaging, { 
-                    vapidKey: settings.pushConfig?.vapidKey 
+                    vapidKey: settings.pushConfig?.vapidKey || 'BIpAVoyM6C6CodEmmKnsykyuQkX0g0VBBXDUWikIRhKtnCVUVCuO86EqlEgf5zuxz8nGA3DCdbEr1yKynCXFJKA',
+                    serviceWorkerRegistration: registration
                 });
 
                 if (token) {
-                    console.log("Device Token:", token);
+                    console.log("Device Token 獲取成功:", token);
                     
-                    // ★★★ 修改：將 Token 寫入使用者的資料庫文檔 ★★★
-                    // 假設您的使用者設定檔存放在 system/users 列表或是獨立的 collection
-                    // 這裡我們示範將其存入 'system_users_tokens' 集合，以 staffId (Email) 為 ID
                     const tokenRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tokens', staffId);
-                    
                     await setDoc(tokenRef, {
                         token: token,
                         user: staffId,
                         updatedAt: serverTimestamp(),
-                        device: navigator.userAgent // 紀錄是哪台設備
+                        device: navigator.userAgent 
                     }, { merge: true });
 
-                    alert(`✅ 裝置配對成功！\n您的 iPhone 現在已連結至帳號：${staffId}\n當有新車或售出時，此裝置將收到通知。`);
+                    alert(`✅ 裝置配對成功！\n您的設備現在已連結至帳號：${staffId}\n當有新車或售出時，此裝置將會收到推送通知。`);
                     
                 } else {
                     alert("無法獲取 Token，請檢查 VAPID Key 設定");
                 }
             } else {
-                alert("權限被拒絕");
+                alert("您已拒絕通知權限。如需開啟，請到瀏覽器設定中解鎖。");
             }
         } catch (err) {
             console.error("Token Error:", err);
-            alert(`發生錯誤: ${err}`);
+            alert(`發生錯誤，請確保您使用的是 HTTPS 連線。\n錯誤詳情: ${err}`);
         }
     };
 
@@ -6750,6 +6753,7 @@ export default function GoldLandAutoDMS() {
         setLink('icon', logoPath);
         setLink('shortcut icon', logoPath); // 針對舊版或特定瀏覽器
         setLink('apple-touch-icon', logoPath); 
+        setLink('manifest', '/manifest.json'); // ★ 新增這行，連結 PWA 描述檔
 
         // Web App Meta
         setMeta('apple-mobile-web-app-title', appName); 
