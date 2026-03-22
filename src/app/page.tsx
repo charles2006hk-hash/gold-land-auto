@@ -7157,6 +7157,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
         const vData = {
             isPublic: isPublicFormValue,
+            licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
             purchaseType: formData.get('purchaseType'),
             acquisition: acquisitionData,
             regMark: (formData.get('regMark') as string)?.toUpperCase() || '',
@@ -8156,9 +8157,49 @@ const VehicleFormModal = ({
                                     <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Reg. as Owner Date</label>
                                     <input type="date" name="registeredOwnerDate" defaultValue={v.registeredOwnerDate} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs font-mono outline-none text-slate-600"/>
                                 </div>
-                                <div className="col-span-1 bg-red-50/50 rounded px-2 md:px-1 py-1 md:py-0 border border-red-100 md:border-none">
-                                    <label className="text-xs md:text-[9px] text-red-500 md:text-red-400 font-bold uppercase">Lic. Expiry</label>
-                                    <input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent border-b border-red-300 md:border-red-200 p-2 md:p-1 text-base md:text-xs font-mono text-left md:text-right text-red-700 outline-none"/>
+                                <div className="col-span-1 bg-red-50/50 rounded px-2 md:px-1 py-1 md:py-0 border border-red-100 md:border-none relative group">
+                                    <div className="flex justify-between items-center mb-0.5 md:mb-0">
+                                        <label className="text-xs md:text-[9px] text-red-500 md:text-red-400 font-bold uppercase flex items-center">
+                                            Lic. Expiry
+                                            {/* ★ 鈴鐺圖示，根據開關狀態改變顏色 */}
+                                            <Bell size={10} className={`ml-1 ${v.licenseReminderEnabled !== false ? 'text-red-500 animate-pulse' : 'text-gray-300'}`} />
+                                        </label>
+                                        
+                                        {/* ★ 小巧的開關 Toggle */}
+                                        <label className="flex items-center cursor-pointer relative z-10" title={v.licenseReminderEnabled !== false ? "提醒已開啟" : "不作提醒"}>
+                                            <div className="relative">
+                                                {/* 隱藏欄位：傳送 true/false 給 formData */}
+                                                <input type="hidden" name="licenseReminderEnabled" value={v.licenseReminderEnabled !== false ? 'true' : 'false'} />
+                                                
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="sr-only peer"
+                                                    defaultChecked={v.licenseReminderEnabled !== false} 
+                                                    onChange={(e) => {
+                                                        // 當切換時，更新隱藏欄位的值
+                                                        const hiddenInput = e.target.previousElementSibling as HTMLInputElement;
+                                                        if (hiddenInput) hiddenInput.value = e.target.checked ? 'true' : 'false';
+                                                        
+                                                        // 即時更新畫面上的鈴鐺顏色 (透過簡單的 DOM 操作，不觸發整個元件 re-render)
+                                                        const bellIcon = e.target.closest('.group')?.querySelector('.lucide-bell');
+                                                        if (bellIcon) {
+                                                            if (e.target.checked) {
+                                                                bellIcon.classList.add('text-red-500', 'animate-pulse');
+                                                                bellIcon.classList.remove('text-gray-300');
+                                                            } else {
+                                                                bellIcon.classList.remove('text-red-500', 'animate-pulse');
+                                                                bellIcon.classList.add('text-gray-300');
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                {/* Toggle UI (縮小版) */}
+                                                <div className="w-5 h-3 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 after:transition-all peer-checked:bg-red-500 shadow-inner"></div>
+                                            </div>
+                                        </label>
+                                    </div>
+                                    
+                                    <input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent border-b border-red-300 md:border-red-200 p-2 md:p-1 text-base md:text-xs font-mono text-left md:text-right text-red-700 outline-none relative z-0"/>
                                 </div>
                             </div>
                             
