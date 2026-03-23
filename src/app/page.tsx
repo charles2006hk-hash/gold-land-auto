@@ -3906,9 +3906,25 @@ const CrossBorderView = ({
     const filteredVehicles = cbVehicles.filter((v:any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
     const activeCar = inventory.find((v: any) => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    // 提醒邏輯
+    // 提醒邏輯 (已升級支援開關)
     const expiredItems: any[] = []; const soonItems: any[] = [];
-    cbVehicles.forEach((v:any) => { Object.entries(dateFields).forEach(([fieldKey, label]) => { const dateStr = (v.crossBorder as any)?.[fieldKey]; if (dateStr) { const days = getDaysRemaining(dateStr); if (days !== null) { const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days }; if (days < 0) expiredItems.push(itemData); else if (days <= 30) soonItems.push(itemData); } } }); });
+    cbVehicles.forEach((v:any) => { 
+        Object.entries(dateFields).forEach(([fieldKey, label]) => { 
+            const dateStr = (v.crossBorder as any)?.[fieldKey]; 
+            // ★ 判斷開關
+            const reminderKey = fieldKey.replace('date', 'cb_remind_');
+            const isRemind = (v.crossBorder as any)?.[reminderKey] !== false;
+            
+            if (dateStr && isRemind) { 
+                const days = getDaysRemaining(dateStr); 
+                if (days !== null) { 
+                    const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days }; 
+                    if (days < 0) expiredItems.push(itemData); 
+                    else if (days <= 30) soonItems.push(itemData); 
+                } 
+            } 
+        }); 
+    });
     expiredItems.sort((a, b) => a.days - b.days); soonItems.sort((a, b) => a.days - b.days);
 
     // --- Actions ---
@@ -4010,7 +4026,14 @@ const CrossBorderView = ({
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
                         {filteredVehicles.map((car:any) => {
                             let expiredCount = 0;
-                            Object.keys(dateFields).forEach(k => { const d = (car.crossBorder as any)?.[k]; if(d && getDaysRemaining(d)! < 0) expiredCount++; });
+                            Object.keys(dateFields).forEach(k => { 
+                                const d = (car.crossBorder as any)?.[k]; 
+                                // ★ 判斷開關
+                                const reminderKey = k.replace('date', 'cb_remind_');
+                                const isRemind = (car.crossBorder as any)?.[reminderKey] !== false;
+                                
+                                if(d && isRemind && getDaysRemaining(d)! < 0) expiredCount++; 
+                            });
                             
                             // 標籤邏輯
                             const getTags = () => {
@@ -4528,7 +4551,7 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                 };
                 Object.entries(cbDocs).forEach(([key, label]) => {
                     const dateVal = (cb as any)?.[key];
-                    // ★ 獲取該項目的開關狀態 (預設 true)
+                    // ★ 讀取該項目的開關狀態
                     const reminderKey = key.replace('date', 'cb_remind_'); 
                     const isRemind = (cb as any)?.[reminderKey] !== false;
 
@@ -10346,7 +10369,11 @@ const CreateDocModule = ({
                       if (!cb) return; 
                       Object.entries(cbDateFields).forEach(([field, label]) => { 
                           const dateStr = (cb as any)?.[field]; 
-                          if (dateStr) { 
+                          // ★ 讀取該項目的開關狀態
+                          const reminderKey = field.replace('date', 'cb_remind_');
+                          const isRemind = (cb as any)?.[reminderKey] !== false;
+
+                          if (dateStr && isRemind) { 
                               const days = getDaysRemaining(dateStr); 
                               if (days !== null && days <= 30) { 
                                   cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v }); 
