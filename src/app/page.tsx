@@ -4516,7 +4516,11 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                 };
                 Object.entries(cbDocs).forEach(([key, label]) => {
                     const dateVal = (cb as any)?.[key];
-                    if (dateVal) {
+                    // ★ 獲取該項目的開關狀態 (預設 true)
+                    const reminderKey = key.replace('date', 'cb_remind_'); 
+                    const isRemind = (cb as any)?.[reminderKey] !== false;
+
+                    if (dateVal && isRemind) {
                         const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                         if (diff <= daysThreshold) {
                             alerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'CrossBorder', item: label, date: dateVal, days: diff });
@@ -7149,6 +7153,18 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             dateMainlandLicense: getStr('cb_dateMainlandLicense', isCbActive, editingVehicle?.crossBorder?.dateMainlandLicense),
             dateHkInspection: getStr('cb_dateHkInspection', isCbActive, editingVehicle?.crossBorder?.dateHkInspection),
             
+            // ★★★ 新增：儲存各個日期的提醒開關狀態 ★★★
+            cb_remind_HkInsurance: formData.get('cb_remind_HkInsurance') !== 'false',
+            cb_remind_ReservedPlate: formData.get('cb_remind_ReservedPlate') !== 'false',
+            cb_remind_Br: formData.get('cb_remind_Br') !== 'false',
+            cb_remind_LicenseFee: formData.get('cb_remind_LicenseFee') !== 'false',
+            cb_remind_MainlandJqx: formData.get('cb_remind_MainlandJqx') !== 'false',
+            cb_remind_MainlandSyx: formData.get('cb_remind_MainlandSyx') !== 'false',
+            cb_remind_ClosedRoad: formData.get('cb_remind_ClosedRoad') !== 'false',
+            cb_remind_Approval: formData.get('cb_remind_Approval') !== 'false',
+            cb_remind_MainlandLicense: formData.get('cb_remind_MainlandLicense') !== 'false',
+            cb_remind_HkInspection: formData.get('cb_remind_HkInspection') !== 'false',
+
             tasks: editingVehicle?.crossBorder?.tasks || [],
             documentLogs: editingVehicle?.crossBorder?.documentLogs || []
         };
@@ -8655,12 +8671,50 @@ const VehicleFormModal = ({
                                     <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-blue-200 w-full min-w-0">
                                         <label className="text-sm md:text-xs text-red-700 font-black mb-3 block flex items-center bg-red-100 w-fit px-3 py-1 rounded-full"><CalendarDays size={16} className="mr-1.5"/> 證件到期日追蹤 (Expiry Dates)</label>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 md:gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full">
-                                            {Object.entries(cbDateMap).map(([key, label]) => (
-                                                <div key={key} className="bg-slate-50 p-3 md:p-2 rounded-xl md:rounded-lg border border-slate-200 hover:border-red-300 transition-colors focus-within:ring-2 ring-red-100 shadow-inner w-full min-w-0">
-                                                    <label className="block text-xs md:text-[10px] text-slate-500 font-bold mb-1.5 truncate">{label}</label>
-                                                    <input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-sm md:text-xs font-mono outline-none font-bold text-slate-800"/>
-                                                </div>
-                                            ))}
+                                            {Object.entries(cbDateMap).map(([key, label]) => {
+                                                // ★ 動態判斷每個項目的提醒開關狀態 (預設為 true)
+                                                const reminderKey = `cb_remind_${key}`;
+                                                const isRemind = (v.crossBorder as any)?.[reminderKey] !== false;
+
+                                                return (
+                                                    <div key={key} className="bg-slate-50 p-3 md:p-2 rounded-xl md:rounded-lg border border-slate-200 hover:border-red-300 transition-colors focus-within:ring-2 ring-red-100 shadow-inner w-full min-w-0 group relative">
+                                                        <div className="flex justify-between items-center mb-1.5">
+                                                            <label className="flex items-center text-xs md:text-[10px] text-slate-500 font-bold truncate">
+                                                                {label}
+                                                                <Bell size={10} className={`ml-1 flex-shrink-0 ${isRemind ? 'text-red-500 animate-pulse' : 'text-gray-300'}`} />
+                                                            </label>
+                                                            
+                                                            {/* 小巧的開關 Toggle */}
+                                                            <label className="flex items-center cursor-pointer relative z-10" title={isRemind ? "提醒已開啟" : "不作提醒"}>
+                                                                <div className="relative">
+                                                                    <input type="hidden" name={reminderKey} value={isRemind ? 'true' : 'false'} />
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        className="sr-only peer"
+                                                                        defaultChecked={isRemind} 
+                                                                        onChange={(e) => {
+                                                                            const hiddenInput = e.target.previousElementSibling as HTMLInputElement;
+                                                                            if (hiddenInput) hiddenInput.value = e.target.checked ? 'true' : 'false';
+                                                                            const bellIcon = e.target.closest('.group')?.querySelector('.lucide-bell');
+                                                                            if (bellIcon) {
+                                                                                if (e.target.checked) {
+                                                                                    bellIcon.classList.add('text-red-500', 'animate-pulse');
+                                                                                    bellIcon.classList.remove('text-gray-300');
+                                                                                } else {
+                                                                                    bellIcon.classList.remove('text-red-500', 'animate-pulse');
+                                                                                    bellIcon.classList.add('text-gray-300');
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <div className="w-5 h-3 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 after:transition-all peer-checked:bg-red-500 shadow-inner"></div>
+                                                                </div>
+                                                            </label>
+                                                        </div>
+                                                        <input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-sm md:text-xs font-mono outline-none font-bold text-slate-800"/>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 </div>
