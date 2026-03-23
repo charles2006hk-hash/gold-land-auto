@@ -16,12 +16,32 @@
   }
 }
 
-body {
+/* ★★★ 原生 App 體驗終極設定 ★★★ */
+html, body {
+  /* 1. 防止 iPhone Safari 向下拉出現灰色背景 (拉動更新) */
+  overscroll-behavior-y: none;
+  
+  /* 2. 鎖定全螢幕，防止底層滾動 */
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh; /* 支援最新的動態視窗高度 */
+  overflow: hidden;
+  
+  /* 3. 禁止用戶長按選取文字 (令感覺更像 App) */
+  -webkit-user-select: none;
+  user-select: none;
+  
+  /* 4. 消除點擊按鈕時出現的半透明灰色閃爍 */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  
+  /* 原本的顏色設定 */
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  background: rgb(var(--background-start-rgb));
+}
+
+/* 確保輸入框依然可以正常打字同複製 (非常重要！) */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: auto;
+  user-select: auto;
 }
