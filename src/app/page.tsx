@@ -336,6 +336,18 @@ type CrossBorderData = {
     dateMainlandLicense?: string; 
     dateHkInspection?: string; 
 
+    // ★★★ 新增：各日期的提醒開關狀態 ★★★
+    cb_remind_HkInsurance?: boolean;
+    cb_remind_ReservedPlate?: boolean;
+    cb_remind_Br?: boolean;
+    cb_remind_LicenseFee?: boolean;
+    cb_remind_MainlandJqx?: boolean;
+    cb_remind_MainlandSyx?: boolean;
+    cb_remind_ClosedRoad?: boolean;
+    cb_remind_Approval?: boolean;
+    cb_remind_MainlandLicense?: boolean;
+    cb_remind_HkInspection?: boolean;
+
     documentLogs?: DocCustodyLog[]; // ★ 新增這一行
 
     // 新增：業務流程列表
