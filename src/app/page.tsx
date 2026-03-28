@@ -10410,58 +10410,44 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      // ★ 改用 lg:grid-cols-2，等屏幕夠闊先雙排，避免過度擁擠
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-none">
+                      // ★ 恢復 grid-cols-2：確保 iPhone 永遠左右並排
+                      <div className="grid grid-cols-2 gap-2 md:gap-3 flex-none">
                           
                           {/* 1. 中港提醒卡片 */}
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-3 md:gap-4 relative overflow-hidden items-center">
-                              {/* ★ 左側：固定闊度 md:w-32，加入 flex-shrink-0 防止被右邊壓縮 */}
-                              <div className="w-full md:w-32 flex-shrink-0 md:border-r border-white/10 pr-0 md:pr-4 flex flex-col justify-center">
-                                  {/* ★ 加入 whitespace-nowrap 絕對防換行 */}
-                                  <div className="font-bold mb-2 md:mb-3 flex items-center text-xs md:text-sm text-slate-300 whitespace-nowrap">
-                                      <Globe size={14} className="mr-1.5"/> 中港業務
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-3 text-white shadow-sm flex flex-col md:flex-row gap-2 md:gap-3 relative overflow-hidden">
+                              {/* ★ 左側：桌面版固定闊度防壓縮 (flex-shrink-0) */}
+                              <div className="w-full md:w-32 flex-shrink-0 md:border-r border-white/10 pr-0 md:pr-3 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-sm text-slate-300 whitespace-nowrap">
+                                      <Globe size={12} className="mr-1 md:mr-1.5"/> 中港
                                   </div>
-                                  <div className="flex justify-between md:flex-col md:gap-2">
-                                      <div className="flex items-center justify-between">
-                                          <span className="text-xl md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</span>
-                                          <span className="text-[10px] md:text-xs text-red-200/70 font-bold">過期</span>
-                                      </div>
-                                      <div className="flex items-center justify-between">
-                                          <span className="text-xl md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</span>
-                                          <span className="text-[10px] md:text-xs text-amber-200/70 font-bold">提醒</span>
-                                      </div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70 mt-0.5 md:mt-0">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none text-right md:text-left">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70 mt-0.5 md:mt-0 text-right md:text-left">提醒</div></div>
                                   </div>
                               </div>
                               
-                              {/* 右側清單 */}
-                              <div className="hidden md:flex flex-1 min-w-0 w-full">
+                              {/* ★ 右側清單：加入 min-w-0 防止被內部文字撐破 */}
+                              <div className="hidden md:block flex-1 min-w-0">
                                   <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
                               </div>
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
                           {/* 2. 文件/牌費提醒卡片 */}
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-3 md:gap-4 relative overflow-hidden items-center">
-                              {/* ★ 左側：固定闊度 md:w-32，加入 flex-shrink-0 防止被右邊壓縮 */}
-                              <div className="w-full md:w-32 flex-shrink-0 md:border-r border-white/10 pr-0 md:pr-4 flex flex-col justify-center">
-                                  {/* ★ 加入 whitespace-nowrap 絕對防換行 */}
-                                  <div className="font-bold mb-2 md:mb-3 flex items-center text-xs md:text-sm text-blue-200 whitespace-nowrap">
-                                      <Database size={14} className="mr-1.5"/> 文件牌費
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-3 text-white shadow-sm flex flex-col md:flex-row gap-2 md:gap-3 relative overflow-hidden">
+                              {/* ★ 左側：桌面版固定闊度防壓縮 (flex-shrink-0) */}
+                              <div className="w-full md:w-32 flex-shrink-0 md:border-r border-white/10 pr-0 md:pr-3 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-sm text-blue-200 whitespace-nowrap">
+                                      <Database size={12} className="mr-1 md:mr-1.5"/> 文件/牌費
                                   </div>
-                                  <div className="flex justify-between md:flex-col md:gap-2">
-                                      <div className="flex items-center justify-between">
-                                          <span className="text-xl md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</span>
-                                          <span className="text-[10px] md:text-xs text-red-200/70 font-bold">過期</span>
-                                      </div>
-                                      <div className="flex items-center justify-between">
-                                          <span className="text-xl md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</span>
-                                          <span className="text-[10px] md:text-xs text-amber-200/70 font-bold">提醒</span>
-                                      </div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70 mt-0.5 md:mt-0">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none text-right md:text-left">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70 mt-0.5 md:mt-0 text-right md:text-left">提醒</div></div>
                                   </div>
                               </div>
                               
-                              {/* 右側清單 */}
-                              <div className="hidden md:flex flex-1 min-w-0 w-full">
+                              {/* ★ 右側清單：加入 min-w-0 防止被內部文字撐破 */}
+                              <div className="hidden md:block flex-1 min-w-0">
                                   <AlertList items={docAlerts} onItemClick={(item:any) => { 
                                       if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
                                       else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
