@@ -10389,7 +10389,8 @@ const CreateDocModule = ({
                   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
                   const AlertList = ({ items, onItemClick }: any) => (
-                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-24 md:h-32">
+                      // ★ 加上 min-w-0 防止被過長內容撐破
+                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-24 md:h-32 min-w-0">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
                               {items.map((item:any, idx:number) => (
                                   <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
@@ -10397,9 +10398,9 @@ const CreateDocModule = ({
                                           <div className="font-bold truncate text-white">{item.title}</div>
                                           <div className="text-white/60 truncate">{item.desc}</div>
                                       </div>
-                                      <div className="text-right whitespace-nowrap">
+                                      <div className="text-right whitespace-nowrap flex-shrink-0">
                                           <div className={`font-bold ${item.status === 'expired' ? 'text-red-400' : 'text-amber-400'}`}>{item.status === 'expired' ? `已過期 ${Math.abs(item.days)} 天` : `還有 ${item.days} 天`}</div>
-                                          <div className="text-white/40 scale-90">{item.date}</div>
+                                          <div className="text-white/40 scale-90 origin-right">{item.date}</div>
                                       </div>
                                   </div>
                               ))}
@@ -10409,46 +10410,66 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      // ★ 修復：強制 grid-cols-2 左右並排，絕對不允許上下疊加霸佔空間
-                      <div className="grid grid-cols-2 gap-2 md:gap-3 flex-none">
-                          {/* 中港提醒卡片 (恢復深色高級漸層) */}
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
-                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
-                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
-                                      <Globe size={12} className="mr-1"/> 中港
+                      // ★ 改用 lg:grid-cols-2，等屏幕夠闊先雙排，避免過度擁擠
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-none">
+                          
+                          {/* 1. 中港提醒卡片 */}
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-3 md:gap-4 relative overflow-hidden items-center">
+                              {/* ★ 左側：固定闊度 md:w-32，加入 flex-shrink-0 防止被右邊壓縮 */}
+                              <div className="w-full md:w-32 flex-shrink-0 md:border-r border-white/10 pr-0 md:pr-4 flex flex-col justify-center">
+                                  {/* ★ 加入 whitespace-nowrap 絕對防換行 */}
+                                  <div className="font-bold mb-2 md:mb-3 flex items-center text-xs md:text-sm text-slate-300 whitespace-nowrap">
+                                      <Globe size={14} className="mr-1.5"/> 中港業務
                                   </div>
-                                  <div className="flex justify-between md:block">
-                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
-                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                                  <div className="flex justify-between md:flex-col md:gap-2">
+                                      <div className="flex items-center justify-between">
+                                          <span className="text-xl md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</span>
+                                          <span className="text-[10px] md:text-xs text-red-200/70 font-bold">過期</span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                          <span className="text-xl md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</span>
+                                          <span className="text-[10px] md:text-xs text-amber-200/70 font-bold">提醒</span>
+                                      </div>
                                   </div>
                               </div>
-                              <div className="hidden md:block flex-1">
+                              
+                              {/* 右側清單 */}
+                              <div className="hidden md:flex flex-1 min-w-0 w-full">
                                   <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
                               </div>
-                              {/* 手機版隱藏右側列表，全卡片可點擊跳轉 */}
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
-                          {/* 文件/牌費提醒卡片 (恢復藍色高級漸層) */}
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
-                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
-                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
-                                      <Database size={12} className="mr-1"/> 文件/牌費
+                          {/* 2. 文件/牌費提醒卡片 */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-3 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-3 md:gap-4 relative overflow-hidden items-center">
+                              {/* ★ 左側：固定闊度 md:w-32，加入 flex-shrink-0 防止被右邊壓縮 */}
+                              <div className="w-full md:w-32 flex-shrink-0 md:border-r border-white/10 pr-0 md:pr-4 flex flex-col justify-center">
+                                  {/* ★ 加入 whitespace-nowrap 絕對防換行 */}
+                                  <div className="font-bold mb-2 md:mb-3 flex items-center text-xs md:text-sm text-blue-200 whitespace-nowrap">
+                                      <Database size={14} className="mr-1.5"/> 文件牌費
                                   </div>
-                                  <div className="flex justify-between md:block">
-                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
-                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                                  <div className="flex justify-between md:flex-col md:gap-2">
+                                      <div className="flex items-center justify-between">
+                                          <span className="text-xl md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</span>
+                                          <span className="text-[10px] md:text-xs text-red-200/70 font-bold">過期</span>
+                                      </div>
+                                      <div className="flex items-center justify-between">
+                                          <span className="text-xl md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</span>
+                                          <span className="text-[10px] md:text-xs text-amber-200/70 font-bold">提醒</span>
+                                      </div>
                                   </div>
                               </div>
-                              <div className="hidden md:block flex-1">
+                              
+                              {/* 右側清單 */}
+                              <div className="hidden md:flex flex-1 min-w-0 w-full">
                                   <AlertList items={docAlerts} onItemClick={(item:any) => { 
                                       if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
                                       else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
                                   }} />
                               </div>
-                              {/* 手機版隱藏右側列表，全卡片可點擊跳轉 */}
                               <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
                           </div>
+
                       </div>
                   );
               })()}
