@@ -10409,40 +10409,76 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      <div className="grid grid-cols-2 gap-2 flex-none">
-                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
-                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
-                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
-                                      <Globe size={12} className="mr-1"/> 中港
-                                  </div>
-                                  <div className="flex justify-between md:block">
-                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
-                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-none">
+                          {/* 1. 中港提醒 (SaaS 潮流分割面板) */}
+                          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
+                              {/* 標題列 */}
+                              <div className="p-2 md:p-2.5 flex justify-between items-center bg-slate-50 border-b border-slate-100 z-10">
+                                  <div className="flex items-center gap-1.5">
+                                      <div className="p-1 bg-indigo-100 rounded-md text-indigo-600"><Globe size={14}/></div>
+                                      <span className="font-bold text-[11px] md:text-xs text-slate-700">中港業務 (Cross-Border)</span>
                                   </div>
                               </div>
-                              <div className="hidden md:block flex-1">
-                                  <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
+                              
+                              <div className="flex flex-1 relative z-10 bg-white">
+                                  {/* 左側：數字統計 (分割區塊) */}
+                                  <div className="w-1/3 md:w-24 flex flex-col border-r border-slate-100 flex-none">
+                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-red-50/30 cursor-pointer hover:bg-red-50 transition-colors" onClick={() => setActiveTab('cross_border')}>
+                                          <span className="text-xl md:text-2xl font-black text-red-500 font-mono leading-none">{cbExpiredCount}</span>
+                                          <span className="text-[9px] text-red-400 font-bold mt-1">過期</span>
+                                      </div>
+                                      <div className="w-full h-px bg-slate-100"></div>
+                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-amber-50/30 cursor-pointer hover:bg-amber-50 transition-colors" onClick={() => setActiveTab('cross_border')}>
+                                          <span className="text-xl md:text-2xl font-black text-amber-500 font-mono leading-none">{cbSoonCount}</span>
+                                          <span className="text-[9px] text-amber-500 font-bold mt-1">提醒</span>
+                                      </div>
+                                  </div>
+                                  {/* 右側：列表 (桌面顯示，手機隱藏) */}
+                                  <div className="hidden md:block flex-1 bg-white">
+                                      <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
+                                  </div>
+                                  {/* 手機版：點擊右側空白區域即可跳轉 */}
+                                  <div className="md:hidden flex-1 flex flex-col justify-center pl-4 bg-slate-50/30" onClick={() => setActiveTab('cross_border')}>
+                                      <span className="text-[10px] font-bold text-slate-400">點擊查看詳情 <ArrowRight size={10} className="inline"/></span>
+                                  </div>
                               </div>
-                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
-                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
-                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
-                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
-                                      <Database size={12} className="mr-1"/> 文件/牌費
-                                  </div>
-                                  <div className="flex justify-between md:block">
-                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
-                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
+                          {/* 2. 文件/牌費提醒 (SaaS 潮流分割面板) */}
+                          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
+                              {/* 標題列 */}
+                              <div className="p-2 md:p-2.5 flex justify-between items-center bg-slate-50 border-b border-slate-100 z-10">
+                                  <div className="flex items-center gap-1.5">
+                                      <div className="p-1 bg-blue-100 rounded-md text-blue-600"><Database size={14}/></div>
+                                      <span className="font-bold text-[11px] md:text-xs text-slate-700">文件及牌費 (Documents)</span>
                                   </div>
                               </div>
-                              <div className="hidden md:block flex-1">
-                                  <AlertList items={docAlerts} onItemClick={(item:any) => { 
-                                      if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
-                                      else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
-                                  }} />
+                              
+                              <div className="flex flex-1 relative z-10 bg-white">
+                                  {/* 左側：數字統計 (分割區塊) */}
+                                  <div className="w-1/3 md:w-24 flex flex-col border-r border-slate-100 flex-none">
+                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-red-50/30 cursor-pointer hover:bg-red-50 transition-colors" onClick={() => setActiveTab('database')}>
+                                          <span className="text-xl md:text-2xl font-black text-red-500 font-mono leading-none">{docExpiredCount}</span>
+                                          <span className="text-[9px] text-red-400 font-bold mt-1">過期</span>
+                                      </div>
+                                      <div className="w-full h-px bg-slate-100"></div>
+                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-amber-50/30 cursor-pointer hover:bg-amber-50 transition-colors" onClick={() => setActiveTab('database')}>
+                                          <span className="text-xl md:text-2xl font-black text-amber-500 font-mono leading-none">{docSoonCount}</span>
+                                          <span className="text-[9px] text-amber-500 font-bold mt-1">提醒</span>
+                                      </div>
+                                  </div>
+                                  {/* 右側：列表 (桌面顯示，手機隱藏) */}
+                                  <div className="hidden md:block flex-1 bg-white">
+                                      <AlertList items={docAlerts} onItemClick={(item:any) => { 
+                                          if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
+                                          else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
+                                      }} />
+                                  </div>
+                                  {/* 手機版：點擊右側空白區域即可跳轉 */}
+                                  <div className="md:hidden flex-1 flex flex-col justify-center pl-4 bg-slate-50/30" onClick={() => setActiveTab('database')}>
+                                      <span className="text-[10px] font-bold text-slate-400">點擊查看詳情 <ArrowRight size={10} className="inline"/></span>
+                                  </div>
                               </div>
-                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
                           </div>
                       </div>
                   );
@@ -10501,27 +10537,26 @@ const CreateDocModule = ({
                     const balance = ((car.price || 0) + cbFees + salesAddonsTotal) - received;
                     const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
 
-                    // ★★★ 升級版：計算海外訂車的到港天數 (支援深度欄位與已到港狀態) ★★★
+                    // ★★★ 計算海外訂車的到港天數 ★★★
                     let daysToArrive: number | null = null;
                     let isArrived = false;
                     let hasValidEta = false;
                     
-                    // 擴大搜尋範圍：ETA 通常會放喺 acquisition (採購) 或 logistics 裡面
                     const etaDate = car.eta || car.arrivalDate || car.acquisition?.eta || car.acquisition?.arrivalDate || (car as any).logistics?.eta; 
 
                     if (etaDate) {
                         const arr = new Date(etaDate);
-                        if (!isNaN(arr.getTime())) { // 確保日期格式正確
+                        if (!isNaN(arr.getTime())) { 
                             hasValidEta = true;
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
-                            arr.setHours(0, 0, 0, 0); // 只比較日期，不比較時間
+                            arr.setHours(0, 0, 0, 0); 
                             
                             const diff = arr.getTime() - today.getTime();
                             daysToArrive = Math.ceil(diff / (1000 * 60 * 60 * 24));
                             
                             if (daysToArrive <= 0) {
-                                isArrived = true; // 今日或之前 = 已到港
+                                isArrived = true; 
                             }
                         }
                     }
@@ -10533,16 +10568,15 @@ const CreateDocModule = ({
                     const aging = getInventoryAging(car);
 
                     let statusText = '在庫';
-                    let statusClass = "bg-green-500 text-white";
-                    if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
-                    else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
+                    let dotColor = "bg-green-500";
+                    if (car.status === 'Reserved') { statusText = '已訂'; dotColor = "bg-yellow-500"; }
+                    else if (car.status === 'Sold') { statusText = '已售'; dotColor = "bg-blue-600"; }
 
-                    // ★★★ 新增：判斷牌費是否已過期 ★★★
                     let isLicenseExpired = false;
                     if (car.licenseExpiry) {
                         const expiry = new Date(car.licenseExpiry);
                         const today = new Date();
-                        today.setHours(0, 0, 0, 0); // 把今天的時間歸零，只比對日期
+                        today.setHours(0, 0, 0, 0); 
                         if (expiry < today) {
                             isLicenseExpired = true;
                         }
@@ -10556,7 +10590,6 @@ const CreateDocModule = ({
                         if (cbTags.length === 0) cbTags.push({ label: '中港', color: 'bg-slate-700' });
                     }
 
-                    // 萃取與精簡車輛規格資料
                     const specs = [];
                     if (car.previousOwners !== undefined && car.previousOwners !== '') specs.push(`${car.previousOwners}手`);
                     if (car.engineSize) specs.push(`${car.engineSize}cc`);
@@ -10565,10 +10598,9 @@ const CreateDocModule = ({
                     if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
 
                     return (
-                        // ★ 手機版防搖晃：w-full box-border overflow-hidden
-                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex w-full box-border overflow-hidden bg-white p-3 rounded-xl border border-slate-100 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
+                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex w-full box-border overflow-hidden bg-white p-2.5 md:p-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
                             
-                            {/* 左側：精緻 4:3 縮圖 (微調 w-28 md:w-32) */}
+                            {/* 左側：保留原尺寸 4:3 大縮圖 (w-28 md:w-32) */}
                             <div className="w-28 md:w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-900 shadow-inner">
                                 {thumbUrl ? (
                                     <>
@@ -10579,17 +10611,19 @@ const CreateDocModule = ({
                                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50"><Car size={20}/><span className="text-[8px] mt-1">No Img</span></div>
                                 )}
                                 
-                                {/* 左上角狀態 */}
+                                {/* ★ 潮流升級：玻璃透視 + 圓點呼吸燈狀態標籤 */}
                                 <div className="absolute top-1.5 left-1.5 z-20 flex flex-col gap-1">
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shadow-sm ${statusClass}`}>{statusText}</span>
+                                    <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-md px-1.5 py-0.5 rounded-md shadow-sm border border-white/50 w-fit">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${dotColor} shadow-[0_0_4px_currentColor]`}></span>
+                                        <span className="text-[9px] font-black text-slate-800 leading-none pt-px">{statusText}</span>
+                                    </div>
                                     {aging && <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm ${aging.style}`}>{aging.label}</span>}
                                 </div>
                             </div>
 
-                            {/* 右側：車輛重點資訊 */}
-                            <div className="ml-3 flex-1 min-w-0 flex flex-col justify-between py-0.5 relative">
+                            {/* 右側：高密度資訊區 */}
+                            <div className="ml-2.5 flex-1 min-w-0 flex flex-col justify-between py-0.5 relative">
                                 
-                                {/* ★★★ 補回：分享(對客預覽)按鈕 ★★★ */}
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); setShareVehicle(car); }} 
                                     className="absolute -top-1 -right-1 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
@@ -10598,81 +10632,79 @@ const CreateDocModule = ({
                                     <Share2 size={14}/>
                                 </button>
 
-                                {/* ★ 手機版防搖晃：加入 pr-7 避開按鈕，加入 truncate */}
-                                <div className="w-full pr-7">
-                                    {/* 車型標題改為單行截斷 */}
-                                    <div className="font-bold text-sm text-slate-800 leading-tight truncate w-full">{car.year} {car.make} {car.model}</div>
+                                <div className="w-full pr-6">
+                                    {/* 標題單行截斷 */}
+                                    <div className="font-bold text-[13px] md:text-sm text-slate-800 leading-tight truncate w-full mb-1">
+                                        {car.year} {car.make} {car.model}
+                                    </div>
                                     
-                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5 w-full">
-                                        <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 rounded-[2px] shadow-sm">{car.regMark || '未出牌'}</span>
-                                        {car.crossBorder?.mainlandPlate && <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1 rounded-[2px] shadow-sm`}>{car.crossBorder.mainlandPlate}</span>}
-                                        {cbTags.map((t:any,i:number) => <span key={i} className={`text-[8px] text-white px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
-                                        
-                                        {/* ★★★ 新增：微型紅色牌費標籤 (接在車牌後面) ★★★ */}
-                                        {car.licenseExpiry && (
-                                            <span className={`text-[9px] px-1.5 py-[1px] rounded-[2px] shadow-sm font-mono flex items-center h-fit border ${
+                                    {/* 車牌與中港標籤同行 (高密度) */}
+                                    <div className="flex flex-wrap items-center gap-1.5 w-full mb-1.5">
+                                        <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[9px] px-1.5 py-0.5 rounded-[2px] shadow-sm leading-none flex-shrink-0">
+                                            {car.regMark || '未出牌'}
+                                        </span>
+                                        {car.crossBorder?.mainlandPlate && (
+                                            <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[8px] px-1.5 py-0.5 rounded-[2px] shadow-sm leading-none flex-shrink-0`}>
+                                                {car.crossBorder.mainlandPlate}
+                                            </span>
+                                        )}
+                                        {cbTags.map((t:any,i:number) => <span key={i} className={`text-[8px] text-white px-1 py-[1px] rounded-[2px] shadow-sm font-bold leading-none flex-shrink-0 ${t.color}`}>{t.label}</span>)}
+                                    </div>
+
+                                    {/* 規格字串 */}
+                                    {specs.length > 0 && (
+                                        <div className="text-[9px] text-slate-500 font-medium leading-none truncate w-full mb-1.5">
+                                            {specs.join(' • ')}
+                                        </div>
+                                    )}
+
+                                    {/* 牌費標籤 */}
+                                    {car.licenseExpiry && (
+                                        <div className="flex w-full">
+                                            <span className={`text-[8px] px-1.5 py-[2px] rounded-[3px] shadow-sm font-mono flex items-center border leading-none ${
                                                 isLicenseExpired 
                                                 ? 'text-red-600 bg-red-50 border-red-200' 
                                                 : 'text-emerald-700 bg-emerald-50 border-emerald-200'
                                             }`}>
-                                                <Calendar size={8} className="mr-0.5"/> 牌費: {car.licenseExpiry}
+                                                <Calendar size={8} className="mr-0.5 opacity-70"/>牌費: {car.licenseExpiry}
                                             </span>
-                                        )}
-                                    </div>
-
-                                    {/* 微型規格列 (圓點分隔) */}
-                                    {specs.length > 0 && (
-                                        <div className="flex flex-wrap items-center mt-1.5 text-[9px] text-slate-500 font-medium leading-none w-full">
-                                            {specs.map((spec, idx) => (
-                                                <span key={idx} className="flex items-center">
-                                                    {idx > 0 && <span className="mx-1 text-slate-300">•</span>}
-                                                    {spec}
-                                                </span>
-                                            ))}
                                         </div>
                                     )}
                                 </div>
 
-                                {/* ★ 手機版防搖晃：底部財務區加入 flex-wrap 與 gap 適應窄螢幕 */}
-                                <div className="flex flex-wrap justify-between items-end mt-2 gap-x-2 gap-y-1.5 w-full">
-                                    {/* 左下：車價 */}
-                                    <div className="font-black text-sm text-slate-800 tracking-tight whitespace-nowrap">{formatCurrency(car.price)}</div>
+                                {/* 底部財務與物流區 */}
+                                <div className="flex flex-wrap justify-between items-end mt-1.5 pt-1.5 border-t border-slate-50 w-full gap-x-1 gap-y-1.5">
+                                    <div className="font-black text-[15px] md:text-base text-slate-800 tracking-tight whitespace-nowrap leading-none mb-0.5">
+                                        {formatCurrency(car.price)}
+                                    </div>
                                     
-                                    {/* 右下：財務與物流狀態區 */}
-                                    <div className="flex flex-col gap-1.5 items-end ml-auto max-w-full">
-                                        
-                                        {/* ★ 1. 海外訂車狀態 (已付款 + 船期倒數 / 已到港) ★ */}
+                                    <div className="flex flex-col gap-1 items-end min-w-0 ml-auto">
                                         {hasValidEta && (
                                             <div className="flex flex-wrap justify-end items-center gap-1">
                                                 {received > 0 && (
-                                                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-medium whitespace-nowrap">
-                                                        已付款
+                                                    <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
+                                                        已付
                                                     </span>
                                                 )}
-                                                <span className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap ${
+                                                <span className={`text-[8px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold ${
                                                     isArrived 
                                                     ? 'text-green-600 bg-green-50 border-green-200' 
                                                     : 'text-indigo-600 bg-indigo-50 border-indigo-200'
                                                 }`}>
-                                                    <Ship size={9} className="mr-1 opacity-70"/> 
-                                                    {isArrived ? '已到港' : `還有 ${daysToArrive} 天`}
+                                                    <Ship size={8} className="mr-0.5 opacity-80"/>{isArrived ? '已到港' : `剩${daysToArrive}天`}
                                                 </span>
                                             </div>
                                         )}
 
                                         <div className="flex flex-wrap justify-end items-center gap-1">
-                                            {/* ★ 2. 未付成本警示 */}
                                             {unpaidExps > 0 && (
-                                                <span className="text-[9px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded-[3px] leading-none font-medium whitespace-nowrap">
-                                                    有未付成本
+                                                <span className="text-[8px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
+                                                    未付成本
                                                 </span>
                                             )}
-
-                                            {/* ★ 3. 待收餘額 (改為幼細的高級財務字體) */}
                                             {balance > 0 && (
-                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap">
-                                                    <span className="mr-1 font-medium opacity-80">待收</span>
-                                                    <span className="font-mono font-light tracking-wide text-[11px]">{formatCurrency(balance)}</span>
+                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-mono font-bold">
+                                                    <span className="mr-0.5 opacity-80 text-[8px]">待收</span>{formatCurrency(balance)}
                                                 </span>
                                             )}
                                         </div>
@@ -10684,16 +10716,20 @@ const CreateDocModule = ({
                 };
 
                   return (
-                      // ★ 修復 1：外層改為永遠 overflow-hidden，強迫鎖死版面，上下平分剩餘空間
                       <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 flex-1 min-h-0 overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0">
                           
                           {/* 左側看板：在庫優先 */}
                           <div className="flex-1 flex flex-col bg-white md:rounded-2xl border-y md:border border-slate-200 shadow-sm overflow-hidden min-h-0">
-                              {/* ★ 修復 2：移除 sticky，改用 flex-none 獨立出來，加上陰影，徹底解決穿透問題 */}
                               <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-none z-10 shadow-sm relative">
-                                  <h3 className="font-bold text-slate-800 flex items-center text-sm"><Layout size={16} className="mr-2 text-green-600"/> 在庫待售 <span className="ml-2 text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{inStockCars.length} 台</span></h3>
+                                  {/* ★ 潮流升級：大標題的數量提示，變成帶有圓點呼吸燈的小標籤 */}
+                                  <h3 className="font-bold text-slate-800 flex items-center text-sm">
+                                      <Layout size={16} className="mr-2 text-green-600"/> 在庫待售 
+                                      <div className="ml-2 flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                          <span className="text-[10px] font-black text-slate-700 font-mono leading-none pt-px">{inStockCars.length} 台</span>
+                                      </div>
+                                  </h3>
                               </div>
-                              {/* ★ 修復 3：獨立的內部滾動區塊 */}
                               <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin relative z-0">
                                   {inStockCars.map(car => renderDashboardCard(car))}
                                   {inStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">目前無在庫車輛</div>}
@@ -10702,11 +10738,16 @@ const CreateDocModule = ({
 
                           {/* 右側看板：已訂 / 待跟進 */}
                           <div className="flex-1 flex flex-col bg-white md:rounded-2xl border-y md:border border-slate-200 shadow-sm overflow-hidden min-h-0">
-                              {/* ★ 同樣改為 flex-none */}
                               <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-none z-10 shadow-sm relative">
-                                  <h3 className="font-bold text-slate-800 flex items-center text-sm"><FileCheck size={16} className="mr-2 text-amber-500"/> 已訂與待結清 <span className="ml-2 text-xs font-normal text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">{actionCars.length} 台</span></h3>
+                                  {/* ★ 潮流升級：大標題的數量提示，變成帶有圓點呼吸燈的小標籤 */}
+                                  <h3 className="font-bold text-slate-800 flex items-center text-sm">
+                                      <FileCheck size={16} className="mr-2 text-amber-500"/> 已訂與待結清 
+                                      <div className="ml-2 flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                          <span className="text-[10px] font-black text-slate-700 font-mono leading-none pt-px">{actionCars.length} 台</span>
+                                      </div>
+                                  </h3>
                               </div>
-                              {/* ★ 獨立的內部滾動區塊 */}
                               <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin relative z-0">
                                   {actionCars.map(car => renderDashboardCard(car))}
                                   {actionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center"><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</div>}
