@@ -10389,7 +10389,7 @@ const CreateDocModule = ({
                   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
 
                   const AlertList = ({ items, onItemClick }: any) => (
-                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-32">
+                      <div className="flex-1 bg-black/20 rounded-lg overflow-hidden flex flex-col h-24 md:h-32">
                           <div className="overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20">
                               {items.map((item:any, idx:number) => (
                                   <div key={idx} onClick={() => onItemClick(item)} className={`flex justify-between items-center p-2 rounded text-xs cursor-pointer hover:bg-white/10 border-l-2 ${item.status === 'expired' ? 'border-red-500 bg-red-900/10' : 'border-amber-400 bg-amber-900/10'}`}>
@@ -10409,76 +10409,45 @@ const CreateDocModule = ({
                   );
 
                   return (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-none">
-                          {/* 1. 中港提醒 (SaaS 潮流分割面板) */}
-                          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
-                              {/* 標題列 */}
-                              <div className="p-2 md:p-2.5 flex justify-between items-center bg-slate-50 border-b border-slate-100 z-10">
-                                  <div className="flex items-center gap-1.5">
-                                      <div className="p-1 bg-indigo-100 rounded-md text-indigo-600"><Globe size={14}/></div>
-                                      <span className="font-bold text-[11px] md:text-xs text-slate-700">中港業務 (Cross-Border)</span>
+                      // ★ 修復：強制 grid-cols-2 左右並排，絕對不允許上下疊加霸佔空間
+                      <div className="grid grid-cols-2 gap-2 md:gap-3 flex-none">
+                          {/* 中港提醒卡片 (恢復深色高級漸層) */}
+                          <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
+                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-slate-300">
+                                      <Globe size={12} className="mr-1"/> 中港
+                                  </div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{cbExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{cbSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
                                   </div>
                               </div>
-                              
-                              <div className="flex flex-1 relative z-10 bg-white">
-                                  {/* 左側：數字統計 (分割區塊) */}
-                                  <div className="w-1/3 md:w-24 flex flex-col border-r border-slate-100 flex-none">
-                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-red-50/30 cursor-pointer hover:bg-red-50 transition-colors" onClick={() => setActiveTab('cross_border')}>
-                                          <span className="text-xl md:text-2xl font-black text-red-500 font-mono leading-none">{cbExpiredCount}</span>
-                                          <span className="text-[9px] text-red-400 font-bold mt-1">過期</span>
-                                      </div>
-                                      <div className="w-full h-px bg-slate-100"></div>
-                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-amber-50/30 cursor-pointer hover:bg-amber-50 transition-colors" onClick={() => setActiveTab('cross_border')}>
-                                          <span className="text-xl md:text-2xl font-black text-amber-500 font-mono leading-none">{cbSoonCount}</span>
-                                          <span className="text-[9px] text-amber-500 font-bold mt-1">提醒</span>
-                                      </div>
-                                  </div>
-                                  {/* 右側：列表 (桌面顯示，手機隱藏) */}
-                                  <div className="hidden md:block flex-1 bg-white">
-                                      <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
-                                  </div>
-                                  {/* 手機版：點擊右側空白區域即可跳轉 */}
-                                  <div className="md:hidden flex-1 flex flex-col justify-center pl-4 bg-slate-50/30" onClick={() => setActiveTab('cross_border')}>
-                                      <span className="text-[10px] font-bold text-slate-400">點擊查看詳情 <ArrowRight size={10} className="inline"/></span>
-                                  </div>
+                              <div className="hidden md:block flex-1">
+                                  <AlertList items={cbAlerts} onItemClick={(item:any) => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }} />
                               </div>
+                              {/* 手機版隱藏右側列表，全卡片可點擊跳轉 */}
+                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('cross_border')}></button>
                           </div>
 
-                          {/* 2. 文件/牌費提醒 (SaaS 潮流分割面板) */}
-                          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
-                              {/* 標題列 */}
-                              <div className="p-2 md:p-2.5 flex justify-between items-center bg-slate-50 border-b border-slate-100 z-10">
-                                  <div className="flex items-center gap-1.5">
-                                      <div className="p-1 bg-blue-100 rounded-md text-blue-600"><Database size={14}/></div>
-                                      <span className="font-bold text-[11px] md:text-xs text-slate-700">文件及牌費 (Documents)</span>
+                          {/* 文件/牌費提醒卡片 (恢復藍色高級漸層) */}
+                          <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-2 md:p-4 text-white shadow-sm flex flex-col md:flex-row gap-2 relative overflow-hidden">
+                              <div className="w-full md:w-1/3 md:border-r border-white/10 pr-0 md:pr-2 flex flex-col justify-center">
+                                  <div className="font-bold mb-1 md:mb-3 flex items-center text-[10px] md:text-xs text-blue-200">
+                                      <Database size={12} className="mr-1"/> 文件/牌費
+                                  </div>
+                                  <div className="flex justify-between md:block">
+                                      <div><div className="text-lg md:text-2xl font-bold text-red-400 leading-none">{docExpiredCount}</div><div className="text-[9px] md:text-[10px] text-red-200/70">過期</div></div>
+                                      <div><div className="text-lg md:text-2xl font-bold text-amber-400 leading-none">{docSoonCount}</div><div className="text-[9px] md:text-[10px] text-amber-200/70">提醒</div></div>
                                   </div>
                               </div>
-                              
-                              <div className="flex flex-1 relative z-10 bg-white">
-                                  {/* 左側：數字統計 (分割區塊) */}
-                                  <div className="w-1/3 md:w-24 flex flex-col border-r border-slate-100 flex-none">
-                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-red-50/30 cursor-pointer hover:bg-red-50 transition-colors" onClick={() => setActiveTab('database')}>
-                                          <span className="text-xl md:text-2xl font-black text-red-500 font-mono leading-none">{docExpiredCount}</span>
-                                          <span className="text-[9px] text-red-400 font-bold mt-1">過期</span>
-                                      </div>
-                                      <div className="w-full h-px bg-slate-100"></div>
-                                      <div className="flex-1 flex flex-col justify-center items-center p-2 bg-amber-50/30 cursor-pointer hover:bg-amber-50 transition-colors" onClick={() => setActiveTab('database')}>
-                                          <span className="text-xl md:text-2xl font-black text-amber-500 font-mono leading-none">{docSoonCount}</span>
-                                          <span className="text-[9px] text-amber-500 font-bold mt-1">提醒</span>
-                                      </div>
-                                  </div>
-                                  {/* 右側：列表 (桌面顯示，手機隱藏) */}
-                                  <div className="hidden md:block flex-1 bg-white">
-                                      <AlertList items={docAlerts} onItemClick={(item:any) => { 
-                                          if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
-                                          else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
-                                      }} />
-                                  </div>
-                                  {/* 手機版：點擊右側空白區域即可跳轉 */}
-                                  <div className="md:hidden flex-1 flex flex-col justify-center pl-4 bg-slate-50/30" onClick={() => setActiveTab('database')}>
-                                      <span className="text-[10px] font-bold text-slate-400">點擊查看詳情 <ArrowRight size={10} className="inline"/></span>
-                                  </div>
+                              <div className="hidden md:block flex-1">
+                                  <AlertList items={docAlerts} onItemClick={(item:any) => { 
+                                      if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
+                                      else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
+                                  }} />
                               </div>
+                              {/* 手機版隱藏右側列表，全卡片可點擊跳轉 */}
+                              <button className="md:hidden absolute inset-0 z-10" onClick={() => setActiveTab('database')}></button>
                           </div>
                       </div>
                   );
