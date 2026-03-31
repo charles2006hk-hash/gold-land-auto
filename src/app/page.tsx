@@ -6158,7 +6158,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 
 
 // ------------------------------------------------------------------
-// ★★★ 2. Report View (v14.5: 獨立組件 + 智慧日期開關鎖定) ★★★
+// ★★★ 2. Report View (v14.6: 獨立組件 + 智慧日期開關鎖定 + 智能日期防呆) ★★★
 // ------------------------------------------------------------------
 const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: any) => {
     const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>('receivable');
@@ -6207,7 +6207,8 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 const carBalance = totalReceivable - generalPayments;
                 
                 if (totalReceivable > 0 && carBalance > 0) {
-                    const date = v.stockOutDate || v.stockInDate || new Date().toISOString().split('T')[0];
+                    // ★ 升級 1：應收未收報表支援顯示「已訂日期」及「已售日期」
+                    const date = v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                     data.push({
                         vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`,
                         regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status,
@@ -6223,7 +6224,8 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                     const taskBalance = fee - taskPaid;
 
                     if (taskBalance > 0) {
-                        let safeDate = task.date || v.stockOutDate || new Date().toISOString().split('T')[0];
+                        // ★ 升級 2：中港代辦費用同樣支援精準日期
+                        let safeDate = task.date || v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                         data.push({
                             vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, 
                             regMark: v.regMark, amount: taskBalance, type: 'Service', status: 'Pending',
@@ -6293,7 +6295,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
                 
-                // ★ 修復：如果有售出日就用售出日，無的話優先用「最後修改日期」，絕對唔好無腦用「今日」
+                // ★ 升級 3：如果有明確售出日就用，無的話優先用「最後修改日期 (updatedAt)」，絕對唔准無腦用「今日」
                 let safeSaleDate = v.stockOutDate;
                 if (!safeSaleDate) {
                     safeSaleDate = v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -7248,10 +7250,20 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             customerID: formData.get('customerID') as string,
             customerAddress: formData.get('customerAddress') as string,
             status: status,
-            // ★ 修復：確保永遠有一個入庫日期
+            // ★★★ 終極升級版：智能儲存 4 個狀態專屬日期 (完美兼容舊數據) ★★★
+            // 1. 入庫：確保永遠有一個入庫日期
             stockInDate: formData.get('stockInDate') || editingVehicle?.stockInDate || new Date().toISOString().split('T')[0],
-            // ★ 修復：當狀態變成已售時，自動記錄今日為售出日 (如果之前已有就保留)
-            stockOutDate: status === 'Sold' ? (formData.get('stockOutDate') || editingVehicle?.stockOutDate || new Date().toISOString().split('T')[0]) : null,
+            
+            // 2. 已訂：讀取隱藏欄位，無就保留舊紀錄
+            reservedDate: formData.get('reservedDate') || (editingVehicle as any)?.reservedDate || null,
+            
+            // 3. 已售：保留您原本的防呆！如果是已售，優先用輸入框的日期，無就用舊紀錄，再無就用今日。
+            stockOutDate: status === 'Sold' 
+                ? (formData.get('stockOutDate') || editingVehicle?.stockOutDate || new Date().toISOString().split('T')[0]) 
+                : (formData.get('stockOutDate') || editingVehicle?.stockOutDate || null), 
+                
+            // 4. 撤回：讀取隱藏欄位
+            withdrawnDate: formData.get('withdrawnDate') || (editingVehicle as any)?.withdrawnDate || null,
             expenses: editingVehicle?.expenses || [], 
             payments: editingVehicle?.payments || [], 
             salesAddons: (editingVehicle as any)?.salesAddons || [], 
@@ -7792,7 +7804,27 @@ const VehicleFormModal = ({
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
-    
+    // ★★★ 升級：智能狀態日期追蹤 ★★★
+    const [statusDates, setStatusDates] = useState({
+        'In Stock': v.stockInDate || new Date().toISOString().split('T')[0],
+        'Reserved': (v as any).reservedDate || '',
+        'Sold': v.stockOutDate || '',
+        'Withdrawn': (v as any).withdrawnDate || ''
+    });
+
+    // 當載入車輛，如果沒有設定已訂/已售日期，智能根據收款記錄推算
+    useEffect(() => {
+        if (v.id && v.payments && v.payments.length > 0) {
+            const sorted = [...v.payments].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            setStatusDates(prev => ({
+                ...prev,
+                'Reserved': prev['Reserved'] || sorted[0].date, // 第一筆錢 = 落訂
+                'Sold': prev['Sold'] || sorted[sorted.length - 1].date // 最後一筆錢 = 結清/售出
+            }));
+        }
+    }, [v.id, v.payments]);
+
+
     const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb'>('vrd');
     
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
@@ -8315,11 +8347,42 @@ const VehicleFormModal = ({
                 
                 {/* 頂部全域狀態列 */}
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:px-6 md:pt-6 bg-white flex-none border-t md:border-t-0 border-slate-200 w-full">
-                    <div className="flex flex-wrap bg-slate-100 rounded-lg p-1 border border-slate-200 shadow-inner w-full md:w-auto">
+                    
+                    {/* ★★★ 升級版：動態變形狀態按鈕 (整合專屬日期) ★★★ */}
+                    <div className="flex flex-wrap bg-slate-100 rounded-lg p-1 border border-slate-200 shadow-inner w-full md:w-auto min-h-[44px]">
                         <input type="hidden" name="status" value={currentStatus} />
-                        {['In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(status => (
-                            <button key={status} type="button" onClick={() => setCurrentStatus(status as any)} className={`flex-1 md:flex-none px-4 py-2 md:py-1.5 rounded-md text-sm md:text-xs font-bold transition-all ${currentStatus === status ? 'bg-white text-blue-700 shadow border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
-                                {status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}
+                        <input type="hidden" name="stockInDate" value={statusDates['In Stock'] || ''} />
+                        <input type="hidden" name="reservedDate" value={statusDates['Reserved'] || ''} />
+                        <input type="hidden" name="stockOutDate" value={statusDates['Sold'] || ''} />
+                        <input type="hidden" name="withdrawnDate" value={statusDates['Withdrawn'] || ''} />
+                        
+                        {(['In Stock', 'Reserved', 'Sold', 'Withdrawn'] as const).map(status => (
+                            <button 
+                                key={status} 
+                                type="button" 
+                                onClick={() => {
+                                    setCurrentStatus(status);
+                                    // 切換狀態時，如果該狀態日期為空，自動填入今日
+                                    if (!statusDates[status]) {
+                                        setStatusDates(prev => ({...prev, [status]: new Date().toISOString().split('T')[0]}));
+                                    }
+                                }} 
+                                className={`flex-1 md:flex-none px-3 py-1.5 rounded-md transition-all flex flex-col items-center justify-center gap-1 ${currentStatus === status ? 'bg-white text-blue-700 shadow border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                            >
+                                <span className="font-bold text-sm md:text-xs">
+                                    {status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}
+                                </span>
+                                {/* 被選中時，底部展開專屬日期框 */}
+                                {currentStatus === status && (
+                                    <input 
+                                        type="date"
+                                        value={statusDates[status]}
+                                        onChange={(e) => setStatusDates({...statusDates, [status]: e.target.value})}
+                                        onClick={(e) => e.stopPropagation()} // 防止點擊輸入框時觸發按鈕
+                                        className="text-[10px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded outline-none font-mono font-bold cursor-pointer border border-blue-200 shadow-inner w-full md:w-[95px] text-center"
+                                        title={`${status === 'In Stock' ? '入庫' : (status === 'Reserved' ? '落訂' : (status === 'Sold' ? '售出' : '撤回'))}日期`}
+                                    />
+                                )}
                             </button>
                         ))}
                     </div>
