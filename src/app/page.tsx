@@ -6292,7 +6292,13 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
-                const safeSaleDate = v.stockOutDate || new Date().toISOString().split('T')[0];
+                
+                // ★ 修復：如果有售出日就用售出日，無的話優先用「最後修改日期」，絕對唔好無腦用「今日」
+                let safeSaleDate = v.stockOutDate;
+                if (!safeSaleDate) {
+                    safeSaleDate = v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+                }
+
                 return {
                     vehicleId: v.id, date: safeSaleDate,
                     title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
@@ -7242,8 +7248,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             customerID: formData.get('customerID') as string,
             customerAddress: formData.get('customerAddress') as string,
             status: status,
-            stockInDate: formData.get('stockInDate'),
-            stockOutDate: status === 'Sold' ? formData.get('stockOutDate') : null, 
+            // ★ 修復：確保永遠有一個入庫日期
+            stockInDate: formData.get('stockInDate') || editingVehicle?.stockInDate || new Date().toISOString().split('T')[0],
+            // ★ 修復：當狀態變成已售時，自動記錄今日為售出日 (如果之前已有就保留)
+            stockOutDate: status === 'Sold' ? (formData.get('stockOutDate') || editingVehicle?.stockOutDate || new Date().toISOString().split('T')[0]) : null,
             expenses: editingVehicle?.expenses || [], 
             payments: editingVehicle?.payments || [], 
             salesAddons: (editingVehicle as any)?.salesAddons || [], 
