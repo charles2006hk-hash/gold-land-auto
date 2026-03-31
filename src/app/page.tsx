@@ -8361,10 +8361,28 @@ const VehicleFormModal = ({
                                 key={status} 
                                 type="button" 
                                 onClick={() => {
-                                    setCurrentStatus(status);
-                                    // 切換狀態時，如果該狀態日期為空，自動填入今日
+                                    setCurrentStatus(status as any);
+                                    
+                                    // ★★★ 終極智能日期推算 ★★★
                                     if (!statusDates[status]) {
-                                        setStatusDates(prev => ({...prev, [status]: new Date().toISOString().split('T')[0]}));
+                                        let autoDate = new Date().toISOString().split('T')[0]; // 預設今日
+                                        
+                                        if (status === 'In Stock' && v.stockInDate) {
+                                            // 在庫：永遠以最原始入庫日為準
+                                            autoDate = v.stockInDate; 
+                                        } 
+                                        else if (status === 'Reserved' && v.payments && v.payments.length > 0) {
+                                            // 已訂：找第一筆收款的日期 (落訂日)
+                                            const sorted = [...v.payments].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                                            autoDate = sorted[0].date;
+                                        } 
+                                        else if (status === 'Sold' && v.payments && v.payments.length > 0) {
+                                            // 已售：找最後一筆收款的日期 (結清日)
+                                            const sorted = [...v.payments].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                                            autoDate = sorted[sorted.length - 1].date;
+                                        }
+                                        
+                                        setStatusDates(prev => ({...prev, [status]: autoDate}));
                                     }
                                 }} 
                                 className={`flex-1 md:flex-none px-3 py-1.5 rounded-md transition-all flex flex-col items-center justify-center gap-1 ${currentStatus === status ? 'bg-white text-blue-700 shadow border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
@@ -8376,7 +8394,7 @@ const VehicleFormModal = ({
                                 {currentStatus === status && (
                                     <input 
                                         type="date"
-                                        value={statusDates[status]}
+                                        value={statusDates[status] || ''}
                                         onChange={(e) => setStatusDates({...statusDates, [status]: e.target.value})}
                                         onClick={(e) => e.stopPropagation()} // 防止點擊輸入框時觸發按鈕
                                         className="text-[10px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded outline-none font-mono font-bold cursor-pointer border border-blue-200 shadow-inner w-full md:w-[95px] text-center"
