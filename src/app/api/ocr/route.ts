@@ -106,7 +106,8 @@ export async function POST(req: Request) {
           - priceA1: 首次登記稅值 (First Registration Taxable Value，請回傳純數字，不要有 $ 符號和逗號)
           - priceTax: 已繳付登記稅 (First Registration Tax Paid，請回傳純數字，不要有 $ 符號和逗號)
 
-          // ★★★ 新增：車主登記日期與牌費到期日 ★★★
+          // ★★★ 新增：座位限額、車主登記日期與牌費到期日 ★★★
+          - seatingCapacity: 座位限額 (Seating Capacity / 不包括司機)，請回傳純數字
           - registeredOwnerDate: 登記為車主日期 (Date of Registration as Owner)，請務必轉換為 YYYY-MM-DD
           - licenseExpiry: 牌照有效日期 / 牌費到期日 (如文件上有顯示)，請轉換為 YYYY-MM-DD
           
