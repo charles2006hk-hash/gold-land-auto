@@ -1843,9 +1843,13 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         if (tagInput.trim() && editingEntry) { setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] }); setTagInput(''); }
     };
 
+    // ★★★ 資料庫中心：全方位智能搜尋邏輯 ★★★
     const filteredEntries = entries.filter(entry => {
         const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
-        const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')}`;
+        
+        // ★ 將車型、廠牌、車主登記日期、底盤號、引擎號，全部塞入搜尋大雜燴入面！
+        const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''} ${entry.chassisNo || ''} ${entry.engineNo || ''}`;
+        
         return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
     });
 
