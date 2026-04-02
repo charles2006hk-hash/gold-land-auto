@@ -6158,26 +6158,54 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 
 
 // ------------------------------------------------------------------
-// ★★★ 2. Report View (v14.6: 獨立組件 + 智慧日期開關鎖定 + 智能日期防呆) ★★★
+// ★★★ 2. Report View (v14.7: 終極記憶鎖定版 - 支援 sessionStorage) ★★★
 // ------------------------------------------------------------------
 const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: any) => {
-    const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>('receivable');
-    const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>('All');
-    const [reportSearchTerm, setReportSearchTerm] = useState('');
-    const [reportCompany, setReportCompany] = useState('');
+    
+    // ★★★ 升級 1：所有狀態全部綁定 sessionStorage，完美實現「跨模組鎖定」 ★★★
+    const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>(() => 
+        (sessionStorage.getItem('gla_rep_type') as any) || 'receivable'
+    );
+    const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>(() => 
+        (sessionStorage.getItem('gla_rep_cat') as any) || 'All'
+    );
+    const [reportSearchTerm, setReportSearchTerm] = useState(() => 
+        sessionStorage.getItem('gla_rep_search') || ''
+    );
+    const [reportCompany, setReportCompany] = useState(() => 
+        sessionStorage.getItem('gla_rep_comp') || ''
+    );
 
-    // ★★★ 新增：日期區間開關 (預設開啟) ★★★
-    const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(true);
+    // ★★★ 升級 2：日期區間開關與數值，切換報表類型時絕對不會重置 ★★★
+    const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(() => 
+        sessionStorage.getItem('gla_rep_date_en') !== 'false' // 預設為 true
+    );
 
     const [reportStartDate, setReportStartDate] = useState(() => {
+        const saved = sessionStorage.getItem('gla_rep_start');
+        if (saved) return saved;
         const date = new Date();
         return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
     });
     const [reportEndDate, setReportEndDate] = useState(() => {
+        const saved = sessionStorage.getItem('gla_rep_end');
+        if (saved) return saved;
         const date = new Date();
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
     });
 
+    // ★★★ 升級 3：自動將最新狀態寫入記憶體 (每次手動更改就會覆蓋鎖定) ★★★
+    useEffect(() => {
+        sessionStorage.setItem('gla_rep_type', reportType);
+        sessionStorage.setItem('gla_rep_cat', reportCategory);
+        sessionStorage.setItem('gla_rep_search', reportSearchTerm);
+        sessionStorage.setItem('gla_rep_comp', reportCompany);
+        sessionStorage.setItem('gla_rep_date_en', isDateFilterEnabled.toString());
+        sessionStorage.setItem('gla_rep_start', reportStartDate);
+        sessionStorage.setItem('gla_rep_end', reportEndDate);
+    }, [reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate]);
+
+    // 點擊車輛進行編輯 (編輯完畢關閉後，會完美回到目前的報表視圖)
     const handleReportItemClick = (vehicleId: string) => {
         const vehicle = inventory.find((v: any) => v.id === vehicleId);
         if (vehicle) setEditingVehicle(vehicle);
@@ -6188,7 +6216,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
         const date = new Date();
         setReportStartDate(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
         setReportEndDate(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
-        setIsDateFilterEnabled(true); // 自動打勾
+        setIsDateFilterEnabled(true); 
     };
 
     const handlePrint = () => { window.print(); };
@@ -6207,7 +6235,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 const carBalance = totalReceivable - generalPayments;
                 
                 if (totalReceivable > 0 && carBalance > 0) {
-                    // ★ 升級 1：應收未收報表支援顯示「已訂日期」及「已售日期」
                     const date = v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                     data.push({
                         vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`,
@@ -6224,7 +6251,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                     const taskBalance = fee - taskPaid;
 
                     if (taskBalance > 0) {
-                        // ★ 升級 2：中港代辦費用同樣支援精準日期
                         let safeDate = task.date || v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                         data.push({
                             vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, 
@@ -6295,7 +6321,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
                 
-                // ★ 升級 3：如果有明確售出日就用，無的話優先用「最後修改日期 (updatedAt)」，絕對唔准無腦用「今日」
                 let safeSaleDate = v.stockOutDate;
                 if (!safeSaleDate) {
                     safeSaleDate = v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
@@ -6310,7 +6335,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
             });
         }
 
-        // ★★★ 日期開關邏輯 (如果開啟才進行過濾) ★★★
+        // 日期開關邏輯 (如果開啟才進行過濾)
         if (isDateFilterEnabled) {
             if (reportStartDate) data = data.filter(d => d.date >= reportStartDate);
             if (reportEndDate) data = data.filter(d => d.date <= reportEndDate);
@@ -6367,7 +6392,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                         <input type="text" value={reportSearchTerm} onChange={e => setReportSearchTerm(e.target.value)} placeholder="車牌/對象..." className="w-full border p-1.5 pl-7 rounded text-xs focus:ring-1 ring-blue-500 outline-none h-8 bg-white"/>
                     </div>
 
-                    {/* ★★★ 智慧型日期區間控制 ★★★ */}
                     <div className="col-span-2 md:col-span-2 bg-white border border-gray-200 p-2 rounded-lg flex flex-col justify-center">
                         <div className="flex justify-between items-center mb-1">
                             <label className="flex items-center text-[10px] font-bold text-gray-700 cursor-pointer">
