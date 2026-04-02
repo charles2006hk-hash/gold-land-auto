@@ -1374,14 +1374,27 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
         setSelectedForPrint([]);
     }, [editingEntry?.id]);
 
-    // ★★★ AI 識別函數 (保持不變) ★★★
-    const analyzeImageWithAI = async (base64Image: string, docType: string) => {
+    // ★★★ AI 識別函數 (升級版：支援直接讀取 URL) ★★★
+    const analyzeImageWithAI = async (imageDataOrUrl: string, docType: string) => {
         setIsScanning(true);
         try {
+            let base64ToSend = imageDataOrUrl;
+
+            // ★ 如果傳入的是網址 (Firebase Storage URL)，我們先在前端把它下載並轉成 Base64 再傳給 AI
+            if (imageDataOrUrl.startsWith('http')) {
+                const res = await fetch(imageDataOrUrl);
+                const blob = await res.blob();
+                base64ToSend = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                }) as string;
+            }
+
             const response = await fetch('/api/ocr', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: base64Image, docType: docType })
+                body: JSON.stringify({ image: base64ToSend, docType: docType })
             });
 
             const result = await response.json();
@@ -1658,9 +1671,34 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
           e.target.value = '';
     };
 
-    const downloadImage = (dataUrl: string, filename: string) => {
-        const link = document.createElement('a'); link.href = dataUrl; link.download = filename || 'download.png';
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    // ★ 下載功能加固 (支援 URL 與 Base64 雙軌並行)
+    const downloadImage = async (dataUrl: string, filename: string) => {
+        if (dataUrl.startsWith('http')) {
+            // 如果係 URL 網址：先 Fetch 轉成 Blob，強制觸發下載
+            try {
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+                const localUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a'); 
+                link.href = localUrl; 
+                link.download = filename || 'download.jpg';
+                document.body.appendChild(link); 
+                link.click(); 
+                document.body.removeChild(link);
+                URL.revokeObjectURL(localUrl); // 下載完釋放記憶體
+            } catch(e) { 
+                // 備用方案：如果遇到嚴格跨網域限制 fetch 唔到，就直接彈出新分頁
+                window.open(dataUrl, '_blank'); 
+            } 
+        } else {
+            // 如果係舊版 Base64：用返您原本最穩陣嘅方法
+            const link = document.createElement('a'); 
+            link.href = dataUrl; 
+            link.download = filename || 'download.png';
+            document.body.appendChild(link); 
+            link.click(); 
+            document.body.removeChild(link);
+        }
     };
 
     const handleQuickRenew = () => {
@@ -2369,36 +2407,30 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                 <div key={mediaItem.id} className="relative aspect-auto bg-white p-1 rounded-lg border-2 border-slate-200 shadow-sm hover:border-indigo-400 group cursor-pointer"
                                     onClick={async () => {
                                         try {
-                                            const res = await fetch(mediaItem.url);
-                                            const blob = await res.blob();
-                                            const reader = new FileReader();
-                                            reader.readAsDataURL(blob);
+                                            // ★ 終極修復：直接儲存 URL 連結，唔好再下載轉做 Base64！
+                                            // 咁樣每張圖只會佔資料庫幾十 bytes，永遠唔會爆 1MB！
+                                            setEditingEntry(prev => prev ? { 
+                                                ...prev, 
+                                                attachments: [...prev.attachments, { 
+                                                    name: mediaItem.fileName || 'Inbox文件', 
+                                                    data: mediaItem.url 
+                                                }] 
+                                            } : null);
                                             
-                                            reader.onloadend = async () => {
-                                                try {
-                                                    const base64data = reader.result as string;
-                                                    
-                                                    setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, { name: mediaItem.fileName || 'Inbox文件', data: base64data }] } : null);
-                                                    
-                                                    const { updateDoc, serverTimestamp, doc } = await import('firebase/firestore');
-                                                    
-                                                    await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', mediaItem.id), {
-                                                        // ★ 關鍵修改：改成 database_linked，這樣圖庫就不會把它抓走了！
-                                                        status: 'database_linked', 
-                                                        updatedAt: serverTimestamp()
-                                                    });
+                                            const { updateDoc, serverTimestamp, doc } = await import('firebase/firestore');
+                                            
+                                            await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', mediaItem.id), {
+                                                // ★ 關鍵修改：改成 database_linked，這樣圖庫就不會把它抓走了！
+                                                status: 'database_linked', 
+                                                updatedAt: serverTimestamp()
+                                            });
 
-                                                    setAvailableDocs(prev => prev.filter(d => d.id !== mediaItem.id)); 
-                                                    showToast('✅ 成功導入文件！');
-                                                    
-                                                } catch (innerError) {
-                                                    console.error("更新 Firebase 狀態失敗:", innerError);
-                                                    alert("圖片已抓取，但 Firebase 狀態更新失敗，請檢查權限。");
-                                                }
-                                            };
+                                            setAvailableDocs(prev => prev.filter(d => d.id !== mediaItem.id)); 
+                                            showToast('✅ 成功導入文件！');
+                                            
                                         } catch (e) { 
-                                            console.error("下載圖片失敗:", e);
-                                            alert("導入失敗：無法讀取圖片資料"); 
+                                            console.error("更新 Firebase 狀態失敗:", e);
+                                            alert("導入失敗，請檢查網絡權限。"); 
                                         }
                                     }}
                                 >
