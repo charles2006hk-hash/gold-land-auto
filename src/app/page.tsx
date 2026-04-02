@@ -173,6 +173,7 @@ type DatabaseEntry = {
     priceA1?: number;           // 首次登記稅值 (A1)
     priceTax?: number;          // 已繳付登記稅
     prevOwners?: number;        // 前任車主數目
+    seating?: number;           // ★ 新增：車輛座位數 (連司機)
     registeredOwnerName?: string; // 登記車主名
     registeredOwnerId?: string;   // 登記車主身分證
     registeredOwnerDate?: string;
@@ -1452,6 +1453,14 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     const finalName = data.name || data.registeredOwnerName || data.insuredPerson || prev.name;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
+                    // ★★★ 新增：計算座位數 (AI提取的乘客數 + 1 司機) ★★★
+                    let finalSeating = prev.seating;
+                    const aiSeatingRaw = data.seating ?? data.seatingCapacity;
+                    if (aiSeatingRaw !== undefined) {
+                        const parsedSeat = parseNum(aiSeatingRaw);
+                        if (parsedSeat !== undefined) finalSeating = parsedSeat + 1;
+                    }
+
                     return {
                         ...prev,
                         name: finalName, 
@@ -1479,6 +1488,8 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                         registeredOwnerName: data.registeredOwnerName || prev.registeredOwnerName,
                         registeredOwnerId: finalOwnerId,
                         registeredOwnerDate: data.registeredOwnerDate || data.ownerRegDate || data.dateOfRegAsOwner || prev.registeredOwnerDate,
+
+                        seating: finalSeating,
                         
                         // --- 四證八面保持不變 ---
                         hkid_name: data.hkid_name || prev.hkid_name,
@@ -1556,6 +1567,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                     priceA1: data.priceA1 || 0,
                     priceTax: data.priceTax || 0,
                     prevOwners: data.prevOwners !== undefined ? Number(data.prevOwners) : 0,
+                    seating: data.seating !== undefined ? Number(data.seating) : 0, // ★ 讀取座位數
                     registeredOwnerName: data.registeredOwnerName || '',
                     registeredOwnerId: data.registeredOwnerId || '',
                     registeredOwnerDate: data.registeredOwnerDate || '',
@@ -1711,6 +1723,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
             priceA1: Number(editingEntry.priceA1) || 0,
             priceTax: Number(editingEntry.priceTax) || 0,
             prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
+            seating: Number(editingEntry.seating) || 0, // ★ 儲存座位數
             tags: Array.from(autoTags), 
             roles: editingEntry.roles || [], 
             attachments: editingEntry.attachments || [],
@@ -1995,11 +2008,12 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
                                                     <div className="col-span-1"><label className="text-[10px] text-gray-500">引擎號</label><input disabled={!isDbEditing} value={editingEntry.engineNo || ''} onChange={e => setEditingEntry({...editingEntry, engineNo: e.target.value})} className="w-full p-1.5 border rounded text-xs font-mono"/></div>
                                                     <div className="col-span-1"><label className="text-[10px] text-gray-500">容量</label><input type="number" disabled={!isDbEditing} value={editingEntry.engineSize || ''} onChange={e => setEditingEntry({...editingEntry, engineSize: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                     <div className="col-span-1"><label className="text-[10px] text-gray-500">狀況</label><input disabled={!isDbEditing} value={editingEntry.firstRegCondition || ''} onChange={e => setEditingEntry({...editingEntry, firstRegCondition: e.target.value})} className="w-full p-1.5 border rounded text-xs" placeholder="BRAND NEW"/></div>
-                                                </div>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="grid grid-cols-4 gap-2">
                                                     <div><label className="text-[10px] text-gray-500">A1 稅值</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceA1 || ''} onChange={e => setEditingEntry({...editingEntry, priceA1: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs font-bold text-blue-600"/></div>
                                                     <div><label className="text-[10px] text-gray-500">已繳稅款</label><input type="number" disabled={!isDbEditing} value={editingEntry.priceTax || ''} onChange={e => setEditingEntry({...editingEntry, priceTax: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                     <div><label className="text-[10px] text-gray-500">手數</label><input type="number" disabled={!isDbEditing} value={editingEntry.prevOwners || ''} onChange={e => setEditingEntry({...editingEntry, prevOwners: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
+                                                    {/* ★ 新增：座位數 */}
+                                                    <div><label className="text-[10px] text-gray-500">座位數</label><input type="number" disabled={!isDbEditing} value={editingEntry.seating || ''} onChange={e => setEditingEntry({...editingEntry, seating: Number(e.target.value)})} className="w-full p-1.5 border rounded text-xs"/></div>
                                                 </div>
                                                 <div className="bg-white p-2 rounded border border-slate-100">
                                                     <label className="text-[10px] font-bold text-slate-400 mb-1 block">VRD 登記車主</label>
@@ -8043,6 +8057,16 @@ const VehicleFormModal = ({
         if (vrdData.priceA1 !== undefined && vrdData.priceA1 !== null) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
         if (vrdData.priceTax !== undefined && vrdData.priceTax !== null) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
 
+        // ★ 強制更新 DOM 上的座位數和手數
+        if (vrdData.seating) {
+            const seatInput = document.querySelector('input[name="seating"]') as HTMLInputElement;
+            if (seatInput) seatInput.value = vrdData.seating.toString();
+        }
+        if (vrdData.prevOwners !== undefined) {
+            const prevOwnerInput = document.querySelector('input[name="previousOwners"]') as HTMLInputElement;
+            if (prevOwnerInput) prevOwnerInput.value = vrdData.prevOwners.toString();
+        }
+
         const rawMake = vrdData.make || vrdData.brand || ''; 
         let matchedMake = rawMake;
         if (rawMake) {
@@ -8087,6 +8111,7 @@ const VehicleFormModal = ({
                 engineSize: vrdData.engineSize || prev.engineSize,
                 priceA1: vrdData.priceA1 || prev.priceA1,
                 priceTax: vrdData.priceTax || prev.priceTax,
+                seating: vrdData.seating || prev.seating, // ★ 新增：連動座位數
                 colorExt: vrdData.vehicleColor || vrdData.color || prev.colorExt,
                 previousOwners: vrdData.prevOwners !== undefined ? vrdData.prevOwners.toString() : prev.previousOwners,
                 registeredOwnerDate: vrdData.registeredOwnerDate || prev.registeredOwnerDate,
