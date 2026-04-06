@@ -10741,10 +10741,12 @@ const CreateDocModule = ({
                         if (cbTags.length === 0) cbTags.push({ label: '中港', color: 'bg-slate-700' });
                     }
 
+                    // ★ 升級：加入座位數、中文排檔
                     const specs = [];
                     if (car.previousOwners !== undefined && car.previousOwners !== '') specs.push(`${car.previousOwners}手`);
-                    if (car.engineSize) specs.push(`${car.engineSize}cc`);
-                    if (car.transmission) specs.push(car.transmission === 'Manual' ? 'MT' : 'Auto');
+                    if (car.seating) specs.push(`${car.seating}座`); 
+                    if (car.transmission) specs.push(car.transmission === 'Manual' ? '手波' : '自動波'); 
+                    if (car.engineSize) specs.push(`${car.engineSize}${car.fuelType === 'Electric' ? 'Kw' : 'cc'}`);
                     if (car.colorExt) specs.push(car.colorExt.split(' ')[0].replace(/[()]/g, '')); 
                     if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
 
@@ -11032,10 +11034,14 @@ const CreateDocModule = ({
                                     {cbTags.map((t,i) => <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
                                 </div>
 
-                                {/* 規格微標籤 (原邏輯保留) */}
+                                {/* 規格微標籤 (升級：加入座位與排檔) */}
                                 <div className="flex flex-wrap gap-1.5 mt-auto mb-4">
                                     {car.colorExt && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 flex items-center"><div className="w-2 h-2 rounded-full border border-gray-300 mr-1.5 shadow-inner" style={{backgroundColor: getColorHex(car.colorExt)}}></div>{car.colorExt}</span>}
                                     <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.previousOwners || 0}手</span>
+                                    {/* ★ 新增：座位數 */}
+                                    {car.seating && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.seating}座</span>}
+                                    {/* ★ 新增：排檔 */}
+                                    {car.transmission && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.transmission === 'Manual' ? '手波' : '自動波'}</span>}
                                     {car.engineSize && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.engineSize}{car.fuelType === 'Electric' ? 'Kw' : 'cc'}</span>}
                                     {car.mileage ? <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{Number(car.mileage).toLocaleString()}km</span> : null}
                                 </div>
