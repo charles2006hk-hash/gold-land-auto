@@ -6904,7 +6904,7 @@ export default function GoldLandAutoDMS() {
               if (docSnap.exists()) {
                   const dbData = docSnap.data() as Partial<SystemSettings>;
                   
-                  ssetSettings(prev => ({
+                  setSettings(prev => ({
                       ...defaultSettings, 
                       ...dbData,          
                       
