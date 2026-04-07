@@ -8031,7 +8031,26 @@ const VehicleFormModal = ({
 
     // ★ 新增：維修保養狀態與函數
     const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
+    // ★ 新增：維修保養的修改(Edit)狀態與函數
+    const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
+    const [editMaintenanceForm, setEditMaintenanceForm] = useState<any>({});
+    
+    const startEditMaintenance = (m: any) => {
+        setEditingMaintenanceId(m.id);
+        setEditMaintenanceForm({ ...m, cost: m.cost?.toString() || '0', charge: m.charge?.toString() || '0' });
+    };
 
+    const saveEditMaintenance = () => {
+        const cst = Number(editMaintenanceForm.cost.replace(/,/g, ''));
+        const chg = Number(editMaintenanceForm.charge.replace(/,/g, ''));
+        const updated = { ...editMaintenanceForm, cost: cst, charge: chg };
+        
+        if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, (v.maintenanceRecords || []).map((x: any) => x.id === editingMaintenanceId ? updated : x));
+        else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: (prev.maintenanceRecords || []).map((x: any) => x.id === editingMaintenanceId ? updated : x) }));
+        
+        setEditingMaintenanceId(null);
+    };
+  
     const handleAddMaintenance = () => {
         const cst = Number(newMaintenance.cost.replace(/,/g, ''));
         const chg = Number(newMaintenance.charge.replace(/,/g, ''));
@@ -8336,8 +8355,16 @@ const VehicleFormModal = ({
             <button type="button" onClick={handleClose} className="hidden md:block p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
           </div>
 
-          <form onSubmit={handleSaveWrapper} className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full">
-            
+          <form 
+            onSubmit={handleSaveWrapper} 
+            onKeyDown={(e) => {
+                // ★ 終極防呆：防止在輸入框按 Enter 誤觸發整個表單儲存並關閉
+                if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+                    e.preventDefault();
+                }
+            }}
+            className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full"
+          >  
             <div className="md:hidden flex border-b border-slate-200 px-2 gap-1 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide sticky top-0 z-40 w-full shadow-sm">
                 <button type="button" onClick={() => setRightTab('vrd')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'vrd' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}><FileText size={16} className="inline mr-1 mb-0.5"/>基本/VRD</button>
                 <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'sales' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售/收款</button>
@@ -9003,36 +9030,63 @@ const VehicleFormModal = ({
                             </h3>
                             
                             <div className="space-y-3 mb-6">
-                                {(v.maintenanceRecords || []).map((m: any) => (
-                                    <div key={m.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
-                                                <span className="font-bold text-slate-800 text-sm">{m.item}</span>
-                                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
-                                            </div>
-                                            {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
-                                                    <button type="button" onClick={() => toggleMaintenanceStatus(m, 'costStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                {(v.maintenanceRecords || []).map((m: any) => {
+                                    const isEditing = editingMaintenanceId === m.id;
+                                    
+                                    // ★ 編輯模式 UI
+                                    if (isEditing) {
+                                        return (
+                                            <div key={m.id} className="flex flex-col md:flex-row gap-2 p-3 bg-blue-50 border border-blue-300 rounded-lg shadow-md animate-fade-in">
+                                                <input type="date" value={editMaintenanceForm.date} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, date: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32 font-bold"/>
+                                                <input type="text" value={editMaintenanceForm.item} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, item: e.target.value})} className="text-xs p-2 border rounded outline-none flex-1 font-bold"/>
+                                                <input type="text" value={editMaintenanceForm.vendor} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, vendor: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32"/>
+                                                <div className="flex items-center gap-2 w-full md:w-auto">
+                                                    <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-red-500 font-bold">成本</span><input type="text" value={editMaintenanceForm.cost} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, cost: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-red-600 font-mono text-right"/></div>
+                                                    <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-blue-500 font-bold">收費</span><input type="text" value={editMaintenanceForm.charge} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, charge: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-blue-600 font-mono text-right"/></div>
+                                                    <button type="button" onClick={saveEditMaintenance} className="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow-sm"><Check size={14}/></button>
+                                                    <button type="button" onClick={() => setEditingMaintenanceId(null)} className="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 shadow-sm"><X size={14}/></button>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
-                                                    <button type="button" onClick={() => toggleMaintenanceStatus(m, 'chargeStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                        );
+                                    }
+
+                                    // ★ 正常顯示模式 (加入 Edit 按鈕)
+                                    return (
+                                        <div key={m.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg shadow-sm hover:border-blue-200 transition-colors">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
+                                                    <span className="font-bold text-slate-800 text-sm">{m.item}</span>
+                                                    <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
+                                                </div>
+                                                {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
+                                                        <button type="button" onClick={() => toggleMaintenanceStatus(m, 'costStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end">
+                                                    <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
+                                                        <button type="button" onClick={() => toggleMaintenanceStatus(m, 'chargeStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* ★ 加入了 Edit 按鈕 */}
+                                                <div className="flex items-center border-l pl-2 ml-2">
+                                                    <button type="button" onClick={() => startEditMaintenance(m)} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>
+                                                    <button type="button" onClick={() => handleDeleteMaintenance(m.id)} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
                                                 </div>
                                             </div>
-                                            <button type="button" onClick={() => handleDeleteMaintenance(m.id)} className="text-gray-400 hover:text-red-500 ml-2"><Trash2 size={16}/></button>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 {(v.maintenanceRecords || []).length === 0 && <div className="text-center text-xs text-gray-400 py-6 border-2 border-dashed rounded-lg bg-slate-50">尚無維修紀錄</div>}
                             </div>
 {/* 新增維修 */}
