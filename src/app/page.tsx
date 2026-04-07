@@ -6625,7 +6625,7 @@ export default function GoldLandAutoDMS() {
   const [isDataSyncing, setIsDataSyncing] = useState(true);
   const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
   const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
-
+  const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock'); // ★ 新增：手機版儀表板分頁狀態
   // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
   const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -11162,44 +11162,63 @@ const CreateDocModule = ({
                 };
 
                   return (
-                      <div className="flex flex-col lg:flex-row gap-2 lg:gap-4 flex-1 min-h-0 overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0">
+                      <div className="flex flex-col flex-1 min-h-0 overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0 bg-slate-100 md:bg-transparent">
                           
-                          {/* 左側看板：在庫優先 */}
-                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl border-y md:border border-slate-200 shadow-sm overflow-hidden min-h-0">
-                              <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-none z-10 shadow-sm relative">
-                                  {/* ★ 潮流升級：大標題的數量提示，變成帶有圓點呼吸燈的小標籤 */}
-                                  <h3 className="font-bold text-slate-800 flex items-center text-sm">
-                                      <Layout size={16} className="mr-2 text-green-600"/> 在庫待售 
-                                      <div className="ml-2 flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                          <span className="text-[10px] font-black text-slate-700 font-mono leading-none pt-px">{inStockCars.length} 台</span>
-                                      </div>
-                                  </h3>
-                              </div>
-                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin relative z-0">
-                                  {inStockCars.map(car => renderDashboardCard(car))}
-                                  {inStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">目前無在庫車輛</div>}
-                              </div>
+                          {/* ★ 創新方式：手機版專屬「浮動分頁按鈕」，釋放 100% 垂直空間！ */}
+                          <div className="md:hidden flex p-1.5 bg-slate-200/60 rounded-xl mx-4 mt-2 mb-2">
+                              <button 
+                                  onClick={() => setDashMobileTab('instock')}
+                                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'instock' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
+                              >
+                                  在庫待售
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${dashMobileTab === 'instock' ? 'bg-green-100 text-green-700' : 'bg-slate-300 text-slate-500'}`}>{inStockCars.length}</span>
+                              </button>
+                              <button 
+                                  onClick={() => setDashMobileTab('action')}
+                                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'action' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500'}`}
+                              >
+                                  已訂/待結清
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${dashMobileTab === 'action' ? 'bg-amber-100 text-amber-700' : 'bg-slate-300 text-slate-500'}`}>{actionCars.length}</span>
+                              </button>
                           </div>
 
-                          {/* 右側看板：已訂 / 待跟進 */}
-                          <div className="flex-1 flex flex-col bg-white md:rounded-2xl border-y md:border border-slate-200 shadow-sm overflow-hidden min-h-0">
-                              <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center flex-none z-10 shadow-sm relative">
-                                  {/* ★ 潮流升級：大標題的數量提示，變成帶有圓點呼吸燈的小標籤 */}
-                                  <h3 className="font-bold text-slate-800 flex items-center text-sm">
-                                      <FileCheck size={16} className="mr-2 text-amber-500"/> 已訂與待結清 
-                                      <div className="ml-2 flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                          <span className="text-[10px] font-black text-slate-700 font-mono leading-none pt-px">{actionCars.length} 台</span>
+                          <div className="flex flex-col lg:flex-row gap-0 lg:gap-5 flex-1 min-h-0 overflow-hidden">
+                              
+                              {/* 左側看板：在庫優先 */}
+                              <div className={`flex-1 flex-col bg-transparent md:bg-white md:rounded-2xl border-0 md:border border-slate-200/60 md:shadow-sm overflow-hidden min-h-0 relative ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+                                  {/* 桌面版：極幼細邊框 + 右上角醒目數量 */}
+                                  <div className="hidden md:flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10">
+                                      <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide">
+                                          <Layout size={16} className="mr-1.5 text-green-500"/> 在庫待售
+                                      </h3>
+                                      <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider">
+                                          {inStockCars.length} 台
                                       </div>
-                                  </h3>
+                                  </div>
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
+                                      {inStockCars.map(car => renderDashboardCard(car))}
+                                      {inStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">目前無在庫車輛</div>}
+                                  </div>
                               </div>
-                              <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 bg-slate-50/50 scrollbar-thin relative z-0">
-                                  {actionCars.map(car => renderDashboardCard(car))}
-                                  {actionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center"><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</div>}
-                              </div>
-                          </div>
 
+                              {/* 右側看板：已訂 / 待跟進 */}
+                              <div className={`flex-1 flex-col bg-transparent md:bg-white md:rounded-2xl border-0 md:border border-slate-200/60 md:shadow-sm overflow-hidden min-h-0 relative ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+                                  {/* 桌面版：極幼細邊框 + 右上角醒目數量 */}
+                                  <div className="hidden md:flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10">
+                                      <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide">
+                                          <FileCheck size={16} className="mr-1.5 text-amber-500"/> 已訂與待結清
+                                      </h3>
+                                      <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider">
+                                          {actionCars.length} 台
+                                      </div>
+                                  </div>
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
+                                      {actionCars.map(car => renderDashboardCard(car))}
+                                      {actionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center"><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</div>}
+                                  </div>
+                              </div>
+
+                          </div>
                       </div>
                   );
               })()}
