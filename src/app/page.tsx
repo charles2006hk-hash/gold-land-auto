@@ -6904,11 +6904,12 @@ export default function GoldLandAutoDMS() {
               if (docSnap.exists()) {
                   const dbData = docSnap.data() as Partial<SystemSettings>;
                   
-                  setSettings(prev => ({
+                  ssetSettings(prev => ({
                       ...defaultSettings, 
                       ...dbData,          
                       
-                      // 1. 陣列保護
+                      // 1. 陣列保護 (★ 加咗 warrantyTypes 喺度)
+                      warrantyTypes: dbData.warrantyTypes?.length ? dbData.warrantyTypes : defaultSettings.warrantyTypes,
                       expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
                       expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
