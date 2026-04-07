@@ -407,6 +407,11 @@ type Vehicle = {
   soldPrice?: number;
   deposit?: number;
 
+  warrantyType?: string;           // 保固類型 (e.g. 5年10萬公里)
+  insuranceExpiry?: string;        // 保險到期日
+  insuranceReminderEnabled?: boolean; // 保險提醒開關
+  maintenanceRecords?: any[];      // 維修與服務紀錄
+
   crossBorder?: CrossBorderData;
   acquisition?: any;
   createdAt?: any;
@@ -6294,6 +6299,17 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                     });
                 }
 
+                // ★ 整合：維修保養的對客收費 (Receivable)
+                (v.maintenanceRecords || []).forEach((m: any) => {
+                    if (m.charge > 0 && m.chargeStatus !== 'Paid') {
+                        data.push({
+                            vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`,
+                            regMark: v.regMark, amount: m.charge, type: 'Service', status: 'Pending',
+                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}`
+                        });
+                    }
+                });
+
                 const cbTasks = v.crossBorder?.tasks || [];
                 cbTasks.forEach((task:any) => {
                     const fee = Number(task.fee) || 0;
@@ -6328,6 +6344,18 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                     }
                 });
 
+                // ★ 整合：維修保養的車房成本 (Payable)
+                (v.maintenanceRecords || []).forEach((m: any) => {
+                    if (m.cost > 0 && m.costStatus === targetStatus) {
+                        data.push({
+                            vehicleId: v.id, id: m.id, date: m.date,
+                            title: `[售後成本] ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: targetStatus,
+                            regMark: v.regMark,
+                            rawTitle: `${v.regMark} ${m.item} ${m.vendor}`
+                        });
+                    }
+                });
+              
                 if (isTargetPaid) {
                     (v.acquisition?.payments || []).forEach((p: any) => {
                         const vendorName = v.acquisition?.vendor || '未填寫供應商';
@@ -7342,6 +7370,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             expenses: editingVehicle?.expenses || [], 
             payments: editingVehicle?.payments || [], 
             salesAddons: (editingVehicle as any)?.salesAddons || [], 
+            warrantyType: formData.get('warrantyType') as string || '',
+            insuranceExpiry: formData.get('insuranceExpiry') as string || '',
+            insuranceReminderEnabled: formData.get('insuranceReminderEnabled') !== 'false',
+            maintenanceRecords: editingVehicle?.maintenanceRecords || [],
             updatedAt: serverTimestamp(),
             crossBorder: crossBorderData
         };
@@ -7955,6 +7987,31 @@ const VehicleFormModal = ({
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
     const [newAddon, setNewAddon] = useState({ name: '文件費', amount: '' });
 
+    // ★ 新增：維修保養狀態與函數
+    const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
+
+    const handleAddMaintenance = () => {
+        const cst = Number(newMaintenance.cost.replace(/,/g, ''));
+        const chg = Number(newMaintenance.charge.replace(/,/g, ''));
+        if (newMaintenance.item) {
+            const obj = { id: Date.now().toString(), ...newMaintenance, cost: cst, charge: chg };
+            if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, [...(v.maintenanceRecords || []), obj]);
+            else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: [...(prev.maintenanceRecords || []), obj] }));
+            setNewMaintenance({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
+        }
+    };
+    
+    const handleDeleteMaintenance = (id: string) => {
+        if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, (v.maintenanceRecords || []).filter((m: any) => m.id !== id));
+        else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: (prev.maintenanceRecords || []).filter((m: any) => m.id !== id) }));
+    };
+    
+    const toggleMaintenanceStatus = (m: any, type: 'costStatus' | 'chargeStatus') => {
+        const newStatus = m[type] === 'Paid' ? 'Unpaid' : 'Paid';
+        if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, (v.maintenanceRecords || []).map((x: any) => x.id === m.id ? { ...x, [type]: newStatus } : x));
+        else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: (prev.maintenanceRecords || []).map((x: any) => x.id === m.id ? { ...x, [type]: newStatus } : x) }));
+    };
+  
     // ★★★ 智能雙軌收支管理器 (解決新舊車入數問題) ★★★
     const handleAddPaymentClick = () => {
         const amt = Number(newPayment.amount.replace(/,/g, ''));
@@ -8234,6 +8291,8 @@ const VehicleFormModal = ({
                 <button type="button" onClick={() => setRightTab('vrd')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'vrd' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}><FileText size={16} className="inline mr-1 mb-0.5"/>基本/VRD</button>
                 <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'sales' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售/收款</button>
                 <button type="button" onClick={() => setRightTab('cost')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'cost' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500'}`}><DownloadCloud size={16} className="inline mr-1 mb-0.5"/>進貨/成本</button>
+                {/* ★ 新增：手機版維修保養按鈕 */}
+                <button type="button" onClick={() => setRightTab('service')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'service' ? 'border-orange-600 text-orange-700' : 'border-transparent text-slate-500'}`}><Wrench size={16} className="inline mr-1 mb-0.5"/>維修/保養</button>
                 <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
             </div>
 
@@ -8512,6 +8571,8 @@ const VehicleFormModal = ({
                 <div className="hidden md:flex border-b border-slate-200 px-6 gap-6 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide w-full">
                     <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${(rightTab === 'sales' || rightTab === 'vrd') ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售與收款</button>
                     <button type="button" onClick={() => setRightTab('cost')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cost' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><DownloadCloud size={16} className="inline mr-1 mb-0.5"/>進貨與成本</button>
+                    {/* ★ 新增：桌面版維修保養按鈕 */}
+                    <button type="button" onClick={() => setRightTab('service')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'service' ? 'border-orange-600 text-orange-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Wrench size={16} className="inline mr-1 mb-0.5"/>維修與保養</button>
                     <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
                 </div>
 
@@ -8843,6 +8904,103 @@ const VehicleFormModal = ({
                         </div>
                     </div>
 
+                    {/* ===== Tab 4: 維修與保養 (Service & Maintenance) ===== */}
+                    <div className={`${rightTab === 'service' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full pb-10`}>
+                        
+                        {/* 1. 保固與保險 */}
+                        <div className="bg-orange-50/40 p-4 md:p-5 rounded-xl border border-orange-200 shadow-sm w-full">
+                            <h3 className="font-bold text-orange-800 text-base md:text-sm mb-4 flex items-center"><ShieldCheck size={18} className="mr-2"/> 保固與車輛保險 (Warranty & Insurance)</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs md:text-[10px] text-orange-600 font-bold uppercase mb-1">保養條款 (Warranty Terms)</label>
+                                    <input name="warrantyType" list="warranty_list" defaultValue={v.warrantyType} placeholder="例如: 5年/10萬公里 (原廠)" className="w-full p-3 md:p-2 border border-orange-200 rounded-lg text-sm outline-none focus:ring-2 ring-orange-300 font-bold text-slate-700 shadow-sm"/>
+                                    <datalist id="warranty_list">
+                                        <option value="5年/10萬公里 (原廠)"/>
+                                        <option value="電池終身保養 (原廠)"/>
+                                        <option value="半年/5000公里 (公司內部)"/>
+                                        <option value="不設保養 (No Warranty)"/>
+                                    </datalist>
+                                </div>
+                                <div className="bg-white p-3 md:p-2 rounded-lg border border-orange-200 shadow-inner group">
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <label className="text-xs md:text-[10px] text-orange-600 font-bold uppercase flex items-center">
+                                            車輛保險到期日 (Insurance Expiry)
+                                            <Bell size={10} className={`ml-1 ${v.insuranceReminderEnabled !== false ? 'text-orange-500 animate-pulse' : 'text-gray-300'}`} />
+                                        </label>
+                                        <label className="flex items-center cursor-pointer relative z-10" title={v.insuranceReminderEnabled !== false ? "提醒已開啟" : "不作提醒"}>
+                                            <input type="hidden" name="insuranceReminderEnabled" value={v.insuranceReminderEnabled !== false ? 'true' : 'false'} />
+                                            <input type="checkbox" className="sr-only peer" defaultChecked={v.insuranceReminderEnabled !== false} onChange={(e) => { const h = e.target.previousElementSibling as HTMLInputElement; if(h) h.value = e.target.checked?'true':'false'; }}/>
+                                            <div className="w-5 h-3 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-orange-500 shadow-inner peer-checked:after:translate-x-full after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 after:transition-all"></div>
+                                        </label>
+                                    </div>
+                                    <input type="date" name="insuranceExpiry" defaultValue={v.insuranceExpiry} className="w-full bg-transparent text-base md:text-sm font-mono outline-none font-bold text-slate-800"/>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. 維修紀錄 (雙軌收支) */}
+                        <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm w-full">
+                            <h3 className="font-bold text-slate-800 text-base md:text-sm mb-4 flex items-center justify-between">
+                                <div className="flex items-center"><Wrench size={18} className="mr-2 text-slate-600"/> 維修與服務紀錄 (Service Records)</div>
+                            </h3>
+                            
+                            <div className="space-y-3 mb-6">
+                                {(v.maintenanceRecords || []).map((m: any) => (
+                                    <div key={m.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
+                                                <span className="font-bold text-slate-800 text-sm">{m.item}</span>
+                                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
+                                            </div>
+                                            {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
+                                                    <button type="button" onClick={() => toggleMaintenanceStatus(m, 'costStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
+                                                    <button type="button" onClick={() => toggleMaintenanceStatus(m, 'chargeStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                </div>
+                                            </div>
+                                            <button type="button" onClick={() => handleDeleteMaintenance(m.id)} className="text-gray-400 hover:text-red-500 ml-2"><Trash2 size={16}/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {(v.maintenanceRecords || []).length === 0 && <div className="text-center text-xs text-gray-400 py-6 border-2 border-dashed rounded-lg bg-slate-50">尚無維修紀錄</div>}
+                            </div>
+
+                            {/* 新增維修 */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 w-full">
+                                <div className="text-xs font-bold text-slate-600 mb-3">新增紀錄 (New Service)</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                                    <input type="date" value={newMaintenance.date} onChange={e => setNewMaintenance({...newMaintenance, date: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
+                                    <input type="text" placeholder="維修/服務項目..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className="w-full lg:col-span-2 text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                                    <input list="vendor_list" placeholder="車房 / 代理名稱" value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white"/>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                                    <div className="lg:col-span-2 relative">
+                                        <span className="absolute top-[-16px] left-1 text-[10px] text-red-500 font-bold uppercase">成本 (給車房)</span>
+                                        <input type="text" placeholder="$ 成本金額" value={newMaintenance.cost} onChange={e => setNewMaintenance({...newMaintenance, cost: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-red-200 rounded-lg outline-none bg-red-50/50 text-right font-mono font-bold text-red-600"/>
+                                    </div>
+                                    <div className="lg:col-span-2 relative">
+                                        <span className="absolute top-[-16px] left-1 text-[10px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
+                                        <input type="text" placeholder="$ 收費金額" value={newMaintenance.charge} onChange={e => setNewMaintenance({...newMaintenance, charge: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-blue-200 rounded-lg outline-none bg-blue-50/50 text-right font-mono font-bold text-blue-700"/>
+                                    </div>
+                                    <button type="button" onClick={handleAddMaintenance} className="w-full bg-slate-800 text-white text-sm py-2 px-4 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform shadow-md">新增紀錄</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
                     {/* ===== Tab 3: 中港車管家 (Cross-Border) ===== */}
                     <div className={`${rightTab === 'cb' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
                         <div className="border-2 border-blue-200 rounded-2xl overflow-hidden bg-white shadow-md w-full">
