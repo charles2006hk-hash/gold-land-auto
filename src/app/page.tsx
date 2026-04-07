@@ -4577,11 +4577,11 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
             // A. 一般證件
             const genDocs = [
                 { key: 'licenseExpiry', label: '車輛牌費 (License)' }, // 注意：資料庫欄位通常是 licenseExpiry
-                { key: 'dateInsurance', label: '車輛保險 (Insurance)' }
+                { key: 'insuranceExpiry', label: '車輛保險 (Insurance)' }
             ];
             genDocs.forEach(d => {
                 const dateVal = (car as any)[d.key];
-                if (dateVal) {
+                if (dateVal && car.insuranceReminderEnabled !== false) {
                     const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     if (diff <= daysThreshold) {
                         alerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'General', item: d.label, date: dateVal, days: diff });
