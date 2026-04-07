@@ -4576,12 +4576,15 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
         inventory.forEach(car => {
             // A. 一般證件
             const genDocs = [
-                { key: 'licenseExpiry', label: '車輛牌費 (License)' }, // 注意：資料庫欄位通常是 licenseExpiry
-                { key: 'insuranceExpiry', label: '車輛保險 (Insurance)' }
+                { key: 'licenseExpiry', reminderKey: 'licenseReminderEnabled', label: '車輛牌費 (License)' }, 
+                { key: 'insuranceExpiry', reminderKey: 'insuranceReminderEnabled', label: '車輛保險 (Insurance)' }
             ];
             genDocs.forEach(d => {
                 const dateVal = (car as any)[d.key];
-                if (dateVal && car.insuranceReminderEnabled !== false) {
+                // ★ 智能判斷：根據不同的項目，檢查對應的開關屬性
+                const isRemind = (car as any)[d.reminderKey] !== false;
+                
+                if (dateVal && isRemind) {
                     const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     if (diff <= daysThreshold) {
                         alerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'General', item: d.label, date: dateVal, days: diff });
