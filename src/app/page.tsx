@@ -440,6 +440,7 @@ type SystemSettings = {
   expenseCompanies: string[];
   paymentTypes: string[]; 
   colors: string[];
+  warrantyTypes?: string[];
   // ★★★ 新增：中港代辦服務項目列表 (解決 serviceItems 報錯) ★★★
   serviceItems?: string[];
   
@@ -516,6 +517,18 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ],
   expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家', '中檢公司'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)'],
+  // ★ 新增：根據 2026 最新政策預設的保養條款
+  warrantyTypes: [
+      '5年/10萬公里 (原廠全車)',
+      '8年/16萬公里 高壓電池 (原廠 EV)',
+      '3年/15萬公里 (寶馬原廠)',
+      '2年不限里程 (平治/保時捷原廠)',
+      '10年/25萬公里 高壓電池 (平治 EQE/EQS)',
+      '4年/8萬公里 (Tesla 原廠)',
+      '8年/19.2萬公里 高壓電池 (Tesla LR/Perf)',
+      '電池終身保養 (BYD 原廠)',
+      '不設保養 (No Warranty)'
+  ],
   
   // ★★★ 新增：預設的中港代辦服務項目 ★★★
   serviceItems: ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'],
@@ -5802,6 +5815,25 @@ const SettingsManager = ({
                                         }} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button>
                                     </div>
                                 )}
+                            
+                            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mt-6">
+                            <h3 className="font-bold text-slate-700 mb-4">3. 保養條款資料庫 (Warranty Types)</h3>
+                            <div className="flex gap-2 mt-2">
+                                <input id="newWarrantyInput" className="border rounded px-2 py-1 text-sm outline-none flex-1 max-w-md" placeholder="例如: 8年/16萬公里 高壓電池"/>
+                                <button onClick={() => { 
+                                    const val = (document.getElementById('newWarrantyInput') as HTMLInputElement).value;
+                                    if (val) { addItem('warrantyTypes', val); (document.getElementById('newWarrantyInput') as HTMLInputElement).value = ''; }
+                                }} className="bg-slate-800 text-white px-3 rounded text-xs">新增條款</button>
+                            </div>
+                            <div className="flex flex-col gap-2 mt-4">
+                                {(settings.warrantyTypes || []).map((w:string, i:number) => (
+                                    <div key={i} className="bg-slate-50 p-2 rounded text-sm flex items-center justify-between border border-slate-200 w-full max-w-2xl">
+                                        <span className="font-bold text-slate-700">{w}</span>
+                                        <button onClick={() => removeItem('warrantyTypes', i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                                    </div>
+                                ))}
+                            </div>
+                         </div>
                             </div>
                             {selectedMake && (
                                 <div className="flex flex-wrap gap-2">
@@ -7381,6 +7413,12 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             crossBorder: crossBorderData
         };
 
+        // ★ 智能記憶：如果手動輸入了新的保養條款，自動存入資料庫
+        const inputWarranty = formData.get('warrantyType') as string;
+        if (inputWarranty && !(settings.warrantyTypes || []).includes(inputWarranty)) {
+            updateSettings('warrantyTypes', [...(settings.warrantyTypes || []), inputWarranty]);
+        }
+  
         try {
             if (editingVehicle && editingVehicle.id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
@@ -8000,6 +8038,15 @@ const VehicleFormModal = ({
             const obj = { id: Date.now().toString(), ...newMaintenance, cost: cst, charge: chg };
             if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, [...(v.maintenanceRecords || []), obj]);
             else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: [...(prev.maintenanceRecords || []), obj] }));
+            
+            // ★ 智能記憶：如果輸入了新的維修項目或車房，自動存入系統資料庫下次用！
+            if (newMaintenance.item && !settings.expenseTypes.some((t:any) => typeof t === 'string' ? t === newMaintenance.item : t.name === newMaintenance.item)) {
+                updateSettings('expenseTypes', [...settings.expenseTypes, newMaintenance.item]);
+            }
+            if (newMaintenance.vendor && !settings.expenseCompanies.includes(newMaintenance.vendor)) {
+                updateSettings('expenseCompanies', [...settings.expenseCompanies, newMaintenance.vendor]);
+            }
+
             setNewMaintenance({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
         }
     };
@@ -8918,10 +8965,7 @@ const VehicleFormModal = ({
                                     <label className="block text-xs md:text-[10px] text-orange-600 font-bold uppercase mb-1">保養條款 (Warranty Terms)</label>
                                     <input name="warrantyType" list="warranty_list" defaultValue={v.warrantyType} placeholder="例如: 5年/10萬公里 (原廠)" className="w-full p-3 md:p-2 border border-orange-200 rounded-lg text-sm outline-none focus:ring-2 ring-orange-300 font-bold text-slate-700 shadow-sm"/>
                                     <datalist id="warranty_list">
-                                        <option value="5年/10萬公里 (原廠)"/>
-                                        <option value="電池終身保養 (原廠)"/>
-                                        <option value="半年/5000公里 (公司內部)"/>
-                                        <option value="不設保養 (No Warranty)"/>
+                                        {(settings.warrantyTypes || []).map((w: string) => <option key={w} value={w} />)}
                                     </datalist>
                                 </div>
                                 <div className="bg-white p-3 md:p-2 rounded-lg border border-orange-200 shadow-inner group">
@@ -8980,14 +9024,27 @@ const VehicleFormModal = ({
                                 ))}
                                 {(v.maintenanceRecords || []).length === 0 && <div className="text-center text-xs text-gray-400 py-6 border-2 border-dashed rounded-lg bg-slate-50">尚無維修紀錄</div>}
                             </div>
-
-                            {/* 新增維修 */}
+{/* 新增維修 */}
                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 w-full">
                                 <div className="text-xs font-bold text-slate-600 mb-3">新增紀錄 (New Service)</div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
                                     <input type="date" value={newMaintenance.date} onChange={e => setNewMaintenance({...newMaintenance, date: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
-                                    <input type="text" placeholder="維修/服務項目..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className="w-full lg:col-span-2 text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
-                                    <input list="vendor_list" placeholder="車房 / 代理名稱" value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white"/>
+                                    
+                                    {/* ★ 維修項目下拉與手動輸入 */}
+                                    <div className="w-full lg:col-span-2">
+                                        <input list="maint_item_list" placeholder="維修/服務項目 (下拉選擇或手動輸入)..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                                        <datalist id="maint_item_list">
+                                            {settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}
+                                        </datalist>
+                                    </div>
+                                    
+                                    {/* ★ 車房下拉與手動輸入 */}
+                                    <div className="w-full">
+                                        <input list="maint_vendor_list" placeholder="車房 / 代理名稱" value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white"/>
+                                        <datalist id="maint_vendor_list">
+                                            {settings.expenseCompanies?.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                                        </datalist>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
                                     <div className="lg:col-span-2 relative">
@@ -9843,7 +9900,17 @@ const CreateDocModule = ({
                 }
             });
         }
-        
+
+        // ★ 終極整合：將車輛詳情中「未收錢」嘅維修保養項目，自動拉入發票/合約中！
+        if (car.maintenanceRecords && car.maintenanceRecords.length > 0) {
+            car.maintenanceRecords.forEach((m: any, i: number) => {
+                // 只有對客收費 > 0，且未付款的項目才會自動帶入
+                if (m.charge > 0 && m.chargeStatus !== 'Paid') {
+                    items.push({ id: `maint_${m.id || i}`, desc: `[維修/保養] ${m.item}`, amount: m.charge, isSelected: true });
+                }
+            });
+        }
+      
         setDocItems(items);
         setMobileStep('edit');
     };
