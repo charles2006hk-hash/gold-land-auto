@@ -8966,7 +8966,17 @@ const VehicleFormModal = ({
                                     <label className="block text-xs md:text-[10px] text-orange-600 font-bold uppercase mb-1">保養條款 (Warranty Terms)</label>
                                     <input name="warrantyType" list="warranty_list" defaultValue={v.warrantyType} placeholder="例如: 5年/10萬公里 (原廠)" className="w-full p-3 md:p-2 border border-orange-200 rounded-lg text-sm outline-none focus:ring-2 ring-orange-300 font-bold text-slate-700 shadow-sm"/>
                                     <datalist id="warranty_list">
-                                        {(settings.warrantyTypes || []).map((w: string) => <option key={w} value={w} />)}
+                                        {((settings.warrantyTypes && settings.warrantyTypes.length > 0) ? settings.warrantyTypes : [
+                                            '5年/10萬公里 (原廠全車)',
+                                            '8年/16萬公里 高壓電池 (原廠 EV)',
+                                            '3年/15萬公里 (寶馬原廠)',
+                                            '2年不限里程 (平治/保時捷原廠)',
+                                            '10年/25萬公里 高壓電池 (平治 EQE/EQS)',
+                                            '4年/8萬公里 (Tesla 原廠)',
+                                            '8年/19.2萬公里 高壓電池 (Tesla LR/Perf)',
+                                            '電池終身保養 (BYD 原廠)',
+                                            '不設保養 (No Warranty)'
+                                        ]).map((w: string) => <option key={w} value={w}>{w}</option>)}
                                     </datalist>
                                 </div>
                                 <div className="bg-white p-3 md:p-2 rounded-lg border border-orange-200 shadow-inner group">
