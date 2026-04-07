@@ -7935,7 +7935,7 @@ const VehicleFormModal = ({
     }, [v.id, v.payments]);
 
 
-    const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb'>('vrd');
+    const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb' | 'service'>('vrd');
     
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
