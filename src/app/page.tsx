@@ -9866,7 +9866,7 @@ const CreateDocModule = ({
     };
 
     const saveDocRecord = async () => {
-        if (!db || !staffId) return;
+        if (!db || !staffId) return null;
         const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
         
         const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
@@ -9883,14 +9883,17 @@ const CreateDocModule = ({
         };
 
         try {
+            let currentId = docId;
             if (docId) { 
                 await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', docId), docData); 
             } else { 
                 const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); 
                 setDocId(ref.id); 
+                currentId = ref.id;
             }
             alert("單據已儲存");
-        } catch (e) { console.error(e); alert("儲存失敗"); }
+            return currentId; // ★ 關鍵：將儲存後獲得的真實 ID 傳回出去
+        } catch (e) { console.error(e); alert("儲存失敗"); return null; }
     };
 
     const addItem = () => {
@@ -9965,7 +9968,7 @@ const CreateDocModule = ({
                 }
             });
         }
-
+        
         // ★ 終極整合：將車輛詳情中「未收錢」嘅維修保養項目，自動拉入發票/合約中！
         if (car.maintenanceRecords && car.maintenanceRecords.length > 0) {
             car.maintenanceRecords.forEach((m: any, i: number) => {
@@ -9975,7 +9978,7 @@ const CreateDocModule = ({
                 }
             });
         }
-      
+        
         setDocItems(items);
         setMobileStep('edit');
     };
@@ -10005,9 +10008,11 @@ const CreateDocModule = ({
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handlePrint = () => {
-        saveDocRecord();
+    const handlePrint = async () => {
+        // ★ 加上 async/await，確保儲存完先彈出 PDF，並取得真實 ID
+        const finalId = await saveDocRecord();
         const dummyVehicle: any = {
+            id: finalId || docId || 'DRAFT', // ★ 將真實 ID 放入虛擬車輛中
             ...formData,
             price: Number(formData.price), 
             deposit: depositItems.reduce((sum, item) => sum + item.amount, 0),
@@ -10078,7 +10083,7 @@ const CreateDocModule = ({
                             <div className="text-right">
                                 <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
                                 <div className="text-xs font-bold text-slate-600 tracking-[0.5em] text-center">{t.ch}</div>
-                                <div className="mt-2 text-[10px] font-mono">NO: PREVIEW-DRAFT</div>
+                                <div className="mt-2 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
                                 <div className="text-[10px] font-mono">DATE: {displayDate}</div>
                             </div>
                         </div>
