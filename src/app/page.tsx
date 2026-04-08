@@ -9024,107 +9024,138 @@ const VehicleFormModal = ({
                         </div>
 
                         {/* 2. 維修紀錄 (雙軌收支) */}
-                        <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm w-full">
-                            <h3 className="font-bold text-slate-800 text-base md:text-sm mb-4 flex items-center justify-between">
-                                <div className="flex items-center"><Wrench size={18} className="mr-2 text-slate-600"/> 維修與服務紀錄 (Service Records)</div>
-                            </h3>
-                            
-                            <div className="space-y-3 mb-6">
-                                {(v.maintenanceRecords || []).map((m: any) => {
-                                    const isEditing = editingMaintenanceId === m.id;
-                                    
-                                    // ★ 編輯模式 UI
-                                    if (isEditing) {
-                                        return (
-                                            <div key={m.id} className="flex flex-col md:flex-row gap-2 p-3 bg-blue-50 border border-blue-300 rounded-lg shadow-md animate-fade-in">
-                                                <input type="date" value={editMaintenanceForm.date} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, date: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32 font-bold"/>
-                                                <input type="text" value={editMaintenanceForm.item} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, item: e.target.value})} className="text-xs p-2 border rounded outline-none flex-1 font-bold"/>
-                                                <input type="text" value={editMaintenanceForm.vendor} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, vendor: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32"/>
-                                                <div className="flex items-center gap-2 w-full md:w-auto">
-                                                    <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-red-500 font-bold">成本</span><input type="text" value={editMaintenanceForm.cost} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, cost: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-red-600 font-mono text-right"/></div>
-                                                    <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-blue-500 font-bold">收費</span><input type="text" value={editMaintenanceForm.charge} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, charge: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-blue-600 font-mono text-right"/></div>
-                                                    <button type="button" onClick={saveEditMaintenance} className="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow-sm"><Check size={14}/></button>
-                                                    <button type="button" onClick={() => setEditingMaintenanceId(null)} className="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 shadow-sm"><X size={14}/></button>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
+                            <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm w-full">
+                                <h3 className="font-bold text-slate-800 text-base md:text-sm mb-4 flex items-center justify-between">
+                                    <div className="flex items-center"><Wrench size={18} className="mr-2 text-slate-600"/> 維修與服務紀錄 (Service Records)</div>
+                                </h3>
+                                
+                                {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
+                                <div className="space-y-6 mb-6">
+                                    {(() => {
+                                        const allMaint = v.maintenanceRecords || [];
+                                        // 只要成本或收費其中一項未找清，就屬於「待處理」
+                                        const pendingMaint = allMaint.filter((m: any) => m.costStatus !== 'Paid' || m.chargeStatus !== 'Paid');
+                                        // 兩邊都找清晒，就跌入「歷史歸檔」
+                                        const historyMaint = allMaint.filter((m: any) => m.costStatus === 'Paid' && m.chargeStatus === 'Paid');
 
-                                    // ★ 正常顯示模式 (加入 Edit 按鈕)
-                                    return (
-                                        <div key={m.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg shadow-sm hover:border-blue-200 transition-colors">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
-                                                    <span className="font-bold text-slate-800 text-sm">{m.item}</span>
-                                                    <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
-                                                </div>
-                                                {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
-                                            </div>
-                                            
-                                            <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
-                                                        <button type="button" onClick={() => toggleMaintenanceStatus(m, 'costStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                        // 共用渲染函數 (Render Card)
+                                        const renderMaintCard = (m: any, isHistory: boolean) => {
+                                            const isEditing = editingMaintenanceId === m.id;
+                                            if (isEditing && !isHistory) {
+                                                return (
+                                                    <div key={m.id} className="flex flex-col md:flex-row gap-2 p-3 bg-blue-50 border border-blue-300 rounded-lg shadow-md animate-fade-in">
+                                                        <input type="date" value={editMaintenanceForm.date} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, date: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32 font-bold"/>
+                                                        <input type="text" value={editMaintenanceForm.item} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, item: e.target.value})} className="text-xs p-2 border rounded outline-none flex-1 font-bold"/>
+                                                        <input type="text" value={editMaintenanceForm.vendor} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, vendor: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32"/>
+                                                        <div className="flex items-center gap-2 w-full md:w-auto">
+                                                            <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-red-500 font-bold">成本</span><input type="text" value={editMaintenanceForm.cost} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, cost: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-red-600 font-mono text-right"/></div>
+                                                            <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-blue-500 font-bold">收費</span><input type="text" value={editMaintenanceForm.charge} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, charge: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-blue-600 font-mono text-right"/></div>
+                                                            <button type="button" onClick={saveEditMaintenance} className="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow-sm"><Check size={14}/></button>
+                                                            <button type="button" onClick={() => setEditingMaintenanceId(null)} className="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 shadow-sm"><X size={14}/></button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <div key={m.id} className={`flex flex-col md:flex-row justify-between gap-3 p-3 rounded-lg shadow-sm transition-colors border ${isHistory ? 'bg-slate-100/50 border-slate-200 opacity-70 hover:opacity-100' : 'bg-slate-50 border-slate-200 hover:border-blue-200'}`}>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
+                                                            <span className="font-bold text-slate-800 text-sm">{m.item}</span>
+                                                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
+                                                        </div>
+                                                        {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
+                                                    </div>
+                                                    
+                                                    <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
+                                                                <button type="button" onClick={() => toggleMaintenanceStatus(m, 'costStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
+                                                                <button type="button" onClick={() => toggleMaintenanceStatus(m, 'chargeStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* ★ 加入了 Edit 按鈕 (只有非歷史紀錄才顯示) */}
+                                                        <div className="flex items-center border-l pl-2 ml-2">
+                                                            {!isHistory && <button type="button" onClick={() => startEditMaintenance(m)} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>}
+                                                            <button type="button" onClick={() => handleDeleteMaintenance(m.id)} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
-                                                        <button type="button" onClick={() => toggleMaintenanceStatus(m, 'chargeStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
-                                                    </div>
+                                            );
+                                        };
+
+                                        return (
+                                            <>
+                                                {/* 進行中區域 */}
+                                                <div className="space-y-3">
+                                                    {pendingMaint.length > 0 ? pendingMaint.map(m => renderMaintCard(m, false)) : (
+                                                        <div className="text-center text-xs text-gray-400 py-6 border-2 border-dashed rounded-lg bg-slate-50">目前無待處理的維修項目</div>
+                                                    )}
                                                 </div>
-                                                
-                                                {/* ★ 加入了 Edit 按鈕 */}
-                                                <div className="flex items-center border-l pl-2 ml-2">
-                                                    <button type="button" onClick={() => startEditMaintenance(m)} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>
-                                                    <button type="button" onClick={() => handleDeleteMaintenance(m.id)} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                                {(v.maintenanceRecords || []).length === 0 && <div className="text-center text-xs text-gray-400 py-6 border-2 border-dashed rounded-lg bg-slate-50">尚無維修紀錄</div>}
-                            </div>
-{/* 新增維修 */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 w-full">
-                                <div className="text-xs font-bold text-slate-600 mb-3">新增紀錄 (New Service)</div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                                    <input type="date" value={newMaintenance.date} onChange={e => setNewMaintenance({...newMaintenance, date: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
-                                    
-                                    {/* ★ 維修項目下拉與手動輸入 */}
-                                    <div className="w-full lg:col-span-2">
-                                        <input list="maint_item_list" placeholder="維修/服務項目 (下拉選擇或手動輸入)..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
-                                        <datalist id="maint_item_list">
-                                            {settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}
-                                        </datalist>
-                                    </div>
-                                    
-                                    {/* ★ 車房下拉與手動輸入 */}
-                                    <div className="w-full">
-                                        <input list="maint_vendor_list" placeholder="車房 / 代理名稱" value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white"/>
-                                        <datalist id="maint_vendor_list">
-                                            {settings.expenseCompanies?.map((c: string) => <option key={c} value={c}>{c}</option>)}
-                                        </datalist>
-                                    </div>
+
+                                                {/* 歷史歸檔區域 (摺疊式) */}
+                                                {historyMaint.length > 0 && (
+                                                    <details className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-6">
+                                                        <summary className="p-3 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 list-none flex items-center justify-between outline-none">
+                                                            <span className="flex items-center"><History size={14} className="mr-2"/> 查看歷史歸檔紀錄 ({historyMaint.length} 筆)</span>
+                                                            <ChevronDown size={16} className="transition-transform group-open:rotate-180"/>
+                                                        </summary>
+                                                        <div className="p-3 pt-0 space-y-2 border-t border-slate-200 mt-2">
+                                                            {historyMaint.map(m => renderMaintCard(m, true))}
+                                                        </div>
+                                                    </details>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-                                    <div className="lg:col-span-2 relative">
-                                        <span className="absolute top-[-16px] left-1 text-[10px] text-red-500 font-bold uppercase">成本 (給車房)</span>
-                                        <input type="text" placeholder="$ 成本金額" value={newMaintenance.cost} onChange={e => setNewMaintenance({...newMaintenance, cost: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-red-200 rounded-lg outline-none bg-red-50/50 text-right font-mono font-bold text-red-600"/>
+
+                                {/* 新增維修 */}
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 w-full">
+                                    <div className="text-xs font-bold text-slate-600 mb-3">新增紀錄 (New Service)</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                                        <input type="date" value={newMaintenance.date} onChange={e => setNewMaintenance({...newMaintenance, date: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
+                                        
+                                        {/* ★ 維修項目下拉與手動輸入 */}
+                                        <div className="w-full lg:col-span-2">
+                                            <input list="maint_item_list" placeholder="維修/服務項目 (下拉選擇或手動輸入)..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                                            <datalist id="maint_item_list">
+                                                {settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}
+                                            </datalist>
+                                        </div>
+                                        
+                                        {/* ★ 車房下拉與手動輸入 */}
+                                        <div className="w-full">
+                                            <input list="maint_vendor_list" placeholder="車房 / 代理名稱" value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white"/>
+                                            <datalist id="maint_vendor_list">
+                                                {settings.expenseCompanies?.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                                            </datalist>
+                                        </div>
                                     </div>
-                                    <div className="lg:col-span-2 relative">
-                                        <span className="absolute top-[-16px] left-1 text-[10px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
-                                        <input type="text" placeholder="$ 收費金額" value={newMaintenance.charge} onChange={e => setNewMaintenance({...newMaintenance, charge: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-blue-200 rounded-lg outline-none bg-blue-50/50 text-right font-mono font-bold text-blue-700"/>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                                        <div className="lg:col-span-2 relative">
+                                            <span className="absolute top-[-16px] left-1 text-[10px] text-red-500 font-bold uppercase">成本 (給車房)</span>
+                                            <input type="text" placeholder="$ 成本金額" value={newMaintenance.cost} onChange={e => setNewMaintenance({...newMaintenance, cost: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-red-200 rounded-lg outline-none bg-red-50/50 text-right font-mono font-bold text-red-600"/>
+                                        </div>
+                                        <div className="lg:col-span-2 relative">
+                                            <span className="absolute top-[-16px] left-1 text-[10px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
+                                            <input type="text" placeholder="$ 收費金額" value={newMaintenance.charge} onChange={e => setNewMaintenance({...newMaintenance, charge: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-blue-200 rounded-lg outline-none bg-blue-50/50 text-right font-mono font-bold text-blue-700"/>
+                                        </div>
+                                        <button type="button" onClick={handleAddMaintenance} className="w-full bg-slate-800 text-white text-sm py-2 px-4 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform shadow-md">新增紀錄</button>
                                     </div>
-                                    <button type="button" onClick={handleAddMaintenance} className="w-full bg-slate-800 text-white text-sm py-2 px-4 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform shadow-md">新增紀錄</button>
                                 </div>
                             </div>
                         </div>
-                    </div>
                     
                     {/* ===== Tab 3: 中港車管家 (Cross-Border) ===== */}
                     <div className={`${rightTab === 'cb' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
@@ -9969,13 +10000,31 @@ const CreateDocModule = ({
             });
         }
         
-        // ★ 終極整合：將車輛詳情中「未收錢」嘅維修保養項目，自動拉入發票/合約中！
+        // ★ 終極整合與智能歸納：將未收費的維修項目「按日期打包」成一張工單，避免發票項目過長！
         if (car.maintenanceRecords && car.maintenanceRecords.length > 0) {
-            car.maintenanceRecords.forEach((m: any, i: number) => {
-                // 只有對客收費 > 0，且未付款的項目才會自動帶入
-                if (m.charge > 0 && m.chargeStatus !== 'Paid') {
-                    items.push({ id: `maint_${m.id || i}`, desc: `[維修/保養] ${m.item}`, amount: m.charge, isSelected: true });
-                }
+            const unpaidMaint = car.maintenanceRecords.filter((m:any) => m.charge > 0 && m.chargeStatus !== 'Paid');
+            const groupedByDate: Record<string, { amount: number, items: string[] }> = {};
+            
+            // 1. 將同一日的項目歸納埋一齊
+            unpaidMaint.forEach((m: any) => {
+                if (!groupedByDate[m.date]) groupedByDate[m.date] = { amount: 0, items: [] };
+                groupedByDate[m.date].amount += m.charge;
+                groupedByDate[m.date].items.push(m.item);
+            });
+
+            // 2. 每個日期生成一行精簡的發票項目
+            Object.entries(groupedByDate).forEach(([date, data], i) => {
+                // 如果超過2項，就寫「換油、噴油等3項」，否則全列出
+                const summary = data.items.length > 2 
+                    ? `${data.items.slice(0,2).join('、')} 等${data.items.length}項` 
+                    : data.items.join('、');
+                
+                items.push({ 
+                    id: `maint_batch_${date}`, 
+                    desc: `[${date} 維修保養] ${summary}`, 
+                    amount: data.amount, 
+                    isSelected: true 
+                });
             });
         }
         
