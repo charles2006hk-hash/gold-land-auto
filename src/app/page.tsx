@@ -9098,7 +9098,7 @@ const VehicleFormModal = ({
                                             <>
                                                 {/* 進行中區域 */}
                                                 <div className="space-y-3">
-                                                    {pendingMaint.length > 0 ? pendingMaint.map(m => renderMaintCard(m, false)) : (
+                                                    {pendingMaint.length > 0 ? pendingMaint.map((m: any) => renderMaintCard(m, false)) : (
                                                         <div className="text-center text-xs text-gray-400 py-6 border-2 border-dashed rounded-lg bg-slate-50">目前無待處理的維修項目</div>
                                                     )}
                                                 </div>
@@ -9111,7 +9111,7 @@ const VehicleFormModal = ({
                                                             <ChevronDown size={16} className="transition-transform group-open:rotate-180"/>
                                                         </summary>
                                                         <div className="p-3 pt-0 space-y-2 border-t border-slate-200 mt-2">
-                                                            {historyMaint.map(m => renderMaintCard(m, true))}
+                                                            {historyMaint.map((m: any) => renderMaintCard(m, true))}
                                                         </div>
                                                     </details>
                                                 )}
