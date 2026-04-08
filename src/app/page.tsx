@@ -9033,10 +9033,18 @@ const VehicleFormModal = ({
                                 <div className="space-y-6 mb-6">
                                     {(() => {
                                         const allMaint = v.maintenanceRecords || [];
-                                        // 只要成本或收費其中一項未找清，就屬於「待處理」
-                                        const pendingMaint = allMaint.filter((m: any) => m.costStatus !== 'Paid' || m.chargeStatus !== 'Paid');
-                                        // 兩邊都找清晒，就跌入「歷史歸檔」
-                                        const historyMaint = allMaint.filter((m: any) => m.costStatus === 'Paid' && m.chargeStatus === 'Paid');
+                                        
+                                        // ★ 痛點 1 完美修復：智能結清判斷！
+                                        // 如果成本係 0 (或者無填)，系統自動當佢已經找清；收費同理。
+                                        // 只有真正要畀/要收嘅錢都變成 'Paid'，先會跌入歷史區！
+                                        const isSettled = (m: any) => {
+                                            const costOk = !m.cost || Number(m.cost) === 0 || m.costStatus === 'Paid';
+                                            const chargeOk = !m.charge || Number(m.charge) === 0 || m.chargeStatus === 'Paid';
+                                            return costOk && chargeOk;
+                                        };
+
+                                        const pendingMaint = allMaint.filter((m: any) => !isSettled(m));
+                                        const historyMaint = allMaint.filter((m: any) => isSettled(m));
 
                                         // 共用渲染函數 (Render Card)
                                         const renderMaintCard = (m: any, isHistory: boolean) => {
@@ -9050,8 +9058,9 @@ const VehicleFormModal = ({
                                                         <div className="flex items-center gap-2 w-full md:w-auto">
                                                             <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-red-500 font-bold">成本</span><input type="text" value={editMaintenanceForm.cost} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, cost: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-red-600 font-mono text-right"/></div>
                                                             <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-blue-500 font-bold">收費</span><input type="text" value={editMaintenanceForm.charge} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, charge: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-blue-600 font-mono text-right"/></div>
-                                                            <button type="button" onClick={saveEditMaintenance} className="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow-sm"><Check size={14}/></button>
-                                                            <button type="button" onClick={() => setEditingMaintenanceId(null)} className="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 shadow-sm"><X size={14}/></button>
+                                                            {/* ★ 痛點 2 修復：加入 e.preventDefault() 攔截表單閃退 */}
+                                                            <button type="button" onClick={(e) => { e.preventDefault(); saveEditMaintenance(); }} className="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow-sm"><Check size={14}/></button>
+                                                            <button type="button" onClick={(e) => { e.preventDefault(); setEditingMaintenanceId(null); }} className="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 shadow-sm"><X size={14}/></button>
                                                         </div>
                                                     </div>
                                                 );
@@ -9067,27 +9076,26 @@ const VehicleFormModal = ({
                                                         </div>
                                                         {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
                                                     </div>
-                                                    
                                                     <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
                                                         <div className="flex flex-col items-end">
                                                             <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
-                                                                <button type="button" onClick={() => toggleMaintenanceStatus(m, 'costStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                                {/* ★ 痛點 2 修復：攔截按鈕預設行為 */}
+                                                                <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'costStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
                                                             </div>
                                                         </div>
                                                         <div className="flex flex-col items-end">
                                                             <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
-                                                                <button type="button" onClick={() => toggleMaintenanceStatus(m, 'chargeStatus')} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                                {/* ★ 痛點 2 修復：攔截按鈕預設行為 */}
+                                                                <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'chargeStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
                                                             </div>
                                                         </div>
-                                                        
-                                                        {/* ★ 加入了 Edit 按鈕 (只有非歷史紀錄才顯示) */}
                                                         <div className="flex items-center border-l pl-2 ml-2">
-                                                            {!isHistory && <button type="button" onClick={() => startEditMaintenance(m)} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>}
-                                                            <button type="button" onClick={() => handleDeleteMaintenance(m.id)} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
+                                                            {!isHistory && <button type="button" onClick={(e) => { e.preventDefault(); startEditMaintenance(m); }} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>}
+                                                            <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteMaintenance(m.id); }} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
                                                         </div>
                                                     </div>
                                                 </div>
