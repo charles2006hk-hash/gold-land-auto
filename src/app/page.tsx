@@ -7974,7 +7974,15 @@ const VehicleFormModal = ({
     }, [v.id, v.payments]);
 
 
-    const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb' | 'service'>('vrd');
+    // ★ 終極防跳走：將分頁狀態綁定到 SessionStorage，無論點刷新都唔會彈走！
+    const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb' | 'service'>(() => {
+        if (typeof window !== 'undefined') return (sessionStorage.getItem('gla_veh_tab') as any) || 'vrd';
+        return 'vrd';
+    });
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') sessionStorage.setItem('gla_veh_tab', rightTab);
+    }, [rightTab]);
     
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
