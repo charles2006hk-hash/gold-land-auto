@@ -8029,35 +8029,37 @@ const VehicleFormModal = ({
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
     const [newAddon, setNewAddon] = useState({ name: '文件費', amount: '' });
 
-    // ★ 新增：維修保養狀態與函數
+   // ★ 新增：維修保養狀態與函數
     const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
+
     // ★ 新增：維修保養的修改(Edit)狀態與函數
     const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
     const [editMaintenanceForm, setEditMaintenanceForm] = useState<any>({});
-    
-    const startEditMaintenance = (m: any) => {
-        setEditingMaintenanceId(m.id);
-        setEditMaintenanceForm({ ...m, cost: m.cost?.toString() || '0', charge: m.charge?.toString() || '0' });
+
+    // ★ 終極防跳走機制：自給自足嘅安全更新函數，唔依賴外部 props！
+    const safeUpdateMaintenance = async (newRecords: any[]) => {
+        // 1. 即時更新畫面 (絕對唔會觸發成個組件重新載入)
+        setEditingVehicle((prev: any) => prev ? { ...prev, maintenanceRecords: newRecords } : null);
+        
+        // 2. 靜靜雞寫入資料庫
+        if (v.id && db) {
+            try {
+                const { updateDoc, doc } = await import('firebase/firestore');
+                await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', v.id), {
+                    maintenanceRecords: newRecords
+                });
+            } catch (e) { console.error("更新失敗", e); }
+        }
     };
 
-    const saveEditMaintenance = () => {
-        const cst = Number(editMaintenanceForm.cost.replace(/,/g, ''));
-        const chg = Number(editMaintenanceForm.charge.replace(/,/g, ''));
-        const updated = { ...editMaintenanceForm, cost: cst, charge: chg };
-        
-        if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, (v.maintenanceRecords || []).map((x: any) => x.id === editingMaintenanceId ? updated : x));
-        else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: (prev.maintenanceRecords || []).map((x: any) => x.id === editingMaintenanceId ? updated : x) }));
-        
-        setEditingMaintenanceId(null);
-    };
-  
     const handleAddMaintenance = () => {
         const cst = Number(newMaintenance.cost.replace(/,/g, ''));
         const chg = Number(newMaintenance.charge.replace(/,/g, ''));
         if (newMaintenance.item) {
             const obj = { id: Date.now().toString(), ...newMaintenance, cost: cst, charge: chg };
-            if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, [...(v.maintenanceRecords || []), obj]);
-            else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: [...(prev.maintenanceRecords || []), obj] }));
+            
+            // 呼叫安全更新函數
+            safeUpdateMaintenance([...(v.maintenanceRecords || []), obj]);
             
             // ★ 智能記憶：如果輸入了新的維修項目或車房，自動存入系統資料庫下次用！
             if (newMaintenance.item && !settings.expenseTypes.some((t:any) => typeof t === 'string' ? t === newMaintenance.item : t.name === newMaintenance.item)) {
@@ -8072,16 +8074,27 @@ const VehicleFormModal = ({
     };
     
     const handleDeleteMaintenance = (id: string) => {
-        if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, (v.maintenanceRecords || []).filter((m: any) => m.id !== id));
-        else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: (prev.maintenanceRecords || []).filter((m: any) => m.id !== id) }));
+        safeUpdateMaintenance((v.maintenanceRecords || []).filter((m: any) => m.id !== id));
     };
     
     const toggleMaintenanceStatus = (m: any, type: 'costStatus' | 'chargeStatus') => {
         const newStatus = m[type] === 'Paid' ? 'Unpaid' : 'Paid';
-        if (v.id) updateSubItem(v.id, 'maintenanceRecords' as any, (v.maintenanceRecords || []).map((x: any) => x.id === m.id ? { ...x, [type]: newStatus } : x));
-        else setEditingVehicle((prev: any) => ({ ...prev, maintenanceRecords: (prev.maintenanceRecords || []).map((x: any) => x.id === m.id ? { ...x, [type]: newStatus } : x) }));
+        safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === m.id ? { ...x, [type]: newStatus } : x));
     };
-  
+
+    const startEditMaintenance = (m: any) => {
+        setEditingMaintenanceId(m.id);
+        setEditMaintenanceForm({ ...m, cost: m.cost?.toString() || '0', charge: m.charge?.toString() || '0' });
+    };
+
+    const saveEditMaintenance = () => {
+        const cst = Number(editMaintenanceForm.cost.replace(/,/g, ''));
+        const chg = Number(editMaintenanceForm.charge.replace(/,/g, ''));
+        const updated = { ...editMaintenanceForm, cost: cst, charge: chg };
+        safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === editingMaintenanceId ? updated : x));
+        setEditingMaintenanceId(null);
+    };
+
     // ★★★ 智能雙軌收支管理器 (解決新舊車入數問題) ★★★
     const handleAddPaymentClick = () => {
         const amt = Number(newPayment.amount.replace(/,/g, ''));
