@@ -6995,6 +6995,61 @@ export default function GoldLandAutoDMS() {
       fetchSettings();
   }, [db, appId]);
 
+  // ★★★ 終極智能背景自動備份 (Lazy Cron) ★★★
+  // 邏輯：每次開機/重整頁面，延遲 15 秒後偷偷檢查，如果到期就自動在背景備份！
+  useEffect(() => {
+      // 如果未開自動雲端備份，或者資料庫未準備好，就中止
+      if (!db || !storage || !appId || !settings.backup?.autoCloud || inventory.length === 0) return;
+
+      const checkAndRunBackup = async () => {
+          const freq = settings.backup?.frequency || 'manual';
+          if (freq === 'manual') return;
+
+          const lastBackup = settings.backup?.lastBackupDate;
+          const now = new Date();
+          let shouldBackup = false;
+
+          // 判斷是否到期需要備份
+          if (!lastBackup) {
+              shouldBackup = true;
+          } else {
+              const lastD = new Date(lastBackup);
+              const diffTime = Math.abs(now.getTime() - lastD.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              if (freq === 'daily' && diffDays >= 1) shouldBackup = true;
+              if (freq === 'weekly' && diffDays >= 7) shouldBackup = true;
+              if (freq === 'monthly' && diffDays >= 30) shouldBackup = true;
+          }
+
+          if (shouldBackup) {
+              try {
+                  console.log("🔄 系統檢測到備份週期已到，正在背景執行自動備份...");
+                  const dataStr = JSON.stringify({ version: "2.0", type: "auto", timestamp: now.toISOString(), settings, inventory });
+                  const fileName = `backups/auto_${freq}_${now.toISOString().slice(0,10)}_${Date.now()}.json`;
+                  const storageRef = ref(storage, fileName);
+                  await uploadString(storageRef, dataStr);
+
+                  // 備份成功後，更新設定中的「上次備份日期」
+                  const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+                  await setDoc(docRef, { backup: { ...settings.backup, lastBackupDate: now.toISOString() } }, { merge: true });
+                  
+                  // 更新前端畫面狀態 (不打擾用戶，只顯示個小 Toast)
+                  setSettings(prev => ({ ...prev, backup: { ...prev.backup!, lastBackupDate: now.toISOString() } }));
+                  showGlobalToast(`✅ 系統已自動完成 ${freq === 'daily' ? '每日' : (freq === 'weekly' ? '每週' : '每月')} 雲端備份！`, 'success');
+              } catch (e) {
+                  console.error("❌ 背景自動備份失敗", e);
+              }
+          }
+      };
+
+      // 延遲 15 秒執行，確保不影響用戶剛登入時的系統流暢度
+      const timer = setTimeout(() => {
+          checkAndRunBackup();
+      }, 15000);
+
+      return () => clearTimeout(timer);
+  }, [db, storage, appId, settings.backup?.frequency, settings.backup?.autoCloud, inventory.length]);
   
   // --- Auth & Data Loading ---
   useEffect(() => {
