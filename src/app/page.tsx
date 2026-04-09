@@ -5435,6 +5435,26 @@ const SettingsManager = ({
     const addItem = (key: string, val: string) => { if(val) updateSettings(key, [...(settings[key] || []), val]); };
     const removeItem = (key: string, idx: number) => { const arr = [...(settings[key] || [])]; arr.splice(idx, 1); updateSettings(key, arr); };
 
+    // ★ 新增：萬能列表排序函數 (上移 / 下移)
+    const moveListItem = (key: keyof SystemSettings, index: number, direction: 'up' | 'down') => {
+        const currentList = Array.isArray(settings[key]) ? [...(settings[key] as any[])] : [];
+        if (direction === 'up' && index > 0) {
+            [currentList[index - 1], currentList[index]] = [currentList[index], currentList[index - 1]];
+            updateSettings(key, currentList);
+        } else if (direction === 'down' && index < currentList.length - 1) {
+            [currentList[index + 1], currentList[index]] = [currentList[index], currentList[index + 1]];
+            updateSettings(key, currentList);
+        }
+    };
+
+    // ★ 新增：萬能修改項目函數
+    const editListItem = (key: keyof SystemSettings, index: number, newValue: string) => {
+        if (!newValue.trim()) return;
+        const currentList = Array.isArray(settings[key]) ? [...(settings[key] as any[])] : [];
+        currentList[index] = newValue;
+        updateSettings(key, currentList);
+    };
+  
     const handleExpenseTypeChange = (idx: number, field: string, val: any) => {
         const newTypes = [...(settings.expenseTypes || [])];
         newTypes[idx] = { ...newTypes[idx], [field]: val };
@@ -5780,76 +5800,90 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 2. 車輛資料 (完整功能) */}
+                {/* 2. 車輛資料 / 全域數據字典 (完整功能) */}
                 {activeTab === 'vehicle_setup' && (
-                    <div className="space-y-6">
-                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">1. 車廠管理 (Makes)</h3>
-                            <div className="flex gap-2 mt-2">
-                                <input value={newMake} onChange={e=>setNewMake(e.target.value)} className="border rounded px-2 py-1 text-sm outline-none w-64" placeholder="Add Make (e.g. Ferrari)"/>
-                                <button onClick={() => { addItem('makes', newMake); setNewMake(''); }} className="bg-slate-800 text-white px-3 rounded text-xs">Add</button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-3">
-                                {(settings.makes || []).map((m:string, i:number) => (
-                                    <span key={i} className="bg-slate-100 px-2 py-1 rounded text-xs flex items-center gap-2 border border-slate-200">{m} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => removeItem('makes', i)}/></span>
-                                ))}
-                            </div>
-                         </div>
-                         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                            <h3 className="font-bold text-slate-700 mb-4">2. 型號管理 (Models)</h3>
-                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
-                                <label className="text-xs font-bold text-slate-500 block mb-1">選擇廠牌</label>
-                                <select value={selectedMake} onChange={e => setSelectedMake(e.target.value)} className="w-full p-2 border rounded text-sm mb-3">
-                                    <option value="">-- 請選擇 --</option>
-                                    {(Array.isArray(settings.makes) ? settings.makes : []).map((m:string) => <option key={m} value={m}>{m}</option>)}
-                                </select>
-                                {selectedMake && (
-                                    <div className="flex gap-2">
-                                        <input value={newModel} onChange={e => setNewModel(e.target.value)} className="flex-1 border rounded px-2 py-1 text-sm outline-none" placeholder={`輸入 ${selectedMake} 新型號...`} />
-                                        <button onClick={() => {
-                                            if(selectedMake && newModel) {
-                                                const currentModels = Array.isArray(settings.models[selectedMake]) ? settings.models[selectedMake] : [];
-                                                updateSettings('models', { ...settings.models, [selectedMake]: [...currentModels, newModel] });
-                                                setNewModel('');
-                                            }
-                                        }} className="bg-blue-600 text-white px-3 rounded text-xs font-bold hover:bg-blue-700">新增型號</button>
-                                    </div>
-                                )}
+                    <div className="space-y-8 animate-fade-in pb-10">
+                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                            <h3 className="font-bold text-blue-800 flex items-center mb-1"><Database size={18} className="mr-2"/> 全域數據字典 (Data Dictionary)</h3>
+                            <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。您可以新增、直接點擊文字修改、刪除，或點擊箭頭調整顯示順序。</p>
+                        </div>
+
+                        {/* 萬能列表渲染引擎 */}
+                        {[
+                            { title: '1. 車輛品牌 (Makes)', key: 'makes', icon: <Car size={16}/>, placeholder: '例如: Toyota' },
+                            { title: '2. 車身顏色 (Colors)', key: 'colors', icon: <Palette size={16}/>, placeholder: '例如: 白 (White)' },
+                            { title: '3. 保養條款庫 (Warranty Terms)', key: 'warrantyTypes', icon: <ShieldCheck size={16}/>, placeholder: '例如: 5年/10萬公里' },
+                            { title: '4. 收款公司/車房名單 (Vendors)', key: 'expenseCompanies', icon: <Wrench size={16}/>, placeholder: '例如: 新港龍汽車' },
+                            { title: '5. 中港牌相關機構 (Institutions)', key: 'cbInstitutions', icon: <Building2 size={16}/>, placeholder: '例如: 中檢公司' },
+                            { title: '6. 收款方式/類別 (Payment Types)', key: 'paymentTypes', icon: <DollarSign size={16}/>, placeholder: '例如: 訂金 (Deposit)' }
+                        ].map((dict, idx) => {
+                            const list = Array.isArray(settings[dict.key as keyof SystemSettings]) ? (settings[dict.key as keyof SystemSettings] as string[]) : [];
                             
-                            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm mt-6">
-                            <h3 className="font-bold text-slate-700 mb-4">3. 保養條款資料庫 (Warranty Types)</h3>
-                            <div className="flex gap-2 mt-2">
-                                <input id="newWarrantyInput" className="border rounded px-2 py-1 text-sm outline-none flex-1 max-w-md" placeholder="例如: 8年/16萬公里 高壓電池"/>
-                                <button onClick={() => { 
-                                    const val = (document.getElementById('newWarrantyInput') as HTMLInputElement).value;
-                                    if (val) { addItem('warrantyTypes', val); (document.getElementById('newWarrantyInput') as HTMLInputElement).value = ''; }
-                                }} className="bg-slate-800 text-white px-3 rounded text-xs">新增條款</button>
-                            </div>
-                            <div className="flex flex-col gap-2 mt-4">
-                                {(settings.warrantyTypes || []).map((w:string, i:number) => (
-                                    <div key={i} className="bg-slate-50 p-2 rounded text-sm flex items-center justify-between border border-slate-200 w-full max-w-2xl">
-                                        <span className="font-bold text-slate-700">{w}</span>
-                                        <button onClick={() => removeItem('warrantyTypes', i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                            return (
+                                <div key={dict.key} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">{dict.icon} {dict.title}</h3>
+                                    
+                                    {/* 新增輸入框 */}
+                                    <div className="flex gap-2 mb-4">
+                                        <input 
+                                            id={`newInput_${dict.key}`} 
+                                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" 
+                                            placeholder={`輸入新選項 (${dict.placeholder})`}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    const val = (e.target as HTMLInputElement).value;
+                                                    if (val) { addItem(dict.key as any, val); (e.target as HTMLInputElement).value = ''; }
+                                                }
+                                            }}
+                                        />
+                                        <button 
+                                            onClick={() => { 
+                                                const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value;
+                                                if (val) { addItem(dict.key as any, val); (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = ''; }
+                                            }} 
+                                            className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"
+                                        >
+                                            <Plus size={16} className="mr-1"/> 新增
+                                        </button>
                                     </div>
-                                ))}
-                            </div>
-                         </div>
-                            </div>
-                            {selectedMake && (
-                                <div className="flex flex-wrap gap-2">
-                                    {(!Array.isArray(settings.models[selectedMake]) || settings.models[selectedMake].length === 0) ? <span className="text-sm text-gray-400">暫無型號</span> : 
-                                    settings.models[selectedMake].map((m:string, i:number) => (
-                                        <span key={i} className="bg-blue-50 text-blue-800 px-2 py-1 rounded text-xs flex items-center gap-2 border border-blue-100">
-                                            {m} 
-                                            <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => {
-                                                const currentModels = Array.isArray(settings.models[selectedMake]) ? settings.models[selectedMake] : [];
-                                                updateSettings('models', { ...settings.models, [selectedMake]: currentModels.filter((mm:string) => mm !== m) });
-                                            }}/>
-                                        </span>
-                                    ))}
+
+                                    {/* 項目列表與排序/修改/刪除 */}
+                                    <div className="flex flex-col gap-2">
+                                        {list.map((item: any, i: number) => {
+                                            const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
+                                            
+                                            return (
+                                                <div key={i} className="group bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
+                                                    <div className="flex-1 flex items-center mr-4">
+                                                        <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
+                                                        <input 
+                                                            type="text"
+                                                            defaultValue={displayValue}
+                                                            onBlur={(e) => editListItem(dict.key as any, i, e.target.value)}
+                                                            className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5"
+                                                        />
+                                                    </div>
+                                                    
+                                                    <div className="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => moveListItem(dict.key as any, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
+                                                        <button onClick={() => moveListItem(dict.key as any, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
+                                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                                        <button onClick={() => removeItem(dict.key as any, i)} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                    </div>
                                 </div>
-                            )}
-                         </div>
+                            );
+                        })}
+                        
+                        {/* 額外保留型號管理說明 (由於結構特殊，交由智能記憶處理) */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm opacity-60 hover:opacity-100 transition-opacity">
+                             <h3 className="font-bold text-slate-700 mb-2 text-sm flex items-center"><Car size={16} className="mr-2"/> 進階：車輛型號管理 (Models)</h3>
+                             <p className="text-xs text-slate-500 mb-2">型號與品牌綁定結構較為特殊，系統已開啟「智能記憶」功能，您在新增車輛時直接輸入新型號，系統會自動學習並加入選單，無需手動管理。</p>
+                        </div>
                     </div>
                 )}
 
