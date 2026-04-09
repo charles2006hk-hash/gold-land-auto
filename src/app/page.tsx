@@ -1822,7 +1822,7 @@ const DatabaseModule = ({ db, staffId, appId, settings, editingEntry, setEditing
 
         try {
             if (editingEntry.id) {
-                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
+                const docRef = doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
                 const cleanData = JSON.parse(JSON.stringify(finalEntry));
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
                 setIsDbEditing(false); 
@@ -7027,11 +7027,13 @@ export default function GoldLandAutoDMS() {
                   console.log("🔄 系統檢測到備份週期已到，正在背景執行自動備份...");
                   const dataStr = JSON.stringify({ version: "2.0", type: "auto", timestamp: now.toISOString(), settings, inventory });
                   const fileName = `backups/auto_${freq}_${now.toISOString().slice(0,10)}_${Date.now()}.json`;
-                  const storageRef = ref(storage, fileName);
+                  
+                  // ★ storage 加 !
+                  const storageRef = ref(storage!, fileName); 
                   await uploadString(storageRef, dataStr);
 
-                  // 備份成功後，更新設定中的「上次備份日期」
-                  const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+                  // ★ db 加 !
+                  const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings'); 
                   await setDoc(docRef, { backup: { ...settings.backup, lastBackupDate: now.toISOString() } }, { merge: true });
                   
                   // 更新前端畫面狀態 (不打擾用戶，只顯示個小 Toast)
