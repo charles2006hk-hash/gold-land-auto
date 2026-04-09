@@ -5802,13 +5802,13 @@ const SettingsManager = ({
 
                 {/* 2. 車輛資料 / 全域數據字典 (完整功能) */}
                 {activeTab === 'vehicle_setup' && (
-                    <div className="space-y-8 animate-fade-in pb-10">
-                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                    <div className="space-y-4 animate-fade-in pb-10">
+                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6">
                             <h3 className="font-bold text-blue-800 flex items-center mb-1"><Database size={18} className="mr-2"/> 全域數據字典 (Data Dictionary)</h3>
-                            <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。您可以新增、直接點擊文字修改、刪除，或點擊箭頭調整顯示順序。</p>
+                            <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。點擊各分類即可展開內容進行新增、修改、排序或刪除。</p>
                         </div>
 
-                        {/* 萬能列表渲染引擎 */}
+                        {/* ★ 升級：摺疊式萬能列表渲染引擎 */}
                         {[
                             { title: '1. 車輛品牌 (Makes)', key: 'makes', icon: <Car size={16}/>, placeholder: '例如: Toyota' },
                             { title: '2. 車身顏色 (Colors)', key: 'colors', icon: <Palette size={16}/>, placeholder: '例如: 白 (White)' },
@@ -5820,70 +5820,83 @@ const SettingsManager = ({
                             const list = Array.isArray(settings[dict.key as keyof SystemSettings]) ? (settings[dict.key as keyof SystemSettings] as string[]) : [];
                             
                             return (
-                                <div key={dict.key} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">{dict.icon} {dict.title}</h3>
+                                <details key={dict.key} className="group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors">
+                                        <span className="flex items-center gap-2">{dict.icon} {dict.title}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded-full">{list.length} 項</span>
+                                            <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
+                                        </div>
+                                    </summary>
                                     
-                                    {/* 新增輸入框 */}
-                                    <div className="flex gap-2 mb-4">
-                                        <input 
-                                            id={`newInput_${dict.key}`} 
-                                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" 
-                                            placeholder={`輸入新選項 (${dict.placeholder})`}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    const val = (e.target as HTMLInputElement).value;
-                                                    if (val) { addItem(dict.key as any, val); (e.target as HTMLInputElement).value = ''; }
-                                                }
-                                            }}
-                                        />
-                                        <button 
-                                            onClick={() => { 
-                                                const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value;
-                                                if (val) { addItem(dict.key as any, val); (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = ''; }
-                                            }} 
-                                            className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"
-                                        >
-                                            <Plus size={16} className="mr-1"/> 新增
-                                        </button>
-                                    </div>
+                                    <div className="p-4 pt-0">
+                                        {/* 新增輸入框 */}
+                                        <div className="flex gap-2 mb-4 pt-4 border-t border-slate-100">
+                                            <input 
+                                                id={`newInput_${dict.key}`} 
+                                                className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" 
+                                                placeholder={`輸入新選項 (${dict.placeholder})`}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        const val = (e.target as HTMLInputElement).value;
+                                                        if (val) { addItem(dict.key as any, val); (e.target as HTMLInputElement).value = ''; }
+                                                    }
+                                                }}
+                                            />
+                                            <button 
+                                                onClick={() => { 
+                                                    const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value;
+                                                    if (val) { addItem(dict.key as any, val); (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = ''; }
+                                                }} 
+                                                className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"
+                                            >
+                                                <Plus size={16} className="mr-1"/> 新增
+                                            </button>
+                                        </div>
 
-                                    {/* 項目列表與排序/修改/刪除 */}
-                                    <div className="flex flex-col gap-2">
-                                        {list.map((item: any, i: number) => {
-                                            const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
-                                            
-                                            return (
-                                                <div key={i} className="group bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
-                                                    <div className="flex-1 flex items-center mr-4">
-                                                        <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
-                                                        <input 
-                                                            type="text"
-                                                            defaultValue={displayValue}
-                                                            onBlur={(e) => editListItem(dict.key as any, i, e.target.value)}
-                                                            className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5"
-                                                        />
+                                        {/* 項目列表與排序/修改/刪除 */}
+                                        <div className="flex flex-col gap-2">
+                                            {list.map((item: any, i: number) => {
+                                                const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
+                                                
+                                                return (
+                                                    <div key={i} className="group/item bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
+                                                        <div className="flex-1 flex items-center mr-4">
+                                                            <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
+                                                            <input 
+                                                                type="text"
+                                                                defaultValue={displayValue}
+                                                                onBlur={(e) => editListItem(dict.key as any, i, e.target.value)}
+                                                                className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5"
+                                                            />
+                                                        </div>
+                                                        
+                                                        <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                                            <button onClick={() => moveListItem(dict.key as any, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
+                                                            <button onClick={() => moveListItem(dict.key as any, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
+                                                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                                            <button onClick={() => removeItem(dict.key as any, i)} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
+                                                        </div>
                                                     </div>
-                                                    
-                                                    <div className="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => moveListItem(dict.key as any, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
-                                                        <button onClick={() => moveListItem(dict.key as any, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
-                                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                                        <button onClick={() => removeItem(dict.key as any, i)} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                        {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                                );
+                                            })}
+                                            {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                        </div>
                                     </div>
-                                </div>
+                                </details>
                             );
                         })}
                         
-                        {/* 額外保留型號管理說明 (由於結構特殊，交由智能記憶處理) */}
-                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm opacity-60 hover:opacity-100 transition-opacity">
-                             <h3 className="font-bold text-slate-700 mb-2 text-sm flex items-center"><Car size={16} className="mr-2"/> 進階：車輛型號管理 (Models)</h3>
-                             <p className="text-xs text-slate-500 mb-2">型號與品牌綁定結構較為特殊，系統已開啟「智能記憶」功能，您在新增車輛時直接輸入新型號，系統會自動學習並加入選單，無需手動管理。</p>
-                        </div>
+                        {/* 額外保留型號管理說明 (摺疊版) */}
+                        <details className="group bg-white rounded-xl border border-slate-200 shadow-sm opacity-80 hover:opacity-100 transition-opacity overflow-hidden">
+                             <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors text-sm">
+                                 <span className="flex items-center"><Car size={16} className="mr-2"/> 進階：車輛型號管理 (Models)</span>
+                                 <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
+                             </summary>
+                             <div className="p-4 pt-0 border-t border-slate-100 mt-2">
+                                <p className="text-xs text-slate-500 mb-2">型號與品牌綁定結構較為特殊，系統已開啟「智能記憶」功能，您在新增車輛時直接輸入新型號，系統會自動學習並加入選單，無需手動管理。</p>
+                             </div>
+                        </details>
                     </div>
                 )}
 
