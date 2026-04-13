@@ -6516,7 +6516,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
     };
 
     return (
-        <div className="p-2 md:p-6 bg-slate-100/50 rounded-lg shadow-sm min-h-screen flex flex-col">
+        <div className="p-2 md:p-4 bg-slate-100/50 rounded-lg shadow-sm h-full min-h-0 overflow-hidden flex flex-col">
             
             {/* ★ 頂部 Header & 導航 ★ */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 flex-none print:hidden">
@@ -11021,15 +11021,15 @@ const CreateDocModule = ({
 
           {/* Report Tab - 讓它內部也可以滾動 */}
                 {activeTab === 'reports' && (
-                    <div className="flex-1 overflow-y-auto">
+                    <div className="flex-1 overflow-hidden flex flex-col">
                         <ReportView 
                             inventory={visibleInventory} 
                             settings={settings}
                             setEditingVehicle={setEditingVehicle}
                             setActiveTab={setActiveTab}
-                            db={db} 
-                            staffId={staffId} 
-                            appId={appId} 
+                            db={db}
+                            staffId={staffId}
+                            appId={appId}
                         />
                     </div>
                 )}
