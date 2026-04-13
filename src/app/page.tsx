@@ -6298,7 +6298,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 // ------------------------------------------------------------------
 // ★★★ 2. Financial Hub (財務總覽 v16.0: 搭載行家來往模塊) ★★★
 // ------------------------------------------------------------------
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore'; // 確保頂部有這行，如果報錯可忽略，通常已在全域 import
+
 
 const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId }: any) => {
     
