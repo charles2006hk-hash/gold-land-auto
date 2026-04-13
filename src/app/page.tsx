@@ -6341,7 +6341,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
     // 讀取行家來往資料庫
     useEffect(() => {
         if (!db || !appId) return;
-        const { collection, query, orderBy, onSnapshot } = require('firebase/firestore');
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
         const unsub = onSnapshot(q, (snap: any) => { setLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
         return () => unsub();
@@ -6534,7 +6533,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
         e.preventDefault();
         const amt = Number(newLedger.amount);
         if (!amt || !selectedPartner || !db) return;
-        const { addDoc, collection, serverTimestamp } = require('firebase/firestore');
         try {
             await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { partner: selectedPartner, date: newLedger.date, type: newLedger.type, amount: amt, note: newLedger.note || (newLedger.type === 'receivable' ? '借出/應收' : '收到還款/墊支'), createdAt: serverTimestamp(), createdBy: staffId });
             setNewLedger({ ...newLedger, amount: '', note: '' });
@@ -6544,7 +6542,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
 
     const handleDeleteLedgerRecord = async (id: string) => {
         if (!db || !confirm("確定刪除此筆對帳紀錄？")) return;
-        const { deleteDoc, doc } = require('firebase/firestore');
         await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', id));
     };
 
