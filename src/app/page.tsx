@@ -6298,7 +6298,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 // ------------------------------------------------------------------
 // ★★★ 2. Financial Hub (財務總覽 v17.0: 搭載過濾與終極 Dashboard) ★★★
 // ------------------------------------------------------------------
-const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId }: any) => {
+const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) => {
     
     // --- 模塊狀態鎖定 ---
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'accounting'>(() => (sessionStorage.getItem('gla_fin_tab') as any) || 'dashboard');
