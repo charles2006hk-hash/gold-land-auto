@@ -6513,7 +6513,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
         });
 
         // 3. 庫存總值
-        const stockValue = inventory.filter(v => v.status === 'In Stock').reduce((sum, v) => sum + (v.price || 0), 0);
+        const stockValue = inventory.filter((v: any) => v.status === 'In Stock').reduce((sum: number, v: any) => sum + (v.price || 0), 0);
 
         return { monthIn, monthOut, monthNet, totalAR, totalAP, stockValue };
     };
