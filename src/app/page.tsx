@@ -6302,6 +6302,17 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
     
     // --- 模塊狀態鎖定 ---
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'accounting'>(() => (sessionStorage.getItem('gla_fin_tab') as any) || 'dashboard');
+    // ★ 核心安全邏輯：判斷是否擁有「管理員級別」的資料視角
+    const isFullAccess = staffId === 'BOSS' || 
+                        currentUser?.modules?.includes('all') || 
+                        currentUser?.dataAccess === 'all';
+
+    // ★ 安全強制重導：如果普通員工誤入了 Tab 3 或 4 (例如透過緩存)，自動彈回首頁
+    useEffect(() => {
+        if (!isFullAccess && (financeTab === 'partner' || financeTab === 'accounting')) {
+            setFinanceTab('dashboard');
+        }
+    }, [financeTab, isFullAccess]);
 
     // --- 統計報表狀態 ---
     const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>(() => (sessionStorage.getItem('gla_rep_type') as any) || 'receivable');
@@ -6594,8 +6605,14 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 w-full md:w-auto overflow-x-auto scrollbar-hide">
                     <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
                     <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
-                    <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
-                    <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
+                    
+                    {/* ★ 只對 All Data 權限顯示以下兩個按鈕 */}
+                    {isFullAccess && (
+                        <>
+                            <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
+                            <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -11155,6 +11172,7 @@ const CreateDocModule = ({
                             db={db}
                             staffId={staffId}
                             appId={appId}
+                            currentUser={currentUser}
                         />
                     </div>
                 )}
