@@ -6296,45 +6296,33 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 
 
 // ------------------------------------------------------------------
-// ★★★ 2. Financial Hub (財務總覽 v15.0: 企業級四大模塊框架) ★★★
+// ★★★ 2. Financial Hub (財務總覽 v16.0: 搭載行家來往模塊) ★★★
 // ------------------------------------------------------------------
-const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: any) => {
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore'; // 確保頂部有這行，如果報錯可忽略，通常已在全域 import
+
+const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId }: any) => {
     
-    // ★★★ 新增：財務四大模塊 Tab 狀態鎖定 ★★★
+    // ★ 財務四大模塊 Tab 狀態鎖定
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'accounting'>(() => 
         (sessionStorage.getItem('gla_fin_tab') as any) || 'dashboard'
     );
 
-    // 原有：統計報表的狀態鎖定
-    const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>(() => 
-        (sessionStorage.getItem('gla_rep_type') as any) || 'receivable'
-    );
-    const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>(() => 
-        (sessionStorage.getItem('gla_rep_cat') as any) || 'All'
-    );
-    const [reportSearchTerm, setReportSearchTerm] = useState(() => 
-        sessionStorage.getItem('gla_rep_search') || ''
-    );
-    const [reportCompany, setReportCompany] = useState(() => 
-        sessionStorage.getItem('gla_rep_comp') || ''
-    );
-    const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(() => 
-        sessionStorage.getItem('gla_rep_date_en') !== 'false'
-    );
-    const [reportStartDate, setReportStartDate] = useState(() => {
-        const saved = sessionStorage.getItem('gla_rep_start');
-        if (saved) return saved;
-        const date = new Date();
-        return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-    });
-    const [reportEndDate, setReportEndDate] = useState(() => {
-        const saved = sessionStorage.getItem('gla_rep_end');
-        if (saved) return saved;
-        const date = new Date();
-        return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-    });
+    // --- 統計報表狀態 ---
+    const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>(() => (sessionStorage.getItem('gla_rep_type') as any) || 'receivable');
+    const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>(() => (sessionStorage.getItem('gla_rep_cat') as any) || 'All');
+    const [reportSearchTerm, setReportSearchTerm] = useState(() => sessionStorage.getItem('gla_rep_search') || '');
+    const [reportCompany, setReportCompany] = useState(() => sessionStorage.getItem('gla_rep_comp') || '');
+    const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(() => sessionStorage.getItem('gla_rep_date_en') !== 'false');
+    const [reportStartDate, setReportStartDate] = useState(() => { const saved = sessionStorage.getItem('gla_rep_start'); if (saved) return saved; const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]; });
+    const [reportEndDate, setReportEndDate] = useState(() => { const saved = sessionStorage.getItem('gla_rep_end'); if (saved) return saved; const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; });
 
-    // 自動儲存狀態
+    // --- ★★★ 新增：行家來往狀態 (Partner Ledger) ★★★ ---
+    const [ledgers, setLedgers] = useState<any[]>([]);
+    const [selectedPartner, setSelectedPartner] = useState<string>('');
+    const [partnerSearch, setPartnerSearch] = useState('');
+    const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '' });
+
+    // 自動儲存 Tab 狀態
     useEffect(() => {
         sessionStorage.setItem('gla_fin_tab', financeTab);
         sessionStorage.setItem('gla_rep_type', reportType);
@@ -6345,6 +6333,16 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
         sessionStorage.setItem('gla_rep_start', reportStartDate);
         sessionStorage.setItem('gla_rep_end', reportEndDate);
     }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate]);
+
+    // ★★★ 讀取行家來往資料庫 ★★★
+    useEffect(() => {
+        if (!db || !appId || financeTab !== 'partner') return;
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            setLedgers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [db, appId, financeTab]);
 
     const handleReportItemClick = (vehicleId: string) => {
         const vehicle = inventory.find((v: any) => v.id === vehicleId);
@@ -6360,7 +6358,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
 
     const handlePrint = () => { window.print(); };
 
-    // --- 原有：統計報表生成邏輯 ---
+    // --- 統計報表生成邏輯 ---
     const generateReportData = () => {
         let data: any[] = [];
         
@@ -6375,20 +6373,12 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 
                 if (totalReceivable > 0 && carBalance > 0) {
                     const date = v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
-                    data.push({
-                        vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`,
-                        regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status,
-                        rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價`
-                    });
+                    data.push({ vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status, rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價` });
                 }
 
                 (v.maintenanceRecords || []).forEach((m: any) => {
                     if (m.charge > 0 && m.chargeStatus !== 'Paid') {
-                        data.push({
-                            vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`,
-                            regMark: v.regMark, amount: m.charge, type: 'Service', status: 'Pending',
-                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}`
-                        });
+                        data.push({ vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`, regMark: v.regMark, amount: m.charge, type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}` });
                     }
                 });
 
@@ -6398,14 +6388,9 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                     if (fee <= 0) return;
                     const taskPaid = (v.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:any, p:any) => s + (p.amount || 0), 0);
                     const taskBalance = fee - taskPaid;
-
                     if (taskBalance > 0) {
                         let safeDate = task.date || v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
-                        data.push({
-                            vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, 
-                            regMark: v.regMark, amount: taskBalance, type: 'Service', status: 'Pending',
-                            rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}`
-                        });
+                        data.push({ vehicleId: v.id, date: safeDate, title: `[中港] ${task.item}`, regMark: v.regMark, amount: taskBalance, type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${task.item}` });
                     }
                 });
             });
@@ -6417,46 +6402,29 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
             inventory.forEach((v:any) => {
                 (v.expenses || []).forEach((exp:any) => {
                     if (exp.status === targetStatus) {
-                        data.push({
-                            vehicleId: v.id, id: exp.id, date: exp.date,
-                            title: `[維修/雜費] ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: targetStatus,
-                            regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}`
-                        });
+                        data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `[維修/雜費] ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
                     }
                 });
 
                 (v.maintenanceRecords || []).forEach((m: any) => {
                     if (m.cost > 0 && m.costStatus === targetStatus) {
-                        data.push({
-                            vehicleId: v.id, id: m.id, date: m.date,
-                            title: `[售後成本] ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: targetStatus,
-                            regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}`
-                        });
+                        data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `[售後成本] ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
                     }
                 });
               
                 if (isTargetPaid) {
                     (v.acquisition?.payments || []).forEach((p: any) => {
                         const vendorName = v.acquisition?.vendor || '未填寫供應商';
-                        data.push({
-                            vehicleId: v.id, id: p.id, date: p.date,
-                            title: `[進貨付款] ${v.make} ${v.model}`, company: vendorName, invoiceNo: p.method, amount: p.amount, status: 'Paid',
-                            regMark: v.regMark, rawTitle: `${v.regMark} 進貨付款 ${vendorName} ${p.method}`
-                        });
+                        data.push({ vehicleId: v.id, id: p.id, date: p.date, title: `[進貨付款] ${v.make} ${v.model}`, company: vendorName, invoiceNo: p.method, amount: p.amount, status: 'Paid', regMark: v.regMark, rawTitle: `${v.regMark} 進貨付款 ${vendorName} ${p.method}` });
                     });
                 } else {
                     const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
                     const acqOffset = Number(v.acquisition?.offsetAmount || 0);
                     const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
-                    
                     if (acqBalance > 0) {
                         const vendorName = v.acquisition?.vendor || '未填寫供應商';
                         const acqTypeLabel = v.acquisition?.type === 'Import' ? '國外訂車' : '本地收車';
-                        data.push({
-                            vehicleId: v.id, id: `acq-${v.id}`, date: v.stockInDate || new Date().toISOString().split('T')[0],
-                            title: `[車輛進貨] ${v.make} ${v.model}`, company: vendorName, invoiceNo: acqTypeLabel, amount: acqBalance, status: 'Unpaid',
-                            regMark: v.regMark, rawTitle: `${v.regMark} 進貨尾數 ${vendorName} ${acqTypeLabel}`
-                        });
+                        data.push({ vehicleId: v.id, id: `acq-${v.id}`, date: v.stockInDate || new Date().toISOString().split('T')[0], title: `[車輛進貨] ${v.make} ${v.model}`, company: vendorName, invoiceNo: acqTypeLabel, amount: acqBalance, status: 'Unpaid', regMark: v.regMark, rawTitle: `${v.regMark} 進貨尾數 ${vendorName} ${acqTypeLabel}` });
                     }
                 }
             });
@@ -6467,12 +6435,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
                 let safeSaleDate = v.stockOutDate || (v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-
-                return {
-                    vehicleId: v.id, date: safeSaleDate, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark,
-                    amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost,
-                    rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}`
-                };
+                return { vehicleId: v.id, date: safeSaleDate, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: totalRevenue, cost: totalCost, profit: totalRevenue - totalCost, rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark}` };
             });
         }
 
@@ -6492,6 +6455,65 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
     const reportData = generateReportData();
     const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
+
+    // --- ★★★ 行家來往邏輯 (Partner Ledger Logic) ★★★ ---
+    
+    // 整合現有設定名單與已記錄的行家
+    const allPartners = Array.from(new Set([
+        ...(settings.expenseCompanies || []), 
+        ...ledgers.map(l => l.partner)
+    ])).filter(Boolean).sort();
+
+    const filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
+
+    // 取得指定行家的所有記錄
+    const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    // 計算該行家的結餘：Receivable (應收我方) 為正，Payable (應付我方/我方支出) 為負
+    // 如果結餘 > 0，代表行家欠我們錢；結餘 < 0，代表我們欠行家錢
+    const partnerBalance = partnerHistory.reduce((sum, l) => {
+        return sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount));
+    }, 0);
+
+    const handleAddLedgerRecord = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const amt = Number(newLedger.amount);
+        if (!amt || !selectedPartner || !db) return;
+        
+        try {
+            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), {
+                partner: selectedPartner,
+                date: newLedger.date,
+                type: newLedger.type,
+                amount: amt,
+                note: newLedger.note || (newLedger.type === 'receivable' ? '借出/應收' : '收到還款/墊支'),
+                createdAt: serverTimestamp(),
+                createdBy: staffId
+            });
+            setNewLedger({ ...newLedger, amount: '', note: '' });
+            // Alert 已經被全域 Toast 攔截，會顯示美觀的提示
+            alert('✅ 紀錄已成功加入！');
+        } catch (err) {
+            console.error(err);
+            alert('❌ 加入失敗，請檢查網絡');
+        }
+    };
+
+    const handleDeleteLedgerRecord = async (id: string) => {
+        if (!db || !confirm("確定刪除此筆對帳紀錄？")) return;
+        await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', id));
+    };
+
+    const handleSettleBalance = () => {
+        if (partnerBalance === 0) return;
+        const settleType = partnerBalance > 0 ? 'payable' : 'receivable'; // 反向沖銷
+        setNewLedger({
+            date: new Date().toISOString().split('T')[0],
+            type: settleType,
+            amount: Math.abs(partnerBalance).toString(),
+            note: '結清帳目對數 (Settlement)'
+        });
+    };
 
     return (
         <div className="p-2 md:p-6 bg-slate-100/50 rounded-lg shadow-sm min-h-screen flex flex-col">
@@ -6530,7 +6552,6 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
             {/* ========================================== */}
             {financeTab === 'reports' && (
                 <div className="flex-1 flex flex-col animate-fade-in min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    
                     <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-none print:hidden">
                         <h3 className="font-bold text-slate-700 flex items-center"><FileBarChart size={18} className="mr-2 text-indigo-500"/> 車輛微觀統計</h3>
                         <button onClick={handlePrint} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors shadow-sm flex items-center"><Printer size={16} className="mr-2"/> 輸出報表</button>
@@ -6611,24 +6632,14 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
                                     {reportData.map((item, idx) => (
                                         <tr key={idx} className="hover:bg-indigo-50/50 cursor-pointer transition-colors" onClick={() => handleReportItemClick(item.vehicleId)}>
                                             <td className="p-3 font-mono text-slate-500">{item.date}</td>
-                                            <td className="p-3 font-bold truncate max-w-[200px]">
-                                                <span className={item.type === 'Service' ? 'text-indigo-700' : (item.title.includes('[進貨') ? 'text-red-700' : 'text-slate-800')}>{item.title}</span>
-                                            </td>
+                                            <td className="p-3 font-bold truncate max-w-[200px]"><span className={item.type === 'Service' ? 'text-indigo-700' : (item.title.includes('[進貨') ? 'text-red-700' : 'text-slate-800')}>{item.title}</span></td>
                                             <td className="p-3 font-mono"><span className="bg-slate-100 border border-slate-200 px-2 py-1 rounded text-slate-800 font-bold">{item.regMark || '未出牌'}</span></td>
-                                            
                                             {reportType === 'receivable' && <td className="p-3 text-xs"><span className={`px-2 py-1 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
                                             {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-3 font-bold text-slate-700">{item.company}</td>}
                                             {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-3"><span className={`px-2 py-1 rounded border ${item.invoiceNo === '本地收車' || item.invoiceNo === '國外訂車' || item.title.includes('[進貨付款]') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{item.invoiceNo || '-'}</span></td>}
-                                            {reportType === 'sales' && <td className="p-3 text-right font-mono">
-                                                {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.cost)}
-                                            </td>}
-
-                                            <td className="p-3 text-right font-mono font-black text-slate-800 text-sm">
-                                                {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.amount)}
-                                            </td>
-                                            {reportType === 'sales' && <td className={`p-3 text-right font-mono font-black text-sm ${item.profit > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                {new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.profit)}
-                                            </td>}
+                                            {reportType === 'sales' && <td className="p-3 text-right font-mono">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.cost)}</td>}
+                                            <td className="p-3 text-right font-mono font-black text-slate-800 text-sm">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.amount)}</td>
+                                            {reportType === 'sales' && <td className={`p-3 text-right font-mono font-black text-sm ${item.profit > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD' }).format(item.profit)}</td>}
                                         </tr>
                                     ))}
                                     {reportData.length === 0 && <tr><td colSpan={10} className="p-12 text-center text-gray-400">目前區間無符合條件的數據</td></tr>}
@@ -6655,10 +6666,134 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab }: an
             {/* Tab 3: 行家來往 (Partner Ledger) */}
             {/* ========================================== */}
             {financeTab === 'partner' && (
-                <div className="flex-1 animate-fade-in flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-300 rounded-2xl bg-white min-h-[400px] shadow-sm">
-                    <Users size={48} className="mb-4 opacity-50 text-amber-500"/>
-                    <h3 className="text-lg font-bold text-slate-600 mb-2">行家來往對帳 (開發中)</h3>
-                    <p className="text-sm">即將推出：獨立行家戶口列表、借款與佣金流水帳，及一鍵結清對數功能。</p>
+                <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                    
+                    {/* 左欄：行家名單 */}
+                    <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
+                        <div className="p-4 border-b border-slate-200 bg-white">
+                            <h3 className="font-bold text-slate-700 flex items-center mb-3"><Users size={18} className="mr-2 text-amber-500"/> 行家/夥伴名單</h3>
+                            <div className="relative">
+                                <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
+                                <input value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} placeholder="搜尋行家名稱..." className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-amber-200"/>
+                            </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {filteredPartners.map((partner, idx) => {
+                                // 預先計算每個人的結餘顯示在左邊
+                                const pLedgers = ledgers.filter(l => l.partner === partner);
+                                const pBalance = pLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
+                                
+                                return (
+                                    <div 
+                                        key={idx} 
+                                        onClick={() => setSelectedPartner(partner)} 
+                                        className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'hover:bg-white border border-transparent hover:border-slate-200'}`}
+                                    >
+                                        <span className={`font-bold text-sm truncate ${selectedPartner === partner ? 'text-amber-900' : 'text-slate-700'}`}>{partner}</span>
+                                        {pBalance !== 0 && (
+                                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${pBalance > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                {pBalance > 0 ? '欠我們 ' : '我們欠 '}${Math.abs(pBalance).toLocaleString()}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            {filteredPartners.length === 0 && <div className="text-center py-10 text-xs text-slate-400">無相關行家紀錄</div>}
+                        </div>
+                        
+                        {/* 新增不在名單中的行家 */}
+                        <div className="p-3 border-t border-slate-200 bg-white">
+                            <p className="text-[10px] text-slate-400 mb-2">提示：若行家不在名單，可直接在右側輸入新名稱新增。</p>
+                        </div>
+                    </div>
+
+                    {/* 右欄：對帳單與新增 */}
+                    <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
+                        {!selectedPartner ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10">
+                                <Briefcase size={48} className="mb-4 opacity-30 text-amber-500"/>
+                                <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左側行家</h3>
+                                <p className="text-xs">查看往來紀錄或新增對數帳目</p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* 頂部：結餘看板 */}
+                                <div className="p-6 bg-slate-900 text-white flex justify-between items-center flex-none shadow-md z-10">
+                                    <div>
+                                        <h3 className="text-2xl font-black tracking-wide mb-1">{selectedPartner}</h3>
+                                        <p className="text-xs text-slate-400">行家往來對帳單 (Partner Ledger)</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">目前結餘 (Current Balance)</p>
+                                        <div className="flex items-center justify-end">
+                                            <span className={`text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>
+                                                {partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}
+                                            </span>
+                                            {partnerBalance !== 0 && (
+                                                <button onClick={handleSettleBalance} className="ml-4 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-xs font-bold transition-colors">
+                                                    一鍵結清
+                                                </button>
+                                            )}
+                                        </div>
+                                        <p className={`text-[10px] font-bold mt-1 ${partnerBalance > 0 ? 'text-green-400/80' : (partnerBalance < 0 ? 'text-red-400/80' : 'text-slate-500')}`}>
+                                            {partnerBalance > 0 ? '(行家尚欠我們款項)' : (partnerBalance < 0 ? '(我們尚欠行家款項)' : '(帳目已結清)')}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* 中間：歷史紀錄 */}
+                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                                    <div className="space-y-3">
+                                        {partnerHistory.map(l => (
+                                            <div key={l.id} className="flex justify-between items-center p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-amber-300 transition-colors group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                        {l.type === 'receivable' ? '入' : '出'}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-slate-800">{l.note || '-'}</div>
+                                                        <div className="text-xs text-slate-400 font-mono mt-0.5">{l.date} • 由 {l.createdBy} 記錄</div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right flex items-center gap-4">
+                                                    <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>
+                                                        {l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}
+                                                    </span>
+                                                    <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"><Trash2 size={16}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {partnerHistory.length === 0 && <div className="text-center py-10 text-slate-400 text-sm">尚無任何往來紀錄</div>}
+                                    </div>
+                                </div>
+
+                                {/* 底部：新增紀錄表單 */}
+                                <form onSubmit={handleAddLedgerRecord} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
+                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">新增帳目紀錄</h4>
+                                    <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                        <input type="date" value={newLedger.date} onChange={e => setNewLedger({...newLedger, date: e.target.value})} className="w-full sm:w-32 p-2.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none" required />
+                                        
+                                        <select value={newLedger.type} onChange={e => setNewLedger({...newLedger, type: e.target.value})} className="w-full sm:w-40 p-2.5 border border-slate-200 rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
+                                            <option value="receivable" className="text-green-700 font-bold">🟢 我方應收 (借出/收佣)</option>
+                                            <option value="payable" className="text-red-700 font-bold">🔴 我方應付 (借入/墊支)</option>
+                                        </select>
+                                        
+                                        <input type="text" placeholder="說明備註 (例如: 代支驗車費)..." value={newLedger.note} onChange={e => setNewLedger({...newLedger, note: e.target.value})} className="flex-1 w-full p-2.5 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 ring-amber-200" required />
+                                        
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden w-full sm:w-40 focus-within:ring-2 ring-amber-200 shadow-inner">
+                                            <span className="pl-3 text-slate-400 font-bold">$</span>
+                                            <input type="number" min="1" placeholder="金額" value={newLedger.amount} onChange={e => setNewLedger({...newLedger, amount: e.target.value})} className="w-full p-2.5 outline-none text-right font-mono font-black text-slate-800" required />
+                                        </div>
+                                        
+                                        <button type="submit" className="w-full sm:w-auto bg-amber-500 text-white font-bold px-6 py-2.5 rounded-lg shadow-md hover:bg-amber-600 active:scale-95 transition-all whitespace-nowrap">
+                                            <Plus size={16} className="inline mr-1 mb-0.5"/> 記帳
+                                        </button>
+                                    </div>
+                                </form>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -10892,6 +11027,9 @@ const CreateDocModule = ({
                             settings={settings}
                             setEditingVehicle={setEditingVehicle}
                             setActiveTab={setActiveTab}
+                            db={db} 
+                            staffId={staffId} 
+                            appId={appId} 
                         />
                     </div>
                 )}
