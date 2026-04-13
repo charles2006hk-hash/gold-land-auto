@@ -6484,7 +6484,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
         let totalAR = 0;
         let totalAP = 0;
         
-        inventory.forEach(v => {
+        inventory.forEach((v: any) => {
             if (v.status === 'Sold' || v.status === 'Reserved') {
                 const received = (v.payments || []).reduce((acc:number, p:any) => acc + (Number(p.amount) || 0), 0);
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (Number(t.fee) || 0), 0);
