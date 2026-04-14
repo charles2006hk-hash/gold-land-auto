@@ -10209,7 +10209,7 @@ const CreateDocModule = ({
 
     const [savedDocs, setSavedDocs] = useState<any[]>([]);
 
-    const [docItems, setDocItems] = useState<{ id: string, desc: string, amount: number, isSelected: boolean }[]>([]);
+    const [docItems, setDocItems] = useState<{ id: string, desc: string, amount: number, isSelected: boolean, isFree?: boolean }[]>([]);
     const [newItemDesc, setNewItemDesc] = useState('');
     const [newItemAmount, setNewItemAmount] = useState('');
     
