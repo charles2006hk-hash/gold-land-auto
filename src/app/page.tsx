@@ -9832,8 +9832,8 @@ const DocumentTemplate = () => {
     const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
     const balance = price + extrasTotal - totalPaid;
 
-    onst soldDate = (activeVehicle as any).soldDate || '___________'; 
-const handoverTime = (activeVehicle as any).handoverTime || '_______';
+    const soldDate = (activeVehicle as any).soldDate || '___________'; 
+    const handoverTime = (activeVehicle as any).handoverTime || '_______';
 
     // 單據標題判定
     let docTitleEn = "VEHICLE SALES AGREEMENT"; 
