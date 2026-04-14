@@ -8422,7 +8422,7 @@ const VehicleFormModal = ({
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
     const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-    const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.amount || 0), 0);
+    const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
     
     const currentRealTimePrice = Number(priceStr.replace(/,/g, '')) || 0;
     const totalRevenue = currentRealTimePrice + cbFees + salesAddonsTotal;
@@ -9133,10 +9133,27 @@ const VehicleFormModal = ({
                                 <span className="text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full text-xs font-bold w-fit">總附加費: {formatCurrency(salesAddonsTotal)}</span>
                             </h4>
                             <div className="space-y-2 mb-4">
-                                {((v as any).salesAddons || []).map((addon: any) => (
+                                {((v as any).salesAddons || []).map((addon: any, idx: number) => (
                                     <div key={addon.id} className="flex items-center justify-between gap-2 text-sm md:text-xs p-3 md:p-2 bg-white border border-indigo-100 rounded-lg shadow-sm">
                                         <div className="font-bold text-slate-700 flex-1 pl-1 min-w-0 truncate">{addon.name}</div>
-                                        <div className="font-mono font-bold text-indigo-600 text-base md:text-sm flex-shrink-0">{formatCurrency(addon.amount)}</div>
+                                        
+                                        {/* ★ 新增：贈送選框 */}
+                                        <label className="flex items-center text-[10px] cursor-pointer text-indigo-500 font-bold bg-indigo-50 px-2 py-1 rounded">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={addon.isFree || false} 
+                                                onChange={(e) => {
+                                                    const newAddons = [...((v as any).salesAddons || [])];
+                                                    newAddons[idx].isFree = e.target.checked;
+                                                    if (v.id) updateSubItem(v.id, 'salesAddons', newAddons);
+                                                    else setEditingVehicle((prev:any) => prev ? ({ ...prev, salesAddons: newAddons }) : null);
+                                                }} 
+                                                className="mr-1 accent-indigo-600"
+                                            />
+                                            贈送
+                                        </label>
+
+                                        <div className={`font-mono font-bold text-base md:text-sm flex-shrink-0 ${addon.isFree ? 'text-slate-400 line-through' : 'text-indigo-600'}`}>{formatCurrency(addon.amount)}</div>
                                         <button type="button" onClick={() => handleDeleteAddonClick(addon.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 md:p-1.5 rounded-md flex-shrink-0"><Trash2 size={16}/></button>
                                     </div>
                                 ))}
@@ -9811,12 +9828,12 @@ const DocumentTemplate = () => {
     const price = Number(activeVehicle.price) || 0;
     
     // 計算邏輯
-    const extrasTotal = itemsToRender.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+    const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
     const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
     const balance = price + extrasTotal - totalPaid;
 
-    const soldDate = (activeVehicle as any).soldDate || today; 
-    const handoverTime = (activeVehicle as any).handoverTime || '';
+    onst soldDate = (activeVehicle as any).soldDate || '___________'; 
+const handoverTime = (activeVehicle as any).handoverTime || '_______';
 
     // 單據標題判定
     let docTitleEn = "VEHICLE SALES AGREEMENT"; 
@@ -10000,8 +10017,8 @@ const DocumentTemplate = () => {
                             {/* 雜費 Add-ons */}
                             {itemsToRender.length > 0 && itemsToRender.map((item: any, idx: number) => (
                                 <tr key={`add-${idx}`}>
-                                    <td className="border p-1.5 text-slate-600 pl-4">+ {item.desc}</td>
-                                    <td className="border p-1.5 text-right font-mono">{formatCurrency(item.amount)}</td>
+                                    <td className="border p-1.5 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td>
+                                    <td className="border p-1.5 text-right font-mono">{item.isFree ? 'F.O.C.' : formatCurrency(item.amount)}</td>
                                 </tr>
                             ))}
 
@@ -10091,8 +10108,12 @@ const DocumentTemplate = () => {
                     {/* 2. 雜費 */}
                     {itemsToRender.length > 0 && itemsToRender.map((item: any, i: number) => (
                         <tr key={i} className="border-b">
-                            <td className="p-2 font-medium pl-4">+ {item.desc}</td>
-                            <td className="p-2 text-right font-mono">{formatCurrency(item.amount)}</td>
+                            <td className="p-2 font-medium pl-4">
+                                + {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}
+                            </td>
+                            <td className="p-2 text-right font-mono">
+                                {item.isFree ? 'F.O.C.' : formatCurrency(item.amount)}
+                            </td>
                         </tr>
                     ))}
 
@@ -10421,7 +10442,8 @@ const CreateDocModule = ({
         if ((car as any).salesAddons && (car as any).salesAddons.length > 0) {
             (car as any).salesAddons.forEach((addon: any, i: number) => {
                 if (addon.amount > 0) {
-                    items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true });
+                    // ★ 讀取車輛設定好的 isFree 狀態
+                    items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false });
                 }
             });
         }
@@ -10515,7 +10537,7 @@ const CreateDocModule = ({
         
         const price = Number(formData.price) || 0;
         const deposit = depositItems.reduce((sum, item) => sum + (item.amount || 0), 0);
-        const extrasTotal = docItems.filter(i => i.isSelected).reduce((sum, i) => sum + i.amount, 0);
+        const extrasTotal = docItems.filter(i => i.isSelected && !i.isFree).reduce((sum, i) => sum + i.amount, 0);
         const balance = price + extrasTotal - deposit;
         const totalAmount = isBill ? (selectedDocType==='invoice' ? price+extrasTotal : deposit) : (price + extrasTotal);
 
@@ -10641,54 +10663,68 @@ const CreateDocModule = ({
                                     )}
 
                                     <div className="mb-3 break-inside-avoid">
-                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">{partPaymentLabel}</div>
-                                        <table className="w-full text-[10px] border-collapse border border-slate-300">
-                                            <tbody>
-                                                <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
-                                                {docItems.filter(i=>i.isSelected).map((item, i) => (
-                                                    <tr key={i} className="border-b">
-                                                        <td className="border p-1.5 text-slate-600 pl-4">+ {item.desc}</td>
-                                                        <td className="border p-1.5 text-right font-mono">{formatCurrency(item.amount)}</td>
-                                                    </tr>
-                                                ))}
-                                                {depositItems.map((item, idx) => (
-                                                    <tr key={`dep-${idx}`} className="border-b">
-                                                        <td className="border p-1.5 font-bold text-slate-600">Less: {item.label}</td>
-                                                        <td className="border p-1.5 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
-                                                    </tr>
-                                                ))}
-                                                <tr className="bg-slate-50 font-bold"><td className="border p-1.5 text-right">Balance Due (餘額)</td><td className="border p-1.5 text-right font-mono text-sm text-red-600">{formatCurrency(balance)}</td></tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </>
-                            ) : (
-                                /* Invoice / Receipt 佈局保留 */
-                                <table className="w-full text-[10px] border-collapse mb-6">
-                                    <thead>
-                                        <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr className="border-b">
-                                            <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
-                                            <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
-                                        </tr>
-                                        {docItems.filter(i=>i.isSelected).map((item, i) => (
-                                            <tr key={i} className="border-b">
-                                                <td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc}</td>
-                                                <td className="p-2 text-right font-mono">{formatCurrency(item.amount)}</td>
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">{partPaymentLabel}</div>
+                                            <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                                <tbody>
+                                                    <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
+                                                    
+                                                    {/* ★ 合約/報價單的雜費 (加入 F.O.C 判斷) */}
+                                                    {docItems.filter(i=>i.isSelected).map((item, i) => (
+                                                        <tr key={i} className="border-b">
+                                                            <td className="border p-1.5 text-slate-600 pl-4">
+                                                                + {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}
+                                                            </td>
+                                                            <td className="border p-1.5 text-right font-mono">
+                                                                {item.isFree ? 'F.O.C.' : formatCurrency(item.amount)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+
+                                                    {depositItems.map((item, idx) => (
+                                                        <tr key={`dep-${idx}`} className="border-b">
+                                                            <td className="border p-1.5 font-bold text-slate-600">Less: {item.label}</td>
+                                                            <td className="border p-1.5 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
+                                                        </tr>
+                                                    ))}
+                                                    <tr className="bg-slate-50 font-bold"><td className="border p-1.5 text-right">Balance Due (餘額)</td><td className="border p-1.5 text-right font-mono text-sm text-red-600">{formatCurrency(balance)}</td></tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </>
+                                ) : (
+                                    /* Invoice / Receipt 佈局保留 */
+                                    <table className="w-full text-[10px] border-collapse mb-6">
+                                        <thead>
+                                            <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr className="border-b">
+                                                <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
+                                                <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
                                             </tr>
-                                        ))}
-                                        {depositItems.map((item, idx) => (
-                                            <tr key={`dep-${idx}`} className="border-b">
-                                                <td className="p-2 font-bold text-slate-600">
-                                                    Less: {item.label}
-                                                    {selectedDocType === 'receipt' && idx === depositItems.length - 1 && <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>}
-                                                </td>
-                                                <td className="p-2 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
+
+                                            {/* ★ 發票/收據的雜費 (加入 F.O.C 判斷) */}
+                                            {docItems.filter(i=>i.isSelected).map((item, i) => (
+                                                <tr key={i} className="border-b">
+                                                    <td className="p-2 font-medium text-slate-600 pl-4">
+                                                        + {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}
+                                                    </td>
+                                                    <td className="p-2 text-right font-mono">
+                                                        {item.isFree ? 'F.O.C.' : formatCurrency(item.amount)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+
+                                            {depositItems.map((item, idx) => (
+                                                <tr key={`dep-${idx}`} className="border-b">
+                                                    <td className="p-2 font-bold text-slate-600">
+                                                        Less: {item.label}
+                                                        {selectedDocType === 'receipt' && idx === depositItems.length - 1 && <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>}
+                                                    </td>
+                                                    <td className="p-2 text-right font-mono text-blue-600">{formatCurrency(item.amount)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
                                     <tfoot>
                                         <tr className="bg-slate-50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-sm text-red-600">{formatCurrency(balance)}</td></tr>
                                     </tfoot>
@@ -10712,8 +10748,7 @@ const CreateDocModule = ({
                                         </>
                                     ) : (
                                         <>
-                                            <p className="mb-1">I, <b>{formData.customerName || '___________'}</b>, agree to {isTradeIn?'consign/sell':'purchase'} the vehicle at HKD <b>{formatCurrency(balance + deposit)}</b> on <b>{displayDate}</b>. Responsibilities transfer at this time.</p>
-                                        </>
+                                            <p className="mb-1">I, <b>{formData.customerName || '___________'}</b>, agree to {isTradeIn?'consign/sell':'purchase'} the vehicle at HKD <b>{formatCurrency(balance + deposit)}</b> on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities transfer at this time.</p>
                                     )}
                                 </div>
                             )}
@@ -11007,9 +11042,17 @@ const CreateDocModule = ({
                                     {docItems.map((item) => (
                                         <div key={item.id} className="flex items-center text-xs bg-white p-1.5 rounded border">
                                             <input type="checkbox" checked={item.isSelected} onChange={() => toggleItem(item.id)} className="mr-2 accent-green-600"/>
-                                            <input value={item.desc} onChange={(e) => { const newDesc = e.target.value; setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, desc: newDesc } : i)); }} className="flex-1 bg-transparent outline-none border-b border-transparent focus:border-blue-300 mr-2" />
+                                            <input value={item.desc} onChange={(e) => { const newDesc = e.target.value; setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, desc: newDesc } : i)); }} className={`flex-1 bg-transparent outline-none border-b border-transparent focus:border-blue-300 mr-2 ${item.isFree ? 'text-slate-500' : ''}`} />
+                                            
+                                            {/* ★ 新增：開單系統的贈送選框 */}
+                                            <label className="flex items-center text-[10px] cursor-pointer text-green-700 font-bold mr-2 bg-green-50 px-1.5 py-0.5 rounded">
+                                                <input type="checkbox" checked={item.isFree || false} onChange={() => {
+                                                    setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, isFree: !i.isFree } : i));
+                                                }} className="mr-1 accent-green-600"/>贈送
+                                            </label>
+
                                             <span className="font-mono font-bold mx-1">$</span>
-                                            <input type="number" value={item.amount} onChange={(e) => { const newAmt = Number(e.target.value); setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, amount: newAmt } : i)); }} className="w-16 bg-transparent outline-none border-b border-transparent focus:border-blue-300 text-right font-bold" />
+                                            <input type="number" value={item.amount} onChange={(e) => { const newAmt = Number(e.target.value); setDocItems(prev => prev.map(i => i.id === item.id ? { ...i, amount: newAmt } : i)); }} className={`w-16 bg-transparent outline-none border-b border-transparent focus:border-blue-300 text-right font-bold ${item.isFree ? 'text-slate-400 line-through' : ''}`} disabled={item.isFree} />
                                             <button onClick={() => deleteItem(item.id)} className="text-gray-400 hover:text-red-500 ml-2"><X size={12}/></button>
                                         </div>
                                     ))}
