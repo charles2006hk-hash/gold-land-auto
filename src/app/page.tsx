@@ -10750,7 +10750,7 @@ const CreateDocModule = ({
                                         <>
                                             <p className="mb-1">I, <b>{formData.customerName || '___________'}</b>, agree to {isTradeIn?'consign/sell':'purchase'} the vehicle at HKD <b>{formatCurrency(balance + deposit)}</b> on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities transfer at this time.</p>
                                         </>
-                                    )}
+                                  )}
                                 </div>
                             )}
 
