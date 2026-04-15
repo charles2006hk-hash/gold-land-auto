@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next"; // ★ 1. 記得引入 Viewport
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,24 +12,29 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// ★★★ 2. 新增 Viewport 設定：鎖死縮放，防止雙擊放大 ★★★
+// ★★★ 1. Viewport 設定：保持您的設定，鎖死縮放，顏色與系統一致 ★★★
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // 絕對禁止雙擊放大
-  themeColor: '#0f172a', // 讓頂部狀態列與系統融合 (slate-900 顏色)
+  userScalable: false,
+  themeColor: '#0f172a', // 與您的 manifest 背景顏色一致
 };
 
-// ★★★ 3. 升級 Metadata：加入 manifest 與完整 PWA 設定 ★★★
+// ★★★ 2. Metadata 設定：加入圖示路徑 ★★★
 export const metadata: Metadata = {
   title: "Gold Land Auto DMS", 
   description: "Vehicle Management System for Gold Land Auto",
-  manifest: "/manifest.json", // ★ 連結 PWA 描述檔，讓瀏覽器知道這是一個 App
+  manifest: "/manifest.json", 
+  // ★ 加入以下 icons 設定，確保瀏覽器分頁與 iOS 桌面圖示正確讀取
+  icons: {
+    icon: '/GL_APPLOGO.png',
+    apple: '/GL_APPLOGO.png',
+  },
   appleWebApp: {
-    capable: true, // ★ 允許加入主畫面並隱藏 Safari 網址列/底部工具列
+    capable: true, 
     title: "金田 DMS",
-    statusBarStyle: "black-translucent", // 讓畫面延伸到頂部瀏海區
+    statusBarStyle: "black-translucent",
   },
 };
 
@@ -39,7 +44,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-HK"> {/* 建議改為 zh-HK 或 zh-TW */}
+      <head>
+        {/* 這裡可以放其他需要手動加入的 head 標籤 */}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
