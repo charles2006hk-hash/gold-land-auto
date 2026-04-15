@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+// @ts-expect-error - next-pwa 並沒有官方 TypeScript 定義檔，忽略此報錯
 import withPWAInit from "next-pwa";
 
 // ★ 設定 PWA 與 Firebase 圖片緩存魔法
