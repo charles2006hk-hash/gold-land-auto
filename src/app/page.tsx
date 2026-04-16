@@ -7152,6 +7152,7 @@ export default function GoldLandAutoDMS() {
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState(''); 
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterSource, setFilterSource] = useState<'All' | 'own' | 'partner'>('All'); // ★ 新增：自家/行家過濾狀態
   const [sortConfig, setSortConfig] = useState<{ key: keyof Vehicle; direction: 'asc' | 'desc' } | null>(null);
 
   // Report States
@@ -8083,6 +8084,11 @@ const deleteVehicle = async (id: string) => {
   const getSortedInventory = () => {
     let sorted = [...visibleInventory];
     if (filterStatus !== 'All') sorted = sorted.filter(v => v.status === filterStatus);
+    
+    // ★ 新增：過濾自家或行家盤
+    if (filterSource === 'own') sorted = sorted.filter(v => !v.sourceType || v.sourceType === 'own' || v.sourceType === 'consignment');
+    if (filterSource === 'partner') sorted = sorted.filter(v => v.sourceType === 'partner');
+
     if (searchTerm) {
         const lowerSearch = searchTerm.toLowerCase();
         sorted = sorted.filter(v => 
@@ -11818,12 +11824,22 @@ const CreateDocModule = ({
               </div>
               
               {/* Filter Bar */}
-              <div className="flex gap-2 overflow-x-auto pb-1 flex-none scrollbar-hide">
-                  {['All', 'In Stock', 'Sold', 'Reserved', 'Withdrawn'].map(s => (
-                      <button key={s} onClick={() => setFilterStatus(s)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>
-                          {s === 'All' ? '全部' : (s === 'Withdrawn' ? '撤回' : s)}
-                      </button>
-                  ))}
+              <div className="flex flex-col sm:flex-row gap-3 overflow-x-auto pb-3 flex-none scrollbar-hide items-start sm:items-center">
+                  {/* ★ 新增：自家 / 行家 快速切換器 */}
+                  <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 shrink-0">
+                      <button onClick={() => setFilterSource('All')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'All' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>全部</button>
+                      <button onClick={() => setFilterSource('own')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'own' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>🟢 自家/寄賣</button>
+                      <button onClick={() => setFilterSource('partner')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'partner' ? 'bg-white shadow-sm text-orange-700' : 'text-slate-500 hover:text-slate-700'}`}>🟠 行家盤</button>
+                  </div>
+                  
+                  {/* 原有的狀態過濾器 */}
+                  <div className="flex gap-2 shrink-0">
+                      {['All', 'In Stock', 'Sold', 'Reserved', 'Withdrawn'].map(s => (
+                          <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>
+                              {s === 'All' ? '全部狀態' : (s === 'Withdrawn' ? '撤回' : s)}
+                          </button>
+                      ))}
+                  </div>
               </div>
 
               {/* Grid Container (v18.0: 現代化 4:3 滿版垂直卡片 + 原有邏輯保留) */}
@@ -11869,8 +11885,11 @@ const CreateDocModule = ({
                         else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
                         else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-500 text-white"; }
 
+                        // ★ 新增：判斷是否為行家盤
+                        const isPartner = car.sourceType === 'partner';
+
                         return (
-                        <div key={car.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-yellow-400 transition-all duration-300 group flex flex-col overflow-hidden cursor-pointer relative" onClick={() => setEditingVehicle(car)}>
+                        <div key={car.id} className={`bg-white rounded-2xl shadow-sm border-2 transition-all duration-300 group flex flex-col overflow-hidden cursor-pointer relative ${isPartner ? 'border-orange-200 hover:border-orange-400 hover:shadow-orange-100' : 'border-slate-200 hover:border-yellow-400 hover:shadow-xl'}`} onClick={() => setEditingVehicle(car)}>
                             
                             {/* 上半部：4:3 滿版圖片 */}
                             <div className="w-full aspect-[4/3] bg-slate-900 relative overflow-hidden flex-none flex items-center justify-center">
@@ -11883,9 +11902,14 @@ const CreateDocModule = ({
                                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-100"><Car size={40} className="mb-2 opacity-50"/><span className="text-xs font-bold uppercase tracking-widest">No Image</span></div>
                                 )}
                                 
-                                {/* 狀態標籤 (左上) */}
-                                <div className="absolute top-2 left-2 z-20">
-                                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold shadow-md ${statusClass}`}>{statusText}</span>
+                                {/* ★ 狀態與行家標籤 (左上) ★ */}
+                                <div className="absolute top-2 left-2 z-20 flex flex-col gap-1.5">
+                                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold shadow-md w-fit ${statusClass}`}>{statusText}</span>
+                                    {isPartner && (
+                                        <span className="px-2 py-1 rounded-md text-[10px] font-bold shadow-md bg-orange-500 text-white flex items-center w-fit">
+                                            <Building2 size={10} className="mr-1"/> 行家: {car.partnerName || '未命名'}
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* 右下角：價格懸浮 */}
