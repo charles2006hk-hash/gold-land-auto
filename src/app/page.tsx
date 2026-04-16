@@ -8742,6 +8742,28 @@ const VehicleFormModal = ({
             editingVehicle.photos = carPhotos;
             (editingVehicle as any).acqPayments = acqPayments; 
         }
+
+        // ★★★ 新增：智能學習行家名字庫邏輯 ★★★
+        const st = formData.get('sourceType') as string;
+        const pn = formData.get('partnerName') as string;
+        if (st === 'partner' && pn && db) {
+            const currentPartners = settings?.partners || [];
+            if (!currentPartners.includes(pn)) {
+                try {
+                    const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+                    const settingsRef = doc(db, 'companies', appId);
+                    await updateDoc(settingsRef, {
+                        partners: arrayUnion(pn)
+                    });
+                    console.log(`✅ 已自動將新行家 [${pn}] 加入字庫`);
+                    // 即時更新本地 settings 防止需要 refresh 先見到
+                    if (settings.partners) settings.partners.push(pn); else settings.partners = [pn];
+                } catch (err) {
+                    console.error('更新行家字典失敗:', err);
+                }
+            }
+        }
+        // ★★★ 結束 ★★★
         
         try { await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
     };
@@ -9233,11 +9255,10 @@ const VehicleFormModal = ({
                                 <h3 className="font-bold text-red-800 text-base md:text-sm flex items-center"><DownloadCloud size={18} className="mr-2"/> 進貨與收車設定 (Acquisition)</h3>
                                 <div className="flex flex-wrap items-center gap-3 md:gap-4 w-full md:w-auto">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-xs md:text-[10px] text-red-400 font-bold uppercase">來源分類:</span>
+                                        <span className="text-xs md:text-[10px] text-red-400 font-bold uppercase">狀態分類:</span>
                                         <select name="purchaseType" defaultValue={v.purchaseType || 'Used'} className="text-sm md:text-xs bg-white border border-red-200 rounded-lg md:rounded p-2 md:p-1 outline-none text-red-700 font-bold shadow-sm">
                                             <option value="Used">二手 (Used)</option>
                                             <option value="New">新車 (New)</option>
-                                            <option value="Consignment">寄賣 (Consign)</option>
                                         </select>
                                     </div>
                                     <div className="flex items-center gap-2 bg-white px-3 md:px-2 py-2 md:py-1 rounded-lg border border-red-200 shadow-sm">
@@ -9249,6 +9270,48 @@ const VehicleFormModal = ({
                                     </div>
                                 </div>
                             </div>
+
+                            {/* ★★★ 新增：進貨來源設定 (自家 / 寄賣 / 行家) ★★★ */}
+                            <div className="mb-6 p-4 bg-white border border-red-200 rounded-xl shadow-sm">
+                                <label className="block text-xs md:text-[10px] font-black text-red-800 mb-2 uppercase tracking-wider">車輛歸屬 (Source Type)</label>
+                                <div className="flex flex-wrap gap-3 mb-2">
+                                    <label className={`flex items-center cursor-pointer px-4 py-2 rounded-lg border-2 transition-all ${(!v.sourceType || v.sourceType === 'own') ? 'bg-indigo-50 border-indigo-400' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+                                        <input type="radio" name="sourceType" value="own" checked={!v.sourceType || v.sourceType === 'own'} onChange={() => setEditingVehicle((prev: any) => ({ ...prev, sourceType: 'own' }))} className="hidden" />
+                                        <span className={`text-sm font-bold ${(!v.sourceType || v.sourceType === 'own') ? 'text-indigo-700' : 'text-slate-500'}`}>🟢 自家盤 (Own)</span>
+                                    </label>
+                                    <label className={`flex items-center cursor-pointer px-4 py-2 rounded-lg border-2 transition-all ${v.sourceType === 'consignment' ? 'bg-blue-50 border-blue-400' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+                                        <input type="radio" name="sourceType" value="consignment" checked={v.sourceType === 'consignment'} onChange={() => setEditingVehicle((prev: any) => ({ ...prev, sourceType: 'consignment' }))} className="hidden" />
+                                        <span className={`text-sm font-bold ${v.sourceType === 'consignment' ? 'text-blue-700' : 'text-slate-500'}`}>🔵 寄賣 (Consign)</span>
+                                    </label>
+                                    <label className={`flex items-center cursor-pointer px-4 py-2 rounded-lg border-2 transition-all ${v.sourceType === 'partner' ? 'bg-orange-50 border-orange-400' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+                                        <input type="radio" name="sourceType" value="partner" checked={v.sourceType === 'partner'} onChange={() => setEditingVehicle((prev: any) => ({ ...prev, sourceType: 'partner' }))} className="hidden" />
+                                        <span className={`text-sm font-bold ${v.sourceType === 'partner' ? 'text-orange-700' : 'text-slate-500'}`}>🟠 行家盤 (Partner)</span>
+                                    </label>
+                                </div>
+
+                                {/* 當選擇了「行家」時，顯示智能輸入框 */}
+                                {v.sourceType === 'partner' && (
+                                    <div className="mt-3 p-3 bg-orange-50/80 border border-orange-200 rounded-lg animate-fade-in flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                                        <label className="text-sm font-black text-orange-800 whitespace-nowrap">行家名稱:</label>
+                                        <div className="w-full flex-1 relative">
+                                            <input
+                                                name="partnerName"
+                                                list="partner-list"
+                                                value={v.partnerName || ''}
+                                                onChange={(e) => setEditingVehicle((prev: any) => ({ ...prev, partnerName: e.target.value }))}
+                                                className="w-full p-2.5 text-sm border-2 border-orange-300 rounded-lg focus:border-orange-500 outline-none font-bold text-slate-800 shadow-inner"
+                                                placeholder="輸入或下拉選擇行家名稱 (例如: 宏發汽車)..."
+                                            />
+                                            <datalist id="partner-list">
+                                                {(settings?.partners || []).map((p: string) => (
+                                                    <option key={p} value={p} />
+                                                ))}
+                                            </datalist>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            {/* ★★★ 結束 ★★★ */}
 
                             {/* 國外訂車表單 */}
                             {acqType === 'Import' ? (
