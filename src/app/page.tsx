@@ -443,6 +443,7 @@ type SystemSettings = {
   warrantyTypes?: string[];
   // ★★★ 新增：中港代辦服務項目列表 (解決 serviceItems 報錯) ★★★
   serviceItems?: string[];
+  partners?: string[];
   
   cbItems: (string | { name: string; defaultInst: string; defaultFee: number; defaultDays: string })[];
   cbInstitutions: string[];
@@ -517,6 +518,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ],
   expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家', '中檢公司'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)'],
+  partners: [],
   // ★ 新增：根據 2026 最新政策預設的保養條款
   warrantyTypes: [
       '5年/10萬公里 (原廠全車)',
@@ -7752,6 +7754,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
         const vData = {
             isPublic: isPublicFormValue,
+            sourceType: formData.get('sourceType') as string || 'own',
             licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
             purchaseType: formData.get('purchaseType'),
             acquisition: acquisitionData,
@@ -8711,7 +8714,40 @@ const VehicleFormModal = ({
         setTimeout(() => alert(alertMessage), 150);
     };
 
-    // ★★★ 新增：智能學習行家名字庫邏輯 (從 Vendor 欄讀取) ★★★
+    const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        
+        if (!e.currentTarget.querySelector('[name="isPublic_hidden"]')) {
+            const hiddenPublic = document.createElement('input');
+            hiddenPublic.type = 'hidden';
+            hiddenPublic.name = 'isPublic_hidden';
+            hiddenPublic.value = isPublic ? 'true' : 'false';
+            e.currentTarget.appendChild(hiddenPublic);
+        }
+
+        if (!e.currentTarget.querySelector('[name="cb_isEnabled_hidden"]')) {
+            const hiddenCb = document.createElement('input');
+            hiddenCb.type = 'hidden';
+            hiddenCb.name = 'cb_isEnabled_hidden';
+            hiddenCb.value = cbEnabled ? 'true' : 'false';
+            e.currentTarget.appendChild(hiddenCb);
+        }
+
+        const formData = new FormData(e.currentTarget);
+        if(!formData.has('mileage')) { 
+            const hiddenMileage = document.createElement('input'); 
+            hiddenMileage.type = 'hidden'; 
+            hiddenMileage.name = 'mileage'; 
+            hiddenMileage.value = (mileageStr || '').replace(/,/g, ''); 
+            e.currentTarget.appendChild(hiddenMileage); 
+        }
+        
+        if(editingVehicle) {
+            editingVehicle.photos = carPhotos;
+            (editingVehicle as any).acqPayments = acqPayments; 
+        }
+        
+        // ★★★ 新增：智能學習行家名字庫邏輯 (從 Vendor 欄讀取) ★★★
         const st = formData.get('sourceType') as string;
         const vendorName = formData.get('acq_vendor') as string;
         if (st === 'partner' && vendorName && db) {
@@ -8719,18 +8755,16 @@ const VehicleFormModal = ({
             if (!currentPartners.includes(vendorName)) {
                 try {
                     const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
-                    const settingsRef = doc(db, 'companies', appId);
+                    const settingsRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
                     await updateDoc(settingsRef, { partners: arrayUnion(vendorName) });
                     console.log(`✅ 已自動將新行家 [${vendorName}] 加入字庫`);
-                    // 即時更新本地 settings
                     if (settings.partners) settings.partners.push(vendorName); else settings.partners = [vendorName];
                 } catch (err) {
                     console.error('更新行家字典失敗:', err);
                 }
             }
         }
-        // ★★★ 結束 ★★★
-        
+
         try { await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
     };
 
@@ -9265,7 +9299,8 @@ const VehicleFormModal = ({
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                                         <div className="sm:col-span-2">
                                             <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label>
-                                            <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm" placeholder={sourceType === 'partner' ? "輸入行家名稱..." : "供應商 / 拍賣場名稱"}/>
+                                            <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm" placeholder="供應商 / 拍賣場名稱"/>
+                                            <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
                                         </div>
                                         <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-sm md:text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono shadow-sm font-bold text-slate-700"/></div>
                                         <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-sm md:text-xs outline-none font-bold text-slate-700 shadow-sm"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
@@ -9309,7 +9344,7 @@ const VehicleFormModal = ({
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
                                     <div className="sm:col-span-2">
                                         <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label>
-                                        <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder={sourceType === 'partner' ? "輸入行家名稱..." : "收車對象名稱"}/>
+                                        <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder="收車對象名稱"/>
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label>
@@ -9327,7 +9362,7 @@ const VehicleFormModal = ({
                                     <div className="w-full min-w-0"><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Advance Fee (代支 HKD)</label><input name="acq_advanceFee" defaultValue={formatNumberInput(String((v as any).acquisition?.advanceFee||''))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right shadow-sm min-w-0" placeholder="$0" title="例如代支留牌費等"/></div>
                                 </div>
                             )}
-
+                            
                             {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
                             <div className="mt-6 border-t border-red-200 pt-5 md:pt-4 w-full">
                                 <h4 className="font-bold text-base md:text-xs text-red-800 mb-4 md:mb-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
@@ -9355,6 +9390,7 @@ const VehicleFormModal = ({
                                     {acqPayments.length === 0 && <div className="text-center text-sm md:text-xs text-gray-400 py-4 border-2 border-dashed rounded-lg bg-white/50 font-bold">尚無付款紀錄</div>}
                                 </div>
 
+                                {/* 新增進貨付款 */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-2 w-full">
                                     <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold min-w-0"/>
                                     <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
@@ -9410,6 +9446,7 @@ const VehicleFormModal = ({
                                 ))}
                             </div>
 
+                            {/* 新增費用 */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-300 w-full">
                                 <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"/>
                                 <select value={newExpense.type} onChange={handleExpenseTypeChange} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-800 min-w-0"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
