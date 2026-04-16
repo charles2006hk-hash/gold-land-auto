@@ -361,6 +361,8 @@ type Vehicle = {
   id: string;
   managedBy?: string; // ★ 新增：負責員工 ID (Email)
   isPublic?: boolean;
+  sourceType?: 'own' | 'consignment' | 'partner';
+  partnerName?: string;
   regMark: string;
   make: string;
   model: string;
