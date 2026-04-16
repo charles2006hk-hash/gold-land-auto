@@ -7757,7 +7757,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
 
         const vData = {
             isPublic: isPublicFormValue,
-            sourceType: formData.get('sourceType') as string || 'own',
+            // ★★★ 修正 2：確保正確存入行家歸屬與名稱 ★★★
+            sourceType: (formData.get('sourceType') as string) || 'own',
+            partnerName: (formData.get('sourceType') === 'partner') ? (formData.get('acq_vendor') as string || '') : '',
+            // ★★★ 結束 ★★★
+
             licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
             purchaseType: formData.get('purchaseType'),
             acquisition: acquisitionData,
@@ -8755,20 +8759,25 @@ const VehicleFormModal = ({
             (editingVehicle as any).acqPayments = acqPayments; 
         }
         
-        // ★★★ 新增：智能學習行家名字庫邏輯 (從 Vendor 欄讀取) ★★★
+        // ★★★ 修正 1：智能學習行家名字庫邏輯 (加強防錯機制) ★★★
         const st = formData.get('sourceType') as string;
         const vendorName = formData.get('acq_vendor') as string;
         if (st === 'partner' && vendorName && db) {
             const currentPartners = settings?.partners || [];
             if (!currentPartners.includes(vendorName)) {
                 try {
-                    const { doc, updateDoc, arrayUnion } = await import('firebase/firestore');
+                    const { doc, updateDoc, setDoc, arrayUnion } = await import('firebase/firestore');
                     const settingsRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
-                    await updateDoc(settingsRef, { partners: arrayUnion(vendorName) });
+                    
+                    // 嘗試更新，如果失敗 (例如欄位未初始化) 則改用 setDoc 合併，徹底解決紅字 Error！
+                    await updateDoc(settingsRef, { partners: arrayUnion(vendorName) }).catch(async () => {
+                        await setDoc(settingsRef, { partners: arrayUnion(vendorName) }, { merge: true });
+                    });
+                    
                     console.log(`✅ 已自動將新行家 [${vendorName}] 加入字庫`);
                     if (settings.partners) settings.partners.push(vendorName); else settings.partners = [vendorName];
                 } catch (err) {
-                    console.error('更新行家字典失敗:', err);
+                    console.warn('更新行家字典失敗 (但不影響車輛儲存):', err);
                 }
             }
         }
