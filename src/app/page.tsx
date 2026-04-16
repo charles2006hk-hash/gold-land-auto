@@ -9251,14 +9251,21 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
+                            {/* ★ 智能 Datalist 放喺外層，等 Local 同 Import 都可以共用！ */}
+                            <datalist id="vendor_list">
+                                {sourceType === 'partner' 
+                                    ? (settings?.partners || []).map((p: string) => <option key={p} value={p} />)
+                                    : (settings?.expenseCompanies || []).map((c: string) => <option key={c} value={c} />)
+                                }
+                            </datalist>
+
                             {/* 國外訂車表單 */}
                             {acqType === 'Import' ? (
                                 <div className="space-y-4 md:space-y-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                                         <div className="sm:col-span-2">
                                             <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Supplier / Vendor</label>
-                                            <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm" placeholder="供應商 / 拍賣場名稱"/>
-                                            <datalist id="vendor_list">{settings.expenseCompanies?.map((c: string) => <option key={c} value={c} />)}</datalist>
+                                            <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm" placeholder={sourceType === 'partner' ? "輸入行家名稱..." : "供應商 / 拍賣場名稱"}/>
                                         </div>
                                         <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">ETA (預計到港)</label><input type="date" name="acq_eta" defaultValue={(v as any).acquisition?.eta} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-sm md:text-xs outline-none focus:ring-2 focus:ring-red-200 font-mono shadow-sm font-bold text-slate-700"/></div>
                                         <div><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label><select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-sm md:text-xs outline-none font-bold text-slate-700 shadow-sm"><option value="Unpaid">未付 (Unpaid)</option><option value="Partial">部分付款 (Partial)</option><option value="Paid">已結清 (Paid)</option></select></div>
@@ -9302,7 +9309,7 @@ const VehicleFormModal = ({
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
                                     <div className="sm:col-span-2">
                                         <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label>
-                                        <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder="收車對象名稱"/>
+                                        <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder={sourceType === 'partner' ? "輸入行家名稱..." : "收車對象名稱"}/>
                                     </div>
                                     <div className="sm:col-span-2">
                                         <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label>
