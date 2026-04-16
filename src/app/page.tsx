@@ -9327,7 +9327,7 @@ const VehicleFormModal = ({
                                     <div className="w-full min-w-0"><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Advance Fee (代支 HKD)</label><input name="acq_advanceFee" defaultValue={formatNumberInput(String((v as any).acquisition?.advanceFee||''))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right shadow-sm min-w-0" placeholder="$0" title="例如代支留牌費等"/></div>
                                 </div>
                             )}
-                            
+
                             {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
                             <div className="mt-6 border-t border-red-200 pt-5 md:pt-4 w-full">
                                 <h4 className="font-bold text-base md:text-xs text-red-800 mb-4 md:mb-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
@@ -9355,7 +9355,6 @@ const VehicleFormModal = ({
                                     {acqPayments.length === 0 && <div className="text-center text-sm md:text-xs text-gray-400 py-4 border-2 border-dashed rounded-lg bg-white/50 font-bold">尚無付款紀錄</div>}
                                 </div>
 
-                                {/* 新增進貨付款 */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-2 w-full">
                                     <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold min-w-0"/>
                                     <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
@@ -9411,7 +9410,6 @@ const VehicleFormModal = ({
                                 ))}
                             </div>
 
-                            {/* 新增費用 */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-300 w-full">
                                 <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"/>
                                 <select value={newExpense.type} onChange={handleExpenseTypeChange} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-800 min-w-0"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
