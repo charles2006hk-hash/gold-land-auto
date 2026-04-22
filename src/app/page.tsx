@@ -6375,7 +6375,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
 
     const handlePrint = () => { window.print(); };
 
-    // ============================================================================
+   // ============================================================================
     // ★ 核心引擎 1：統計報表生成 (Report Data)
     // ============================================================================
     const generateReportData = () => {
@@ -6384,17 +6384,27 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
         if (reportType === 'receivable') {
             const targetInventory = inventory.filter((v:any) => v.status === 'Sold' || v.status === 'Reserved');
             targetInventory.forEach((v:any) => {
+                
+                // ★ 修正 1：車價與附加費 (客戶應付) - 徹底排除內部 expenses
+                const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
+                const totalCarReceivable = (v.price || 0) + salesAddonsTotal;
+                
+                // ★ 修正 2：一般車價收款 (排除中港代辦的獨立收款)
                 const generalPayments = (v.payments || []).filter((p:any) => !p.relatedTaskId).reduce((s:any, p:any) => s + (p.amount || 0), 0);
-                const generalExpenses = (v.expenses || []).reduce((s:any, e:any) => s + (e.amount || 0), 0);
-                const totalReceivable = (v.price || 0) + generalExpenses;
-                const carBalance = totalReceivable - generalPayments;
-                if (totalReceivable > 0 && carBalance > 0) {
+                
+                // ★ 修正 3：車價尾數 (純客戶應付 - 已付)
+                const carBalance = totalCarReceivable - generalPayments;
+                if (totalCarReceivable > 0 && carBalance > 0) {
                     const date = v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                     data.push({ vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status, rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價` });
                 }
+                
+                // 4. 售後維修收費 (對客收 charge)
                 (v.maintenanceRecords || []).forEach((m: any) => {
                     if (m.charge > 0 && m.chargeStatus !== 'Paid') data.push({ vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`, regMark: v.regMark, amount: m.charge, type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}` });
                 });
+
+                // 5. 中港代辦費
                 (v.crossBorder?.tasks || []).forEach((task:any) => {
                     const fee = Number(task.fee) || 0; if (fee <= 0) return;
                     const taskPaid = (v.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:any, p:any) => s + (p.amount || 0), 0);
@@ -6456,7 +6466,7 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
     const reportData = generateReportData();
     const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
-
+  
     // ============================================================================
     // ★ 核心引擎 2：會計流水帳生成 (Unified Cash Ledger)
     // ============================================================================
@@ -8143,17 +8153,27 @@ const deleteVehicle = async (id: string) => {
 
       // 4. 應收尾數邏輯 (已售 OR 已訂)
       if (car.status === 'Sold' || car.status === 'Reserved') {
-        const received = (car.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
-        const expenses = (car.expenses || []).reduce((acc, e) => acc + (e.amount || 0), 0);
-        const cbFees = (car.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+        const received = (car.payments || []).reduce((acc: any, p: any) => acc + (Number(p.amount) || 0), 0);
         
-        const totalDue = (car.price || 0) + expenses + cbFees;
+        // --- 修正開始：只計算「對客」的收費項目 ---
+        
+        // A. 對客附加費 (排除贈送項目)
+        const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.isFree ? 0 : (Number(addon.amount) || 0)), 0);
+        
+        // B. 中港代辦服務費
+        const cbFees = (car.crossBorder?.tasks || []).reduce((sum: any, t: any) => sum + (Number(t.fee) || 0), 0);
+        
+        // C. 售後維修/服務對客收費 (只計算未找數的 Charge)
+        const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
+        
+        // --- 修正結束：總應收 = 車價 + 附加費 + 中港費 + 維修費 (完全剔除 expenses 內部開支) ---
+        const totalDue = (Number(car.price) || 0) + salesAddonsTotal + cbFees + maintCharge;
         const balance = totalDue - received;
         
         if (balance > 0) totalReceivable += balance;
 
         // 本月銷售額
-        if (car.status === 'Sold') totalSoldThisMonth += car.price || 0;
+        if (car.status === 'Sold') totalSoldThisMonth += (Number(car.price) || 0);
       }
     });
 
