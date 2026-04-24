@@ -10016,10 +10016,21 @@ const DocumentTemplate = () => {
         const hasOrderDetails = (isQuotation || activeType === 'sales_contract') && (activeVehicle as any).orderType && (activeVehicle as any).orderType !== 'None';
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
         
+        // ★ 新增：計算海外與本地總額
+        const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
+        const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
+        const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+        
+        // ★ 新增：總結餘計算 (車價 + 雜費 + 訂單總額 - 已付)
+        const balance = price + extrasTotal + orderFeesTotal - totalPaid;
+
         // ★ 新增：處理交車日期/日數顯示
         const etaDisplay = (activeVehicle as any).etaFormat === 'days' 
             ? `${(activeVehicle as any).etaDays || '___'} Days (天)` 
             : ((activeVehicle as any).etaDate || 'TBC (待定)');
+
+        // 讀取印章開關狀態
+        const showStampAndSig = (activeVehicle as any).showStampAndSig !== false;
 
         return (
             <div id="print-root" className="max-w-[210mm] mx-auto bg-white p-8 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:p-0">
@@ -10062,7 +10073,7 @@ const DocumentTemplate = () => {
                     </table>
                 </div>
 
-                {/* ★★★ 報價單專屬：Part C 訂購與運輸明細 (升級版) ★★★ */}
+                {/* ★★★ 合約與報價單共用：Part C 訂購與運輸明細 (智能切換版) ★★★ */}
                 {hasOrderDetails && (
                     <div className="mb-3 break-inside-avoid">
                         <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Order & Shipping Details (訂購與運輸明細)</div>
@@ -10074,7 +10085,7 @@ const DocumentTemplate = () => {
                                         {(activeVehicle as any).orderType === 'Overseas' ? `Overseas 境外訂購 (${(activeVehicle as any).overseasCountry})` : 'Local 本地訂購'}
                                     </td>
                                     <td className="border p-1.5 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td>
-                                    {/* ★ 套用 ETA 智能顯示格式 */}
+                                    {/* ★ 套用 ETA 智能顯示格式 (日期或日數) */}
                                     <td className="border p-1.5 w-[30%] font-mono font-bold text-blue-700">{etaDisplay}</td>
                                 </tr>
                                 
@@ -10117,16 +10128,19 @@ const DocumentTemplate = () => {
                     <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">{partPaymentLabel}</div>
                     <table className="w-full text-[10px] border-collapse border border-slate-300">
                         <tbody>
-                            {/* 車價 */}
-                            <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
-                            
-                            {/* ★ 新增：顯示海外/本地總收費 */}
-                            {orderFeesTotal > 0 && (
+                            {/* ★ 智能切換：海外訂車顯示總費用，一般買賣顯示車價 */}
+                            {(activeVehicle as any).orderType === 'Overseas' ? (
                                 <tr>
-                                    <td className="border p-1.5 text-slate-600 pl-4">+ Overseas & Local Charges (當地與到港總費用)</td>
-                                    <td className="border p-1.5 text-right font-mono">{formatCurrency(orderFeesTotal)}</td>
+                                    <td className="border p-1.5 font-bold w-1/2 text-purple-800">Overseas & Local Charges (車價：當地與到港總費用)</td>
+                                    <td className="border p-1.5 text-right font-mono font-bold text-purple-800">{formatCurrency(orderFeesTotal)}</td>
+                                </tr>
+                            ) : (
+                                <tr>
+                                    <td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td>
+                                    <td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td>
                                 </tr>
                             )}
+                            
                             {/* 雜費 Add-ons */}
                             {itemsToRender.length > 0 && itemsToRender.map((item: any, idx: number) => (
                                 <tr key={`add-${idx}`}>
@@ -10167,10 +10181,10 @@ const DocumentTemplate = () => {
                         ) : (
                             <>
                                 <p className="mb-1">
-                                    I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, {(isPurchase||isConsignment) ? 'the registered owner,' : ''} agree to {(isPurchase||isConsignment)?(isConsignment?'consign':'sell'):'purchase'} the vehicle to/from <span className="font-bold uppercase">{companyEn}</span> at HKD <span className="font-bold underline">{formatCurrency(price + extrasTotal)}</span> (Total) on <span className="font-bold underline mx-1">{soldDate}</span> at <span className="font-bold underline mx-1">{handoverTime}</span>. Responsibilities for traffic contraventions/liabilities transfer at this time.
+                                    I, <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span>, {(isPurchase||isConsignment) ? 'the registered owner,' : ''} agree to {(isPurchase||isConsignment)?(isConsignment?'consign':'sell'):'purchase'} the vehicle to/from <span className="font-bold uppercase">{companyEn}</span> at HKD <span className="font-bold underline">{formatCurrency(balance + totalPaid)}</span> (Total) on <span className="font-bold underline mx-1">{soldDate}</span> at <span className="font-bold underline mx-1">{handoverTime}</span>. Responsibilities for traffic contraventions/liabilities transfer at this time.
                                 </p>
                                 <p>
-                                    本人 <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span> 同意{(isPurchase||isConsignment)?(isConsignment?'寄賣':'出售'):'購買'}該車輛，日期 <span className="font-bold underline mx-1">{soldDate}</span> 時間 <span className="font-bold underline mx-1">{handoverTime}</span>。成交總價港幣 <span className="font-bold underline">{formatCurrency(price + extrasTotal)}</span>。此時間點前後之交通違例及法律責任由相應方負責。
+                                    本人 <span className="font-bold underline uppercase">{curCustomer.name || '___________'}</span> 同意{(isPurchase||isConsignment)?(isConsignment?'寄賣':'出售'):'購買'}該車輛，日期 <span className="font-bold underline mx-1">{soldDate}</span> 時間 <span className="font-bold underline mx-1">{handoverTime}</span>。成交總價港幣 <span className="font-bold underline">{formatCurrency(balance + totalPaid)}</span>。此時間點前後之交通違例及法律責任由相應方負責。
                                 </p>
                             </>
                         )}
@@ -10184,7 +10198,22 @@ const DocumentTemplate = () => {
                     </div>
                 )}
                 
-                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Client Confirmation (客戶確認)" : ((isPurchase||isConsignment) ? "Vendor Signature (賣方/車主)" : "Purchaser Signature (買方)")} />
+                {/* ★ 簽名區塊，已整合印章開關與向下移動 1cm (mt-8, pt-12) */}
+                <div className="mt-8 grid grid-cols-2 gap-12 break-inside-avoid">
+                    <div className="relative pt-12 border-t border-slate-800 text-center">
+                        {showStampAndSig && (
+                            <>
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                            </>
+                        )}
+                        <p className="font-bold text-[10px] uppercase mt-6">{`For and on behalf of ${companyEn}`}</p>
+                    </div>
+                    <div className="pt-12 border-t border-slate-800 text-center">
+                        <p className="font-bold text-[10px] uppercase mt-6">{isQuotation ? "Client Confirmation (客戶確認)" : ((isPurchase||isConsignment) ? "Vendor Signature (賣方/車主)" : "Purchaser Signature (買方)")}</p>
+                        <p className="text-[9px] text-gray-500">ID: {curCustomer.hkid}</p>
+                    </div>
+                </div>
             </div>
         );
     }
@@ -10671,7 +10700,9 @@ const CreateDocModule = ({
         const hkFee = Number((formData as any).localTotalFee) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
 
-        const balance = price + extrasTotal + orderFeesTotal - deposit;
+        // ★ 修正邏輯：如果是海外訂車，車價直接等於「海外+本地費用總額」，不再疊加 price
+        const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
+        const balance = basePrice + extrasTotal - deposit;
 
         const titleMap: any = {
             'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' },
@@ -10855,10 +10886,18 @@ const CreateDocModule = ({
                                             <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
                                         </thead>
                                         <tbody>
-                                            <tr className="border-b">
-                                                <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
-                                                <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
-                                            </tr>
+                                            {/* ★ 智能切換：海外訂單發票顯示總費用 */}
+                                            {formData.orderType === 'Overseas' ? (
+                                                <tr className="border-b">
+                                                    <td className="p-2 font-bold text-purple-800">Overseas & Local Charges (車價：當地與到港總費用)</td>
+                                                    <td className="p-2 text-right font-mono font-bold text-purple-800">{formatCurrency(orderFeesTotal)}</td>
+                                                </tr>
+                                            ) : (
+                                                <tr className="border-b">
+                                                    <td className="p-2 font-medium">Vehicle Price ({formData.make} {formData.model})</td>
+                                                    <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
+                                                </tr>
+                                            )}
 
                                             {/* 發票/收據的雜費 */}
                                             {docItems.filter(i=>i.isSelected).map((item, i) => (
