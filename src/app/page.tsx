@@ -10598,12 +10598,15 @@ const CreateDocModule = ({
         setSelectedCarId('BLANK');
         setFormData(prev => ({ 
             ...prev, 
-            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
+            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
+            
+            // ★ 換成新版的海外與本地費用選項
             orderType: 'None', overseasCountry: 'Japan',
-            feeShipping: '', feeOverseasIns: '', feeOverseasInsp: '',
-            feeEmissions: '', feeLocalInsp: '', feeTowing: '',
+            overseasTotalFee: '', localTotalFee: '',
+            chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
+            chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false,
             etaDate: ''
         }));
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -10611,6 +10614,7 @@ const CreateDocModule = ({
         
         setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
         setShowTerms(true);
+        setShowStampAndSig(true); // ★ 重置時預設開啟印章
         setMobileStep('edit');
     };
 
@@ -10652,14 +10656,19 @@ const CreateDocModule = ({
         const price = Number(formData.price) || 0;
         const deposit = depositItems.reduce((sum, item) => sum + (item.amount || 0), 0);
         const extrasTotal = docItems.filter(i => i.isSelected && !i.isFree).reduce((sum, i) => sum + i.amount, 0);
-        const balance = price + extrasTotal - deposit;
-        const totalAmount = isBill ? (selectedDocType==='invoice' ? price+extrasTotal : deposit) : (price + extrasTotal);
+        
+        // ★ 確保即時預覽也計算海外與本地費用總額
+        const ovFee = Number((formData as any).overseasTotalFee) || 0;
+        const hkFee = Number((formData as any).localTotalFee) || 0;
+        const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+
+        const balance = price + extrasTotal + orderFeesTotal - deposit;
 
         const titleMap: any = {
             'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' },
             'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' },
             'consignment_contract': { en: 'VEHICLE CONSIGNMENT AGREEMENT', ch: '汽車寄賣合約' },
-            'quotation': { en: 'QUOTATION', ch: '報價單' }, // ★ 新增報價單
+            'quotation': { en: 'QUOTATION', ch: '報價單' },
             'invoice': { en: 'INVOICE', ch: '發票' },
             'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' }
         };
@@ -10739,14 +10748,14 @@ const CreateDocModule = ({
                                         </table>
                                     </div>
 
-                                    {/* ★ 報價單專屬：訂單與運輸細節預覽 ★ */}
+                                    {/* ★ 報價單專屬：訂單與運輸細節預覽 (與 A4 列印版同步) ★ */}
                                     {hasOrderDetails && (
                                         <div className="mb-3 break-inside-avoid">
-                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Order & Shipping Details</div>
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Order & Shipping Details (訂購與運輸明細)</div>
                                             <table className="w-full text-[10px] border-collapse border border-slate-300">
                                                 <tbody>
                                                     <tr>
-                                                        <td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Order Type</td>
+                                                        <td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Order Type (類別)</td>
                                                         <td className="border p-1.5 w-[30%]">
                                                             {formData.orderType === 'Overseas' ? `Overseas 境外訂購 (${formData.overseasCountry})` : 'Local 本地訂購'}
                                                         </td>
@@ -10755,19 +10764,30 @@ const CreateDocModule = ({
                                                     </tr>
                                                     {formData.orderType === 'Overseas' && (
                                                         <>
-                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Overseas Charges (當地費用)</td></tr>
+                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Overseas Charges (預估當地費用)</td></tr>
                                                             <tr>
-                                                                <td className="border p-1.5 bg-slate-50">Shipping (運費)</td><td className="border p-1.5 font-mono">{formatCurrency(Number(formData.feeShipping)||0)}</td>
-                                                                <td className="border p-1.5 bg-slate-50">Insurance (保險)</td><td className="border p-1.5 font-mono">{formatCurrency(Number(formData.feeOverseasIns)||0)}</td>
+                                                                <td colSpan={3} className="border p-1.5 text-slate-600">
+                                                                    <span className="font-bold text-slate-800">Included (包含項目):</span> {' '}
+                                                                    {[
+                                                                        {k:'chk_ov_local', l:'當地人費用'}, {k:'chk_ov_auction', l:'拍賣手續'}, 
+                                                                        {k:'chk_ov_shipping', l:'運輸'}, {k:'chk_ov_ins', l:'保險'}, 
+                                                                        {k:'chk_ov_tax', l:'稅金'}, {k:'chk_ov_doc', l:'文件費'}, {k:'chk_ov_misc', l:'雜費'}
+                                                                    ].filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}
+                                                                </td>
+                                                                <td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(ovFee)}</td>
                                                             </tr>
+                                                            
+                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Local Charges (預估到港本地費用)</td></tr>
                                                             <tr>
-                                                                <td className="border p-1.5 bg-slate-50">Inspection (驗車)</td><td className="border p-1.5 font-mono">{formatCurrency(Number(formData.feeOverseasInsp)||0)}</td>
-                                                                <td className="border p-1.5 bg-slate-50"></td><td className="border p-1.5 font-mono"></td>
-                                                            </tr>
-                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Local Charges (到港費用)</td></tr>
-                                                            <tr>
-                                                                <td className="border p-1.5 bg-slate-50">Emissions (環保)</td><td className="border p-1.5 font-mono">{formatCurrency(Number(formData.feeEmissions)||0)}</td>
-                                                                <td className="border p-1.5 bg-slate-50">Gov. Insp. (政府驗車)</td><td className="border p-1.5 font-mono">{formatCurrency(Number(formData.feeLocalInsp)||0)}</td>
+                                                                <td colSpan={3} className="border p-1.5 text-slate-600">
+                                                                    <span className="font-bold text-slate-800">Included (包含項目):</span> {' '}
+                                                                    {[
+                                                                        {k:'chk_hk_tax', l:'政府稅金'}, {k:'chk_hk_emissions', l:'環保'}, 
+                                                                        {k:'chk_hk_insp', l:'驗車'}, {k:'chk_hk_reg', l:'出牌文件'}, 
+                                                                        {k:'chk_hk_ins', l:'保險'}, {k:'chk_hk_misc', l:'雜費'}
+                                                                    ].filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}
+                                                                </td>
+                                                                <td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(hkFee)}</td>
                                                             </tr>
                                                         </>
                                                     )}
@@ -10782,7 +10802,15 @@ const CreateDocModule = ({
                                                 <tbody>
                                                     <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
                                                     
-                                                    {/* ★ 合約/報價單的雜費 (加入 F.O.C 判斷) */}
+                                                    {/* ★ 海外與本地總費用 */}
+                                                    {orderFeesTotal > 0 && (
+                                                        <tr>
+                                                            <td className="border p-1.5 text-slate-600 pl-4">+ Overseas & Local Charges (當地與到港總費用)</td>
+                                                            <td className="border p-1.5 text-right font-mono">{formatCurrency(orderFeesTotal)}</td>
+                                                        </tr>
+                                                    )}
+
+                                                    {/* 雜費 Add-ons */}
                                                     {docItems.filter(i=>i.isSelected).map((item, i) => (
                                                         <tr key={i} className="border-b">
                                                             <td className="border p-1.5 text-slate-600 pl-4">
@@ -10806,7 +10834,7 @@ const CreateDocModule = ({
                                         </div>
                                     </>
                                 ) : (
-                                    /* Invoice / Receipt 佈局保留 */
+                                    /* Invoice / Receipt 佈局 */
                                     <table className="w-full text-[10px] border-collapse mb-6">
                                         <thead>
                                             <tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr>
@@ -10817,7 +10845,7 @@ const CreateDocModule = ({
                                                 <td className="p-2 text-right font-mono">{formatCurrency(price)}</td>
                                             </tr>
 
-                                            {/* ★ 發票/收據的雜費 (加入 F.O.C 判斷) */}
+                                            {/* 發票/收據的雜費 */}
                                             {docItems.filter(i=>i.isSelected).map((item, i) => (
                                                 <tr key={i} className="border-b">
                                                     <td className="p-2 font-medium text-slate-600 pl-4">
@@ -10876,15 +10904,20 @@ const CreateDocModule = ({
                             )}
                         </div>
 
-                        {/* Footer / Signature */}
+                        {/* Footer / Signature (★ 新增位移與開關) */}
                         <div className="mt-auto">
-                            <div className="grid grid-cols-2 gap-12 mt-8">
-                                <div className="pt-8 border-t border-slate-800 text-center relative">
-                                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 scale-75 opacity-50"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
-                                    <p className="font-bold text-[8px] uppercase">For {formData.companyNameEn}</p>
+                            <div className="grid grid-cols-2 gap-12 mt-8 break-inside-avoid">
+                                <div className="pt-12 border-t border-slate-800 text-center relative">
+                                    {showStampAndSig && (
+                                        <>
+                                            <div className="absolute -top-8 left-1/2 -translate-x-1/2 scale-75 opacity-50"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
+                                            <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                                        </>
+                                    )}
+                                    <p className="font-bold text-[8px] uppercase mt-6">For {formData.companyNameEn}</p>
                                 </div>
-                                <div className="pt-8 border-t border-slate-800 text-center">
-                                    <p className="font-bold text-[8px] uppercase">{isQuotation ? "Client Confirmation (客戶確認)" : "Customer Signature"}</p>
+                                <div className="pt-12 border-t border-slate-800 text-center">
+                                    <p className="font-bold text-[8px] uppercase mt-6">{isQuotation ? "Client Confirmation (客戶確認)" : "Customer Signature"}</p>
                                 </div>
                             </div>
                         </div>
