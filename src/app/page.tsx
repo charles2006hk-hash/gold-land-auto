@@ -9910,7 +9910,16 @@ const DocumentTemplate = () => {
     // 計算邏輯
     const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
     const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-    const balance = price + extrasTotal - totalPaid;
+    // ★ 計算海外與本地總額
+    const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
+    const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
+    const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+    
+    // 總結餘計算 (車價 + 雜費 + 訂車手續費總額 - 已付)
+    const balance = price + extrasTotal + orderFeesTotal - totalPaid;
+    
+    // 讀取印章開關狀態
+    const showStampAndSig = (activeVehicle as any).showStampAndSig !== false;
 
     const soldDate = (activeVehicle as any).soldDate || '___________'; 
     const handoverTime = (activeVehicle as any).handoverTime || '_______';
@@ -9982,15 +9991,20 @@ const DocumentTemplate = () => {
         </div>
     );
 
+    // ★ 簽名區排版升級 (簽名橫線向下推約 1cm: pt-12, mt-6)
     const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-6 grid grid-cols-2 gap-12 break-inside-avoid">
-            <div className="relative pt-8 border-t border-slate-800 text-center">
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                <p className="font-bold text-[10px] uppercase">{labelLeft}</p>
+        <div className="mt-8 grid grid-cols-2 gap-12 break-inside-avoid">
+            <div className="relative pt-12 border-t border-slate-800 text-center">
+                {showStampAndSig && (
+                    <>
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                    </>
+                )}
+                <p className="font-bold text-[10px] uppercase mt-6">{labelLeft}</p>
             </div>
-            <div className="pt-8 border-t border-slate-800 text-center">
-                <p className="font-bold text-[10px] uppercase">{labelRight}</p>
+            <div className="pt-12 border-t border-slate-800 text-center">
+                <p className="font-bold text-[10px] uppercase mt-6">{labelRight}</p>
                 <p className="text-[9px] text-gray-500">ID: {curCustomer.hkid}</p>
             </div>
         </div>
@@ -10043,7 +10057,7 @@ const DocumentTemplate = () => {
                     </table>
                 </div>
 
-                {/* ★★★ 報價單專屬：Part C 訂購與運輸明細 ★★★ */}
+                {/* ★★★ 報價單專屬：Part C 訂購與運輸明細 (升級版) ★★★ */}
                 {hasOrderDetails && (
                     <div className="mb-3 break-inside-avoid">
                         <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Order & Shipping Details (訂購與運輸明細)</div>
@@ -10058,27 +10072,33 @@ const DocumentTemplate = () => {
                                     <td className="border p-1.5 w-[30%] font-mono font-bold text-blue-700">{(activeVehicle as any).etaDate || 'TBC (待定)'}</td>
                                 </tr>
                                 
-                                {/* 只有海外訂單才顯示當地收費明細 */}
+                                {/* 海外訂單選項顯示 */}
                                 {(activeVehicle as any).orderType === 'Overseas' && (
                                     <>
                                         <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Overseas Charges (預估當地費用)</td></tr>
                                         <tr>
-                                            <td className="border p-1.5 bg-slate-50">Shipping (運費)</td><td className="border p-1.5 font-mono">{formatCurrency(Number((activeVehicle as any).feeShipping)||0)}</td>
-                                            <td className="border p-1.5 bg-slate-50">Insurance (當地保險)</td><td className="border p-1.5 font-mono">{formatCurrency(Number((activeVehicle as any).feeOverseasIns)||0)}</td>
-                                        </tr>
-                                        <tr>
-                                            <td className="border p-1.5 bg-slate-50">Inspection (當地驗車)</td><td className="border p-1.5 font-mono">{formatCurrency(Number((activeVehicle as any).feeOverseasInsp)||0)}</td>
-                                            <td className="border p-1.5 bg-slate-50"></td><td className="border p-1.5 font-mono"></td>
+                                            <td colSpan={3} className="border p-1.5 text-slate-600">
+                                                <span className="font-bold text-slate-800">Included (包含項目):</span> {' '}
+                                                {[
+                                                    {k:'chk_ov_local', l:'當地人費用'}, {k:'chk_ov_auction', l:'拍賣手續'}, 
+                                                    {k:'chk_ov_shipping', l:'運輸'}, {k:'chk_ov_ins', l:'保險'}, 
+                                                    {k:'chk_ov_tax', l:'稅金'}, {k:'chk_ov_doc', l:'文件費'}, {k:'chk_ov_misc', l:'雜費'}
+                                                ].filter(opt => (activeVehicle as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}
+                                            </td>
+                                            <td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(ovFee)}</td>
                                         </tr>
                                         
                                         <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Local Charges (預估到港本地費用)</td></tr>
                                         <tr>
-                                            <td className="border p-1.5 bg-slate-50">Emissions (環保檢驗)</td><td className="border p-1.5 font-mono">{formatCurrency(Number((activeVehicle as any).feeEmissions)||0)}</td>
-                                            <td className="border p-1.5 bg-slate-50">Gov. Insp. (政府驗車)</td><td className="border p-1.5 font-mono">{formatCurrency(Number((activeVehicle as any).feeLocalInsp)||0)}</td>
-                                        </tr>
-                                        <tr>
-                                            <td className="border p-1.5 bg-slate-50">Towing (本地拖車)</td><td className="border p-1.5 font-mono">{formatCurrency(Number((activeVehicle as any).feeTowing)||0)}</td>
-                                            <td className="border p-1.5 bg-slate-50"></td><td className="border p-1.5 font-mono"></td>
+                                            <td colSpan={3} className="border p-1.5 text-slate-600">
+                                                <span className="font-bold text-slate-800">Included (包含項目):</span> {' '}
+                                                {[
+                                                    {k:'chk_hk_tax', l:'政府稅金'}, {k:'chk_hk_emissions', l:'環保'}, 
+                                                    {k:'chk_hk_insp', l:'驗車'}, {k:'chk_hk_reg', l:'出牌文件'}, 
+                                                    {k:'chk_hk_ins', l:'保險'}, {k:'chk_hk_misc', l:'雜費'}
+                                                ].filter(opt => (activeVehicle as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}
+                                            </td>
+                                            <td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(hkFee)}</td>
                                         </tr>
                                     </>
                                 )}
@@ -10277,12 +10297,17 @@ const CreateDocModule = ({
         price: '', deposit: '', balance: '', deliveryDate: new Date().toISOString().split('T')[0], 
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), remarks: '', paymentMethod: 'Cheque',
 
-        // ★★★ 報價單專屬欄位 ★★★
+        // ★★★ 報價單專屬欄位 (升級版) ★★★
         orderType: 'None', // 'None' | 'Local' | 'Overseas'
         overseasCountry: 'Japan',
-        feeShipping: '', feeOverseasIns: '', feeOverseasInsp: '',
-        feeEmissions: '', feeLocalInsp: '', feeTowing: '',
-        etaDate: ''
+        etaDate: '',
+        
+        // 海外費用總額與選項
+        overseasTotalFee: '',
+        chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
+        // 香港費用總額與選項
+        localTotalFee: '',
+        chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -10298,6 +10323,7 @@ const CreateDocModule = ({
     ]);
 
     const [showTerms, setShowTerms] = useState(true);
+    const [showStampAndSig, setShowStampAndSig] = useState(true); // ★ 新增：印章與簽名顯示開關
 
     // 過濾器與搜尋狀態
     const [filterType, setFilterType] = useState<string>('All');
@@ -10435,7 +10461,8 @@ const CreateDocModule = ({
             checklist,
             docItems,
             depositItems, 
-            showTerms,    
+            showTerms,
+            showStampAndSig,
             updatedAt: serverTimestamp(),
             summary: summaryStr 
         };
@@ -11044,20 +11071,47 @@ const CreateDocModule = ({
                                         )}
                                     </div>
                                     
+                                    {/* ★ 升級版：海外與本地費用結構 (選項 + 總額) */}
                                     {formData.orderType === 'Overseas' && (
-                                        <div className="space-y-2 mt-2 pt-2 border-t border-purple-200">
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <div><label className="text-[9px] text-purple-600 block mb-0.5 font-bold">當地運費</label><input name="feeShipping" type="number" value={formData.feeShipping || ''} onChange={handleChange} placeholder="$" className="w-full p-1.5 text-xs border rounded outline-none font-mono text-purple-800"/></div>
-                                                <div><label className="text-[9px] text-purple-600 block mb-0.5 font-bold">當地保險</label><input name="feeOverseasIns" type="number" value={formData.feeOverseasIns || ''} onChange={handleChange} placeholder="$" className="w-full p-1.5 text-xs border rounded outline-none font-mono text-purple-800"/></div>
-                                                <div><label className="text-[9px] text-purple-600 block mb-0.5 font-bold">當地驗車</label><input name="feeOverseasInsp" type="number" value={formData.feeOverseasInsp || ''} onChange={handleChange} placeholder="$" className="w-full p-1.5 text-xs border rounded outline-none font-mono text-purple-800"/></div>
+                                        <div className="space-y-3 mt-3 pt-3 border-t border-purple-200">
+                                            {/* 海外費用 */}
+                                            <div className="bg-white p-2 rounded border border-purple-100">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-bold text-purple-700">{formData.overseasCountry === 'Japan' ? '日本' : '海外'}當地費用包含：</span>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[10px] font-bold text-slate-500">總額 $</span>
+                                                        <input name="overseasTotalFee" type="number" value={formData.overseasTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 border rounded outline-none text-right font-mono font-bold text-purple-800 text-xs focus:ring-1 ring-purple-400"/>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {[{k:'chk_ov_local', l:'當地人費用'}, {k:'chk_ov_auction', l:'拍賣手續'}, {k:'chk_ov_shipping', l:'運輸'}, {k:'chk_ov_ins', l:'保險'}, {k:'chk_ov_tax', l:'稅金'}, {k:'chk_ov_doc', l:'文件費'}, {k:'chk_ov_misc', l:'雜費'}].map(opt => (
+                                                        <label key={opt.k} className="flex items-center text-[10px] text-slate-600 cursor-pointer">
+                                                            <input type="checkbox" checked={(formData as any)[opt.k]} onChange={e => setFormData({...formData, [opt.k]: e.target.checked})} className="mr-1 accent-purple-600"/>{opt.l}
+                                                        </label>
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <div><label className="text-[9px] text-purple-600 block mb-0.5 font-bold">到港環保驗車</label><input name="feeEmissions" type="number" value={formData.feeEmissions || ''} onChange={handleChange} placeholder="$" className="w-full p-1.5 text-xs border rounded outline-none font-mono text-purple-800"/></div>
-                                                <div><label className="text-[9px] text-purple-600 block mb-0.5 font-bold">到港政府驗車</label><input name="feeLocalInsp" type="number" value={formData.feeLocalInsp || ''} onChange={handleChange} placeholder="$" className="w-full p-1.5 text-xs border rounded outline-none font-mono text-purple-800"/></div>
-                                                <div><label className="text-[9px] text-purple-600 block mb-0.5 font-bold">本地拖車</label><input name="feeTowing" type="number" value={formData.feeTowing || ''} onChange={handleChange} placeholder="$" className="w-full p-1.5 text-xs border rounded outline-none font-mono text-purple-800"/></div>
+
+                                            {/* 香港費用 */}
+                                            <div className="bg-white p-2 rounded border border-purple-100">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-bold text-purple-700">香港到港費用包含：</span>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-[10px] font-bold text-slate-500">總額 $</span>
+                                                        <input name="localTotalFee" type="number" value={formData.localTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 border rounded outline-none text-right font-mono font-bold text-purple-800 text-xs focus:ring-1 ring-purple-400"/>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {[{k:'chk_hk_tax', l:'政府稅金'}, {k:'chk_hk_emissions', l:'環保'}, {k:'chk_hk_insp', l:'驗車'}, {k:'chk_hk_reg', l:'出牌文件'}, {k:'chk_hk_ins', l:'保險'}, {k:'chk_hk_misc', l:'雜費'}].map(opt => (
+                                                        <label key={opt.k} className="flex items-center text-[10px] text-slate-600 cursor-pointer">
+                                                            <input type="checkbox" checked={(formData as any)[opt.k]} onChange={e => setFormData({...formData, [opt.k]: e.target.checked})} className="mr-1 accent-purple-600"/>{opt.l}
+                                                        </label>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </div>
                                     )}
+
                                     {(formData.orderType === 'Overseas' || formData.orderType === 'Local') && (
                                         <div className="mt-2">
                                             <label className="text-[9px] text-purple-600 block mb-0.5 font-bold">預計船運/交車時間 (ETA)</label>
@@ -11069,19 +11123,18 @@ const CreateDocModule = ({
 
                             {/* 1. 基本款項與收款 */}
                             <div className="p-3 bg-yellow-50 rounded border border-yellow-200 mb-3">
-                                <div className="flex justify-between items-center mb-2">
+                                <div className="flex justify-between items-center mb-2 flex-wrap gap-y-2">
                                     <div className="text-[10px] font-bold text-yellow-600">交易金額與收款 (Payment)</div>
-                                    <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
-                                        <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
-                                        列印法律條款
-                                    </label>
-                                </div>
-
-                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-yellow-100">
-                                    <span className="text-xs font-bold text-slate-700">成交價 (Vehicle Price)</span>
-                                    <div className="flex items-center">
-                                        <span className="text-xs mr-1">$</span>
-                                        <input type="number" name="price" value={formData.price} onChange={handleChange} className="w-24 bg-white border border-yellow-300 rounded px-1 text-right font-bold text-sm outline-none focus:ring-2 ring-yellow-400"/>
+                                    <div className="flex gap-3">
+                                        {/* ★ 新增：印章簽名顯示開關 */}
+                                        <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
+                                            <input type="checkbox" checked={showStampAndSig} onChange={e => setShowStampAndSig(e.target.checked)} className="mr-1 accent-slate-600"/>
+                                            印章與簽名
+                                        </label>
+                                        <label className="flex items-center text-[10px] cursor-pointer text-slate-500">
+                                            <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1 accent-slate-600"/>
+                                            法律條款
+                                        </label>
                                     </div>
                                 </div>
 
