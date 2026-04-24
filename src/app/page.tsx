@@ -10666,21 +10666,12 @@ const CreateDocModule = ({
         const deposit = depositItems.reduce((sum, item) => sum + (item.amount || 0), 0);
         const extrasTotal = docItems.filter(i => i.isSelected && !i.isFree).reduce((sum, i) => sum + i.amount, 0);
         
-       // ★ 確保即時預覽也計算海外與本地費用總額
+        // ★ 確保即時預覽也計算海外與本地費用總額
         const ovFee = Number((formData as any).overseasTotalFee) || 0;
         const hkFee = Number((formData as any).localTotalFee) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
 
         const balance = price + extrasTotal + orderFeesTotal - deposit;
-
-        // ★ 判斷是否需要顯示 Part C: 訂購資訊 (合約與報價單共用)
-        const hasOrderDetails = (isQuotation || selectedDocType === 'sales_contract') && formData.orderType && formData.orderType !== 'None';
-        const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
-        
-        // ★ 新增：處理交車日期/日數顯示
-        const etaDisplay = formData.etaFormat === 'days' 
-            ? `${formData.etaDays || '___'} Days (天)` 
-            : (formData.etaDate || 'TBC (待定)');
 
         const titleMap: any = {
             'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' },
@@ -10694,8 +10685,14 @@ const CreateDocModule = ({
 
         const displayDate = formData.deliveryDate || new Date().toLocaleDateString('en-GB');
 
-        const hasOrderDetails = isQuotation && formData.orderType && formData.orderType !== 'None';
+        // ★ 判斷是否需要顯示 Part C: 訂購資訊 (合約與報價單共用)
+        const hasOrderDetails = (isQuotation || selectedDocType === 'sales_contract') && formData.orderType && formData.orderType !== 'None';
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
+        
+        // ★ 新增：處理交車日期/日數顯示
+        const etaDisplay = formData.etaFormat === 'days' 
+            ? `${formData.etaDays || '___'} Days (天)` 
+            : (formData.etaDate || 'TBC (待定)');
 
         return (
             <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
@@ -10766,7 +10763,7 @@ const CreateDocModule = ({
                                         </table>
                                     </div>
 
-                                    {/* ★ 報價單專屬：訂單與運輸細節預覽 (與 A4 列印版同步) ★ */}
+                                    {/* ★ 報價單與買賣合約專屬：訂單與運輸細節預覽 ★ */}
                                     {hasOrderDetails && (
                                         <div className="mb-3 break-inside-avoid">
                                             <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part C: Order & Shipping Details (訂購與運輸明細)</div>
@@ -10778,7 +10775,6 @@ const CreateDocModule = ({
                                                             {formData.orderType === 'Overseas' ? `Overseas 境外訂購 (${formData.overseasCountry})` : 'Local 本地訂購'}
                                                         </td>
                                                         <td className="border p-1.5 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td>
-                                                        {/* ★ 套用 ETA 智能顯示格式 */}
                                                         <td className="border p-1.5 w-[30%] font-mono font-bold text-blue-700">{etaDisplay}</td>
                                                     </tr>
                                                     {formData.orderType === 'Overseas' && (
