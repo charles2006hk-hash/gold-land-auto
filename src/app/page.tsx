@@ -10012,9 +10012,14 @@ const DocumentTemplate = () => {
 
     // 1. 合約與報價單類 (Contract & Quotation)
     if (activeType.includes('contract') || isQuotation) {
-        // 判斷是否需要顯示 Part C: 訂購資訊
-        const hasOrderDetails = isQuotation && (activeVehicle as any).orderType && (activeVehicle as any).orderType !== 'None';
+        // ★ 判斷是否需要顯示 Part C: 訂購資訊 (合約與報價單共用)
+        const hasOrderDetails = (isQuotation || activeType === 'sales_contract') && (activeVehicle as any).orderType && (activeVehicle as any).orderType !== 'None';
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
+        
+        // ★ 新增：處理交車日期/日數顯示
+        const etaDisplay = (activeVehicle as any).etaFormat === 'days' 
+            ? `${(activeVehicle as any).etaDays || '___'} Days (天)` 
+            : ((activeVehicle as any).etaDate || 'TBC (待定)');
 
         return (
             <div id="print-root" className="max-w-[210mm] mx-auto bg-white p-8 min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:p-0">
@@ -10069,7 +10074,8 @@ const DocumentTemplate = () => {
                                         {(activeVehicle as any).orderType === 'Overseas' ? `Overseas 境外訂購 (${(activeVehicle as any).overseasCountry})` : 'Local 本地訂購'}
                                     </td>
                                     <td className="border p-1.5 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td>
-                                    <td className="border p-1.5 w-[30%] font-mono font-bold text-blue-700">{(activeVehicle as any).etaDate || 'TBC (待定)'}</td>
+                                    {/* ★ 套用 ETA 智能顯示格式 */}
+                                    <td className="border p-1.5 w-[30%] font-mono font-bold text-blue-700">{etaDisplay}</td>
                                 </tr>
                                 
                                 {/* 海外訂單選項顯示 */}
@@ -10307,6 +10313,8 @@ const CreateDocModule = ({
         // ★★★ 報價單專屬欄位 (升級版) ★★★
         orderType: 'None', // 'None' | 'Local' | 'Overseas'
         overseasCountry: 'Japan',
+        etaFormat: 'date', // ★ 新增：交車時間格式 (date 日期 或 days 日數)
+        etaDays: '',       // ★ 新增：交車日數
         etaDate: '',
         
         // 海外費用總額與選項
@@ -10523,6 +10531,7 @@ const CreateDocModule = ({
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
             
             // ★ 嘗試載入 ETA 如果有的話
+            etaFormat: 'date', etaDays: '',
             etaDate: (car as any).eta || car.acquisition?.eta || '',
             orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None'
         }));
@@ -10607,7 +10616,7 @@ const CreateDocModule = ({
             overseasTotalFee: '', localTotalFee: '',
             chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
             chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false,
-            etaDate: ''
+            etaFormat: 'date', etaDays: '', etaDate: '' // ★ 新增 etaFormat 同 etaDays
         }));
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]);
@@ -11092,8 +11101,8 @@ const CreateDocModule = ({
                                 <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent"/>
                             </div>
                             
-                            {/* ★★★ 報價單專屬：訂購車輛資訊 ★★★ */}
-                            {selectedDocType === 'quotation' && (
+                            {/* ★★★ 訂購車輛資訊 (報價單/買賣合約 共用) ★★★ */}
+                            {(selectedDocType === 'quotation' || selectedDocType === 'sales_contract') && (
                                 <div className="p-3 bg-purple-50 rounded border border-purple-200 mb-3 animate-fade-in">
                                     <div className="text-[10px] font-bold text-purple-700 mb-2">訂購車輛資訊 (Order Details)</div>
                                     <div className="flex gap-2 mb-2">
@@ -11152,10 +11161,26 @@ const CreateDocModule = ({
                                         </div>
                                     )}
 
+                                    {/* ★ 新增：日期與日數切換 */}
                                     {(formData.orderType === 'Overseas' || formData.orderType === 'Local') && (
-                                        <div className="mt-2">
-                                            <label className="text-[9px] text-purple-600 block mb-0.5 font-bold">預計船運/交車時間 (ETA)</label>
-                                            <input name="etaDate" type="date" value={formData.etaDate || ''} onChange={handleChange} className="w-full p-1.5 text-xs border rounded outline-none text-purple-800 font-bold"/>
+                                        <div className="mt-2 flex gap-2 items-end">
+                                            <div className="flex-1">
+                                                <label className="text-[9px] text-purple-600 block mb-0.5 font-bold">預計船運/交車時間 (ETA)</label>
+                                                <div className="flex bg-white rounded border border-purple-200 overflow-hidden shadow-sm">
+                                                    <select name="etaFormat" value={formData.etaFormat || 'date'} onChange={handleChange} className="text-xs p-1.5 border-r border-purple-200 outline-none font-bold text-purple-800 bg-slate-50 cursor-pointer">
+                                                        <option value="date">日期 (Date)</option>
+                                                        <option value="days">日數 (Days)</option>
+                                                    </select>
+                                                    {formData.etaFormat === 'days' ? (
+                                                        <div className="flex flex-1 items-center px-2">
+                                                            <input name="etaDays" type="number" value={formData.etaDays || ''} onChange={handleChange} className="w-full text-xs outline-none text-purple-800 font-bold bg-transparent" placeholder="例如: 30"/>
+                                                            <span className="text-[10px] text-slate-500 whitespace-nowrap ml-1 font-bold">天 (Days)</span>
+                                                        </div>
+                                                    ) : (
+                                                        <input name="etaDate" type="date" value={formData.etaDate || ''} onChange={handleChange} className="flex-1 w-full p-1.5 text-xs outline-none text-purple-800 font-bold bg-transparent cursor-pointer"/>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
