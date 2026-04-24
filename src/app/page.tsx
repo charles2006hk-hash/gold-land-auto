@@ -10114,6 +10114,13 @@ const DocumentTemplate = () => {
                             {/* 車價 */}
                             <tr><td className="border p-1.5 font-bold w-1/2">Vehicle Price (車價)</td><td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(price)}</td></tr>
                             
+                            {/* ★ 新增：顯示海外/本地總收費 */}
+                            {orderFeesTotal > 0 && (
+                                <tr>
+                                    <td className="border p-1.5 text-slate-600 pl-4">+ Overseas & Local Charges (當地與到港總費用)</td>
+                                    <td className="border p-1.5 text-right font-mono">{formatCurrency(orderFeesTotal)}</td>
+                                </tr>
+                            )}
                             {/* 雜費 Add-ons */}
                             {itemsToRender.length > 0 && itemsToRender.map((item: any, idx: number) => (
                                 <tr key={`add-${idx}`}>
