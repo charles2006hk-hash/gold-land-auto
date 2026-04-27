@@ -25,7 +25,8 @@ import {
 } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { 
-  getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, 
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, // ★ 新增：本地快取模組
+  collection, addDoc, deleteDoc, doc, onSnapshot, query, 
   orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
   getDocs, where, limit 
 } from "firebase/firestore";
@@ -111,7 +112,17 @@ const initFirebaseSystem = () => {
         }
       }
     }
-    db = getFirestore(app);
+    
+    // ★★★ 效能大升級：啟用 Firestore 本地永久快取 ★★★
+    try {
+        db = initializeFirestore(app, {
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        });
+    } catch (e) {
+        // 如果瀏覽器唔支援快取 (例如無痕模式)，就降級用普通版
+        db = getFirestore(app);
+    }
+    
     storage = getStorage(app);
     return true;
   } catch (e) {
@@ -7184,17 +7195,20 @@ export default function GoldLandAutoDMS() {
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
 
-  // ★★★ 新增：監聽所有銷售單據 (放在主層) ★★★
+  // ★★★ 效能優化：延遲監聽所有銷售單據 (只在需要時下載) ★★★
   useEffect(() => {
       if (!db || !appId) return;
-      // 這裡假設您的單據集合名稱是 sales_documents
+      
+      // ★ 只有當「打開車輛詳情 (需要睇關聯單據)」或「進入開單系統」時，才向數據庫請求資料
+      if (!editingVehicle && activeTab !== 'create_doc') return;
+
       const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
       const unsub = onSnapshot(q, (snapshot) => {
           const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setAllSalesDocs(list);
       });
       return () => unsub();
-  }, [db, appId]);
+  }, [db, appId, activeTab, editingVehicle !== null]);
 
   // ★★★ 新增：處理從車輛詳情跳轉到開單系統 ★★★
   const handleJumpToDoc = (docData: any) => {
