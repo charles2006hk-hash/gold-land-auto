@@ -11831,13 +11831,10 @@ const CreateDocModule = ({
                     return (
                         <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex w-full box-border overflow-hidden bg-white p-2.5 md:p-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
                             
-                            {/* 左側：保留原尺寸 4:3 大縮圖 (w-28 md:w-32) */}
-                            <div className="w-28 md:w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-900 shadow-inner">
+                            {/* 左側：改用 object-cover 自動適應放大，完美去邊框 */}
+                            <div className="w-28 md:w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-100 border border-slate-200/50 shadow-inner">
                                 {thumbUrl ? (
-                                    <>
-                                        <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-sm opacity-50 scale-110" />
-                                        <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-0.5 drop-shadow-md group-hover:scale-105 transition-transform" />
-                                    </>
+                                    <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Car" loading="lazy" />
                                 ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50"><Car size={20}/><span className="text-[8px] mt-1">No Img</span></div>
                                 )}
