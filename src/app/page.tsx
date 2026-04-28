@@ -6316,18 +6316,32 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) => {
     
     // --- 模塊狀態鎖定 ---
-    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'accounting'>(() => (sessionStorage.getItem('gla_fin_tab') as any) || 'dashboard');
+    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'accounting' | 'capital'>(() => (sessionStorage.getItem('gla_fin_tab') as any) || 'dashboard');
     // ★ 核心安全邏輯：判斷是否擁有「管理員級別」的資料視角
     const isFullAccess = staffId === 'BOSS' || 
                         currentUser?.modules?.includes('all') || 
                         currentUser?.dataAccess === 'all';
 
-    // ★ 安全強制重導：如果普通員工誤入了 Tab 3 或 4 (例如透過緩存)，自動彈回首頁
+    // ★ 安全強制重導：如果普通員工誤入了管理員專屬 Tab，自動彈回首頁
     useEffect(() => {
-        if (!isFullAccess && (financeTab === 'partner' || financeTab === 'accounting')) {
+        if (!isFullAccess && (financeTab === 'partner' || financeTab === 'accounting' || financeTab === 'capital')) {
             setFinanceTab('dashboard');
         }
     }, [financeTab, isFullAccess]);
+
+    // --- ★★★ 資金預算沙盤狀態 (Capital Sandbox) ★★★ ---
+    const [capPrincipal, setCapPrincipal] = useState<string>('10000000');
+    const [capInterest, setCapInterest] = useState<number>(8);
+    const [capFee, setCapFee] = useState<number>(6);
+    const [capYears, setCapYears] = useState<number>(5);
+
+    const [allocUsedCar, setAllocUsedCar] = useState<number>(60);
+    const [allocLimited, setAllocLimited] = useState<number>(20);
+    const [allocRental, setAllocRental] = useState<number>(20);
+    
+    const [yieldUsedCar, setYieldUsedCar] = useState<number>(15);
+    const [yieldLimited, setYieldLimited] = useState<number>(25);
+    const [yieldRental, setYieldRental] = useState<number>(10);
 
     // --- 統計報表狀態 ---
     const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>(() => (sessionStorage.getItem('gla_rep_type') as any) || 'receivable');
@@ -6631,11 +6645,12 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
                     <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
                     <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
                     
-                    {/* ★ 只對 All Data 權限顯示以下兩個按鈕 */}
+                    {/* ★ 只對 All Data 權限顯示以下按鈕 */}
                     {isFullAccess && (
                         <>
                             <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
                             <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
+                            <button onClick={() => setFinanceTab('capital')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'capital' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="mr-1.5"/> 資金預算沙盤</button>
                         </>
                     )}
                 </div>
@@ -6974,6 +6989,146 @@ const ReportView = ({ inventory, settings, setEditingVehicle, setActiveTab, db, 
                     </div>
                 </div>
             )}
+        {/* ========================================== */}
+            {/* Tab 5: 資金預算沙盤 (Capital Sandbox) */}
+            {/* ========================================== */}
+            {financeTab === 'capital' && (() => {
+                // 數學計算引擎
+                const principal = Number(capPrincipal.replace(/,/g, '')) || 0;
+                const upfrontFee = principal * (capFee / 100);
+                const upfrontInterest = principal * (capInterest / 100);
+                const usableCash = principal - upfrontFee - upfrontInterest;
+                
+                const totalInterest = principal * (capInterest / 100) * capYears;
+                const totalCost = upfrontFee + totalInterest;
+                
+                // 損益兩平點 (Break-even Yield)：每年至少要賺幾多%，先夠還利息同手續費？
+                const breakEvenYield = usableCash > 0 ? (totalCost / usableCash / capYears) * 100 : 0;
+
+                // 分配計算
+                const valUsedCar = usableCash * (allocUsedCar / 100);
+                const valLimited = usableCash * (allocLimited / 100);
+                const valRental = usableCash * (allocRental / 100);
+
+                const retUsedCar = valUsedCar * (yieldUsedCar / 100);
+                const retLimited = valLimited * (yieldLimited / 100);
+                const retRental = valRental * (yieldRental / 100);
+                
+                const totalAnnualReturn = retUsedCar + retLimited + retRental;
+                const blendedYield = usableCash > 0 ? (totalAnnualReturn / usableCash) * 100 : 0;
+                const netAnnualProfit = totalAnnualReturn - (principal * (capInterest / 100)) - (upfrontFee / capYears);
+
+                return (
+                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl shadow-sm border border-slate-200 overflow-y-auto animate-fade-in p-4 md:p-6 space-y-6">
+                        
+                        <div className="bg-purple-900 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
+                            <div className="absolute -right-10 -top-10 w-48 h-48 bg-purple-600/30 rounded-full blur-3xl"></div>
+                            <h3 className="text-xl font-black mb-2 flex items-center"><DollarSign className="mr-2 text-yellow-400"/> 資金成本與槓桿模擬器 (Capital Sandbox)</h3>
+                            <p className="text-sm text-purple-200 max-w-2xl">計算包含「先扣利息與手續費」的真實資金成本，並將可用現金流分配至三大業務板塊，模擬您的年度預期回報與風險。</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* 左側：資金結構 */}
+                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                                <h4 className="font-bold text-slate-800 text-lg border-b pb-2">1. 外部資金結構 (Capital Structure)</h4>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">申請總額 (Principal HKD)</label>
+                                        <input type="text" value={formatNumberInput(capPrincipal)} onChange={e => setCapPrincipal(e.target.value.replace(/,/g, ''))} className="w-full text-2xl font-black font-mono text-slate-800 border-b-2 border-purple-300 outline-none focus:border-purple-600 p-1 bg-transparent"/>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">年利率 (%)</label>
+                                            <input type="number" value={capInterest} onChange={e => setCapInterest(Number(e.target.value))} className="w-full text-lg font-bold border rounded p-2 outline-none focus:ring-2 ring-purple-200"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">一次性手續費 (%)</label>
+                                            <input type="number" value={capFee} onChange={e => setCapFee(Number(e.target.value))} className="w-full text-lg font-bold border rounded p-2 outline-none focus:ring-2 ring-purple-200"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">借款期 (年)</label>
+                                            <input type="number" value={capYears} onChange={e => setCapYears(Number(e.target.value))} className="w-full text-lg font-bold border rounded p-2 outline-none focus:ring-2 ring-purple-200"/>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                                    <div className="flex justify-between text-sm"><span className="text-slate-500">先扣手續費:</span><span className="font-mono text-red-500 font-bold">-{formatCurrency(upfrontFee)}</span></div>
+                                    <div className="flex justify-between text-sm"><span className="text-slate-500">先扣首年利息:</span><span className="font-mono text-red-500 font-bold">-{formatCurrency(upfrontInterest)}</span></div>
+                                    <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                                        <span className="font-bold text-slate-800">實際到手可用現金:</span>
+                                        <span className="text-2xl font-black font-mono text-emerald-600">{formatCurrency(usableCash)}</span>
+                                    </div>
+                                </div>
+
+                                <div className="bg-red-50 p-4 rounded-xl border border-red-200 flex justify-between items-center">
+                                    <div>
+                                        <div className="text-xs font-bold text-red-600 uppercase">損益兩平點 (Break-even Yield)</div>
+                                        <div className="text-[10px] text-red-500/80 mt-0.5">這筆可用現金每年需賺取多少，才夠冚皮？</div>
+                                    </div>
+                                    <div className="text-2xl font-black text-red-700">{breakEvenYield.toFixed(2)}%</div>
+                                </div>
+                            </div>
+
+                            {/* 右側：投資分配與回報 */}
+                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+                                <div className="flex justify-between items-center border-b pb-2">
+                                    <h4 className="font-bold text-slate-800 text-lg">2. 資金池分配矩陣 (Allocation)</h4>
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${allocUsedCar + allocLimited + allocRental === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>總分配: {allocUsedCar + allocLimited + allocRental}%</span>
+                                </div>
+
+                                {/* 跑道 1 */}
+                                <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
+                                    <div className="flex justify-between font-bold text-blue-800 text-sm mb-2"><span>A. 常規二手車及中港買賣 (高周轉)</span><span>{formatCurrency(valUsedCar)}</span></div>
+                                    <div className="flex gap-4 items-center">
+                                        <div className="flex-1"><label className="text-[10px] text-blue-600">分配比例 {allocUsedCar}%</label><input type="range" min="0" max="100" value={allocUsedCar} onChange={e=>setAllocUsedCar(Number(e.target.value))} className="w-full accent-blue-600"/></div>
+                                        <div className="w-24"><label className="text-[10px] text-blue-600">預期年回報 %</label><input type="number" value={yieldUsedCar} onChange={e=>setYieldUsedCar(Number(e.target.value))} className="w-full p-1 text-sm border border-blue-300 rounded text-center font-bold"/></div>
+                                    </div>
+                                </div>
+
+                                {/* 跑道 2 */}
+                                <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+                                    <div className="flex justify-between font-bold text-amber-800 text-sm mb-2"><span>B. 限量版 Quota 買賣 (高利潤)</span><span>{formatCurrency(valLimited)}</span></div>
+                                    <div className="flex gap-4 items-center">
+                                        <div className="flex-1"><label className="text-[10px] text-amber-600">分配比例 {allocLimited}%</label><input type="range" min="0" max="100" value={allocLimited} onChange={e=>setAllocLimited(Number(e.target.value))} className="w-full accent-amber-500"/></div>
+                                        <div className="w-24"><label className="text-[10px] text-amber-600">預期年回報 %</label><input type="number" value={yieldLimited} onChange={e=>setYieldLimited(Number(e.target.value))} className="w-full p-1 text-sm border border-amber-300 rounded text-center font-bold"/></div>
+                                    </div>
+                                </div>
+
+                                {/* 跑道 3 */}
+                                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                                    <div className="flex justify-between font-bold text-emerald-800 text-sm mb-2"><span>C. 未來拓展：車輛出租 (穩定防守)</span><span>{formatCurrency(valRental)}</span></div>
+                                    <div className="flex gap-4 items-center">
+                                        <div className="flex-1"><label className="text-[10px] text-emerald-600">分配比例 {allocRental}%</label><input type="range" min="0" max="100" value={allocRental} onChange={e=>setAllocRental(Number(e.target.value))} className="w-full accent-emerald-500"/></div>
+                                        <div className="w-24"><label className="text-[10px] text-emerald-600">預期年回報 %</label><input type="number" value={yieldRental} onChange={e=>setYieldRental(Number(e.target.value))} className="w-full p-1 text-sm border border-emerald-300 rounded text-center font-bold"/></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* 底部總結 */}
+                            <div className="lg:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center text-white">
+                                <div className="mb-4 md:mb-0 w-full md:w-auto">
+                                    <div className="text-slate-400 font-bold text-sm uppercase tracking-widest mb-1">Portfolio Projection (投資組合預期)</div>
+                                    <div className="text-3xl font-black text-white">{blendedYield.toFixed(2)}% <span className="text-sm text-slate-400 font-normal">混合年回報率</span></div>
+                                </div>
+                                <div className="flex gap-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-slate-700 pt-4 md:pt-0">
+                                    <div className="text-right">
+                                        <div className="text-slate-400 text-[10px] uppercase">預期每年總利潤</div>
+                                        <div className="text-xl font-mono font-bold text-blue-400">{formatCurrency(totalAnnualReturn)}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-slate-400 text-[10px] uppercase">扣除資金成本後 <span className="text-emerald-400">真實純利</span></div>
+                                        <div className={`text-2xl font-mono font-black ${netAnnualProfit > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {formatCurrency(netAnnualProfit)}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };
