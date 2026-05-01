@@ -8,6 +8,8 @@ import {
   Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+// ★ 加入 Firebase Storage 功能
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 
 // --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
@@ -225,10 +227,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     
     // 相片陣列
     const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
+
     const [transport, setTransport] = useState({ type: 'SEA', departureDate: '', duration: '' });
     const [margin, setMargin] = useState('30000');
     
-    // 將 originFees 宣告為 any 避免 TS 報錯
     const [originFees, setOriginFees] = useState<any>(REGION_CONFIGS['JP'].origin);
     const [hkMiscFees, setHkMiscFees] = useState<any>(REGION_CONFIGS['JP'].hk_misc);
     const [hkLicenseFees, setHkLicenseFees] = useState<any>(REGION_CONFIGS['JP'].hk_license);
@@ -260,25 +262,21 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         if (cc > 0) setHkLicenseFees((prev: any) => ({ ...prev, fee: calcLicenseFee(cc).toString() }));
     }, [carInfo.cc]);
 
-    // --- 計算邏輯 ---
+    // --- 計算邏輯 (徹底移除 HKHK$ 錯誤) ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
-    
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
     const frtTax = calcFRT(parseNum(prpPrice));
     const totalOriginHKD = getFeeTotal(originFees) * currentRate;
     const totalHkMisc = getFeeTotal(hkMiscFees);
-    
     const estIns = estimateInsurance(carPriceHKD + frtTax, parseNum(carInfo.cc), insType, insNCD);
     const finalIns = parseNum(hkLicenseFees.insurance || '0') > 0 ? parseNum(hkLicenseFees.insurance) : estIns;
     const pureLicenseFee = parseNum(hkLicenseFees.fee || '0');
-    
     const totalHkLicense = pureLicenseFee + frtTax + finalIns; 
     const landedCost = carPriceHKD + totalOriginHKD + totalHkMisc + frtTax;
     const totalCost = landedCost + pureLicenseFee + finalIns;
     const finalPrice = totalCost + parseNum(margin);
 
-    // 載入歷史紀錄
     useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
@@ -287,7 +285,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
     }, [db, appId]);
 
-    // ★ 數據搬家小工具 (處理從另一個 Firebase 導出的 JSON)
+    // ★ 智能數據搬家 (只上傳 Storage，不污染智能圖庫)
     const handleMigrateOldData = async (e: any) => {
         const file = e.target.files?.[0];
         if (!file || !db) return;
@@ -298,18 +296,53 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 const list = Array.isArray(rawData) ? rawData : (rawData.import_orders || []);
                 if (list.length === 0) return alert("檔案中找不到有效訂單數據");
                 
-                if (confirm(`準備匯入 ${list.length} 筆舊系統數據，確定嗎？`)) {
+                if (confirm(`準備匯入 ${list.length} 筆數據。系統將自動把舊 Base64 圖片上傳至雲端 Storage。這可能需要幾分鐘，請耐心等候，確定嗎？`)) {
+                    const storage = getStorage(); 
                     const batch = writeBatch(db);
-                    list.forEach((oldItem: any) => {
+
+                    for (let i = 0; i < list.length; i++) {
+                        const oldItem = list[i];
                         const newRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
+                        
+                        const mappedPhotos = [];
+                        const oldAttachments = oldItem.attachments || [];
+
+                        // 處理舊相片上傳至 Storage (不寫入 Media Library)
+                        for (let a of oldAttachments) {
+                            if (a.type?.startsWith('image/') && a.data) {
+                                try {
+                                    const fileName = `import_orders/migration_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+                                    const sRef = storageRef(storage, fileName);
+                                    await uploadString(sRef, a.data, 'data_url');
+                                    const url = await getDownloadURL(sRef);
+                                    mappedPhotos.push(url);
+                                } catch (uploadErr) {
+                                    console.error("圖片轉移失敗", uploadErr);
+                                }
+                            }
+                        }
+
+                        const totalCostObj = oldItem.results?.totalCost || 0;
+                        const defaultMargin = 30000;
+
                         batch.set(newRef, {
                             ...oldItem,
+                            region: oldItem.country || 'JP',
+                            photos: mappedPhotos, // 純 URL 字串陣列
+                            results: {
+                                ...oldItem.results,
+                                frtTax: oldItem.results?.frt || 0,
+                                finalPrice: totalCostObj + defaultMargin
+                            },
+                            quote: { margin: defaultMargin, finalPrice: totalCostObj + defaultMargin },
                             migratedFromOldApp: true,
                             importTs: Date.now()
                         });
-                    });
+                    }
+
                     await batch.commit();
-                    alert(`✅ 成功搬遷 ${list.length} 筆數據！`);
+                    alert(`✅ 成功搬遷並完美升級 ${list.length} 筆數據！圖片已轉移至雲端 (未分配入主圖庫)。`);
+                    setView('history');
                 }
             } catch (err) { alert("檔案解析失敗，請確保是正確的 JSON 格式"); }
         };
@@ -317,13 +350,14 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         e.target.value = ''; // Reset input
     };
 
-    const handlePhotoUpload = (e: any) => {
+    // ★ 日常圖片上傳 (只上傳 Storage，供報價單預覽使用)
+    const handlePhotoUpload = async (e: any) => {
         const file = e.target.files?.[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 const canvas = document.createElement('canvas');
                 const MAX_SIZE = 800;
                 let w = img.width, h = img.height;
@@ -332,8 +366,18 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 canvas.width = w; canvas.height = h;
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, w, h);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-                setOrderPhotos(prev => [...prev, dataUrl]);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
+                
+                try {
+                    const storage = getStorage();
+                    const fileName = `import_orders/uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+                    const sRef = storageRef(storage, fileName);
+                    await uploadString(sRef, dataUrl, 'data_url');
+                    const url = await getDownloadURL(sRef);
+                    setOrderPhotos(prev => [...prev, url]); // 只更新 UI 狀態
+                } catch (err) {
+                    alert("圖片上傳至雲端失敗！");
+                }
             };
             img.src = event.target?.result as string;
         };
@@ -342,7 +386,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
     const handleSave = async () => {
         if (!carPrice || !prpPrice) return alert("請填寫基本車價與 PRP");
-        
         if (carInfo.make && !(settings?.makes || []).includes(carInfo.make)) updateSettings('makes', [...(settings?.makes || []), carInfo.make]);
         if (carInfo.exteriorColor && !(settings?.colors || []).includes(carInfo.exteriorColor)) updateSettings('colors', [...(settings?.colors || []), carInfo.exteriorColor]);
 
@@ -371,7 +414,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         } catch (e) { alert("儲存失敗"); }
     };
 
-    // ★ 匯入主系統 (Inventory) 邏輯
+    // ★ 匯入主系統 (轉正時，才將相片正式寫入智能圖庫，並自動綁定該車！)
     const handleImportToInventory = async (item: any) => {
         if (!db || !appId) return;
         
@@ -387,7 +430,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 alert("✅ 已取消匯入，車輛已從主庫存移除。");
             } catch (e) { alert("操作失敗"); }
         } else {
-            if (!confirm("確定將此訂單匯入至主系統庫存？這會自動建立一台新車資料。")) return;
+            if (!confirm("確定將此訂單匯入至主系統庫存？系統會自動建立新車資料，並將相關相片派發至智能圖庫！")) return;
             try {
                 const vehicleData = {
                     regMark: '',
@@ -427,12 +470,31 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     updatedAt: serverTimestamp()
                 };
 
+                // 1. 建立庫存車輛
                 const docRef = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/inventory`), vehicleData);
                 
+                // 2. 正式將相片推入智能圖庫，並直接綁定剛建立的 docRef.id
+                if (item.photos && item.photos.length > 0) {
+                    const batch = writeBatch(db);
+                    item.photos.forEach((url: string) => {
+                        const mediaRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
+                        batch.set(mediaRef, {
+                            url: url,
+                            vehicleId: docRef.id,
+                            source: 'Import Order Confirmed',
+                            status: 'assigned',
+                            uploadedAt: serverTimestamp()
+                        });
+                    });
+                    await batch.commit();
+                }
+
+                // 3. 更新報價單狀態
                 await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, item.id), {
                     isImported: true, linkedVehicleId: docRef.id
                 });
-                alert("✅ 成功匯入至主系統庫存！您可以去「車輛管理」查看。");
+                
+                alert("✅ 成功匯入！相片已自動歸類至該車輛檔案中，您可以去「車輛管理」查看。");
             } catch (e) { console.error(e); alert("匯入失敗"); }
         }
     };
@@ -444,10 +506,17 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setPrpPrice(formatNum(String(item.vals.prp)));
         
         setCarInfo({
-            make: item.details.manufacturer || item.details.make || '', model: item.details.model || '', year: item.details.year || '',
-            code: item.details.code || '', exteriorColor: item.details.exteriorColor || '', interiorColor: item.details.interiorColor || '',
-            transmission: item.details.transmission || 'AT', cc: item.details.engineCapacity || item.details.cc || '', seats: item.details.seats || '',
-            mileage: item.details.mileage || '', chassis: item.details.chassisNo || item.details.chassis || ''
+            make: item.details.manufacturer || item.details.make || '', 
+            model: item.details.model || '', 
+            year: item.details.year || '',
+            code: item.details.code || '', 
+            exteriorColor: item.details.exteriorColor || '', 
+            interiorColor: item.details.interiorColor || '',
+            transmission: item.details.transmission || 'AT', 
+            cc: item.details.engineCapacity || item.details.cc || '', 
+            seats: item.details.seats || '',
+            mileage: item.details.mileage || '', 
+            chassis: item.details.chassisNo || item.details.chassis || ''
         });
         setJpEra('Reiwa'); setJpEraYear('');
 
@@ -473,7 +542,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         if (filterStatus !== 'ALL' && h.status !== filterStatus) return false;
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            return (h.details.model || '').toLowerCase().includes(q) || (h.details.chassisNo || h.details.chassis || '').toLowerCase().includes(q);
+            return (h.details?.model || '').toLowerCase().includes(q) || (h.details?.chassisNo || h.details?.chassis || '').toLowerCase().includes(q);
         }
         return true;
     });
@@ -509,9 +578,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
             {view === 'calc' && (
                 <div className="md:hidden flex bg-white border-b border-slate-200 p-1 gap-1 shrink-0 z-20">
-                    <button onClick={()=>setMobileTab('basic')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='basic'?'bg-slate-100 text-blue-700':'text-slate-400'}`}>1. 規格</button>
-                    <button onClick={()=>setMobileTab('fees')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='fees'?'bg-slate-100 text-blue-700':'text-slate-400'}`}>2. 雜費</button>
-                    <button onClick={()=>setMobileTab('result')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='result'?'bg-slate-100 text-blue-700':'text-slate-400'}`}>3. 報價</button>
+                    <button onClick={()=>setMobileTab('basic')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='basic'?'bg-blue-50 text-blue-700':'text-slate-400'}`}>1. 規格</button>
+                    <button onClick={()=>setMobileTab('fees')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='fees'?'bg-blue-50 text-blue-700':'text-slate-400'}`}>2. 雜費</button>
+                    <button onClick={()=>setMobileTab('result')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='result'?'bg-blue-50 text-blue-700':'text-slate-400'}`}>3. 報價</button>
                 </div>
             )}
 
@@ -567,10 +636,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     </div>
                                                     
                                                     <div className="flex flex-wrap items-center gap-2 mt-2">
-                                                        {item.details.transmission && <span className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] flex items-center text-slate-600 font-bold"><Cog size={12} className="mr-1"/>{item.details.transmission}</span>}
-                                                        {item.details.mileage && <span className="bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded text-[10px] flex items-center text-orange-700 font-bold"><RotateCcw size={12} className="mr-1"/>{formatNum(item.details.mileage)} km</span>}
-                                                        {item.details.exteriorColor && <span className="flex items-center text-[10px] text-slate-600 font-bold ml-1"><div className="w-2.5 h-2.5 rounded-full border border-slate-300 mr-1" style={{backgroundColor: getColorHex(item.details.exteriorColor)}}></div>{item.details.exteriorColor}</span>}
-                                                        {item.details.interiorColor && <span className="flex items-center text-[10px] text-slate-600 font-bold ml-1"><div className="w-2.5 h-2.5 rounded-full border border-slate-300 mr-1" style={{backgroundColor: getColorHex(item.details.interiorColor)}}></div>{item.details.interiorColor}</span>}
+                                                        {item.details?.transmission && <span className="bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] flex items-center text-slate-600 font-bold"><Cog size={12} className="mr-1"/>{item.details.transmission}</span>}
+                                                        {item.details?.mileage && <span className="bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded text-[10px] flex items-center text-orange-700 font-bold"><RotateCcw size={12} className="mr-1"/>{formatNum(item.details.mileage)} km</span>}
+                                                        {item.details?.exteriorColor && <span className="flex items-center text-[10px] text-slate-600 font-bold ml-1"><div className="w-2.5 h-2.5 rounded-full border border-slate-300 mr-1" style={{backgroundColor: getColorHex(item.details.exteriorColor)}}></div>{item.details.exteriorColor}</span>}
+                                                        {item.details?.interiorColor && <span className="flex items-center text-[10px] text-slate-600 font-bold ml-1"><div className="w-2.5 h-2.5 rounded-full border border-slate-300 mr-1" style={{backgroundColor: getColorHex(item.details.interiorColor)}}></div>{item.details.interiorColor}</span>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -591,16 +660,16 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         </div>
 
                                         <div className="mt-2">
-                                            <TransportProgressBar departureDate={item.details.departureDate} durationDays={item.details.shippingDuration} type={item.details.transportType} />
+                                            <TransportProgressBar departureDate={item.details?.departureDate} durationDays={item.details?.shippingDuration} type={item.details?.transportType} />
                                         </div>
 
                                         {/* 底部價格摘要 */}
                                         <div className="flex justify-between items-end border-t border-slate-100 pt-3 mt-1">
                                             <div className="text-[10px] text-slate-500 font-bold space-y-0.5">
-                                                <div>到港: <span className="text-slate-800">{fmt(item.results.landedCost)}</span></div>
-                                                <div>A1稅: <span className="text-slate-800">{fmt(item.results.frtTax)}</span></div>
+                                                <div>到港: <span className="text-slate-800">{fmt(item.results?.landedCost)}</span></div>
+                                                <div>A1稅: <span className="text-slate-800">{fmt(item.results?.frtTax)}</span></div>
                                             </div>
-                                            <div className="text-3xl font-black text-blue-700 tracking-tighter">{fmt(item.results.finalPrice)}</div>
+                                            <div className="text-3xl font-black text-blue-700 tracking-tighter">{fmt(item.results?.finalPrice)}</div>
                                         </div>
                                     </div>
                                 );
@@ -621,7 +690,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 ))}
                             </div>
 
-                            {/* 核心價格 (移至最左側) */}
+                            {/* 核心價格 */}
                             <div>
                                 <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
                                     <DollarSign className="w-5 h-5 text-blue-600" />
@@ -647,7 +716,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 
                                 {/* 圖片上傳 */}
                                 <div className="mb-4">
-                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">車輛相片 (自動壓縮)</label>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">車輛相片 (自動上傳雲端)</label>
                                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                         {orderPhotos.map((url, i) => (
                                             <div key={i} className="relative w-16 h-12 rounded-md border border-slate-300 overflow-hidden flex-none">
@@ -754,7 +823,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3>
                                 </div>
                                 
-                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6">
+                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 shadow-sm">
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="flex bg-white rounded p-0.5 border border-indigo-200 shadow-sm">
                                             <button onClick={()=>setInsType('3rd')} className={`px-4 py-1.5 text-xs font-bold rounded ${insType==='3rd'?'bg-indigo-600 text-white':'text-indigo-400'}`}>三保</button>
@@ -789,7 +858,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 
                                 <div className="mb-6">
                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">當地雜費 ({regData.currency})</span>
-                                    <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                                    <div className="grid grid-cols-3 gap-x-4 gap-y-6">
                                         {Object.entries(originFees).map(([k, v]:any) => (
                                             <div key={k} className="flex flex-col">
                                                 <InputField label={k} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: formatNum(val)})} />
@@ -800,7 +869,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
                                 <div className="pt-4 border-t border-slate-200">
                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">香港雜費 (HKD)</span>
-                                    <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+                                    <div className="grid grid-cols-3 gap-x-4 gap-y-6">
                                         {Object.entries(hkMiscFees).map(([k, v]:any) => (
                                             <div key={k} className="flex flex-col">
                                                 <InputField label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: formatNum(val)})} />
