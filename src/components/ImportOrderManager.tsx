@@ -64,9 +64,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [prpPrice, setPrpPrice] = useState('');
 
     // 2. 雜費細項 (全自動帶入預設)
-    const [originFees, setOriginFees] = useState(REGION_CONFIGS['JP'].origin);
-    const [hkMiscFees, setHkMiscFees] = useState(REGION_CONFIGS['JP'].hk_misc);
-    const [hkLicenseFees, setHkLicenseFees] = useState(REGION_CONFIGS['JP'].hk_license);
+    const [originFees, setOriginFees] = useState<any>(REGION_CONFIGS['JP'].origin);
+    const [hkMiscFees, setHkMiscFees] = useState<any>(REGION_CONFIGS['JP'].hk_misc);
+    const [hkLicenseFees, setHkLicenseFees] = useState<any>(REGION_CONFIGS['JP'].hk_license);
     const [margin, setMargin] = useState('30000');
 
     // 當地區切換時，自動重置所有預設費用
@@ -81,9 +81,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
     const frtTax = calcFRT(parseNum(prpPrice));
     
-    const totalOriginHKD = Object.values(originFees).reduce((s:any, v:any) => s + parseNum(v), 0) * currentRate;
-    const totalHkMisc = Object.values(hkMiscFees).reduce((s:any, v:any) => s + parseNum(v), 0);
-    const totalHkLicense = Object.values(hkLicenseFees).reduce((s:any, v:any) => s + parseNum(v), 0) + frtTax;
+    const totalOriginHKD = Object.values(originFees as any).reduce((s:any, v:any) => s + parseNum(v), 0) * currentRate;
+    const totalHkMisc = Object.values(hkMiscFees as any).reduce((s:any, v:any) => s + parseNum(v), 0);
+    const totalHkLicense = Object.values(hkLicenseFees as any).reduce((s:any, v:any) => s + parseNum(v), 0) + frtTax;
     
     const landedCost = carPriceHKD + totalOriginHKD + totalHkMisc + frtTax;
     const totalCost = landedCost + (totalHkLicense - frtTax);
