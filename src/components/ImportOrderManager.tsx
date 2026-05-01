@@ -133,7 +133,7 @@ const TransportProgressBar = ({ departureDate, durationDays, type }: any) => {
     const arrivalDate = new Date(end).toLocaleDateString('zh-HK');
     const daysLeft = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
     return (
-        <div className="w-full mt-3 mb-1">
+        <div className="w-full mt-2 mb-1">
             <div className="flex justify-between items-end mb-1 text-[10px] font-bold text-slate-500">
                 <span>出發: {departureDate}</span>
                 <span className={isArrived ? 'text-emerald-600' : 'text-blue-600'}>{isArrived ? '已抵達' : `預計: ${arrivalDate} (${daysLeft > 0 ? `還有 ${daysLeft} 天` : '即將抵達'})`}</span>
@@ -269,7 +269,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         if (cc > 0) setHkLicenseFees((prev: any) => ({ ...prev, fee: calcLicenseFee(cc).toString() }));
     }, [carInfo.cc]);
 
-    // 切換選中單據時，重置畫廊 index
     useEffect(() => {
         setSelectedPhotoIdx(0);
     }, [selectedId]);
@@ -510,7 +509,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             {zoomPhoto && (
                 <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-fade-in" onClick={() => setZoomPhoto(null)}>
                     <button className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2" title="關閉"><X size={32}/></button>
-                    <img src={zoomPhoto} className="max-w-full max-h-[75vh] object-contain mb-8 shadow-2xl rounded-lg border border-white/10 bg-black" onClick={e => e.stopPropagation()} />
+                    {/* ★ 使用 object-contain 保證相片完整顯示 */}
+                    <img src={zoomPhoto} className="max-w-full max-h-[85vh] object-contain mb-8 shadow-2xl rounded-lg border border-white/10" onClick={e => e.stopPropagation()} />
                     <div className="flex gap-4">
                         <a href={zoomPhoto} download={`car_photo_${Date.now()}.jpg`} target="_blank" rel="noopener noreferrer" className="bg-white text-slate-900 px-6 py-3 rounded-full font-black shadow-xl flex items-center gap-2 hover:bg-slate-200 hover:scale-105 active:scale-95 transition-all" onClick={e => e.stopPropagation()}>
                             <Download size={18}/> 下載原圖
@@ -583,14 +583,14 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <button onClick={() => setSelectedId(null)} className="md:hidden flex items-center gap-1 text-slate-500 font-bold text-xs bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-fit mb-3"><ArrowLeft size={14}/> 返回列表</button>
                                     
                                     {/* 頂部 Header */}
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0 mb-4">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 shrink-0 mb-4">
                                         <div>
                                             <div className="flex items-center gap-2 mb-1.5">
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider border ${STATUS_OPTIONS[selectedItem.status || 'QUOTING'].color}`}>{STATUS_OPTIONS[selectedItem.status || 'QUOTING'].label}</span>
                                                 <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">{selectedItem.region}</span>
                                                 <span className="text-xs text-slate-400 font-bold ml-2">{selectedItem.date}</span>
                                             </div>
-                                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
+                                            <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
                                         </div>
                                         <div className="flex gap-2 flex-wrap">
                                             <button onClick={() => handleImportToInventory(selectedItem)} className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 font-bold text-xs border shadow-sm ${selectedItem.isImported ? 'bg-white text-slate-500 border-slate-200' : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 active:scale-95'}`}>{selectedItem.isImported ? <RotateCcw size={14}/> : <Database size={14}/>} {selectedItem.isImported ? '取消匯入' : '匯入主庫存'}</button>
@@ -601,73 +601,82 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         </div>
                                     </div>
 
-                                    {/* ★ 全新黃金比例排版：左邊 (佔 2 欄) 放相片與規格，右邊 (佔 1 欄) 放財務 */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
+                                    {/* ★ 全新黃金比例佈局 (2/3 左側畫廊與資料， 1/3 右側財務) */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
                                         
-                                        {/* 左側：相片畫廊 + 車輛規格 + 物流 (佔 2 欄，獨立滾動) */}
-                                        <div className="lg:col-span-2 flex flex-col gap-5 overflow-y-auto pr-2 scrollbar-hide">
+                                        {/* 左側：相片疊在規格之上 (佔 2 欄) */}
+                                        <div className="lg:col-span-2 flex flex-col gap-4 h-full min-h-0 overflow-y-auto scrollbar-hide pr-1">
                                             
-                                            {/* 相片畫廊 (置於車輛規格上方) */}
-                                            {selectedItem.photos?.length > 0 && (
-                                                <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0">
-                                                    {/* ★ 修正：使用 object-contain 及限定高度，確保相片全貌顯示 */}
-                                                    <div className="relative rounded-xl overflow-hidden bg-slate-100 group cursor-zoom-in flex items-center justify-center h-64 md:h-[320px]" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
+                                            {/* 上方：相片畫廊 (大面積展示) */}
+                                            {selectedItem.photos?.length > 0 ? (
+                                                <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0 h-[260px] xl:h-[320px]">
+                                                    <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-100/50 group cursor-zoom-in flex items-center justify-center" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
                                                         <img src={selectedItem.photos[selectedPhotoIdx]} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105 p-1" />
                                                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all flex items-center justify-center">
                                                             <div className="bg-white/95 text-slate-800 px-4 py-2 rounded-lg font-black text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100"><Search size={14}/> 點擊放大下載</div>
                                                         </div>
                                                     </div>
                                                     {selectedItem.photos.length > 1 && (
-                                                        <div className="h-16 mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0">
+                                                        <div className="h-14 mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0 px-1">
                                                             {selectedItem.photos.map((p: string, idx: number) => (
-                                                                <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-20 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all bg-slate-50 ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-sm scale-95' : 'border-transparent opacity-60 hover:opacity-100 hover:scale-95'}`}>
+                                                                <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-16 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all bg-slate-50 ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-sm scale-95' : 'border-transparent opacity-60 hover:opacity-100 hover:scale-95'}`}>
                                                                     <img src={p} className="w-full h-full object-cover" />
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
+                                            ) : (
+                                                <div className="h-[200px] shrink-0 flex flex-col items-center justify-center text-slate-300 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200"><ImageIcon size={48}/><p className="mt-2 text-xs font-bold text-slate-400">無相片</p></div>
                                             )}
 
-                                            {/* 中欄：規格與運輸 */}
-                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0">
-                                                <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-4 flex items-center gap-2"><Car size={18} className="text-blue-500"/> 車輛規格</h3>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-y-5 gap-x-4">
-                                                    <div className="col-span-2"><span className="block text-[10px] font-bold text-slate-400 uppercase">車身號碼</span><span className="font-bold text-sm text-slate-800 break-all">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</span></div>
-                                                    <div><span className="block text-[10px] font-bold text-slate-400 uppercase">排量(cc)</span><span className="font-bold text-sm text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</span></div>
-                                                    <div><span className="block text-[10px] font-bold text-slate-400 uppercase">波箱</span><span className="font-bold text-sm text-slate-800">{selectedItem.details?.transmission || '-'}</span></div>
-                                                    <div><span className="block text-[10px] font-bold text-slate-400 uppercase">咪數(km)</span><span className="font-bold text-sm text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</span></div>
-                                                    <div><span className="block text-[10px] font-bold text-slate-400 uppercase">外觀顏色</span><span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">{selectedItem.details?.exteriorColor && <div className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details.exteriorColor)}}></div>}{selectedItem.details?.exteriorColor || '-'}</span></div>
-                                                    <div className="col-span-2"><span className="block text-[10px] font-bold text-slate-400 uppercase">內飾顏色</span><span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">{selectedItem.details?.interiorColor && <div className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details.interiorColor)}}></div>}{selectedItem.details?.interiorColor || '-'}</span></div>
+                                            {/* 下方：規格與物流「左右平排」 (零滾動秘訣) */}
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
+                                                {/* 車輛規格 (佔 2 欄) */}
+                                                <div className="md:col-span-2 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                                                    <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-3 flex items-center gap-2"><Car size={16} className="text-blue-500"/> 車輛規格</h3>
+                                                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-3 gap-x-2">
+                                                        <div className="col-span-2 lg:col-span-3"><span className="block text-[9px] font-bold text-slate-400 uppercase">車身號碼</span><span className="font-bold text-[13px] text-slate-800 break-all">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</span></div>
+                                                        <div><span className="block text-[9px] font-bold text-slate-400 uppercase">排量(cc)</span><span className="font-bold text-[13px] text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</span></div>
+                                                        <div><span className="block text-[9px] font-bold text-slate-400 uppercase">波箱</span><span className="font-bold text-[13px] text-slate-800">{selectedItem.details?.transmission || '-'}</span></div>
+                                                        <div><span className="block text-[9px] font-bold text-slate-400 uppercase">咪數(km)</span><span className="font-bold text-[13px] text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</span></div>
+                                                        <div><span className="block text-[9px] font-bold text-slate-400 uppercase">外觀顏色</span><span className="font-bold text-[13px] text-slate-800 flex items-center gap-1.5">{selectedItem.details?.exteriorColor && <div className="w-2 h-2 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details.exteriorColor)}}></div>}{selectedItem.details?.exteriorColor || '-'}</span></div>
+                                                        <div className="col-span-2"><span className="block text-[9px] font-bold text-slate-400 uppercase">內飾顏色</span><span className="font-bold text-[13px] text-slate-800 flex items-center gap-1.5">{selectedItem.details?.interiorColor && <div className="w-2 h-2 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details.interiorColor)}}></div>}{selectedItem.details?.interiorColor || '-'}</span></div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* 物流進度 (佔 1 欄) */}
+                                                <div className="md:col-span-1 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                                                    <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-2 flex items-center gap-2"><Plane size={16} className="text-slate-500"/> 物流進度</h3>
+                                                    {selectedItem.details?.departureDate ? (
+                                                        <div className="flex-1 flex flex-col justify-center">
+                                                            <TransportProgressBar departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex-1 flex items-center justify-center text-xs font-bold text-slate-400">未設定出發日期</div>
+                                                    )}
                                                 </div>
                                             </div>
-                                            
-                                            {selectedItem.details?.departureDate && (
-                                                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0">
-                                                    <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-3 flex items-center gap-2"><Plane size={18} className="text-slate-500"/> 物流進度</h3>
-                                                    <TransportProgressBar departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
-                                                </div>
-                                            )}
                                         </div>
 
-                                        {/* 右側：財務結算 (佔 1 欄，高度填滿) */}
-                                        <div className="lg:col-span-1 flex flex-col h-full bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white min-h-[400px]">
-                                            <div className="p-5 border-b border-white/10 shrink-0">
-                                                <h3 className="font-black text-blue-400 text-sm tracking-widest uppercase mb-4 flex items-center gap-2"><DollarSign size={18}/> 財務結算</h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
-                                                    <div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold uppercase">海關 A1 價</span><span className="font-mono text-sm">${formatNum(selectedItem.vals?.prp)}</span></div>
+                                        {/* 右側：財務結算 (佔 1/3) */}
+                                        <div className="lg:col-span-1 flex flex-col h-full bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white min-h-[300px] lg:min-h-0">
+                                            <div className="p-4 border-b border-white/10 shrink-0">
+                                                <h3 className="font-black text-blue-400 text-sm tracking-widest uppercase mb-3 flex items-center gap-2"><DollarSign size={16}/> 財務結算</h3>
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
+                                                    <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">海關 A1 價</span><span className="font-mono text-sm">${formatNum(selectedItem.vals?.prp)}</span></div>
                                                 </div>
                                             </div>
-                                            <div className="p-5 bg-slate-800/50 border-b border-white/10 space-y-4 shrink-0">
+                                            <div className="p-4 bg-slate-800/50 border-b border-white/10 space-y-2 shrink-0">
                                                 <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">到港成本</span><span className="font-mono font-bold text-slate-200">{fmt(selectedItem.results?.landedCost)}</span></div>
                                                 <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">A1 入口稅</span><span className="font-mono font-bold text-slate-200">{fmt(selectedItem.results?.frtTax)}</span></div>
-                                                <div className="flex justify-between items-end pt-3 border-t border-slate-700"><span className="text-xs text-slate-300 font-bold uppercase">總成本</span><span className="font-mono font-black text-lg text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
+                                                <div className="flex justify-between items-end pt-2 border-t border-slate-700"><span className="text-[10px] text-slate-300 font-bold uppercase">總成本</span><span className="font-mono font-black text-base text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
                                             </div>
-                                            <div className="p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center text-center relative">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-blue-200 opacity-80">Final Quote</p>
-                                                <p className="text-3xl xl:text-4xl font-black font-mono tracking-tighter drop-shadow-md">{fmt(selectedItem.results?.finalPrice)}</p>
-                                                <p className="text-[10px] text-blue-200 font-bold mt-2">(利潤: {fmt(selectedItem.quote?.margin)})</p>
+                                            <div className="p-4 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center text-center relative">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-blue-200 opacity-80">Final Quote</p>
+                                                <p className="text-2xl xl:text-3xl font-black font-mono tracking-tighter drop-shadow-md">{fmt(selectedItem.results?.finalPrice)}</p>
+                                                <p className="text-[9px] text-blue-200 font-bold mt-1">(利潤: {fmt(selectedItem.quote?.margin)})</p>
                                             </div>
                                         </div>
                                     </div>
