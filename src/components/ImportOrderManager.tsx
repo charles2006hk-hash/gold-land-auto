@@ -285,29 +285,71 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
     }, [db, appId]);
 
-    // ★ 智能數據搬家 (只上傳 Storage，不污染智能圖庫)
+    // ★ 智能數據搬家 (支援 Array, Payload, 及 History 包裝格式)
     const handleMigrateOldData = async (e: any) => {
         const file = e.target.files?.[0];
         if (!file || !db) return;
+        
         const reader = new FileReader();
         reader.onload = async (event) => {
             try {
-                const rawData = JSON.parse(event.target?.result as string);
-                const list = Array.isArray(rawData) ? rawData : (rawData.import_orders || []);
-                if (list.length === 0) return alert("檔案中找不到有效訂單數據");
+                const text = event.target?.result as string;
+                let rawData;
                 
-                if (confirm(`準備匯入 ${list.length} 筆數據。系統將自動把舊 Base64 圖片上傳至雲端 Storage。這可能需要幾分鐘，請耐心等候，確定嗎？`)) {
+                try {
+                    rawData = JSON.parse(text);
+                } catch (err1) {
+                    const lines = text.split('\n').filter(line => line.trim() !== '');
+                    rawData = lines.map(line => JSON.parse(line));
+                }
+
+                let list: any[] = [];
+
+                // 🧠 核心修正：智能拆解 payload 或 history 包裝
+                if (Array.isArray(rawData)) {
+                    list = rawData;
+                } else if (typeof rawData === 'object' && rawData !== null) {
+                    // 如果有 payload (系統完整備份)
+                    const coreData = rawData.payload || rawData;
+
+                    if (coreData.history) {
+                        // 🎯 命中您的格式：有 history 陣列
+                        list = Array.isArray(coreData.history) 
+                            ? coreData.history 
+                            : Object.keys(coreData.history).map(k => ({ id: k, ...coreData.history[k] }));
+                    } else if (coreData.import_orders) {
+                        list = Array.isArray(coreData.import_orders) 
+                            ? coreData.import_orders 
+                            : Object.keys(coreData.import_orders).map(k => ({ id: k, ...coreData.import_orders[k] }));
+                    } else if (rawData.__collections__ && rawData.__collections__.history) {
+                        const hist = rawData.__collections__.history;
+                        list = Object.keys(hist).map(k => ({ id: k, ...hist[k] }));
+                    } else {
+                        list = Object.keys(coreData).map(k => ({ id: k, ...coreData[k] }));
+                    }
+                }
+
+                // 過濾出真實有效的訂單 (確保資料內有車輛細節)
+                list = list.filter(item => item && (item.details || item.vals || item.results));
+
+                if (list.length === 0) {
+                    alert("檔案解析成功，但找不到任何訂單紀錄！");
+                    return;
+                }
+                
+                if (confirm(`成功解開備份檔！共搵到 ${list.length} 筆訂單數據。\n\n⚠️ 系統即將升級格式並把圖片上傳至雲端 Storage，這可能需要幾分鐘，請不要關閉視窗，確定開始嗎？`)) {
                     const storage = getStorage(); 
-                    const batch = writeBatch(db);
+                    let currentBatch = writeBatch(db);
+                    let opCount = 0;
+                    let successCount = 0;
 
                     for (let i = 0; i < list.length; i++) {
                         const oldItem = list[i];
                         const newRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
                         
-                        const mappedPhotos = [];
+                        const mappedPhotos: string[] = [];
                         const oldAttachments = oldItem.attachments || [];
 
-                        // 處理舊相片上傳至 Storage (不寫入 Media Library)
                         for (let a of oldAttachments) {
                             if (a.type?.startsWith('image/') && a.data) {
                                 try {
@@ -323,31 +365,54 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         }
 
                         const totalCostObj = oldItem.results?.totalCost || 0;
+                        const oldFinalPrice = oldItem.results?.finalPrice || oldItem.quote?.finalPrice;
                         const defaultMargin = 30000;
+                        
+                        // 智能判斷：如果有舊的報價就保留，無就自動加 3萬 利潤
+                        const finalPriceToSave = oldFinalPrice ? oldFinalPrice : (totalCostObj + defaultMargin);
+                        const marginToSave = oldFinalPrice ? (oldFinalPrice - totalCostObj) : defaultMargin;
 
-                        batch.set(newRef, {
+                        currentBatch.set(newRef, {
                             ...oldItem,
-                            region: oldItem.country || 'JP',
-                            photos: mappedPhotos, // 純 URL 字串陣列
+                            region: oldItem.country || oldItem.region || 'JP',
+                            photos: mappedPhotos, // 轉換為純 URL
                             results: {
                                 ...oldItem.results,
-                                frtTax: oldItem.results?.frt || 0,
-                                finalPrice: totalCostObj + defaultMargin
+                                frtTax: oldItem.results?.frt || oldItem.results?.frtTax || 0,
+                                finalPrice: finalPriceToSave
                             },
-                            quote: { margin: defaultMargin, finalPrice: totalCostObj + defaultMargin },
+                            quote: { 
+                                margin: marginToSave, 
+                                finalPrice: finalPriceToSave 
+                            },
                             migratedFromOldApp: true,
                             importTs: Date.now()
                         });
+
+                        opCount++;
+                        successCount++;
+
+                        if (opCount >= 400) {
+                            await currentBatch.commit();
+                            currentBatch = writeBatch(db);
+                            opCount = 0;
+                        }
                     }
 
-                    await batch.commit();
-                    alert(`✅ 成功搬遷並完美升級 ${list.length} 筆數據！圖片已轉移至雲端 (未分配入主圖庫)。`);
+                    if (opCount > 0) {
+                        await currentBatch.commit();
+                    }
+
+                    alert(`✅ 大功告成！成功搬遷並完美升級 ${successCount} 筆數據！`);
                     setView('history');
                 }
-            } catch (err) { alert("檔案解析失敗，請確保是正確的 JSON 格式"); }
+            } catch (err: any) { 
+                alert(`🚨 解析失敗: ${err.message}`); 
+                console.error("解析 JSON 錯誤:", err);
+            }
         };
         reader.readAsText(file);
-        e.target.value = ''; // Reset input
+        e.target.value = ''; 
     };
 
     // ★ 日常圖片上傳 (只上傳 Storage，供報價單預覽使用)
