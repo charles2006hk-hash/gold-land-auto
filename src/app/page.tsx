@@ -7141,7 +7141,7 @@ export default function GoldLandAutoDMS() {
   const [staffId, setStaffId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[], dataAccess?: string } | null>(null);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database'| 'media_center'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database' | 'media_center' | 'import_orders'>('dashboard');
   const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
   const [isDataSyncing, setIsDataSyncing] = useState(true);
