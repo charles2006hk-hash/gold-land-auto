@@ -60,7 +60,7 @@ const parseNum = (val: string) => Number(val.replace(/,/g, '')) || 0;
 // 主組件
 // ==========================================
 export default function ImportOrderManager({ db, staffId, appId }: any) {
-    const [view, setView] = useState<'calc' | 'history'>('calculator');
+    const [view, setView] = useState<'calc' | 'history'>('calc');
     const [step, setStep] = useState(1);
     const [history, setHistory] = useState<any[]>([]);
 
