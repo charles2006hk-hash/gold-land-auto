@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { compressImage } from '@/utils/imageHelpers';
+import ImportOrderManager from '@/components/ImportOrderManager';
 
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
@@ -1127,6 +1128,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
     const allMenuItems = [
         { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard, permission: 'dashboard' },
         { id: 'inventory', label: '車輛管理', icon: Car, permission: 'inventory' },
+        { id: 'import_orders', label: '海外訂車管家', icon: Ship, permission: 'inventory' }, // ★ 新增呢行！
         { id: 'create_doc', label: '開單系統', icon: FileText, permission: 'inventory' }, // 開單通常跟隨車庫
         { id: 'reports', label: '財務總覽', icon: Briefcase, permission: 'reports' },
         { id: 'cross_border', label: '中港業務', icon: Globe, permission: 'business' }, 
@@ -12401,6 +12403,19 @@ const CreateDocModule = ({
                   inventory={visibleInventory} 
               />
           )}
+
+          {/* ★★★ 新增：掛載獨立的海外訂車管家模塊 ★★★ */}
+        {activeTab === 'import_orders' && (
+            <div className="h-full animate-fade-in">
+                <ImportOrderManager 
+                    db={db}
+                    staffId={staffId}
+                    appId={appId}
+                    inventory={visibleInventory}
+                    settings={settings}
+                />
+            </div>
+        )}
 
          </div>       
       </main>
