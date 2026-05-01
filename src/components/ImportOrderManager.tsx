@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  List, Save, Ship, Car, 
-  DollarSign, Trash2, ArrowRight, ArrowLeft, 
-  ShieldCheck, Globe, CheckCircle,
-  Plane
+  List, Save, Ship, Car, FileText, 
+  DollarSign, Trash2, Search, ArrowRight, ArrowLeft, 
+  ShieldCheck, Globe, Info, Zap, CheckCircle, Plus,
+  RefreshCw, Anchor, Calendar, Clock, ChevronRight,
+  Plane, Cog, RotateCcw, CreditCard, ImageIcon
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
