@@ -222,13 +222,14 @@ const QuotationPreview = ({ item, onClose }: any) => {
 // 主系統組件
 // ==========================================
 export default function ImportOrderManager({ db, staffId, appId, settings, updateSettings }: any) {
-    const [view, setView] = useState<'dashboard' | 'calc'>('dashboard');
+    // 視圖狀態：dashboard (主從列表) | calc (編輯器) | settings
+    const [view, setView] = useState<'dashboard' | 'calc' | 'settings'>('dashboard');
     const [mobileTab, setMobileTab] = useState<'basic' | 'fees' | 'result'>('basic');
     
     const [history, setHistory] = useState<any[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [previewItem, setPreviewItem] = useState<any | null>(null);
-    
+
     // ★ 相片畫廊與放大狀態
     const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0);
     const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
@@ -290,13 +291,17 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const totalCost = landedCost + pureLicenseFee + finalIns;
     const finalPrice = totalCost + parseNum(margin);
 
+    // 載入歷史紀錄
     useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
         return onSnapshot(q, (snap) => {
             const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a:any, b:any) => b.ts - a.ts);
             setHistory(list);
-            if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
+            // 預設選中第一筆
+            if (list.length > 0 && !selectedId) {
+                setSelectedId(list[0].id);
+            }
         });
     }, [db, appId]);
 
@@ -326,6 +331,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 }
 
                 list = list.filter(item => item && (item.details || item.vals || item.results));
+
                 if (list.length === 0) return alert("找不到有效數據");
 
                 if (confirm(`準備搬遷 ${list.length} 筆數據至雲端？系統將自動整理圖片與數據結構。`)) {
@@ -424,7 +430,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         try {
             if (editingId) {
                 await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, editingId), record);
-                setSelectedId(editingId); 
+                setSelectedId(editingId); // 保存後保持選中
             } else {
                 const newDoc = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`), { ...record, timestamp: serverTimestamp() });
                 setSelectedId(newDoc.id);
@@ -434,16 +440,23 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     };
 
     const handleAddNew = () => {
-        setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice('');
+        setEditingId(null);
+        setRegion('JP');
+        setCarPrice(''); setPrpPrice('');
         setCarInfo({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
-        setOrderPhotos([]); setTransport({ type: 'SEA', departureDate: '', duration: '' });
-        setOriginFees(REGION_CONFIGS['JP'].origin); setHkMiscFees(REGION_CONFIGS['JP'].hk_misc); setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
-        setMargin('30000'); setView('calc');
+        setOrderPhotos([]);
+        setTransport({ type: 'SEA', departureDate: '', duration: '' });
+        setOriginFees(REGION_CONFIGS['JP'].origin);
+        setHkMiscFees(REGION_CONFIGS['JP'].hk_misc);
+        setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
+        setMargin('30000');
+        setView('calc');
     };
 
     const handleEdit = (item: any) => {
         setEditingId(item.id); setRegion(item.region || 'JP');
-        setCarPrice(formatNum(item.vals?.carPrice)); setPrpPrice(formatNum(item.vals?.prp));
+        setCarPrice(formatNum(item.vals?.carPrice));
+        setPrpPrice(formatNum(item.vals?.prp));
         setCarInfo({
             make: item.details?.manufacturer || item.carInfo?.make || '', model: item.details?.model || item.carInfo?.model || '', year: item.details?.year || item.carInfo?.year || '',
             code: item.details?.code || item.carInfo?.code || '', exteriorColor: item.details?.exteriorColor || item.carInfo?.exteriorColor || '', interiorColor: item.details?.interiorColor || item.carInfo?.interiorColor || '',
@@ -452,8 +465,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
         setOrderPhotos(item.photos || []);
         setTransport({ type: item.details?.transportType || 'SEA', departureDate: item.details?.departureDate || '', duration: item.details?.shippingDuration || '' });
-        setOriginFees(flattenFees(item.fees?.origin)); setHkMiscFees(flattenFees(item.fees?.hk_misc)); setHkLicenseFees(flattenFees(item.fees?.hk_license));
-        setMargin(formatNum(item.quote?.margin || '30000')); setView('calc');
+        setOriginFees(flattenFees(item.fees?.origin));
+        setHkMiscFees(flattenFees(item.fees?.hk_misc));
+        setHkLicenseFees(flattenFees(item.fees?.hk_license));
+        setMargin(formatNum(item.quote?.margin || '30000'));
+        setView('calc');
     };
 
     const handleImportToInventory = async (item: any) => {
@@ -511,6 +527,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             {zoomPhoto && (
                 <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-fade-in" onClick={() => setZoomPhoto(null)}>
                     <button className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2" title="關閉"><X size={32}/></button>
+                    {/* ★ 使用 object-contain 保證相片完整顯示 */}
                     <img src={zoomPhoto} className="max-w-full max-h-[75vh] object-contain mb-8 shadow-2xl rounded-lg border border-white/10" onClick={e => e.stopPropagation()} />
                     <div className="flex gap-4">
                         <a href={zoomPhoto} download={`car_photo_${Date.now()}.jpg`} target="_blank" rel="noopener noreferrer" className="bg-white text-slate-900 px-6 py-3 rounded-full font-black shadow-xl flex items-center gap-2 hover:bg-slate-200 hover:scale-105 active:scale-95 transition-all" onClick={e => e.stopPropagation()}>
@@ -610,9 +627,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div className="lg:col-span-4 flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-2 shadow-sm min-h-[300px] lg:min-h-0">
                                             {selectedItem.photos?.length > 0 ? (
                                                 <>
-                                                    <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-100 group cursor-zoom-in" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
-                                                        <img src={selectedItem.photos[selectedPhotoIdx]} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                                                    {/* ★ 修正：使用 object-contain 及置中，確保相片全貌顯示，不裁切 */}
+                                                    <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-100/50 group cursor-zoom-in flex items-center justify-center" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
+                                                        <img src={selectedItem.photos[selectedPhotoIdx]} className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105 drop-shadow-sm p-2" />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all flex items-center justify-center">
                                                             <div className="bg-white/95 text-slate-800 px-4 py-2 rounded-lg font-black text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100"><Search size={14}/> 點擊放大下載</div>
                                                         </div>
                                                     </div>
@@ -773,7 +791,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3"><div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input type="text" value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded-lg p-1.5 pl-5 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div><input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/></div>
                                     <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-6 rounded-3xl shadow-2xl text-white text-center relative overflow-hidden"><div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div><p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-blue-100 opacity-80">Final Quote</p><p className="text-4xl lg:text-5xl font-black font-mono tracking-tighter drop-shadow-lg">{fmt(finalPrice)}</p></div>
                                 </div>
-                                <div className="mt-6 pt-4 border-t border-slate-100 flex-none sticky bottom-0 bg-white pb-2 hidden md:block z-10"><button onClick={handleSave} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2"><Save size={20}/> {editingId ? '更新並返回' : '儲存紀錄'}</button></div>
+                                <div className="mt-6 pt-4 border-t border-slate-100 flex-none sticky bottom-0 bg-white pb-2 hidden md:block z-10"><button onClick={handleSave} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"><Save size={20}/> {editingId ? '更新並返回' : '儲存紀錄'}</button></div>
                             </div>
                         </div>
 
