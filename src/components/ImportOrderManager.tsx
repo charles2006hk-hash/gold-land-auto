@@ -52,6 +52,12 @@ const fmt = (n: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', c
 const formatNum = (val: string) => val.replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const parseNum = (val: string) => Number(String(val).replace(/,/g, '')) || 0;
 
+// ★★★ 新增這段：專門對付 TypeScript 嚴格檢查的加總工具 ★★★
+const getFeeTotal = (feeObj: any) => {
+    if (!feeObj) return 0;
+    return Object.values(feeObj).reduce((sum: number, val: any) => sum + parseNum(String(val)), 0);
+};
+
 export default function ImportOrderManager({ db, staffId, appId, settings, updateSettings }: any) {
     const [view, setView] = useState<'calc' | 'history'>('calc');
     const [mobileTab, setMobileTab] = useState<'basic' | 'fees' | 'result'>('basic');
@@ -81,9 +87,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
     const frtTax = calcFRT(parseNum(prpPrice));
     
-    const totalOriginHKD = Object.values(originFees as any).reduce((s:any, v:any) => s + parseNum(v), 0) * currentRate;
-    const totalHkMisc = Object.values(hkMiscFees as any).reduce((s:any, v:any) => s + parseNum(v), 0);
-    const totalHkLicense = Object.values(hkLicenseFees as any).reduce((s:any, v:any) => s + parseNum(v), 0) + frtTax;
+    const totalOriginHKD = getFeeTotal(originFees) * currentRate;
+    const totalHkMisc = getFeeTotal(hkMiscFees);
+    const totalHkLicense = getFeeTotal(hkLicenseFees) + frtTax;
     
     const landedCost = carPriceHKD + totalOriginHKD + totalHkMisc + frtTax;
     const totalCost = landedCost + (totalHkLicense - frtTax);
