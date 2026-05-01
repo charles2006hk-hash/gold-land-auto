@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calculator, List, Save, Ship, Car, FileText, 
   DollarSign, Trash2, Search, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, Info, Zap, CheckCircle, Plus,
   RefreshCw, Anchor, Calendar, Clock, ChevronRight
 } from 'lucide-react';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
-// --- 專業級預設費用數據 (源自您的原始系統) ---
+// --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
   JP: { 
     id: 'JP', name: '日本', currency: 'JPY', symbol: '¥', 
@@ -32,7 +32,7 @@ const REGION_CONFIGS: any = {
 };
 
 // ==========================================
-// 核心計算引擎
+// 核心計算引擎與工具
 // ==========================================
 const calcFRT = (prp: number) => {
     let v = prp; let t = 0;
@@ -52,7 +52,7 @@ const fmt = (n: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', c
 const formatNum = (val: string) => val.replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 const parseNum = (val: string) => Number(String(val).replace(/,/g, '')) || 0;
 
-// ★★★ 新增這段：專門對付 TypeScript 嚴格檢查的加總工具 ★★★
+// ★ 專門對付 TypeScript 嚴格檢查的加總工具
 const getFeeTotal = (feeObj: any) => {
     if (!feeObj) return 0;
     return Object.values(feeObj).reduce((sum: number, val: any) => sum + parseNum(String(val)), 0);
@@ -69,7 +69,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [carPrice, setCarPrice] = useState('');
     const [prpPrice, setPrpPrice] = useState('');
 
-    // 2. 雜費細項 (全自動帶入預設)
+    // 2. 雜費細項 (宣告為 any 以避免 Object.values 報錯)
     const [originFees, setOriginFees] = useState<any>(REGION_CONFIGS['JP'].origin);
     const [hkMiscFees, setHkMiscFees] = useState<any>(REGION_CONFIGS['JP'].hk_misc);
     const [hkLicenseFees, setHkLicenseFees] = useState<any>(REGION_CONFIGS['JP'].hk_license);
@@ -82,11 +82,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setHkLicenseFees(REGION_CONFIGS[region].hk_license);
     }, [region]);
 
-    // --- 計算邏輯 ---
-    const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP']; // ★ 補回這行：取得當前地區的設定 (符號、貨幣)
+    // --- ★ 集中計算邏輯 (確保變數順序與依賴正確) ---
+    const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
+    const frtTax = calcFRT(parseNum(prpPrice));
     
+    // 使用專用工具計算總和，避免報錯
     const totalOriginHKD = getFeeTotal(originFees) * currentRate;
     const totalHkMisc = getFeeTotal(hkMiscFees);
     const totalHkLicense = getFeeTotal(hkLicenseFees) + frtTax;
@@ -99,9 +101,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
-        return onSnapshot(q, (snap) => {
+        const unsub = onSnapshot(q, (snap) => {
             setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a:any, b:any) => b.ts - a.ts));
         });
+        return () => unsub();
     }, [db, appId]);
 
     const handleSave = async () => {
@@ -130,12 +133,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     };
 
     // --- UI 輔助組件 ---
-    const InputField = ({ label, value, onChange, prefix, placeholder }: any) => (
+    const InputField = ({ label, value, onChange, prefix, placeholder, list }: any) => (
         <div className="flex flex-col gap-1 w-full">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</label>
             <div className="relative group">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xs">{prefix}</span>
-                <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full bg-slate-50 border border-slate-200 rounded-lg py-2 ${prefix?'pl-7':'pl-3'} pr-3 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm`} />
+                {prefix && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xs">{prefix}</span>}
+                <input list={list} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full bg-slate-50 border border-slate-200 rounded-lg py-2 ${prefix?'pl-7':'pl-3'} pr-3 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm`} />
             </div>
         </div>
     );
@@ -198,7 +201,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="col-span-2"><InputField label="車牌/底盤號 (Chassis)" value={carInfo.chassis} onChange={(v:any)=>setCarInfo({...carInfo, chassis:v.toUpperCase()})} placeholder="例如: AH30-123456" /></div>
-                                <InputField label="品牌 (Make)" value={carInfo.make} onChange={(v:any)=>setCarInfo({...carInfo, make:v})} list="makes" placeholder="Toyota" />
+                                <InputField label="品牌 (Make)" value={carInfo.make} onChange={(v:any)=>setCarInfo({...carInfo, make:v})} list="makes_list" placeholder="Toyota" />
                                 <InputField label="型號 (Model)" value={carInfo.model} onChange={(v:any)=>setCarInfo({...carInfo, model:v})} placeholder="Alphard" />
                                 <InputField label="年份 (Year)" value={carInfo.year} onChange={(v:any)=>setCarInfo({...carInfo, year:v})} type="number" placeholder="2024" />
                                 <InputField label="排量 (cc)" value={carInfo.cc} onChange={(v:any)=>setCarInfo({...carInfo, cc:v})} type="number" placeholder="2494" />
@@ -267,7 +270,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
                                 <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3">
                                     <div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤 (Margin)</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded p-1 pl-4 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div>
-                                    <input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500"/>
+                                    <input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/>
                                 </div>
 
                                 <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-6 rounded-3xl shadow-2xl text-white text-center relative overflow-hidden">
@@ -292,9 +295,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Live Total Cost</p>
                         <p className="text-2xl font-black font-mono text-blue-400 leading-none">{fmt(totalCost)}</p>
                     </div>
-                    <button onClick={handleSave} className="bg-white text-black px-6 py-3 rounded-2xl font-black text-sm active:scale-95 transition-transform flex items-center gap-2 shadow-lg">
-                        <Save size={16}/> 儲存
-                    </button>
                 </div>
             )}
         </div>
