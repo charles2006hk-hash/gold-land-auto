@@ -5,7 +5,7 @@ import {
   List, Save, Ship, Car, 
   DollarSign, Trash2, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, CheckCircle,
-  Plane, Cog, RotateCcw
+  Plane, Cog, RotateCcw, Zap
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
