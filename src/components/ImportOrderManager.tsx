@@ -83,9 +83,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     }, [region]);
 
     // --- 計算邏輯 ---
+    const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP']; // ★ 補回這行：取得當前地區的設定 (符號、貨幣)
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
-    const frtTax = calcFRT(parseNum(prpPrice));
     
     const totalOriginHKD = getFeeTotal(originFees) * currentRate;
     const totalHkMisc = getFeeTotal(hkMiscFees);
