@@ -154,14 +154,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [customIns, setCustomIns] = useState('');
 
     // --- 聯動計算 Effect ---
-    // 當地區切換時，自動重置雜費
     useEffect(() => {
         setOriginFees(REGION_CONFIGS[region].origin);
         setHkMiscFees(REGION_CONFIGS[region].hk_misc);
         setHkLicenseFees(REGION_CONFIGS[region].hk_license);
     }, [region]);
 
-    // 當輸入日本年號時，自動推算西元年並填入 carInfo
     useEffect(() => {
         if (jpEraYear) {
             const y = parseInt(jpEraYear);
@@ -172,7 +170,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
     }, [jpEra, jpEraYear]);
 
-    // 當輸入 cc 數時，自動更新牌費
     useEffect(() => {
         const cc = parseNum(carInfo.cc);
         if (cc > 0) {
@@ -181,7 +178,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
     }, [carInfo.cc]);
 
-    // --- 核心計算 (無依賴報錯版) ---
+    // --- 核心計算 ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
@@ -195,10 +192,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const estIns = estimateInsurance(carPriceHKD + frtTax, parseNum(carInfo.cc), insType, insNCD);
     const finalIns = customIns ? parseNum(customIns) : estIns;
     
-    const totalHkLicense = getFeeTotal(hkLicenseFees) + frtTax + finalIns - parseNum(hkLicenseFees.insurance || '0'); 
+    const pureLicenseFee = parseNum(hkLicenseFees.fee || '0');
+    const totalHkLicense = pureLicenseFee + frtTax + finalIns; 
     
     const landedCost = carPriceHKD + totalOriginHKD + totalHkMisc + frtTax;
-    const totalCost = landedCost + (totalHkLicense - frtTax);
+    const totalCost = landedCost + pureLicenseFee + finalIns;
     const finalPrice = totalCost + parseNum(margin);
 
     // 載入歷史紀錄
@@ -213,7 +211,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const handleSave = async () => {
         if (!carPrice || !prpPrice) return alert("請填寫基本車價與 PRP");
         
-        // 智能記憶：如果輸入了新品牌/型號，自動存入 settings
         if (carInfo.make && !(settings?.makes || []).includes(carInfo.make)) updateSettings('makes', [...(settings?.makes || []), carInfo.make]);
         if (carInfo.exteriorColor && !(settings?.colors || []).includes(carInfo.exteriorColor)) updateSettings('colors', [...(settings?.colors || []), carInfo.exteriorColor]);
 
@@ -243,10 +240,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
     // --- UI 渲染 ---
     return (
-        <div className="bg-white md:bg-slate-100 min-h-full rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+        // ★ 核心修復 1：外層使用 h-full 同 flex-col 鎖死高度
+        <div className="bg-white md:bg-slate-100 h-full rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
             
-            {/* 頂部導航 */}
-            <div className="bg-slate-900 text-white p-3 flex justify-between items-center z-30 sticky top-0 flex-none safe-area-top">
+            {/* 頂部導航 (高度固定) */}
+            <div className="bg-slate-900 text-white p-3 flex justify-between items-center z-30 flex-none safe-area-top">
                 <div className="flex items-center gap-2">
                     <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg"><Ship size={18}/></div>
                     <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
@@ -257,7 +255,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 </div>
             </div>
 
-            {/* iPhone Sub-channel (只在手機顯示) */}
+            {/* iPhone Sub-channel (只在手機顯示，高度固定) */}
             {view === 'calc' && (
                 <div className="md:hidden flex bg-white border-b border-slate-200 p-1 gap-1 shrink-0">
                     <button onClick={()=>setMobileTab('basic')} className={`flex-1 py-2 text-xs font-bold rounded-md ${mobileTab==='basic'?'bg-slate-100 text-blue-700':'text-slate-400'}`}>1. 規格</button>
@@ -266,11 +264,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 </div>
             )}
 
-            {/* ★ 修正：桌面版改用 overflow-hidden，讓三欄各自獨立滾動，徹底解決截斷問題 */}
-            <div className="flex-1 overflow-y-auto md:overflow-hidden w-full relative pb-32 md:pb-0">
+            {/* ★ 核心修復 2：主內容區使用 flex-1 同 min-h-0，確保內容可以獨立捲動 */}
+            <div className="flex-1 w-full relative min-h-0 flex flex-col">
                 
                 {view === 'history' ? (
-                    <div className="p-4 space-y-4 max-w-5xl mx-auto animate-fade-in h-full overflow-y-auto">
+                    <div className="h-full overflow-y-auto p-4 space-y-4 max-w-5xl mx-auto w-full animate-fade-in">
                         {history.map(item => (
                             <div key={item.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:border-blue-400 transition-all group border-l-8 border-l-blue-500">
                                 <div className="flex justify-between items-start mb-2">
@@ -290,7 +288,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 rounded inline-block">利潤: {fmt(item.quote.margin)}</div>
                                     </div>
                                 </div>
-                                
                                 {/* 物流進度條 */}
                                 {item.details.departureDate && item.details.shippingDuration && (
                                     <div className="mt-2 border-t border-slate-100 pt-2">
@@ -303,10 +300,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     </div>
                 ) : (
                     /* ================= 桌面版：左中右 三欄聯動版面 ================= */
-                    <div className="flex flex-col md:flex-row h-full">
+                    <div className="flex flex-col md:flex-row h-full min-h-0 w-full">
                         
-                        {/* 🟥 左欄：車輛資料與運輸 (加入 pb-20 確保滾動到底) */}
-                        <div className={`w-full md:w-[35%] p-4 md:p-6 space-y-8 md:border-r border-slate-200 bg-white md:bg-transparent overflow-y-auto pb-20 ${mobileTab!=='basic'?'hidden md:block':''}`}>
+                        {/* 🟥 左欄：車輛資料與運輸 */}
+                        {/* ★ 核心修復 3：每欄加上 h-full 同 overflow-y-auto，確保不會撐爆父容器 */}
+                        <div className={`w-full md:w-[35%] h-full overflow-y-auto p-4 md:p-6 space-y-8 md:border-r border-slate-200 bg-white md:bg-transparent pb-32 md:pb-6 ${mobileTab!=='basic'?'hidden md:block':''}`}>
                             
                             <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
                                 {Object.values(REGION_CONFIGS).map((c:any) => (
@@ -401,8 +399,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             </div>
                         </div>
 
-                        {/* 🟨 中欄：雜費細項 (智能聯動) */}
-                        <div className={`w-full md:w-[40%] p-4 md:p-6 space-y-8 bg-slate-50/50 overflow-y-auto pb-20 ${mobileTab!=='fees'?'hidden md:block':''}`}>
+                        {/* 🟨 中欄：雜費細項 */}
+                        <div className={`w-full md:w-[40%] h-full overflow-y-auto p-4 md:p-6 space-y-8 bg-slate-50/50 pb-32 md:pb-6 ${mobileTab!=='fees'?'hidden md:block':''}`}>
                             
                             {/* 車價與稅金 */}
                             <div>
@@ -411,12 +409,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">核心價格</h3>
                                 </div>
                                 <div className="space-y-4">
-                                    <InputField label={`當地車價 (${REGION_CONFIGS[region].currency})`} value={carPrice} onChange={(v:any)=>setCarPrice(formatNum(v))} prefix={REGION_CONFIGS[region].symbol} placeholder="0" />
+                                    <InputField label={`當地車價 (${regData.currency})`} value={carPrice} onChange={(v:any)=>setCarPrice(formatNum(v))} prefix={regData.symbol} placeholder="0" />
                                     <InputField label="海關 A1 零售價 (HKD)" value={prpPrice} onChange={(v:any)=>setPrpPrice(formatNum(v))} prefix="$" placeholder="查閱入口網頁填入" />
                                 </div>
                             </div>
 
-                            {/* 智能保險與出牌 (★ 修正：拿掉多餘的 HK 字眼) */}
+                            {/* 智能保險與出牌 */}
                             <div>
                                 <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
                                     <ShieldCheck className="w-5 h-5 text-indigo-500" />
@@ -434,7 +432,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <input type="range" min="0" max="60" step="10" value={insNCD} onChange={e=>setInsNCD(Number(e.target.value))} className="w-full accent-indigo-600 mb-4"/>
                                     <div className="flex justify-between items-center pt-3 border-t border-indigo-100">
                                         <span className="text-sm font-bold text-indigo-700">AI 預估保費</span>
-                                        {/* ★ 修正 1：移除 HK 字眼 */}
                                         <span className="text-2xl font-black font-mono text-indigo-700">{fmt(estIns)}</span>
                                     </div>
                                 </div>
@@ -452,7 +449,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
                                 <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg mt-2">
                                     <span>首次登記稅 (FRT)</span>
-                                    {/* ★ 修正 2：移除 HK 字眼 */}
                                     <span className="font-mono">{fmt(frtTax)}</span>
                                 </div>
                             </div>
@@ -465,7 +461,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                                 
                                 <div className="mb-6">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">當地雜費 ({REGION_CONFIGS[region].currency})</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">當地雜費 ({regData.currency})</span>
                                     <div className="grid grid-cols-2 gap-6">
                                         {Object.entries(originFees).map(([k, v]:any) => (
                                             <div key={k} className="flex flex-col">
@@ -491,13 +487,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         </div>
 
                         {/* 🟩 右欄：結算與報價 */}
-                        <div className={`w-full md:w-[25%] p-4 md:p-6 space-y-6 md:border-l border-slate-200 bg-white flex flex-col overflow-y-auto pb-20 ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
-                            <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4 flex-none">
-                                <Zap className="w-5 h-5 text-amber-500" />
-                                <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">報價結算</h3>
-                            </div>
-                            
-                            <div className="space-y-4 flex-1">
+                        <div className={`w-full md:w-[25%] h-full flex flex-col overflow-y-auto p-4 md:p-6 bg-white md:border-l border-slate-200 pb-32 md:pb-6 ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
+                            <div className="flex-1 space-y-6">
+                                <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
+                                    <Zap className="w-5 h-5 text-amber-500" />
+                                    <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">報價結算</h3>
+                                </div>
+                                
                                 <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-4">
                                     <div className="flex justify-between items-center border-b border-white/10 pb-2"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">車輛到港成本</span> <span className="text-xl font-mono font-black">{fmt(landedCost)}</span></div>
                                     <div className="flex justify-between items-center"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">預計總成本</span> <span className="text-2xl font-mono font-black text-blue-400">{fmt(totalCost)}</span></div>
@@ -515,10 +511,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                             </div>
 
-                            {/* ★ 桌面版專屬儲存按鈕：確保在滾動區域最底 */}
-                            <button onClick={handleSave} className="hidden md:flex w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 active:scale-95 transition-all items-center justify-center gap-2 mt-6 flex-none mb-6">
-                                <Save size={20}/> 儲存並產生成本單
-                            </button>
+                            {/* ★ 核心修復 4：吸底按鈕，永遠在右欄底部可見 */}
+                            <div className="mt-6 pt-4 border-t border-slate-100 flex-none sticky bottom-0 bg-white pb-2 hidden md:block z-10">
+                                <button onClick={handleSave} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2">
+                                    <Save size={20}/> 儲存並產生成本單
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
