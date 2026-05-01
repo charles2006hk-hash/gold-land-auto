@@ -5,9 +5,9 @@ import {
   List, Save, Ship, Car, 
   DollarSign, Trash2, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, CheckCircle, Search,
-  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database
+  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download
 } from 'lucide-react';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 
 // --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
@@ -38,8 +38,13 @@ const STATUS_OPTIONS: any = {
 };
 
 // ==========================================
-// 外部純函數與組件
+// 外部輔助函數與組件
 // ==========================================
+const fmt = (n: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(n || 0);
+const formatNum = (val: string) => val.replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+const parseNum = (val: string) => Number(String(val).replace(/,/g, '')) || 0;
+const getFeeTotal = (feeObj: any) => { if (!feeObj) return 0; return Object.values(feeObj).reduce((sum: number, val: any) => sum + parseNum(String(val)), 0); };
+
 const calcFRT = (prp: number) => {
     let v = prp; let t = 0;
     if (v > 0) { let tx = Math.min(v, 150000); t += tx * 0.46; v -= tx; }
@@ -63,15 +68,11 @@ const estimateInsurance = (carValueHKD: number, cc: number, type: '3rd' | 'comp'
     return Math.round((base * (1 - (ncd / 100))) / 100) * 100;
 };
 
-const fmt = (n: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(n || 0);
-const formatNum = (val: string) => val.replace(/[^0-9.]/g, '').replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-const parseNum = (val: string) => Number(String(val).replace(/,/g, '')) || 0;
-const getFeeTotal = (feeObj: any) => { if (!feeObj) return 0; return Object.values(feeObj).reduce((sum: number, val: any) => sum + parseNum(String(val)), 0); };
-
 const convertJpYear = (era: string, num: string) => {
     const y = parseInt(num) || 0; if (y <= 0) return '';
     return era === 'Reiwa' ? `(${y + 2018}年)` : (era === 'Heisei' ? `(${y + 1988}年)` : '');
 };
+
 const getColorHex = (name: string) => {
     if (!name) return 'transparent'; const n = name.toLowerCase();
     if (n.includes('white')) return '#f8f9fa'; if (n.includes('black')) return '#1a1a1a';
@@ -79,6 +80,17 @@ const getColorHex = (name: string) => {
     if (n.includes('blue')) return '#3b82f6'; if (n.includes('red')) return '#ef4444';
     return name;
 };
+
+// 簡約輸入框組件
+const InputField = ({ label, value, onChange, prefix, placeholder, list, type = 'text', readOnly = false }: any) => (
+    <div className="flex flex-col gap-0.5 w-full">
+        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</label>
+        <div className="relative group">
+            {prefix && <span className="absolute left-1 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">{prefix}</span>}
+            <input readOnly={readOnly} type={type} list={list} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full bg-white border-b-2 border-slate-200 py-1 ${prefix?'pl-4':'pl-1'} pr-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-colors md:bg-transparent md:border-b-2 md:rounded-none rounded-lg shadow-sm md:shadow-none`} />
+        </div>
+    </div>
+);
 
 // 物流進度條組件
 const TransportProgressBar = ({ departureDate, durationDays, type }: any) => {
@@ -111,16 +123,83 @@ const TransportProgressBar = ({ departureDate, durationDays, type }: any) => {
     );
 };
 
-// --- 簡約輸入框組件 ---
-const InputField = ({ label, value, onChange, prefix, placeholder, list, type = 'text', readOnly = false }: any) => (
-    <div className="flex flex-col gap-0.5 w-full">
-        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</label>
-        <div className="relative group">
-            {prefix && <span className="absolute left-1 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">{prefix}</span>}
-            <input readOnly={readOnly} type={type} list={list} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full bg-white border-b-2 border-slate-200 py-1 ${prefix?'pl-4':'pl-1'} pr-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-colors md:bg-transparent md:border-b-2 md:rounded-none rounded-lg shadow-sm md:shadow-none`} />
+// PDF 預覽模態視窗
+const QuotationPreview = ({ item, onClose }: any) => {
+    if (!item) return null;
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white w-full max-w-[210mm] h-[90vh] md:h-[297mm] md:max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl scale-95 md:scale-100 origin-center transition-transform">
+                <div className="bg-slate-900 text-white p-4 flex justify-between items-center print:hidden">
+                    <div className="flex items-center gap-2"><Printer size={20}/><span className="font-bold">報價單預覽 (PDF Preview)</span></div>
+                    <div className="flex gap-2">
+                        <button onClick={() => window.print()} className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">正式列印 / 輸出 PDF</button>
+                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X/></button>
+                    </div>
+                </div>
+                <div id="print-area" className="flex-1 overflow-y-auto p-10 text-slate-900 bg-white">
+                    <div className="flex justify-between items-start border-b-4 border-slate-800 pb-6 mb-8">
+                        <div>
+                            <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Gold Land Auto</h1>
+                            <h2 className="text-xl font-bold tracking-widest mt-1">金田汽車</h2>
+                            <p className="text-[10px] text-slate-500 mt-2">海外訂購車輛正式報價單</p>
+                        </div>
+                        <div className="text-right">
+                            <div className="bg-slate-800 text-white px-3 py-1 text-xs font-bold uppercase tracking-widest inline-block mb-2">Quotation</div>
+                            <p className="text-xs font-mono text-slate-500">Date: {item.date}</p>
+                            <p className="text-xs font-mono text-slate-500">Ref: QT-{item.id.slice(0,8).toUpperCase()}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-8 mb-8">
+                        <div>
+                            <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800">Vehicle Specification</h3>
+                            <div className="space-y-1 text-sm">
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Model:</span> <span className="font-black text-lg">{item.details.manufacturer || item.details.make} {item.details.model}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Year:</span> <span className="font-bold">{item.details.year}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details.chassisNo || item.details.chassis || 'TBC'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details.exteriorColor}</span></p>
+                            </div>
+                        </div>
+                        <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                            <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport Info</h3>
+                            <p className="text-xs font-bold">Shipping: {item.details.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</p>
+                            <p className="text-xs text-slate-500 mt-1">Departure: {item.details.departureDate || 'TBC'}</p>
+                        </div>
+                    </div>
+
+                    <table className="w-full text-sm mb-10">
+                        <thead className="bg-slate-800 text-white">
+                            <tr><th className="p-3 text-left uppercase tracking-widest text-[10px]">Description</th><th className="p-3 text-right uppercase tracking-widest text-[10px]">Amount</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            <tr><td className="p-3 font-bold">車輛到港成本 (含海外雜費及船運)</td><td className="p-3 text-right font-mono">{fmt(item.results.landedCost)}</td></tr>
+                            <tr><td className="p-3">政府首次登記稅 (FRT)</td><td className="p-3 text-right font-mono">{fmt(item.results.frtTax)}</td></tr>
+                            <tr><td className="p-3">出牌、保險及其他本地雜費</td><td className="p-3 text-right font-mono">{fmt(item.results.totalCost - item.results.landedCost)}</td></tr>
+                            <tr className="bg-slate-50"><td className="p-4 font-black text-lg">Final Quotation (總報價)</td><td className="p-4 text-right font-black text-2xl text-blue-700">{fmt(item.results.finalPrice)}</td></tr>
+                        </tbody>
+                    </table>
+
+                    <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20">
+                        <div className="text-center pt-8 border-t border-slate-800">
+                            <p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p>
+                        </div>
+                        <div className="text-center pt-8 border-t border-slate-800">
+                            <p className="text-[10px] font-bold uppercase">Customer Confirmation</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <style jsx global>{`
+                @media print {
+                    body * { visibility: hidden; }
+                    #print-area, #print-area * { visibility: visible; }
+                    #print-area { position: fixed; left: 0; top: 0; width: 100%; height: 100%; margin: 0; padding: 15mm; }
+                    .print\\:hidden { display: none !important; }
+                }
+            `}</style>
         </div>
-    </div>
-);
+    );
+};
 
 // ==========================================
 // 主系統組件
@@ -128,16 +207,11 @@ const InputField = ({ label, value, onChange, prefix, placeholder, list, type = 
 export default function ImportOrderManager({ db, staffId, appId, settings, updateSettings }: any) {
     const [view, setView] = useState<'calc' | 'history'>('calc');
     const [mobileTab, setMobileTab] = useState<'basic' | 'fees' | 'result'>('basic');
-    
-    // 歷史狀態與過濾
     const [history, setHistory] = useState<any[]>([]);
-    const [filterStatus, setFilterStatus] = useState('ALL');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [previewItem, setPreviewItem] = useState<any | null>(null);
 
-    // 編輯模式
+    // 狀態變量
     const [editingId, setEditingId] = useState<string | null>(null);
-
-    // 1. 車輛基礎與 A1/PRP
     const [region, setRegion] = useState('JP');
     const [carPrice, setCarPrice] = useState('');
     const [prpPrice, setPrpPrice] = useState('');
@@ -149,25 +223,23 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' 
     });
     
-    // ★ 相片陣列
+    // 相片陣列
     const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
-
-    // 運輸資訊
     const [transport, setTransport] = useState({ type: 'SEA', departureDate: '', duration: '' });
-
-    // 日本年號
-    const [jpEra, setJpEra] = useState('Reiwa');
-    const [jpEraYear, setJpEraYear] = useState('');
-
-    // 2. 雜費與保險
+    const [margin, setMargin] = useState('30000');
+    
+    // 將 originFees 宣告為 any 避免 TS 報錯
     const [originFees, setOriginFees] = useState<any>(REGION_CONFIGS['JP'].origin);
     const [hkMiscFees, setHkMiscFees] = useState<any>(REGION_CONFIGS['JP'].hk_misc);
     const [hkLicenseFees, setHkLicenseFees] = useState<any>(REGION_CONFIGS['JP'].hk_license);
-    const [margin, setMargin] = useState('30000');
-    
-    // 智能保險
+
     const [insType, setInsType] = useState<'3rd'|'comp'>('comp');
     const [insNCD, setInsNCD] = useState(0);
+
+    const [filterStatus, setFilterStatus] = useState('ALL');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [jpEra, setJpEra] = useState('Reiwa');
+    const [jpEraYear, setJpEraYear] = useState('');
 
     // --- 聯動 Effect ---
     useEffect(() => {
@@ -188,17 +260,16 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         if (cc > 0) setHkLicenseFees((prev: any) => ({ ...prev, fee: calcLicenseFee(cc).toString() }));
     }, [carInfo.cc]);
 
-    // --- 核心計算 ---
+    // --- 計算邏輯 ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
     
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
     const frtTax = calcFRT(parseNum(prpPrice));
-    
     const totalOriginHKD = getFeeTotal(originFees) * currentRate;
     const totalHkMisc = getFeeTotal(hkMiscFees);
-    const estIns = estimateInsurance(carPriceHKD + frtTax, parseNum(carInfo.cc), insType, insNCD);
     
+    const estIns = estimateInsurance(carPriceHKD + frtTax, parseNum(carInfo.cc), insType, insNCD);
     const finalIns = parseNum(hkLicenseFees.insurance || '0') > 0 ? parseNum(hkLicenseFees.insurance) : estIns;
     const pureLicenseFee = parseNum(hkLicenseFees.fee || '0');
     
@@ -216,7 +287,36 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
     }, [db, appId]);
 
-    // 相片上傳 (簡易壓縮轉 Base64)
+    // ★ 數據搬家小工具 (處理從另一個 Firebase 導出的 JSON)
+    const handleMigrateOldData = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file || !db) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const rawData = JSON.parse(event.target?.result as string);
+                const list = Array.isArray(rawData) ? rawData : (rawData.import_orders || []);
+                if (list.length === 0) return alert("檔案中找不到有效訂單數據");
+                
+                if (confirm(`準備匯入 ${list.length} 筆舊系統數據，確定嗎？`)) {
+                    const batch = writeBatch(db);
+                    list.forEach((oldItem: any) => {
+                        const newRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
+                        batch.set(newRef, {
+                            ...oldItem,
+                            migratedFromOldApp: true,
+                            importTs: Date.now()
+                        });
+                    });
+                    await batch.commit();
+                    alert(`✅ 成功搬遷 ${list.length} 筆數據！`);
+                }
+            } catch (err) { alert("檔案解析失敗，請確保是正確的 JSON 格式"); }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; // Reset input
+    };
+
     const handlePhotoUpload = (e: any) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -240,9 +340,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         reader.readAsDataURL(file);
     };
 
-    // 儲存邏輯
     const handleSave = async () => {
         if (!carPrice || !prpPrice) return alert("請填寫基本車價與 PRP");
+        
         if (carInfo.make && !(settings?.makes || []).includes(carInfo.make)) updateSettings('makes', [...(settings?.makes || []), carInfo.make]);
         if (carInfo.exteriorColor && !(settings?.colors || []).includes(carInfo.exteriorColor)) updateSettings('colors', [...(settings?.colors || []), carInfo.exteriorColor]);
 
@@ -252,11 +352,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             details: { ...carInfo, transportType: transport.type, departureDate: transport.departureDate, shippingDuration: transport.duration }, 
             vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate },
             fees: { origin: originFees, hk_misc: hkMiscFees, hk_license: hkLicenseFees, finalInsurance: finalIns },
-            results: { carPriceHKD, totalOriginHKD, totalHkMisc, totalHkLicense, landedCost, totalCost, finalPrice },
+            results: { carPriceHKD, totalOriginHKD, totalHkMisc, totalHkLicense, landedCost, totalCost, finalPrice, frtTax },
             quote: { margin: parseNum(margin), finalPrice },
-            photos: orderPhotos,
-            status: editingId ? (history.find(h=>h.id===editingId)?.status || 'QUOTING') : 'QUOTING', 
-            createdBy: staffId
+            photos: orderPhotos, status: editingId ? (history.find(h=>h.id===editingId)?.status || 'QUOTING') : 'QUOTING', createdBy: staffId
         };
 
         try {
@@ -296,7 +394,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     make: item.details.manufacturer || item.details.make || '',
                     model: item.details.model || '',
                     year: item.details.year || '',
-                    chassisNo: item.details.chassis || '',
+                    chassisNo: item.details.chassisNo || item.details.chassis || '',
                     engineNo: '',
                     colorExt: item.details.exteriorColor || '',
                     colorInt: item.details.interiorColor || '',
@@ -344,12 +442,15 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setRegion(item.region);
         setCarPrice(formatNum(String(item.vals.carPrice)));
         setPrpPrice(formatNum(String(item.vals.prp)));
+        
         setCarInfo({
             make: item.details.manufacturer || item.details.make || '', model: item.details.model || '', year: item.details.year || '',
             code: item.details.code || '', exteriorColor: item.details.exteriorColor || '', interiorColor: item.details.interiorColor || '',
             transmission: item.details.transmission || 'AT', cc: item.details.engineCapacity || item.details.cc || '', seats: item.details.seats || '',
             mileage: item.details.mileage || '', chassis: item.details.chassisNo || item.details.chassis || ''
         });
+        setJpEra('Reiwa'); setJpEraYear('');
+
         setOrderPhotos(item.photos || []);
         setTransport({ type: item.details.transportType || 'SEA', departureDate: item.details.departureDate || '', duration: item.details.shippingDuration || '' });
         setOriginFees(item.fees.origin); setHkMiscFees(item.fees.hk_misc); setHkLicenseFees(item.fees.hk_license);
@@ -380,13 +481,20 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     // --- UI 渲染 ---
     return (
         <div className="bg-white md:bg-slate-100 h-full rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+            <QuotationPreview item={previewItem} onClose={() => setPreviewItem(null)} />
             
             <div className="bg-slate-900 text-white p-3 flex justify-between items-center z-30 flex-none safe-area-top">
                 <div className="flex items-center gap-2">
                     <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg"><Ship size={18}/></div>
                     <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
                 </div>
-                <div className="flex bg-slate-800 rounded-xl p-1">
+                <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
+                    {view === 'history' && (
+                        <label className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-700 text-slate-300 hover:bg-slate-600 cursor-pointer flex items-center gap-1 transition-colors border border-slate-600 shadow-inner">
+                            <FileDown size={12}/> 搬家
+                            <input type="file" accept=".json" onChange={handleMigrateOldData} className="hidden" />
+                        </label>
+                    )}
                     <button onClick={() => setView('calc')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='calc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>算帳</button>
                     <button onClick={() => setView('history')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='history' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>紀錄 ({history.length})</button>
                 </div>
@@ -455,7 +563,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                         <span className="text-[10px] text-slate-400 font-bold">{item.date}</span>
                                                     </div>
                                                     <div className="font-black text-slate-900 text-xl tracking-tight leading-tight truncate">
-                                                        {item.details.manufacturer || item.details.make} {item.details.model} <span className="font-bold text-slate-500 text-lg">{item.details.year}</span>
+                                                        {item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model} <span className="font-bold text-slate-500 text-lg">{item.details?.year || item.carInfo?.year}</span>
                                                     </div>
                                                     
                                                     <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -470,12 +578,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             {/* 操作按鈕 */}
                                             <div className="flex flex-col items-end gap-2 ml-4">
                                                 <div className="flex gap-1.5 flex-wrap justify-end">
-                                                    {/* ★ 匯入主系統按鈕 */}
                                                     <button onClick={() => handleImportToInventory(item)} className={`p-1.5 rounded-lg transition flex items-center gap-1 font-bold text-[10px] border shadow-sm ${item.isImported ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}`} title={item.isImported ? "取消匯入" : "匯入至車輛庫存"}>
                                                         {item.isImported ? <RotateCcw className="w-4 h-4"/> : <Database className="w-4 h-4"/>} 
                                                         <span className="hidden sm:inline">{item.isImported ? '取消匯入' : '匯入主庫存'}</span>
                                                     </button>
-                                                    
+                                                    <button onClick={() => setPreviewItem(item)} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition" title="預覽報價單"><Eye className="w-4 h-4"/></button>
                                                     <button onClick={() => handleEdit(item)} className="p-1.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition flex items-center gap-1 font-bold text-[10px] border border-slate-200"><Pencil className="w-4 h-4"/> <span className="hidden sm:inline">編輯</span></button>
                                                     <button onClick={() => toggleLock(item)} className={`p-1.5 rounded-lg transition border ${item.isLocked ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-400 bg-white hover:bg-slate-100 border-slate-200'}`} title={item.isLocked?"解鎖":"鎖定"}>{item.isLocked ? <Lock className="w-4 h-4"/> : <Unlock className="w-4 h-4"/>}</button>
                                                     <button onClick={() => handleDelete(item)} disabled={item.isLocked} className="p-1.5 text-slate-400 bg-white hover:text-red-600 hover:bg-red-50 disabled:opacity-30 rounded-lg transition border border-slate-200" title="刪除"><Trash2 className="w-4 h-4"/></button>
@@ -647,13 +754,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3>
                                 </div>
                                 
-                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-4 shadow-sm">
+                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6">
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="flex bg-white rounded p-0.5 border border-indigo-200 shadow-sm">
-                                            <button onClick={()=>setInsType('3rd')} className={`px-4 py-1 text-xs font-bold rounded ${insType==='3rd'?'bg-indigo-600 text-white':'text-indigo-400'}`}>三保</button>
-                                            <button onClick={()=>setInsType('comp')} className={`px-4 py-1 text-xs font-bold rounded ${insType==='comp'?'bg-indigo-600 text-white':'text-indigo-400'}`}>全保</button>
+                                            <button onClick={()=>setInsType('3rd')} className={`px-4 py-1.5 text-xs font-bold rounded ${insType==='3rd'?'bg-indigo-600 text-white':'text-indigo-400'}`}>三保</button>
+                                            <button onClick={()=>setInsType('comp')} className={`px-4 py-1.5 text-xs font-bold rounded ${insType==='comp'?'bg-indigo-600 text-white':'text-indigo-400'}`}>全保</button>
                                         </div>
-                                        <span className="text-[10px] font-bold text-indigo-800 bg-indigo-100 px-2 py-1 rounded-lg">NCD: {insNCD}%</span>
+                                        <span className="text-[10px] font-bold text-indigo-800 bg-indigo-100 px-3 py-1.5 rounded-lg">NCD: {insNCD}%</span>
                                     </div>
                                     <input type="range" min="0" max="60" step="10" value={insNCD} onChange={e=>setInsNCD(Number(e.target.value))} className="w-full accent-indigo-600 mb-4"/>
                                     <div className="flex justify-between items-center pt-3 border-t border-indigo-100">
@@ -662,7 +769,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div className="grid grid-cols-2 gap-6 mb-4">
                                     <InputField label="牌費" value={formatNum(hkLicenseFees.fee)} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, fee: formatNum(v)})} />
                                     <InputField label="實際保費" value={formatNum(hkLicenseFees.insurance || estIns.toString())} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, insurance: formatNum(v)})} />
                                 </div>
