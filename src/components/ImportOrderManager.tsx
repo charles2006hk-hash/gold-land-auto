@@ -258,8 +258,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             make: item.details.manufacturer || '', model: item.details.model || '', year: item.details.year || '',
             code: item.details.code || '', exteriorColor: item.details.exteriorColor || '', interiorColor: item.details.interiorColor || '',
             transmission: item.details.transmission || 'AT', cc: item.details.engineCapacity || '', seats: item.details.seats || '',
-            mileage: item.details.mileage || '', chassis: item.details.chassisNo || '', era: 'Reiwa', eraNum: ''
+            mileage: item.details.mileage || '', chassis: item.details.chassisNo || ''
         });
+        setJpEra('Reiwa');
+        setJpEraYear('');
         setTransport({ type: item.details.transportType || 'SEA', departureDate: item.details.departureDate || '', duration: item.details.shippingDuration || '' });
         setOriginFees(item.fees.origin); setHkMiscFees(item.fees.hk_misc); setHkLicenseFees(item.fees.hk_license);
         setMargin(formatNum(String(item.quote.margin)));
