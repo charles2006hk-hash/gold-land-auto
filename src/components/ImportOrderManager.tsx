@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Calculator, List, Save, Ship, Car, FileText, 
-  DollarSign, Trash2, Search, ArrowRight, ArrowLeft, 
-  ShieldCheck, Globe, Info, Zap, CheckCircle, Plus,
-  RefreshCw, Anchor, Calendar, Clock, ChevronRight,
-  Plane, Cog, RotateCcw, CreditCard, FileIcon, ImageIcon
+  List, Save, Ship, Car, 
+  DollarSign, Trash2, ArrowRight, ArrowLeft, 
+  ShieldCheck, Globe, CheckCircle,
+  Plane
 } from 'lucide-react';
-import { collection, query, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 
 // --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
@@ -64,7 +63,13 @@ const formatNum = (val: string) => val.replace(/[^0-9.]/g, '').replace(/\B(?=(\d
 const parseNum = (val: string) => Number(String(val).replace(/,/g, '')) || 0;
 const getFeeTotal = (feeObj: any) => { if (!feeObj) return 0; return Object.values(feeObj).reduce((sum: number, val: any) => sum + parseNum(String(val)), 0); };
 
-// 物流進度條組件 (從舊系統完美移植)
+// ★★★ 補回漏掉的日本年號轉換函數 ★★★
+const convertJpYear = (era: string, num: string) => {
+    const y = parseInt(num) || 0; if (y <= 0) return '';
+    return era === 'Reiwa' ? `(${y + 2018}年)` : (era === 'Heisei' ? `(${y + 1988}年)` : '');
+};
+
+// 物流進度條組件
 const TransportProgressBar = ({ departureDate, durationDays, type }: any) => {
     if (!departureDate || !durationDays) return null;
     const start = new Date(departureDate).getTime();
@@ -105,12 +110,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [mobileTab, setMobileTab] = useState<'basic' | 'fees' | 'result'>('basic');
     const [history, setHistory] = useState<any[]>([]);
 
-    // 1. 車輛基礎狀態 (嚴格按照截圖排版)
+    // 1. 車輛基礎狀態
     const [region, setRegion] = useState('JP');
     const [carPrice, setCarPrice] = useState('');
     const [prpPrice, setPrpPrice] = useState('');
     
-    // ★ 車輛資料 (對齊您的截圖)
+    // ★ 車輛資料
     const [carInfo, setCarInfo] = useState({ 
         make: '', model: '', year: '', code: '', 
         exteriorColor: '', interiorColor: '', 
@@ -165,7 +170,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
     }, [carInfo.cc]);
 
-    // --- 核心計算 (無依賴報錯版) ---
+    // --- 核心計算 ---
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
     const frtTax = calcFRT(parseNum(prpPrice));
@@ -224,9 +229,26 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         } catch (e) { alert("儲存失敗"); }
     };
 
-    // --- UI 渲染 ---
+    // --- UI 輔助組件 ---
+    const InputField = ({ label, value, onChange, prefix, placeholder, list, type = 'text' }: any) => (
+        <div className="flex flex-col gap-1 w-full">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</label>
+            <div className="relative group">
+                {prefix && <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xs">{prefix}</span>}
+                <input type={type} list={list} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className={`w-full bg-slate-50 border border-slate-200 rounded-lg py-2 ${prefix?'pl-7':'pl-3'} pr-3 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm`} />
+            </div>
+        </div>
+    );
+
+    const SectionTitle = ({ icon, title }: any) => (
+        <div className="flex items-center gap-2 border-b-2 border-slate-800 pb-2 mb-4">
+            <span className="text-slate-900">{icon}</span>
+            <h3 className="font-black text-sm uppercase tracking-widest text-slate-800">{title}</h3>
+        </div>
+    );
+
     return (
-        <div className="bg-slate-100 min-h-full rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+        <div className="bg-white md:bg-slate-100 min-h-full rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
             
             {/* 頂部導航 */}
             <div className="bg-slate-900 text-white p-3 flex justify-between items-center z-30 sticky top-0 flex-none safe-area-top">
@@ -235,7 +257,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
                 </div>
                 <div className="flex bg-slate-800 rounded-xl p-1">
-                    <button onClick={() => setView('calc')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='calc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>算帳</button>
+                    <button onClick={() => setView('calc')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='calc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>計算</button>
                     <button onClick={() => setView('history')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${view==='history' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>紀錄 ({history.length})</button>
                 </div>
             </div>
@@ -269,11 +291,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     </div>
                                     <div className="text-right shrink-0">
                                         <div className="text-2xl font-black text-blue-700">{fmt(item.results.finalPrice)}</div>
-                                        <div className="text-[10px] text-emerald-600 font-bold">預估利潤: {fmt(item.quote.margin)}</div>
+                                        <div className="text-[9px] text-emerald-600 font-bold bg-emerald-50 px-1.5 rounded inline-block">利潤: {fmt(item.quote.margin)}</div>
                                     </div>
                                 </div>
                                 
-                                {/* 移植舊版物流進度條 */}
+                                {/* 物流進度條 */}
                                 {item.details.departureDate && item.details.shippingDuration && (
                                     <div className="mt-2 border-t border-slate-100 pt-2">
                                         <TransportProgressBar departureDate={item.details.departureDate} durationDays={item.details.shippingDuration} type={item.details.transportType} />
@@ -287,77 +309,49 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     /* ================= 桌面版：三欄聯動 (還原截圖排版) ================= */
                     <div className="flex flex-col md:flex-row h-full">
                         
-                        {/* 左欄：車輛資料與運輸 (完美還原您的截圖) */}
+                        {/* 左欄：車輛資料與運輸 */}
                         <div className={`w-full md:w-[40%] p-4 md:p-6 space-y-6 md:border-r border-slate-200 bg-white overflow-y-auto ${mobileTab!=='basic'?'hidden md:block':''}`}>
                             
-                            <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
-                                <Car className="w-5 h-5 text-slate-700" />
-                                <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">車輛資料</h3>
-                            </div>
+                            <SectionTitle icon={<Car className="w-5 h-5"/>} title="車輛資料" />
 
+                            <div className="flex bg-slate-100 p-1 rounded-xl gap-1 mb-4">
+                                {Object.values(REGION_CONFIGS).map((c:any) => (
+                                    <button key={c.id} onClick={()=>setRegion(c.id)} className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${region===c.id?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>{c.name}</button>
+                                ))}
+                            </div>
+                            
                             <div className="space-y-4">
-                                {/* Row 1 */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">品牌</label>
-                                        <input list="makes_list" value={carInfo.make} onChange={e=>setCarInfo({...carInfo, make:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white" placeholder="選擇或輸入..."/>
-                                        <datalist id="makes_list">{settings?.makes?.map((m:any) => <option key={m} value={m}/>)}</datalist>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">型號</label>
-                                        <input list="models_list" value={carInfo.model} onChange={e=>setCarInfo({...carInfo, model:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white" placeholder="選擇或輸入..."/>
-                                        <datalist id="models_list">{(settings?.models?.[carInfo.make] || []).map((m:any) => <option key={m} value={m}/>)}</datalist>
-                                    </div>
+                                    <InputField label="品牌 (Make)" value={carInfo.make} onChange={(v:any)=>setCarInfo({...carInfo, make:v})} list="makes_list" placeholder="選擇或輸入..." />
+                                    <datalist id="makes_list">{settings?.makes?.map((m:any) => <option key={m} value={m}/>)}</datalist>
+                                    
+                                    <InputField label="型號 (Model)" value={carInfo.model} onChange={(v:any)=>setCarInfo({...carInfo, model:v})} list="models_list" placeholder="選擇或輸入..." />
+                                    <datalist id="models_list">{(settings?.models?.[carInfo.make] || []).map((m:any) => <option key={m} value={m}/>)}</datalist>
                                 </div>
 
-                                {/* Row 2 */}
                                 <div className="grid grid-cols-4 gap-3">
+                                    <div className="col-span-2 sm:col-span-1"><InputField label="年份" value={carInfo.year} onChange={(v:any)=>setCarInfo({...carInfo, year:v})} type="number" placeholder="2024" /></div>
+                                    <div className="col-span-2 sm:col-span-1"><InputField label="代號" value={carInfo.code} onChange={(v:any)=>setCarInfo({...carInfo, code:v})} placeholder="AH30" /></div>
                                     <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">年份</label>
-                                        <input type="number" value={carInfo.year} onChange={e=>setCarInfo({...carInfo, year:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="2024"/>
-                                    </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">代號</label>
-                                        <input value={carInfo.code} onChange={e=>setCarInfo({...carInfo, code:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="AH30"/>
-                                    </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">外觀顏色</label>
-                                        <input list="colors_list" value={carInfo.exteriorColor} onChange={e=>setCarInfo({...carInfo, exteriorColor:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white" placeholder="e.g. White"/>
+                                        <InputField label="外觀顏色" value={carInfo.exteriorColor} onChange={(v:any)=>setCarInfo({...carInfo, exteriorColor:v})} list="colors_list" placeholder="e.g. White" />
                                         <datalist id="colors_list">{settings?.colors?.map((c:any) => <option key={c} value={c}/>)}</datalist>
                                     </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">內飾顏色</label>
-                                        <input list="colors_list" value={carInfo.interiorColor} onChange={e=>setCarInfo({...carInfo, interiorColor:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white" placeholder="e.g. Black"/>
-                                    </div>
+                                    <div className="col-span-2 sm:col-span-1"><InputField label="內飾顏色" value={carInfo.interiorColor} onChange={(v:any)=>setCarInfo({...carInfo, interiorColor:v})} list="colors_list" placeholder="e.g. Black" /></div>
                                 </div>
 
-                                {/* Row 3 */}
                                 <div className="grid grid-cols-4 gap-3">
                                     <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">波箱 (Trans)</label>
-                                        <select value={carInfo.transmission} onChange={e=>setCarInfo({...carInfo, transmission:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white">
+                                        <label className="block text-[10px] font-bold text-slate-600 mb-1">波箱 (Trans)</label>
+                                        <select value={carInfo.transmission} onChange={e=>setCarInfo({...carInfo, transmission:e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-3 pr-3 text-sm font-bold outline-none focus:border-blue-500 transition-all shadow-sm">
                                             <option value="AT">AT (自動)</option><option value="MT">MT (手動)</option>
                                         </select>
                                     </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">排氣量 (cc)</label>
-                                        <input type="number" value={carInfo.cc} onChange={e=>setCarInfo({...carInfo, cc:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="2494"/>
-                                    </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">座位數</label>
-                                        <input type="number" value={carInfo.seats} onChange={e=>setCarInfo({...carInfo, seats:e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="7"/>
-                                    </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">車輛咪數 (km)</label>
-                                        <input type="text" inputMode="decimal" value={formatNum(carInfo.mileage)} onChange={e=>setCarInfo({...carInfo, mileage:formatNum(e.target.value)})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="15,000"/>
-                                    </div>
+                                    <div className="col-span-2 sm:col-span-1"><InputField label="排氣量 (cc)" value={carInfo.cc} onChange={(v:any)=>setCarInfo({...carInfo, cc:v})} type="number" placeholder="2494" /></div>
+                                    <div className="col-span-2 sm:col-span-1"><InputField label="座位數" value={carInfo.seats} onChange={(v:any)=>setCarInfo({...carInfo, seats:v})} type="number" placeholder="7" /></div>
+                                    <div className="col-span-2 sm:col-span-1"><InputField label="車輛咪數 (km)" value={formatNum(carInfo.mileage)} onChange={(v:any)=>setCarInfo({...carInfo, mileage:formatNum(v)})} placeholder="15,000" /></div>
                                 </div>
 
-                                {/* Row 4 */}
-                                <div>
-                                    <label className="block text-[11px] font-bold text-slate-600 mb-1">車身號碼 (Chassis No)</label>
-                                    <input value={carInfo.chassis} onChange={e=>setCarInfo({...carInfo, chassis:e.target.value.toUpperCase()})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold font-mono text-slate-800 outline-none focus:border-blue-500 uppercase tracking-widest" placeholder="e.g. NHP10-1234567"/>
-                                </div>
+                                <div><InputField label="車身號碼 (Chassis No)" value={carInfo.chassis} onChange={(v:any)=>setCarInfo({...carInfo, chassis:v.toUpperCase()})} placeholder="e.g. NHP10-1234567" /></div>
                             </div>
 
                             {/* 日本年份輔助器 */}
@@ -370,33 +364,24 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                             )}
 
-                            {/* 運輸資訊 (還原截圖) */}
+                            {/* 運輸資訊 */}
                             <div className="mt-8">
-                                <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
-                                    <Plane className="w-5 h-5 text-slate-700" />
-                                    <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">運輸資訊</h3>
-                                </div>
+                                <SectionTitle icon={<Plane className="w-5 h-5"/>} title="運輸資訊" />
                                 <div className="grid grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">運輸方式</label>
-                                        <select value={transport.type} onChange={e=>setTransport({...transport, type: e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white">
+                                        <label className="block text-[10px] font-bold text-slate-600 mb-1">運輸方式</label>
+                                        <select value={transport.type} onChange={e=>setTransport({...transport, type: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-3 pr-3 text-sm font-bold outline-none focus:border-blue-500 transition-all shadow-sm">
                                             <option value="SEA">船運 (Sea)</option><option value="AIR">空運 (Air)</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">出發日期</label>
-                                        <input type="date" value={transport.departureDate} onChange={e=>setTransport({...transport, departureDate: e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500 bg-white"/>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1">預計需時 (天)</label>
-                                        <input type="number" value={transport.duration} onChange={e=>setTransport({...transport, duration: e.target.value})} className="w-full border-2 border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="e.g. 14"/>
-                                    </div>
+                                    <div className="col-span-2"><InputField label="出發日期" type="date" value={transport.departureDate} onChange={(v:any)=>setTransport({...transport, departureDate: v})} /></div>
+                                    <div className="col-span-3"><InputField label="預計需時 (天)" type="number" value={transport.duration} onChange={(v:any)=>setTransport({...transport, duration: v})} placeholder="e.g. 14" /></div>
                                 </div>
                             </div>
                         </div>
 
                         {/* 中欄：雜費細項 (智能聯動) */}
-                        <div className={`w-full md:w-[35%] p-4 md:p-6 space-y-6 bg-slate-50/50 overflow-y-auto ${mobileTab!=='fees'?'hidden md:block':''}`}>
+                        <div className={`w-full md:w-[35%] p-4 md:p-6 space-y-6 bg-slate-50/50 overflow-y-auto border-r border-slate-200 ${mobileTab!=='fees'?'hidden md:block':''}`}>
                             
                             {/* 車價與稅金 */}
                             <div className="bg-white p-5 rounded-2xl shadow-sm border-l-8 border-blue-500">
@@ -405,26 +390,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">核心價格</h3>
                                 </div>
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1 flex justify-between">
-                                            <span>當地車價 ({REGION_CONFIGS[region].currency})</span>
-                                            <span className="text-blue-600">折合 {fmt(carPriceHKD)}</span>
-                                        </label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-2.5 text-slate-400 font-bold">{REGION_CONFIGS[region].symbol}</span>
-                                            <input type="text" inputMode="decimal" value={carPrice} onChange={e=>setCarPrice(formatNum(e.target.value))} className="w-full border-2 border-slate-200 rounded-lg p-2.5 pl-8 text-xl font-black font-mono text-slate-800 outline-none focus:border-blue-500 focus:ring-2 ring-blue-100" placeholder="0"/>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-600 mb-1 flex justify-between">
-                                            <span>海關 A1 零售價 (HKD)</span>
-                                            {frtTax > 0 && <span className="text-red-600 bg-red-50 px-2 py-0.5 rounded">入口稅: {fmt(frtTax)}</span>}
-                                        </label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
-                                            <input type="text" inputMode="decimal" value={prpPrice} onChange={e=>setPrpPrice(formatNum(e.target.value))} className="w-full border-2 border-slate-200 rounded-lg p-2.5 pl-8 text-xl font-black font-mono text-red-700 outline-none focus:border-red-500 focus:ring-2 ring-red-100" placeholder="0"/>
-                                        </div>
-                                    </div>
+                                    <InputField label={`當地車價 (${REGION_CONFIGS[region].currency})`} value={carPrice} onChange={(v:any)=>setCarPrice(formatNum(v))} prefix={REGION_CONFIGS[region].symbol} placeholder="0" />
+                                    <InputField label="海關 A1 零售價 (HKD)" value={prpPrice} onChange={(v:any)=>setPrpPrice(formatNum(v))} prefix="$" placeholder="查閱入口網頁填入" />
                                 </div>
                             </div>
 
@@ -450,15 +417,15 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         </div>
                                     </div>
 
-                                    {/* 香港雜費列表 */}
                                     <div className="grid grid-cols-2 gap-3 mt-4">
                                         {Object.entries(hkLicenseFees).map(([k, v]:any) => (
                                             <div key={k}>
                                                 <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1 truncate">{k === 'fee' ? '牌費' : k === 'insurance' ? '實際保費' : k}</label>
-                                                <input type="text" inputMode="decimal" value={formatNum(v)} onChange={e=>setHkLicenseFees({...hkLicenseFees, [k]: formatNum(e.target.value)})} className="w-full border-b-2 border-slate-200 py-1.5 text-xs font-mono font-bold outline-none focus:border-blue-500 bg-transparent text-slate-800" />
+                                                <input value={formatNum(v)} onChange={e=>setHkLicenseFees({...hkLicenseFees, [k]: formatNum(e.target.value)})} className="w-full border-b-2 border-slate-200 py-1.5 text-xs font-mono font-bold outline-none focus:border-blue-500 bg-transparent text-slate-800" />
                                             </div>
                                         ))}
                                     </div>
+                                    <div className="flex justify-between items-center text-xs font-bold text-red-600 bg-red-50 p-2 rounded-lg mt-2"><span>首次登記稅 (FRT)</span> <span className="font-mono">{fmt(frtTax)}</span></div>
                                 </div>
                             </div>
 
@@ -489,7 +456,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         </div>
 
                         {/* 右欄：結算與報價 */}
-                        <div className={`w-full md:w-[25%] p-4 md:p-6 space-y-6 md:border-l border-slate-200 bg-white flex flex-col overflow-y-auto ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
+                        <div className={`w-full md:w-[25%] p-4 md:p-6 space-y-6 bg-white flex flex-col overflow-y-auto ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
                             <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4 flex-none">
                                 <Zap className="w-5 h-5 text-amber-500" />
                                 <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">報價結算</h3>
