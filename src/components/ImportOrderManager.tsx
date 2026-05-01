@@ -5,7 +5,7 @@ import {
   List, Save, Ship, Car, 
   DollarSign, Trash2, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, CheckCircle, Search, Plus,
-  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Calendar, MapPin
+  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
@@ -156,7 +156,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center print:hidden">
                     <div className="flex items-center gap-2"><Printer size={20}/><span className="font-bold">報價單預覽 (PDF Preview)</span></div>
                     <div className="flex gap-2">
-                        <button onClick={() => window.print()} className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">正式列印</button>
+                        <button onClick={() => window.print()} className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">正式列印 / 輸出 PDF</button>
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X/></button>
                     </div>
                 </div>
@@ -222,13 +222,16 @@ const QuotationPreview = ({ item, onClose }: any) => {
 // 主系統組件
 // ==========================================
 export default function ImportOrderManager({ db, staffId, appId, settings, updateSettings }: any) {
-    // 視圖狀態：dashboard (主從列表) | calc (編輯器) | settings
-    const [view, setView] = useState<'dashboard' | 'calc' | 'settings'>('dashboard');
+    const [view, setView] = useState<'dashboard' | 'calc'>('dashboard');
     const [mobileTab, setMobileTab] = useState<'basic' | 'fees' | 'result'>('basic');
     
     const [history, setHistory] = useState<any[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [previewItem, setPreviewItem] = useState<any | null>(null);
+    
+    // ★ 相片畫廊與放大狀態
+    const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0);
+    const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
 
     // 表單狀態
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -267,6 +270,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         if (cc > 0) setHkLicenseFees((prev: any) => ({ ...prev, fee: calcLicenseFee(cc).toString() }));
     }, [carInfo.cc]);
 
+    // 切換選中單據時，重置畫廊 index
+    useEffect(() => {
+        setSelectedPhotoIdx(0);
+    }, [selectedId]);
+
     // --- 計算邏輯 ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
     const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
@@ -282,17 +290,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const totalCost = landedCost + pureLicenseFee + finalIns;
     const finalPrice = totalCost + parseNum(margin);
 
-    // 載入歷史紀錄
     useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
         return onSnapshot(q, (snap) => {
             const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a:any, b:any) => b.ts - a.ts);
             setHistory(list);
-            // 預設選中第一筆
-            if (list.length > 0 && !selectedId) {
-                setSelectedId(list[0].id);
-            }
+            if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
         });
     }, [db, appId]);
 
@@ -322,7 +326,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 }
 
                 list = list.filter(item => item && (item.details || item.vals || item.results));
-
                 if (list.length === 0) return alert("找不到有效數據");
 
                 if (confirm(`準備搬遷 ${list.length} 筆數據至雲端？系統將自動整理圖片與數據結構。`)) {
@@ -421,7 +424,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         try {
             if (editingId) {
                 await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, editingId), record);
-                setSelectedId(editingId); // 保存後保持選中
+                setSelectedId(editingId); 
             } else {
                 const newDoc = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`), { ...record, timestamp: serverTimestamp() });
                 setSelectedId(newDoc.id);
@@ -431,23 +434,16 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     };
 
     const handleAddNew = () => {
-        setEditingId(null);
-        setRegion('JP');
-        setCarPrice(''); setPrpPrice('');
+        setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice('');
         setCarInfo({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
-        setOrderPhotos([]);
-        setTransport({ type: 'SEA', departureDate: '', duration: '' });
-        setOriginFees(REGION_CONFIGS['JP'].origin);
-        setHkMiscFees(REGION_CONFIGS['JP'].hk_misc);
-        setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
-        setMargin('30000');
-        setView('calc');
+        setOrderPhotos([]); setTransport({ type: 'SEA', departureDate: '', duration: '' });
+        setOriginFees(REGION_CONFIGS['JP'].origin); setHkMiscFees(REGION_CONFIGS['JP'].hk_misc); setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
+        setMargin('30000'); setView('calc');
     };
 
     const handleEdit = (item: any) => {
         setEditingId(item.id); setRegion(item.region || 'JP');
-        setCarPrice(formatNum(item.vals?.carPrice));
-        setPrpPrice(formatNum(item.vals?.prp));
+        setCarPrice(formatNum(item.vals?.carPrice)); setPrpPrice(formatNum(item.vals?.prp));
         setCarInfo({
             make: item.details?.manufacturer || item.carInfo?.make || '', model: item.details?.model || item.carInfo?.model || '', year: item.details?.year || item.carInfo?.year || '',
             code: item.details?.code || item.carInfo?.code || '', exteriorColor: item.details?.exteriorColor || item.carInfo?.exteriorColor || '', interiorColor: item.details?.interiorColor || item.carInfo?.interiorColor || '',
@@ -456,11 +452,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
         setOrderPhotos(item.photos || []);
         setTransport({ type: item.details?.transportType || 'SEA', departureDate: item.details?.departureDate || '', duration: item.details?.shippingDuration || '' });
-        setOriginFees(flattenFees(item.fees?.origin));
-        setHkMiscFees(flattenFees(item.fees?.hk_misc));
-        setHkLicenseFees(flattenFees(item.fees?.hk_license));
-        setMargin(formatNum(item.quote?.margin || '30000'));
-        setView('calc');
+        setOriginFees(flattenFees(item.fees?.origin)); setHkMiscFees(flattenFees(item.fees?.hk_misc)); setHkLicenseFees(flattenFees(item.fees?.hk_license));
+        setMargin(formatNum(item.quote?.margin || '30000')); setView('calc');
     };
 
     const handleImportToInventory = async (item: any) => {
@@ -514,8 +507,21 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         <div className="bg-white md:bg-slate-100 h-full rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
             <QuotationPreview item={previewItem} onClose={() => setPreviewItem(null)} />
             
-            <div className="bg-slate-900 text-white p-3 flex justify-between items-center z-30 flex-none safe-area-top">
-                <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('dashboard')}>
+            {/* ★ 全螢幕相片放大與下載模態視窗 */}
+            {zoomPhoto && (
+                <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-fade-in" onClick={() => setZoomPhoto(null)}>
+                    <button className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors p-2" title="關閉"><X size={32}/></button>
+                    <img src={zoomPhoto} className="max-w-full max-h-[75vh] object-contain mb-8 shadow-2xl rounded-lg border border-white/10" onClick={e => e.stopPropagation()} />
+                    <div className="flex gap-4">
+                        <a href={zoomPhoto} download={`car_photo_${Date.now()}.jpg`} target="_blank" rel="noopener noreferrer" className="bg-white text-slate-900 px-6 py-3 rounded-full font-black shadow-xl flex items-center gap-2 hover:bg-slate-200 hover:scale-105 active:scale-95 transition-all" onClick={e => e.stopPropagation()}>
+                            <Download size={18}/> 下載原圖
+                        </a>
+                    </div>
+                </div>
+            )}
+            
+            <div className="bg-slate-900 text-white p-3 flex justify-between items-center z-30 flex-none safe-area-top shadow-md">
+                <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition" onClick={() => setView('dashboard')}>
                     <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg"><Ship size={18}/></div>
                     <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
                 </div>
@@ -534,12 +540,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     // ★ Master-Detail View (主從視圖)
                     <div className="flex w-full h-full">
                         {/* 左側列表 (Master) */}
-                        <div className={`w-full md:w-80 lg:w-96 flex-none bg-white border-r border-slate-200 flex flex-col ${selectedId && 'hidden md:flex'}`}>
-                            <div className="p-4 border-b border-slate-100 space-y-3">
-                                <button onClick={handleAddNew} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black text-sm flex justify-center items-center gap-2 hover:bg-blue-700 transition shadow-sm"><Plus size={16}/> 新增報價單</button>
+                        <div className={`w-full md:w-80 lg:w-96 flex-none bg-white border-r border-slate-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10 ${selectedId && 'hidden md:flex'}`}>
+                            <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
+                                <button onClick={handleAddNew} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black text-sm flex justify-center items-center gap-2 hover:bg-blue-700 active:scale-95 transition shadow-sm"><Plus size={16}/> 新增報價單</button>
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input className="w-full pl-9 pr-4 py-2 bg-slate-50 rounded-lg border border-slate-200 focus:border-blue-500 outline-none font-bold text-xs" placeholder="搜尋型號或車身號碼..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                    <input className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋型號或車身號碼..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto">
@@ -547,15 +553,23 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     const st = STATUS_OPTIONS[item.status || 'QUOTING'];
                                     const isSelected = selectedId === item.id;
                                     return (
-                                        <div key={item.id} onClick={() => setSelectedId(item.id)} className={`p-4 border-b border-slate-100 cursor-pointer transition-all border-l-4 ${isSelected ? 'bg-blue-50/50 border-l-blue-600' : 'hover:bg-slate-50 border-l-transparent'}`}>
-                                            <div className="flex justify-between items-start mb-1">
+                                        <div key={item.id} onClick={() => setSelectedId(item.id)} className={`p-4 border-b border-slate-100 cursor-pointer transition-all border-l-4 ${isSelected ? 'bg-blue-50/80 border-l-blue-600' : 'hover:bg-slate-50 border-l-transparent'}`}>
+                                            <div className="flex justify-between items-start mb-1.5">
                                                 <div className="flex items-center gap-1.5"><span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${st.color}`}>{st.label}</span><span className="text-[9px] text-slate-400 font-bold">{item.date}</span></div>
                                                 {item.isLocked && <Lock size={12} className="text-yellow-500"/>}
                                             </div>
                                             <div className="font-black text-slate-800 text-sm truncate">{item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
-                                            <div className="flex justify-between items-end mt-2">
-                                                <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded">{item.region}</span>
-                                                <span className="font-black text-blue-700">{fmt(item.results?.finalPrice)}</span>
+                                            <div className="flex justify-between items-end mt-2.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{item.region}</span>
+                                                    {/* ★ 左側列表相片數量提示 */}
+                                                    {item.photos?.length > 0 && (
+                                                        <span className="flex items-center gap-1 text-[10px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="相片數量">
+                                                            <ImageIcon size={10} className="text-slate-400"/> {item.photos.length}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="font-black text-blue-700 text-base tracking-tight">{fmt(item.results?.finalPrice)}</span>
                                             </div>
                                         </div>
                                     );
@@ -564,79 +578,101 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             </div>
                         </div>
 
-                        {/* 右側詳情 (Detail) */}
-                        <div className={`flex-1 h-full bg-slate-50/50 flex flex-col overflow-y-auto ${!selectedId && 'hidden md:flex'}`}>
+                        {/* 右側詳情 (Detail - No Rolling Layout) */}
+                        <div className={`flex-1 h-full bg-slate-50/50 flex flex-col p-4 md:p-6 lg:overflow-hidden overflow-y-auto ${!selectedId && 'hidden md:flex'}`}>
                             {selectedItem ? (
-                                <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6">
-                                    {/* 手機版返回按鈕 */}
-                                    <button onClick={() => setSelectedId(null)} className="md:hidden flex items-center gap-1 text-slate-500 font-bold text-xs bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-fit mb-2"><ArrowLeft size={14}/> 返回列表</button>
+                                <div className="flex flex-col h-full w-full max-w-6xl mx-auto">
+                                    <button onClick={() => setSelectedId(null)} className="md:hidden flex items-center gap-1 text-slate-500 font-bold text-xs bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm w-fit mb-3"><ArrowLeft size={14}/> 返回列表</button>
                                     
-                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                                    {/* 頂部 Header */}
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0 mb-4">
                                         <div>
-                                            <div className="flex items-center gap-2 mb-2">
+                                            <div className="flex items-center gap-2 mb-1.5">
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider border ${STATUS_OPTIONS[selectedItem.status || 'QUOTING'].color}`}>{STATUS_OPTIONS[selectedItem.status || 'QUOTING'].label}</span>
                                                 <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">{selectedItem.region}</span>
                                                 <span className="text-xs text-slate-400 font-bold ml-2">{selectedItem.date}</span>
                                             </div>
-                                            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
+                                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
                                         </div>
                                         <div className="flex gap-2 flex-wrap">
-                                            <button onClick={() => handleImportToInventory(selectedItem)} className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 font-bold text-xs border shadow-sm ${selectedItem.isImported ? 'bg-white text-slate-500 border-slate-200' : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700'}`}>{selectedItem.isImported ? <RotateCcw size={14}/> : <Database size={14}/>} {selectedItem.isImported ? '取消匯入' : '匯入主庫存'}</button>
-                                            <button onClick={() => handleEdit(selectedItem)} className="px-3 py-2 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl transition flex items-center gap-1.5 font-bold text-xs shadow-sm"><Pencil size={14}/> 編輯</button>
-                                            <button onClick={() => setPreviewItem(selectedItem)} className="px-3 py-2 bg-white text-blue-600 border border-slate-200 hover:bg-blue-50 rounded-xl transition flex items-center gap-1.5 font-bold text-xs shadow-sm"><Printer size={14}/> 列印</button>
-                                            <button onClick={() => toggleLock(selectedItem)} className={`p-2 rounded-xl transition border shadow-sm ${selectedItem.isLocked ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-400 bg-white hover:bg-slate-50 border-slate-200'}`}>{selectedItem.isLocked ? <Lock size={16}/> : <Unlock size={16}/>}</button>
-                                            <button onClick={() => handleDelete(selectedItem)} disabled={selectedItem.isLocked} className="p-2 text-slate-400 bg-white hover:text-red-600 hover:bg-red-50 disabled:opacity-30 rounded-xl transition border border-slate-200 shadow-sm"><Trash2 size={16}/></button>
+                                            <button onClick={() => handleImportToInventory(selectedItem)} className={`px-3 py-2 rounded-xl transition flex items-center gap-1.5 font-bold text-xs border shadow-sm ${selectedItem.isImported ? 'bg-white text-slate-500 border-slate-200' : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 active:scale-95'}`}>{selectedItem.isImported ? <RotateCcw size={14}/> : <Database size={14}/>} {selectedItem.isImported ? '取消匯入' : '匯入主庫存'}</button>
+                                            <button onClick={() => handleEdit(selectedItem)} className="px-3 py-2 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 rounded-xl transition flex items-center gap-1.5 font-bold text-xs shadow-sm active:scale-95"><Pencil size={14}/> 編輯</button>
+                                            <button onClick={() => setPreviewItem(selectedItem)} className="px-3 py-2 bg-white text-blue-600 border border-slate-200 hover:bg-blue-50 rounded-xl transition flex items-center gap-1.5 font-bold text-xs shadow-sm active:scale-95"><Printer size={14}/> 列印</button>
+                                            <button onClick={() => toggleLock(selectedItem)} className={`p-2 rounded-xl transition border shadow-sm active:scale-95 ${selectedItem.isLocked ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-400 bg-white hover:bg-slate-50 border-slate-200'}`}>{selectedItem.isLocked ? <Lock size={16}/> : <Unlock size={16}/>}</button>
+                                            <button onClick={() => handleDelete(selectedItem)} disabled={selectedItem.isLocked} className="p-2 text-slate-400 bg-white hover:text-red-600 hover:bg-red-50 disabled:opacity-30 rounded-xl transition border border-slate-200 shadow-sm active:scale-95"><Trash2 size={16}/></button>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                        <div className="lg:col-span-2 space-y-6">
-                                            {selectedItem.photos?.length > 0 && (
-                                                <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-200 h-64 md:h-80 w-full relative group">
-                                                    <img src={selectedItem.photos[0]} className="w-full h-full object-cover" />
-                                                    {selectedItem.photos.length > 1 && <div className="absolute bottom-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-xs font-bold backdrop-blur-sm">+ {selectedItem.photos.length - 1}</div>}
-                                                </div>
+                                    {/* ★ No-Rolling Grid 排版 */}
+                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+                                        
+                                        {/* 左欄：相片畫廊 */}
+                                        <div className="lg:col-span-4 flex flex-col h-full bg-white rounded-2xl border border-slate-200 p-2 shadow-sm min-h-[300px] lg:min-h-0">
+                                            {selectedItem.photos?.length > 0 ? (
+                                                <>
+                                                    <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-100 group cursor-zoom-in" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
+                                                        <img src={selectedItem.photos[selectedPhotoIdx]} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                                                            <div className="bg-white/95 text-slate-800 px-4 py-2 rounded-lg font-black text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100"><Search size={14}/> 點擊放大下載</div>
+                                                        </div>
+                                                    </div>
+                                                    {selectedItem.photos.length > 1 && (
+                                                        <div className="h-16 mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide shrink-0 px-1">
+                                                            {selectedItem.photos.map((p: string, idx: number) => (
+                                                                <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-20 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-sm' : 'border-transparent opacity-50 hover:opacity-100'}`}>
+                                                                    <img src={p} className="w-full h-full object-cover" />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="flex-1 flex flex-col items-center justify-center text-slate-300 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200"><ImageIcon size={48}/><p className="mt-2 text-xs font-bold text-slate-400">無相片</p></div>
                                             )}
-                                            
-                                            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                                        </div>
+
+                                        {/* 中欄：規格與運輸 */}
+                                        <div className="lg:col-span-5 flex flex-col h-full space-y-4">
+                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-1 overflow-y-auto">
                                                 <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-4 flex items-center gap-2"><Car size={18} className="text-blue-500"/> 車輛規格</h3>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="grid grid-cols-2 gap-y-4 gap-x-3">
                                                     <div><span className="block text-[10px] font-bold text-slate-400 uppercase">車身號碼</span><span className="font-bold text-sm text-slate-800 break-all">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</span></div>
-                                                    <div><span className="block text-[10px] font-bold text-slate-400 uppercase">波箱</span><span className="font-bold text-sm text-slate-800">{selectedItem.details?.transmission || '-'}</span></div>
                                                     <div><span className="block text-[10px] font-bold text-slate-400 uppercase">排量(cc)</span><span className="font-bold text-sm text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</span></div>
+                                                    <div><span className="block text-[10px] font-bold text-slate-400 uppercase">波箱</span><span className="font-bold text-sm text-slate-800">{selectedItem.details?.transmission || '-'}</span></div>
                                                     <div><span className="block text-[10px] font-bold text-slate-400 uppercase">咪數(km)</span><span className="font-bold text-sm text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</span></div>
                                                     <div><span className="block text-[10px] font-bold text-slate-400 uppercase">外觀顏色</span><span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">{selectedItem.details?.exteriorColor && <div className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details.exteriorColor)}}></div>}{selectedItem.details?.exteriorColor || '-'}</span></div>
                                                     <div><span className="block text-[10px] font-bold text-slate-400 uppercase">內飾顏色</span><span className="font-bold text-sm text-slate-800 flex items-center gap-1.5">{selectedItem.details?.interiorColor && <div className="w-2.5 h-2.5 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details.interiorColor)}}></div>}{selectedItem.details?.interiorColor || '-'}</span></div>
                                                 </div>
                                             </div>
-
-                                            {selectedItem.details?.departureDate && (
-                                                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                                                    <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-4 flex items-center gap-2"><Plane size={18} className="text-slate-500"/> 物流進度</h3>
+                                            
+                                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 shrink-0">
+                                                <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase mb-3 flex items-center gap-2"><Plane size={18} className="text-slate-500"/> 物流進度</h3>
+                                                {selectedItem.details?.departureDate ? (
                                                     <TransportProgressBar departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
-                                                </div>
-                                            )}
+                                                ) : (
+                                                    <div className="text-xs font-bold text-slate-400 text-center py-2">未設定出發日期</div>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        <div className="lg:col-span-1 space-y-6">
-                                            <div className="bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white flex flex-col h-full">
-                                                <div className="p-6 border-b border-white/10">
-                                                    <h3 className="font-black text-blue-400 text-sm tracking-widest uppercase mb-4 flex items-center gap-2"><DollarSign size={18}/> 財務結算</h3>
-                                                    <div className="space-y-3">
-                                                        <div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
-                                                        <div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold uppercase">海關 A1 價</span><span className="font-mono text-sm">${formatNum(selectedItem.vals?.prp)}</span></div>
-                                                    </div>
+                                        {/* 右欄：財務結算 */}
+                                        <div className="lg:col-span-3 flex flex-col h-full bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white">
+                                            <div className="p-5 border-b border-white/10 shrink-0">
+                                                <h3 className="font-black text-blue-400 text-sm tracking-widest uppercase mb-3 flex items-center gap-2"><DollarSign size={18}/> 財務結算</h3>
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
+                                                    <div className="flex justify-between items-end"><span className="text-xs text-slate-400 font-bold uppercase">海關 A1 價</span><span className="font-mono text-sm">${formatNum(selectedItem.vals?.prp)}</span></div>
                                                 </div>
-                                                <div className="p-6 bg-slate-800/50 border-b border-white/10 space-y-2">
-                                                    <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">到港成本</span><span className="font-mono font-bold text-slate-200">{fmt(selectedItem.results?.landedCost)}</span></div>
-                                                    <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">A1 入口稅</span><span className="font-mono font-bold text-slate-200">{fmt(selectedItem.results?.frtTax)}</span></div>
-                                                    <div className="flex justify-between items-end pt-2 border-t border-slate-700"><span className="text-xs text-slate-300 font-bold uppercase">總成本</span><span className="font-mono font-black text-lg text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
-                                                </div>
-                                                <div className="p-6 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center text-center relative">
-                                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-blue-200 opacity-80">Final Quote</p>
-                                                    <p className="text-4xl font-black font-mono tracking-tighter drop-shadow-md">{fmt(selectedItem.results?.finalPrice)}</p>
-                                                    <p className="text-[10px] text-blue-200 font-bold mt-2">(利潤: {fmt(selectedItem.quote?.margin)})</p>
-                                                </div>
+                                            </div>
+                                            <div className="p-5 bg-slate-800/50 border-b border-white/10 space-y-3 shrink-0">
+                                                <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">到港成本</span><span className="font-mono font-bold text-slate-200">{fmt(selectedItem.results?.landedCost)}</span></div>
+                                                <div className="flex justify-between items-end"><span className="text-[10px] text-slate-400 font-bold uppercase">A1 入口稅</span><span className="font-mono font-bold text-slate-200">{fmt(selectedItem.results?.frtTax)}</span></div>
+                                                <div className="flex justify-between items-end pt-3 border-t border-slate-700"><span className="text-xs text-slate-300 font-bold uppercase">總成本</span><span className="font-mono font-black text-lg text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
+                                            </div>
+                                            <div className="p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center text-center relative min-h-[120px]">
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-1 text-blue-200 opacity-80">Final Quote</p>
+                                                <p className="text-3xl xl:text-4xl font-black font-mono tracking-tighter drop-shadow-md">{fmt(selectedItem.results?.finalPrice)}</p>
+                                                <p className="text-[10px] text-blue-200 font-bold mt-1">(利潤: {fmt(selectedItem.quote?.margin)})</p>
                                             </div>
                                         </div>
                                     </div>
@@ -659,7 +695,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         </div>
 
                         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
-                            {/* 左中右 三欄聯動版面 */}
                             <div className={`w-full md:w-[35%] h-full overflow-y-auto p-4 md:p-6 space-y-8 md:border-r border-slate-200 bg-white md:bg-transparent pb-32 md:pb-6 ${mobileTab!=='basic'?'hidden md:block':''}`}>
                                 <div className="flex bg-slate-100 p-1 rounded-xl gap-1">{Object.values(REGION_CONFIGS).map((c:any) => (<button key={c.id} onClick={()=>setRegion(c.id)} className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${region===c.id?'bg-white text-blue-700 shadow-sm':'text-slate-500'}`}>{c.name}</button>))}</div>
                                 <div>
@@ -738,7 +773,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3"><div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input type="text" value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded-lg p-1.5 pl-5 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div><input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/></div>
                                     <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-6 rounded-3xl shadow-2xl text-white text-center relative overflow-hidden"><div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div><p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-blue-100 opacity-80">Final Quote</p><p className="text-4xl lg:text-5xl font-black font-mono tracking-tighter drop-shadow-lg">{fmt(finalPrice)}</p></div>
                                 </div>
-                                <div className="mt-6 pt-4 border-t border-slate-100 flex-none sticky bottom-0 bg-white pb-2 hidden md:block z-10"><button onClick={handleSave} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"><Save size={20}/> {editingId ? '更新並返回' : '儲存紀錄'}</button></div>
+                                <div className="mt-6 pt-4 border-t border-slate-100 flex-none sticky bottom-0 bg-white pb-2 hidden md:block z-10"><button onClick={handleSave} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 active:scale-95 transition-all flex items-center justify-center gap-2"><Save size={20}/> {editingId ? '更新並返回' : '儲存紀錄'}</button></div>
                             </div>
                         </div>
 
