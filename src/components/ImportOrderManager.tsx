@@ -787,7 +787,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div className="grid grid-cols-4 gap-3">
                                             <InputField label="年份" value={carInfo.year} onChange={(v:any)=>setCarInfo({...carInfo, year:v})} type="number" />
                                             <InputField label="代號" value={carInfo.code} onChange={(v:any)=>setCarInfo({...carInfo, code:v})} list="codes_list" />
-                                            <datalist id="codes_list">{settings?.codes?.map((c:any) => <option key={c} value={c}/>)}</datalist>
+                                            <datalist id="codes_list">{((settings.codes || {})[carInfo.model] || []).map((c: string) => <option key={c} value={c}/>)}</datalist>
                                             <InputField label="外觀顏色" value={carInfo.exteriorColor} onChange={(v:any)=>setCarInfo({...carInfo, exteriorColor:v})} list="colors_list"/>
                                             <datalist id="colors_list">{settings?.colors?.map((c:any) => <option key={c} value={c}/>)}</datalist>
                                             <InputField label="內飾顏色" value={carInfo.interiorColor} onChange={(v:any)=>setCarInfo({...carInfo, interiorColor:v})} list="int_colors_list" />
