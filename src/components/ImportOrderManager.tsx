@@ -164,7 +164,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         <div>
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800">Vehicle Specification</h3>
                             <div className="space-y-1 text-sm">
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Model:</span> <span className="font-black text-lg">{item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Model:</span> <span className="font-black text-lg">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || 'TBC'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor}</span></p>
@@ -492,7 +492,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setEditingId(item.id); setRegion(item.region || 'JP'); setOrderStatus(item.status || 'QUOTING');
         setCarPrice(formatNum(item.vals?.carPrice)); setPrpPrice(formatNum(item.vals?.prp));
         setCarInfo({
-            make: item.details?.manufacturer || item.carInfo?.make || '', model: item.details?.model || item.carInfo?.model || '', year: item.details?.year || item.carInfo?.year || '',
+            make: item.details?.make || item.details?.manufacturer || item.carInfo?.make || '', model: item.details?.model || item.carInfo?.model || '', year: item.details?.year || item.carInfo?.year || '',
             code: item.details?.code || item.carInfo?.code || '', exteriorColor: item.details?.exteriorColor || item.carInfo?.exteriorColor || '', interiorColor: item.details?.interiorColor || item.carInfo?.interiorColor || '',
             transmission: item.details?.transmission || item.carInfo?.transmission || 'AT', cc: item.details?.engineCapacity || item.details?.cc || item.carInfo?.cc || '', seats: item.details?.seats || item.carInfo?.seats || '',
             mileage: item.details?.mileage || item.carInfo?.mileage || '', chassis: item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || ''
@@ -616,7 +616,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div className="font-black text-slate-800 text-sm truncate">{item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
+                                            <div className="font-black text-slate-800 text-sm truncate">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
                                             <div className="flex justify-between items-end mt-2.5">
                                                 <div className="flex items-center gap-1.5">
                                                     <span className="text-[10px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{item.region}</span>
@@ -647,7 +647,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded uppercase">{selectedItem.region}</span>
                                                 <span className="text-xs text-slate-400 font-bold ml-2">{selectedItem.date}</span>
                                             </div>
-                                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500 font-bold">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
+                                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.make || selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500 font-bold">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
                                         </div>
                                         <div className="flex gap-2 flex-wrap">
                                             <button onClick={() => handleEdit(selectedItem)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-black text-xs transition flex items-center gap-2 shadow-sm border border-slate-200"><Pencil size={14}/> 編輯資料</button>
@@ -851,7 +851,34 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg border border-red-100"><span>首次登記稅 (FRT)</span><span className="font-mono">{fmt(frtTax)}</span></div>
                                 </div>
                                 <div>
-                                    <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4"><Globe className="w-5 h-5 text-emerald-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">其他雜費</h3></div>
+                                    <div>
+                                    <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
+                                        <Globe className="w-5 h-5 text-emerald-500" />
+                                        <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">其他雜費</h3>
+                                    </div>
+                                    <div className="mb-6">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">當地雜費 ({regData.currency})</span>
+                                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200 shadow-sm">
+                                                小計: {regData.symbol}{formatNum(getFeeTotal(originFees))}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+                                            {Object.entries(originFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: val})} />))}
+                                        </div>
+                                    </div>
+                                    <div className="pt-4 border-t border-slate-200">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">香港雜費 (HKD)</span>
+                                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-200 shadow-sm">
+                                                小計: {fmt(getFeeTotal(hkMiscFees))}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-x-4 gap-y-6">
+                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />))}
+                                        </div>
+                                    </div>
+                                </div>
                                     <div className="mb-6"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">當地雜費 ({regData.currency})</span><div className="grid grid-cols-3 gap-x-4 gap-y-6">{Object.entries(originFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: val})} />))}</div></div>
                                     <div className="pt-4 border-t border-slate-200"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">香港雜費 (HKD)</span><div className="grid grid-cols-3 gap-x-4 gap-y-6">{Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />))}</div></div>
                                 </div>
