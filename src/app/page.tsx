@@ -454,46 +454,43 @@ type SystemSettings = {
   expenseCompanies: string[];
   paymentTypes: string[]; 
   colors: string[];
+  // ★★★ 新增：內飾顏色與車輛代號 ★★★
+  interiorColors?: string[]; 
+  codes?: string[];          
   warrantyTypes?: string[];
-  // ★★★ 新增：中港代辦服務項目列表 (解決 serviceItems 報錯) ★★★
   serviceItems?: string[];
   partners?: string[];
-  
   cbItems: (string | { name: string; defaultInst: string; defaultFee: number; defaultDays: string })[];
   cbInstitutions: string[];
   dbCategories: string[];
   dbRoles: string[]; 
   dbDocTypes: Record<string, string[]>;
-  // ★★★ 新增：提醒設定結構 ★★★
   reminders?: {
-      isEnabled: boolean;          // 總開關
-      daysBefore: number;          // 預設提前幾天提醒 (例如 30天)
-      time: string;                // 每日提醒時間 (例如 09:00)
-      categories: {                // 要開啟提醒的類別
-          license: boolean;        // 牌費/驗車
-          insurance: boolean;      // 保險
-          crossBorder: boolean;    // 中港證件
-          installments: boolean;   // 供車/分期
+      isEnabled: boolean;          
+      daysBefore: number;          
+      time: string;                
+      categories: {                
+          license: boolean;        
+          insurance: boolean;      
+          crossBorder: boolean;    
+          installments: boolean;   
       };
   };
   backup?: {
-      frequency: 'manual' | 'daily' | 'weekly' | 'monthly'; // 頻率
-      lastBackupDate: string; // 上次備份日期
-      autoCloud: boolean;     // 是否開啟雲端自動備份
+      frequency: 'manual' | 'daily' | 'weekly' | 'monthly'; 
+      lastBackupDate: string; 
+      autoCloud: boolean;     
   };
-
-  // ★★★ 新增：推送通知設定 ★★★
   pushConfig?: {
-      isEnabled: boolean;       // 是否開啟全域推送
-      vapidKey: string;         // FCM 公鑰 (Public Key)
-      events: {                 // 訂閱哪些事件
-          newCar: boolean;      // 新車入庫
-          sold: boolean;        // 車輛售出
-          expiry: boolean;      // 到期提醒
-          workflow: boolean;    // 流程進度更新
+      isEnabled: boolean;       
+      vapidKey: string;         
+      events: {                 
+          newCar: boolean;      
+          sold: boolean;        
+          expiry: boolean;      
+          workflow: boolean;    
       };
   };
-
 };
 
 type Customer = {
@@ -521,7 +518,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Porsche': ['911', 'Cayenne', 'Macan', 'Taycan', 'Panamera'],
     'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7']
   },
-  // ★★★ 新增：預設收款項目 ★★★
   paymentTypes: ['訂金 (Deposit)', '大訂 (Part Payment)', '尾數 (Balance)', '全數 (Full Payment)', '服務費 (Service Fee)', '代支 (Advance)'],
   expenseTypes: [
       { name: '政府牌費', defaultCompany: '香港運輸署', defaultAmount: 5860, defaultDays: '0' },
@@ -532,8 +528,10 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ],
   expenseCompanies: ['金田維修部', 'ABC車房', '政府牌照局', '友邦保險', '自家', '中檢公司'], 
   colors: ['白 (White)', '黑 (Black)', '銀 (Silver)', '灰 (Grey)', '藍 (Blue)', '紅 (Red)', '金 (Gold)', '綠 (Green)'],
+  // ★★★ 新增：內飾顏色與車輛代號預設值 ★★★
+  interiorColors: ['黑 (Black)', '米 (Beige)', '灰 (Grey)', '紅 (Red)', '棕 (Brown)', '白 (White)'], 
+  codes: ['AH30', 'AGH30', 'AYH30'], 
   partners: [],
-  // ★ 新增：根據 2026 最新政策預設的保養條款
   warrantyTypes: [
       '5年/10萬公里 (原廠全車)',
       '8年/16萬公里 高壓電池 (原廠 EV)',
@@ -545,10 +543,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
       '電池終身保養 (BYD 原廠)',
       '不設保養 (No Warranty)'
   ],
-  
-  // ★★★ 新增：預設的中港代辦服務項目 ★★★
   serviceItems: ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'],
-
   cbItems: [
       { name: '批文延期', defaultInst: '廣東省公安廳', defaultFee: 500, defaultDays: '10' },
       { name: '禁區紙續期', defaultInst: '香港運輸署', defaultFee: 540, defaultDays: '5' },
@@ -559,7 +554,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ],
   cbInstitutions: ['廣東省公安廳', '香港運輸署', '中國檢驗有限公司', '梅林海關', '深圳灣口岸', '港珠澳大橋口岸'],
   dbCategories: ['一般客戶', '中港司機', '公司客戶', '車輛文件', '保險文件', '其他'],
-  
   dbRoles: ['客戶', '員工', '司機', '代辦'],
   dbDocTypes: {
     'Person': ['香港身份證', '回鄉證', '護照', '通行證', '地址證明', '香港電子認證', '香港駕照', '國內駕照', '海外駕照', '其他'],
@@ -567,37 +561,18 @@ const DEFAULT_SETTINGS: SystemSettings = {
     'Vehicle': ['牌薄(VRD)', '香港保險', '澳門保險', '國內交強保', '國內商業險', '國內關稅險', '其他'],
     'CrossBorder': ['批文卡', '新辦回執', '換車回執', '司機更換回執', '中檢資料', '其他']
   },
-
-  // ★★★ 新增：提醒預設值 ★★★
   reminders: {
       isEnabled: true,
       daysBefore: 30,
       time: '10:00',
-      categories: {
-          license: true,
-          insurance: true,
-          crossBorder: true,
-          installments: false
-      }
+      categories: { license: true, insurance: true, crossBorder: true, installments: false }
   },
-  backup: {
-      frequency: 'monthly',
-      lastBackupDate: '',
-      autoCloud: true
-  },
-
-  // ★★★ 新增：推送預設值 ★★★
+  backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true },
   pushConfig: {
       isEnabled: false,
-      vapidKey: 'BIpAVoyM6C6CodEmmKnsykyuQkX0g0VBBXDUWikIRhKtnCVUVCuO86EqlEgf5zuxz8nGA3DCdbEr1yKynCXFJKA', // 稍後需填入 Firebase Console 的 Key
-      events: {
-          newCar: true,
-          sold: true,
-          expiry: true,
-          workflow: true
-      }
-  },
-  
+      vapidKey: 'BIpAVoyM6C6CodEmmKnsykyuQkX0g0VBBXDUWikIRhKtnCVUVCuO86EqlEgf5zuxz8nGA3DCdbEr1yKynCXFJKA',
+      events: { newCar: true, sold: true, expiry: true, workflow: true }
+  }
 };
 
 // ------------------------------------------------------------------
@@ -5818,104 +5793,220 @@ const SettingsManager = ({
                 )}
 
                 {/* 2. 車輛資料 / 全域數據字典 (完整功能) */}
-                {activeTab === 'vehicle_setup' && (
-                    <div className="space-y-4 animate-fade-in pb-10">
-                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6">
-                            <h3 className="font-bold text-blue-800 flex items-center mb-1"><Database size={18} className="mr-2"/> 全域數據字典 (Data Dictionary)</h3>
-                            <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。點擊各分類即可展開內容進行新增、修改、排序或刪除。</p>
-                        </div>
+                {activeTab === 'vehicle_setup' && (() => {
+                    // ★ 新增：車輛品牌與型號專用管理函數 (寫在渲染區塊內)
+                    const [activeSetupMake, setActiveSetupMake] = useState<string>('');
+                    const [newSetupModel, setNewSetupModel] = useState('');
 
-                        {/* ★ 升級：摺疊式萬能列表渲染引擎 */}
-                        {[
-                            { title: '1. 車輛品牌 (Makes)', key: 'makes', icon: <Car size={16}/>, placeholder: '例如: Toyota' },
-                            { title: '2. 車身顏色 (Colors)', key: 'colors', icon: <Palette size={16}/>, placeholder: '例如: 白 (White)' },
-                            { title: '3. 保養條款庫 (Warranty Terms)', key: 'warrantyTypes', icon: <ShieldCheck size={16}/>, placeholder: '例如: 5年/10萬公里' },
-                            { title: '4. 收款公司/車房名單 (Vendors)', key: 'expenseCompanies', icon: <Wrench size={16}/>, placeholder: '例如: 新港龍汽車' },
-                            { title: '5. 中港牌相關機構 (Institutions)', key: 'cbInstitutions', icon: <Building2 size={16}/>, placeholder: '例如: 中檢公司' },
-                            { title: '6. 收款方式/類別 (Payment Types)', key: 'paymentTypes', icon: <DollarSign size={16}/>, placeholder: '例如: 訂金 (Deposit)' }
-                        ].map((dict, idx) => {
-                            const list = Array.isArray(settings[dict.key as keyof SystemSettings]) ? (settings[dict.key as keyof SystemSettings] as string[]) : [];
-                            
-                            return (
-                                <details key={dict.key} className="group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors">
-                                        <span className="flex items-center gap-2">{dict.icon} {dict.title}</span>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xs text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded-full">{list.length} 項</span>
-                                            <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
-                                        </div>
-                                    </summary>
-                                    
-                                    <div className="p-4 pt-0">
-                                        {/* 新增輸入框 */}
-                                        <div className="flex gap-2 mb-4 pt-4 border-t border-slate-100">
-                                            <input 
-                                                id={`newInput_${dict.key}`} 
-                                                className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" 
-                                                placeholder={`輸入新選項 (${dict.placeholder})`}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        const val = (e.target as HTMLInputElement).value;
-                                                        if (val) { addItem(dict.key as any, val); (e.target as HTMLInputElement).value = ''; }
+                    const handleEditMake = (idx: number, oldMake: string, newMake: string) => {
+                        if (!newMake.trim() || oldMake === newMake) return;
+                        const newMakes = [...(settings.makes || [])];
+                        newMakes[idx] = newMake;
+                        
+                        const newModels = { ...(settings.models || {}) };
+                        if (newModels[oldMake]) {
+                            newModels[newMake] = newModels[oldMake];
+                            delete newModels[oldMake];
+                        }
+                        
+                        updateSettings('makes', newMakes);
+                        updateSettings('models', newModels);
+                        if (activeSetupMake === oldMake) setActiveSetupMake(newMake);
+                    };
+
+                    const handleDeleteMake = (idx: number, makeName: string) => {
+                        if (!confirm(`確定刪除品牌 ${makeName} 及其所有型號？`)) return;
+                        const newMakes = [...(settings.makes || [])];
+                        newMakes.splice(idx, 1);
+                        const newModels = { ...(settings.models || {}) };
+                        delete newModels[makeName];
+                        
+                        updateSettings('makes', newMakes);
+                        updateSettings('models', newModels);
+                        if (activeSetupMake === makeName) setActiveSetupMake('');
+                    };
+
+                    const handleMoveModel = (make: string, idx: number, dir: 'up'|'down') => {
+                        const list = [...(settings.models[make] || [])];
+                        if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
+                        else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
+                        updateSettings('models', { ...settings.models, [make]: list });
+                    };
+
+                    const handleDeleteModel = (make: string, idx: number) => {
+                        const list = [...(settings.models[make] || [])];
+                        list.splice(idx, 1);
+                        updateSettings('models', { ...settings.models, [make]: list });
+                    };
+
+                    return (
+                        <div className="space-y-6 animate-fade-in pb-10">
+                            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-2">
+                                <h3 className="font-bold text-blue-800 flex items-center mb-1"><Database size={18} className="mr-2"/> 車輛參數與數據字典</h3>
+                                <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項，包含品牌與型號的聯動關係。</p>
+                            </div>
+
+                            {/* ★★★ 升級版：專屬車輛品牌與型號聯動管理器 ★★★ */}
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[400px]">
+                                {/* 左側：品牌 (Makes) */}
+                                <div className="w-full md:w-1/2 border-r border-slate-200 bg-slate-50 flex flex-col">
+                                    <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700 flex justify-between items-center">
+                                        <span className="flex items-center"><Car size={16} className="mr-2 text-blue-500"/> 1. 車輛品牌 (Makes)</span>
+                                    </div>
+                                    <div className="p-3 border-b border-slate-200 bg-white flex gap-2">
+                                        <input id="newMakeInput" className="border rounded px-2 py-1.5 text-sm flex-1 outline-none focus:border-blue-400" placeholder="新增品牌..."/>
+                                        <button onClick={() => {
+                                            const val = (document.getElementById('newMakeInput') as HTMLInputElement).value;
+                                            if (val) { addItem('makes', val); (document.getElementById('newMakeInput') as HTMLInputElement).value = ''; }
+                                        }} className="bg-slate-800 text-white px-3 rounded text-xs font-bold"><Plus size={14}/></button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                        {(settings.makes || []).map((m: string, i: number) => (
+                                            <div key={i} onClick={() => setActiveSetupMake(m)} className={`group flex justify-between items-center p-2 rounded-lg border transition-colors cursor-pointer ${activeSetupMake === m ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-white border-transparent hover:border-slate-200'}`}>
+                                                <div className="flex items-center flex-1 mr-2">
+                                                    <input type="text" defaultValue={m} onBlur={e => handleEditMake(i, m, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 text-sm py-0.5" />
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                                    <button onClick={() => moveListItem('makes', i, 'up')} disabled={i === 0} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronUp size={14}/></button>
+                                                    <button onClick={() => moveListItem('makes', i, 'down')} disabled={i === settings.makes.length - 1} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronDown size={14}/></button>
+                                                    <button onClick={() => handleDeleteMake(i, m)} className="p-1 text-red-400 hover:text-white hover:bg-red-500 rounded ml-1"><Trash2 size={14}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 右側：型號 (Models) */}
+                                <div className="w-full md:w-1/2 bg-white flex flex-col">
+                                    <div className="p-3 border-b border-slate-200 bg-slate-50 font-bold text-slate-700 flex justify-between items-center">
+                                        <span className="flex items-center"><CheckCircle size={16} className="mr-2 text-indigo-500"/> 2. 對應型號 (Models)</span>
+                                    </div>
+                                    {activeSetupMake ? (
+                                        <>
+                                            <div className="p-3 border-b border-slate-200 bg-indigo-50/30 flex gap-2">
+                                                <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={e => {
+                                                    if (e.key === 'Enter' && newSetupModel) {
+                                                        updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] });
+                                                        setNewSetupModel('');
                                                     }
-                                                }}
-                                            />
-                                            <button 
-                                                onClick={() => { 
-                                                    const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value;
-                                                    if (val) { addItem(dict.key as any, val); (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = ''; }
-                                                }} 
-                                                className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"
-                                            >
-                                                <Plus size={16} className="mr-1"/> 新增
-                                            </button>
-                                        </div>
-
-                                        {/* 項目列表與排序/修改/刪除 */}
-                                        <div className="flex flex-col gap-2">
-                                            {list.map((item: any, i: number) => {
-                                                const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
-                                                
-                                                return (
-                                                    <div key={i} className="group/item bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
-                                                        <div className="flex-1 flex items-center mr-4">
-                                                            <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
-                                                            <input 
-                                                                type="text"
-                                                                defaultValue={displayValue}
-                                                                onBlur={(e) => editListItem(dict.key as any, i, e.target.value)}
-                                                                className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5"
-                                                            />
+                                                }} className="border border-indigo-200 rounded px-2 py-1.5 text-sm flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增型號...`}/>
+                                                <button onClick={() => {
+                                                    if (newSetupModel) {
+                                                        updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] });
+                                                        setNewSetupModel('');
+                                                    }
+                                                }} className="bg-indigo-600 text-white px-3 rounded text-xs font-bold"><Plus size={14}/></button>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                                {(settings.models[activeSetupMake] || []).map((model: string, i: number) => (
+                                                    <div key={i} className="group flex justify-between items-center p-2 bg-white rounded-lg border border-slate-100 hover:border-indigo-200 transition-colors">
+                                                        <div className="flex items-center flex-1 mr-2">
+                                                            <span className="text-slate-400 font-mono w-5 text-xs">{i+1}.</span>
+                                                            <input type="text" defaultValue={model} onBlur={e => {
+                                                                if (!e.target.value.trim() || e.target.value === model) return;
+                                                                const newMList = [...settings.models[activeSetupMake]];
+                                                                newMList[i] = e.target.value;
+                                                                updateSettings('models', { ...settings.models, [activeSetupMake]: newMList });
+                                                            }} className="bg-transparent border-b border-transparent focus:border-indigo-300 outline-none w-full font-bold text-slate-700 text-sm py-0.5" />
                                                         </div>
-                                                        
-                                                        <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                                            <button onClick={() => moveListItem(dict.key as any, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
-                                                            <button onClick={() => moveListItem(dict.key as any, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
-                                                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                                            <button onClick={() => removeItem(dict.key as any, i)} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
+                                                        <div className="flex items-center gap-1 opacity-30 group-hover:opacity-100 transition-opacity">
+                                                            <button onClick={() => handleMoveModel(activeSetupMake, i, 'up')} disabled={i === 0} className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-30"><ChevronUp size={14}/></button>
+                                                            <button onClick={() => handleMoveModel(activeSetupMake, i, 'down')} disabled={i === settings.models[activeSetupMake].length - 1} className="p-1 text-slate-400 hover:text-indigo-600 disabled:opacity-30"><ChevronDown size={14}/></button>
+                                                            <button onClick={() => handleDeleteModel(activeSetupMake, i)} className="p-1 text-red-400 hover:text-white hover:bg-red-500 rounded ml-1"><Trash2 size={14}/></button>
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
-                                            {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                                ))}
+                                                {(settings.models[activeSetupMake] || []).length === 0 && <div className="text-xs text-slate-400 text-center py-10">此品牌目前沒有型號</div>}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 text-center"><Car size={32} className="mb-2 opacity-30"/> <p className="text-sm">請先在左側點選一個品牌<br/>以管理其對應的車輛型號</p></div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* ★ 升級：摺疊式萬能列表渲染引擎 (已加入 內飾顏色、車輛代號) */}
+                            {[
+                                { title: '車輛代號 (Codes)', key: 'codes', icon: <Car size={16}/>, placeholder: '例如: AH30' },
+                                { title: '外觀顏色 (Exterior Colors)', key: 'colors', icon: <Palette size={16}/>, placeholder: '例如: 白 (White)' },
+                                { title: '內飾顏色 (Interior Colors)', key: 'interiorColors', icon: <Armchair size={16}/>, placeholder: '例如: 黑 (Black)' },
+                                { title: '保養條款庫 (Warranty Terms)', key: 'warrantyTypes', icon: <ShieldCheck size={16}/>, placeholder: '例如: 5年/10萬公里' },
+                                { title: '收款公司/車房名單 (Vendors)', key: 'expenseCompanies', icon: <Wrench size={16}/>, placeholder: '例如: 新港龍汽車' },
+                                { title: '中港牌相關機構 (Institutions)', key: 'cbInstitutions', icon: <Building2 size={16}/>, placeholder: '例如: 中檢公司' },
+                                { title: '收款方式/類別 (Payment Types)', key: 'paymentTypes', icon: <DollarSign size={16}/>, placeholder: '例如: 訂金 (Deposit)' }
+                            ].map((dict) => {
+                                const list = Array.isArray(settings[dict.key as keyof SystemSettings]) ? (settings[dict.key as keyof SystemSettings] as string[]) : [];
+                                
+                                return (
+                                    <details key={dict.key} className="group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                        <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors">
+                                            <span className="flex items-center gap-2">{dict.icon} {dict.title}</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded-full">{list.length} 項</span>
+                                                <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
+                                            </div>
+                                        </summary>
+                                        
+                                        <div className="p-4 pt-0">
+                                            {/* 新增輸入框 */}
+                                            <div className="flex gap-2 mb-4 pt-4 border-t border-slate-100">
+                                                <input 
+                                                    id={`newInput_${dict.key}`} 
+                                                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" 
+                                                    placeholder={`輸入新選項 (${dict.placeholder})`}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            const val = (e.target as HTMLInputElement).value;
+                                                            if (val) { addItem(dict.key as any, val); (e.target as HTMLInputElement).value = ''; }
+                                                        }
+                                                    }}
+                                                />
+                                                <button 
+                                                    onClick={() => { 
+                                                        const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value;
+                                                        if (val) { addItem(dict.key as any, val); (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = ''; }
+                                                    }} 
+                                                    className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"
+                                                >
+                                                    <Plus size={16} className="mr-1"/> 新增
+                                                </button>
+                                            </div>
+
+                                            {/* 項目列表與排序/修改/刪除 */}
+                                            <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+                                                {list.map((item: any, i: number) => {
+                                                    const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
+                                                    
+                                                    return (
+                                                        <div key={i} className="group/item bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
+                                                            <div className="flex-1 flex items-center mr-4">
+                                                                <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
+                                                                <input 
+                                                                    type="text"
+                                                                    defaultValue={displayValue}
+                                                                    onBlur={(e) => editListItem(dict.key as any, i, e.target.value)}
+                                                                    className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5"
+                                                                />
+                                                            </div>
+                                                            
+                                                            <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                                                <button onClick={() => moveListItem(dict.key as any, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
+                                                                <button onClick={() => moveListItem(dict.key as any, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
+                                                                <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                                                <button onClick={() => removeItem(dict.key as any, i)} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                            </div>
                                         </div>
-                                    </div>
-                                </details>
-                            );
-                        })}
-                        
-                        {/* 額外保留型號管理說明 (摺疊版) */}
-                        <details className="group bg-white rounded-xl border border-slate-200 shadow-sm opacity-80 hover:opacity-100 transition-opacity overflow-hidden">
-                             <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors text-sm">
-                                 <span className="flex items-center"><Car size={16} className="mr-2"/> 進階：車輛型號管理 (Models)</span>
-                                 <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
-                             </summary>
-                             <div className="p-4 pt-0 border-t border-slate-100 mt-2">
-                                <p className="text-xs text-slate-500 mb-2">型號與品牌綁定結構較為特殊，系統已開啟「智能記憶」功能，您在新增車輛時直接輸入新型號，系統會自動學習並加入選單，無需手動管理。</p>
-                             </div>
-                        </details>
-                    </div>
-                )}
+                                    </details>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
 
                 {/* 3. 財務與費用 (完整功能) */}
                 {activeTab === 'expenses_setup' && (
