@@ -6228,8 +6228,10 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
                     {/* Key Specs Grid (★ 需求 5: 加入牌費到期日) */}
                     <div className="grid grid-cols-3 gap-2 mb-4">
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">顏色 (Color)</span>
-                            <span className="font-bold text-slate-800 text-xs truncate">{vehicle.colorExt || '-'}</span>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">外觀/內飾 (Color)</span>
+                            <span className="font-bold text-slate-800 text-[10px] truncate" title={`${vehicle.colorExt || '-'} / ${vehicle.colorInt || vehicle.colorInterior || '-'}`}>
+                                {vehicle.colorExt || '-'} / {vehicle.colorInt || (vehicle as any).colorInterior || '-'}
+                            </span>
                         </div>
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數 (Owners)</span>
@@ -8598,6 +8600,7 @@ const VehicleFormModal = ({
 
     const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [dragPhotoIdx, setDragPhotoIdx] = useState<number | null>(null);
 
     const [vrdSearch, setVrdSearch] = useState('');
     const [vrdResults, setVrdResults] = useState<any[]>([]);
@@ -9188,7 +9191,33 @@ const VehicleFormModal = ({
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4">
                         <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-xs md:text-[10px] bg-blue-50 text-blue-600 px-3 py-2 md:py-1.5 rounded-lg border hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button></div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[300px] md:max-h-[260px] overflow-y-auto pr-1">
-                            {displayPhotos.map((url, idx) => (<div key={idx} className="relative aspect-video rounded-lg border overflow-hidden shadow-sm cursor-zoom-in" onClick={() => setPreviewImage(url)}><img src={url} className="w-full h-full object-cover"/></div>))}
+                            {displayPhotos.map((url, idx) => (
+                                <div 
+                                    key={idx} 
+                                    draggable={!isOneForOne} // ★ 一換一佔位圖不可拖曳
+                                    onDragStart={() => setDragPhotoIdx(idx)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        if (dragPhotoIdx === null || dragPhotoIdx === idx || isOneForOne) return;
+                                        const newArr = [...carPhotos];
+                                        const item = newArr.splice(dragPhotoIdx, 1)[0];
+                                        newArr.splice(idx, 0, item);
+                                        setCarPhotos(newArr);
+                                        setDragPhotoIdx(null);
+                                    }}
+                                    className={`relative aspect-video rounded-lg border overflow-hidden shadow-sm transition-transform ${!isOneForOne ? 'cursor-move hover:scale-[1.02]' : ''} ${dragPhotoIdx === idx ? 'opacity-50 ring-2 ring-blue-500' : ''} ${idx===0 ? 'col-span-2' : ''}`}
+                                    onClick={() => setPreviewImage(url)}
+                                >
+                                    {/* 加入 pointer-events-none 確保拖曳順暢不被圖片干擾 */}
+                                    <img src={url} className="w-full h-full object-cover pointer-events-none"/>
+                                    {!isOneForOne && (
+                                        <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded backdrop-blur-sm">
+                                            <Eye size={12}/>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                             {displayPhotos.length === 0 && (<div className="col-span-full py-8 text-center text-slate-400 text-sm md:text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
                         </div>
                     </div>
