@@ -5256,7 +5256,7 @@ type SettingsManagerProps = {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 10. Settings Manager (v17.4: 修復 React Error 310) ★★★
+// ★★★ 10. Settings Manager (v18.0: 終極修復 Error 310 Hook 崩潰) ★★★
 // ------------------------------------------------------------------
 const SettingsManager = ({ 
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
@@ -5297,32 +5297,33 @@ const SettingsManager = ({
         { key: 'settings', label: '系統設置 (Admin)' }
     ];
 
+    // =========================================================
+    // ★★★ 核心修復區：所有 useState 必須放在最外層，絕對不能放在條件式內 ★★★
+    // =========================================================
     const [showMobileMenu, setShowMobileMenu] = useState(true); 
     const [activeTab, setActiveTab] = useState('general');
     
-    // --- 內部狀態 (用於輸入框) ---
+    // --- 一般設定狀態 ---
     const [newColor, setNewColor] = useState('');
-    
     const [newExpenseComp, setNewExpenseComp] = useState('');
     const [newCbInst, setNewCbInst] = useState('');
-    
     const [newUserEmail, setNewUserEmail] = useState('');
     const [newUserPassword, setNewUserPassword] = useState(''); 
-
     const [selectedDbCat, setSelectedDbCat] = useState('Person');
     const [newDocType, setNewDocType] = useState('');
-
     const [backupConfig, setBackupConfig] = useState(settings.backup || { frequency: 'monthly', lastBackupDate: '', autoCloud: true });
     const [isBackingUp, setIsBackingUp] = useState(false);
-
     const [showInspector, setShowInspector] = useState(false);
     const [logs, setLogs] = useState<any[]>([]);
-
     const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
 
-    // ★★★ 核心修復：將車輛型號管理的 Hook 狀態提升到最外層安全區域 ★★★
+    // --- ★ 車輛三級聯動 (Make -> Model -> Code) 專屬狀態 (全數移至安全區) ★ ---
     const [activeSetupMake, setActiveSetupMake] = useState<string>('');
+    const [activeSetupModel, setActiveSetupModel] = useState<string>('');
+    const [newSetupMake, setNewSetupMake] = useState('');
     const [newSetupModel, setNewSetupModel] = useState('');
+    const [newSetupCode, setNewSetupCode] = useState('');
+    // =========================================================
 
     useEffect(() => {
         if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -5378,29 +5379,33 @@ const SettingsManager = ({
         }
     };
 
-    // --- 邏輯函數 ---
-    const addItem = (key: string, val: string) => { if(val) updateSettings(key as keyof SystemSettings, [...(settings[key as keyof SystemSettings] as any[] || []), val], 'add'); };
-    const removeItem = (key: string, idx: number) => { const arr = [...(settings[key as keyof SystemSettings] as any[] || [])]; arr.splice(idx, 1); updateSettings(key as keyof SystemSettings, arr, 'remove'); };
-
+    // --- 萬能字典操作函數 ---
+    const addItem = (key: keyof SystemSettings, val: string) => { 
+        if(val) updateSettings(key, [...(settings[key] as any[] || []), val]); 
+    };
+    const removeItem = (key: keyof SystemSettings, idx: number) => { 
+        const arr = [...(settings[key] as any[] || [])]; 
+        arr.splice(idx, 1); 
+        updateSettings(key, arr); 
+    };
     const moveListItem = (key: keyof SystemSettings, index: number, direction: 'up' | 'down') => {
         const currentList = Array.isArray(settings[key]) ? [...(settings[key] as any[])] : [];
         if (direction === 'up' && index > 0) {
             [currentList[index - 1], currentList[index]] = [currentList[index], currentList[index - 1]];
-            updateSettings(key, currentList, 'add');
+            updateSettings(key, currentList);
         } else if (direction === 'down' && index < currentList.length - 1) {
             [currentList[index + 1], currentList[index]] = [currentList[index], currentList[index + 1]];
-            updateSettings(key, currentList, 'add');
+            updateSettings(key, currentList);
         }
     };
-
     const editListItem = (key: keyof SystemSettings, index: number, newValue: string) => {
         if (!newValue.trim()) return;
         const currentList = Array.isArray(settings[key]) ? [...(settings[key] as any[])] : [];
         currentList[index] = newValue;
-        updateSettings(key, currentList, 'add');
+        updateSettings(key, currentList);
     };
 
-    // ★★★ 核心修復：將管理函數移出條件渲染區塊 ★★★
+    // --- ★ 車輛三級聯動操作函數 (Make -> Model -> Code) ★ ---
     const handleEditMake = (idx: number, oldMake: string, newMake: string) => {
         if (!newMake.trim() || oldMake === newMake) return;
         const newMakes = [...(settings.makes || [])];
@@ -5412,46 +5417,103 @@ const SettingsManager = ({
             delete newModels[oldMake];
         }
         
-        updateSettings('makes', newMakes, 'add');
-        updateSettings('models', newModels, 'add');
+        updateSettings('makes', newMakes);
+        updateSettings('models', newModels);
         if (activeSetupMake === oldMake) setActiveSetupMake(newMake);
     };
 
     const handleDeleteMake = (idx: number, makeName: string) => {
-        if (!confirm(`確定刪除品牌 ${makeName} 及其所有型號？`)) return;
+        if (!confirm(`確定刪除品牌 ${makeName} 及其所有型號與代號？`)) return;
         const newMakes = [...(settings.makes || [])];
         newMakes.splice(idx, 1);
-        const newModels = { ...(settings.models || {}) };
-        delete newModels[makeName];
         
-        updateSettings('makes', newMakes, 'remove');
-        updateSettings('models', newModels, 'remove');
-        if (activeSetupMake === makeName) setActiveSetupMake('');
+        const newModels = { ...(settings.models || {}) };
+        const modelsToDelete = newModels[makeName] || [];
+        delete newModels[makeName];
+
+        const newCodes = { ...(settings.codes || {}) };
+        modelsToDelete.forEach((m: string) => delete newCodes[m]);
+        
+        updateSettings('makes', newMakes);
+        updateSettings('models', newModels);
+        updateSettings('codes', newCodes);
+        if (activeSetupMake === makeName) { setActiveSetupMake(''); setActiveSetupModel(''); }
+    };
+
+    const handleMoveMake = (idx: number, dir: 'up'|'down') => {
+        const list = [...(settings.makes || [])];
+        if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
+        else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
+        updateSettings('makes', list);
+    };
+
+    const handleEditModel = (make: string, idx: number, oldModel: string, newModel: string) => {
+        if (!newModel.trim() || oldModel === newModel) return;
+        const newMList = [...(settings.models[make] || [])];
+        newMList[idx] = newModel;
+        
+        const newCodes = { ...(settings.codes || {}) };
+        if (newCodes[oldModel]) {
+            newCodes[newModel] = newCodes[oldModel];
+            delete newCodes[oldModel];
+        }
+
+        updateSettings('models', { ...settings.models, [make]: newMList });
+        updateSettings('codes', newCodes);
+        if (activeSetupModel === oldModel) setActiveSetupModel(newModel);
+    };
+
+    const handleDeleteModel = (make: string, idx: number, modelName: string) => {
+        if (!confirm(`確定刪除型號 ${modelName} 及其所有代號？`)) return;
+        const newMList = [...(settings.models[make] || [])];
+        newMList.splice(idx, 1);
+        
+        const newCodes = { ...(settings.codes || {}) };
+        delete newCodes[modelName];
+
+        updateSettings('models', { ...settings.models, [make]: newMList });
+        updateSettings('codes', newCodes);
+        if (activeSetupModel === modelName) setActiveSetupModel('');
     };
 
     const handleMoveModel = (make: string, idx: number, dir: 'up'|'down') => {
         const list = [...(settings.models[make] || [])];
         if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
         else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
-        updateSettings('models', { ...settings.models, [make]: list }, 'add');
+        updateSettings('models', { ...settings.models, [make]: list });
     };
 
-    const handleDeleteModel = (make: string, idx: number) => {
-        const list = [...(settings.models[make] || [])];
-        list.splice(idx, 1);
-        updateSettings('models', { ...settings.models, [make]: list }, 'remove');
+    const handleEditCode = (model: string, idx: number, newCode: string) => {
+        if (!newCode.trim()) return;
+        const newCList = [...((settings.codes || {})[model] || [])];
+        newCList[idx] = newCode;
+        updateSettings('codes', { ...settings.codes, [model]: newCList });
     };
-  
+
+    const handleDeleteCode = (model: string, idx: number) => {
+        const newCList = [...((settings.codes || {})[model] || [])];
+        newCList.splice(idx, 1);
+        updateSettings('codes', { ...settings.codes, [model]: newCList });
+    };
+
+    const handleMoveCode = (model: string, idx: number, dir: 'up'|'down') => {
+        const list = [...((settings.codes || {})[model] || [])];
+        if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
+        else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
+        updateSettings('codes', { ...settings.codes, [model]: list });
+    };
+
+    // --- 其他操作函數 ---
     const handleExpenseTypeChange = (idx: number, field: string, val: any) => {
         const newTypes = [...(settings.expenseTypes || [])];
         newTypes[idx] = { ...newTypes[idx] as any, [field]: val };
-        updateSettings('expenseTypes', newTypes, 'add');
+        updateSettings('expenseTypes', newTypes);
     };
 
     const handleCbItemChange = (idx: number, field: string, val: any) => {
         const newItems = [...(settings.cbItems || [])];
         newItems[idx] = { ...newItems[idx] as any, [field]: val };
-        updateSettings('cbItems', newItems, 'add');
+        updateSettings('cbItems', newItems);
     };
 
     const handleUserPermissionChange = (email: string, field: string, val: any) => {
@@ -5487,10 +5549,11 @@ const SettingsManager = ({
 
     useEffect(() => {
         if (activeTab === 'logs' && db) {
+            const { query, collection, orderBy, limit, onSnapshot } = require("firebase/firestore");
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), orderBy('timestamp', 'desc'), limit(50)); 
-            const unsub = onSnapshot(q, (snap) => {
+            const unsub = onSnapshot(q, (snap: any) => {
                 const list: any[] = [];
-                snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                snap.forEach((d: any) => list.push({ id: d.id, ...d.data() }));
                 setLogs(list);
             });
             return () => unsub();
@@ -5508,7 +5571,7 @@ const SettingsManager = ({
             await uploadString(storageRef, dataStr);
             const newConfig = { ...backupConfig, lastBackupDate: new Date().toISOString() };
             setBackupConfig(newConfig as any);
-            updateSettings('backup', newConfig, 'add');
+            updateSettings('backup', newConfig);
             alert(`✅ 雲端備份成功: ${fileName}`);
         } catch (e:any) { alert("備份失敗: " + e.message); } 
         finally { setIsBackingUp(false); }
@@ -5530,7 +5593,7 @@ const SettingsManager = ({
                 const d=JSON.parse(ev.target?.result as string); 
                 if(d.settings){ 
                     setSettings((p:any)=>({...p,...d.settings})); 
-                    Object.keys(d.settings).forEach(k=>updateSettings(k as keyof SystemSettings, d.settings[k], 'add')); 
+                    Object.keys(d.settings).forEach(k=>updateSettings(k as keyof SystemSettings, d.settings[k])); 
                     alert('設定已從檔案還原'); 
                 } 
             }catch{alert('檔案格式錯誤');}
@@ -5545,7 +5608,7 @@ const SettingsManager = ({
         } else if (direction === 'down' && idx < currentList.length - 1) {
             [currentList[idx + 1], currentList[idx]] = [currentList[idx], currentList[idx + 1]];
         }
-        updateSettings('dbDocTypes', { ...settings.dbDocTypes, [cat]: currentList }, 'add');
+        updateSettings('dbDocTypes', { ...settings.dbDocTypes, [cat]: currentList });
     };
 
     const handleRescueImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -5720,18 +5783,18 @@ const SettingsManager = ({
                                 <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
                                     <span className="text-sm font-bold text-slate-700">啟用系統推送 (Master Switch)</span>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={settings.pushConfig?.isEnabled || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, isEnabled: e.target.checked } as any, 'add')} />
+                                        <input type="checkbox" className="sr-only peer" checked={settings.pushConfig?.isEnabled || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, isEnabled: e.target.checked } as any)} />
                                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                     </label>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                                        <input type="checkbox" checked={settings.pushConfig?.events?.newCar || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, newCar: e.target.checked } } as any, 'add')} className="mr-3 rounded accent-blue-600" />
+                                        <input type="checkbox" checked={settings.pushConfig?.events?.newCar || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, newCar: e.target.checked } } as any)} className="mr-3 rounded accent-blue-600" />
                                         <span className="text-xs font-bold text-slate-600">新車入庫通知</span>
                                     </label>
                                     <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                                        <input type="checkbox" checked={settings.pushConfig?.events?.sold || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, sold: e.target.checked } } as any, 'add')} className="mr-3 rounded accent-blue-600" />
+                                        <input type="checkbox" checked={settings.pushConfig?.events?.sold || false} onChange={(e) => updateSettings('pushConfig', { ...settings.pushConfig, events: { ...settings.pushConfig?.events, sold: e.target.checked } } as any)} className="mr-3 rounded accent-blue-600" />
                                         <span className="text-xs font-bold text-slate-600">車輛售出通知</span>
                                     </label>
                                 </div>
@@ -5753,309 +5816,154 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 2. 車輛資料 / 全域數據字典 (三級聯動 + 解決排序 Bug) */}
-                {activeTab === 'vehicle_setup' && (() => {
-                    const [activeSetupMake, setActiveSetupMake] = useState<string>('');
-                    const [activeSetupModel, setActiveSetupModel] = useState<string>('');
-                    
-                    const [newSetupMake, setNewSetupMake] = useState('');
-                    const [newSetupModel, setNewSetupModel] = useState('');
-                    const [newSetupCode, setNewSetupCode] = useState('');
+                {/* 2. 車輛資料 / 全域數據字典 (三級聯動修復版) */}
+                {activeTab === 'vehicle_setup' && (
+                    <div className="space-y-6 animate-fade-in pb-10">
+                        <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-2">
+                            <h3 className="font-bold text-blue-800 flex items-center mb-1"><Database size={18} className="mr-2"/> 車輛三級聯動與數據字典</h3>
+                            <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。車輛採用「品牌 ➔ 型號 ➔ 海關代號」三層聯動架構。</p>
+                        </div>
 
-                    // --- 品牌 (Make) 邏輯 ---
-                    const handleEditMake = (idx: number, oldMake: string, newMake: string) => {
-                        if (!newMake.trim() || oldMake === newMake) return;
-                        const newMakes = [...(settings.makes || [])];
-                        newMakes[idx] = newMake;
-                        
-                        const newModels = { ...(settings.models || {}) };
-                        if (newModels[oldMake]) {
-                            newModels[newMake] = newModels[oldMake];
-                            delete newModels[oldMake];
-                        }
-                        
-                        updateSettings('makes', newMakes);
-                        updateSettings('models', newModels);
-                        if (activeSetupMake === oldMake) setActiveSetupMake(newMake);
-                    };
-
-                    const handleDeleteMake = (idx: number, makeName: string) => {
-                        if (!confirm(`確定刪除品牌 ${makeName} 及其所有型號與代號？`)) return;
-                        const newMakes = [...(settings.makes || [])];
-                        newMakes.splice(idx, 1);
-                        
-                        const newModels = { ...(settings.models || {}) };
-                        const modelsToDelete = newModels[makeName] || [];
-                        delete newModels[makeName];
-
-                        const newCodes = { ...(settings.codes || {}) };
-                        modelsToDelete.forEach((m: string) => delete newCodes[m]);
-                        
-                        updateSettings('makes', newMakes);
-                        updateSettings('models', newModels);
-                        updateSettings('codes', newCodes);
-                        if (activeSetupMake === makeName) { setActiveSetupMake(''); setActiveSetupModel(''); }
-                    };
-
-                    const handleMoveMake = (idx: number, dir: 'up'|'down') => {
-                        const list = [...(settings.makes || [])];
-                        if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
-                        else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
-                        updateSettings('makes', list);
-                    };
-
-                    // --- 型號 (Model) 邏輯 ---
-                    const handleEditModel = (make: string, idx: number, oldModel: string, newModel: string) => {
-                        if (!newModel.trim() || oldModel === newModel) return;
-                        const newMList = [...(settings.models[make] || [])];
-                        newMList[idx] = newModel;
-                        
-                        const newCodes = { ...(settings.codes || {}) };
-                        if (newCodes[oldModel]) {
-                            newCodes[newModel] = newCodes[oldModel];
-                            delete newCodes[oldModel];
-                        }
-
-                        updateSettings('models', { ...settings.models, [make]: newMList });
-                        updateSettings('codes', newCodes);
-                        if (activeSetupModel === oldModel) setActiveSetupModel(newModel);
-                    };
-
-                    const handleDeleteModel = (make: string, idx: number, modelName: string) => {
-                        if (!confirm(`確定刪除型號 ${modelName} 及其所有代號？`)) return;
-                        const newMList = [...(settings.models[make] || [])];
-                        newMList.splice(idx, 1);
-                        
-                        const newCodes = { ...(settings.codes || {}) };
-                        delete newCodes[modelName];
-
-                        updateSettings('models', { ...settings.models, [make]: newMList });
-                        updateSettings('codes', newCodes);
-                        if (activeSetupModel === modelName) setActiveSetupModel('');
-                    };
-
-                    const handleMoveModel = (make: string, idx: number, dir: 'up'|'down') => {
-                        const list = [...(settings.models[make] || [])];
-                        if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
-                        else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
-                        updateSettings('models', { ...settings.models, [make]: list });
-                    };
-
-                    // --- 代號 (Code) 邏輯 ---
-                    const handleEditCode = (model: string, idx: number, newCode: string) => {
-                        if (!newCode.trim()) return;
-                        const newCList = [...((settings.codes || {})[model] || [])];
-                        newCList[idx] = newCode;
-                        updateSettings('codes', { ...settings.codes, [model]: newCList });
-                    };
-
-                    const handleDeleteCode = (model: string, idx: number) => {
-                        const newCList = [...((settings.codes || {})[model] || [])];
-                        newCList.splice(idx, 1);
-                        updateSettings('codes', { ...settings.codes, [model]: newCList });
-                    };
-
-                    const handleMoveCode = (model: string, idx: number, dir: 'up'|'down') => {
-                        const list = [...((settings.codes || {})[model] || [])];
-                        if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
-                        else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
-                        updateSettings('codes', { ...settings.codes, [model]: list });
-                    };
-
-                    return (
-                        <div className="space-y-6 animate-fade-in pb-10">
-                            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-2">
-                                <h3 className="font-bold text-blue-800 flex items-center mb-1"><Database size={18} className="mr-2"/> 車輛三級聯動與數據字典</h3>
-                                <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。車輛採用「品牌 ➔ 型號 ➔ 海關代號」三層聯動架構。</p>
-                            </div>
-
-                            {/* ★★★ 品牌 ➔ 型號 ➔ 代號 三欄佈局 ★★★ */}
-                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[450px]">
-                                
-                                {/* 1. 品牌欄 */}
-                                <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 flex flex-col">
-                                    <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700"><span className="flex items-center"><Car size={16} className="mr-2 text-blue-500"/> 1. 品牌 (Makes)</span></div>
-                                    <div className="p-2 border-b border-slate-200 bg-white flex gap-1">
-                                        <input value={newSetupMake} onChange={e => setNewSetupMake(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupMake) { updateSettings('makes', [...(settings.makes || []), newSetupMake]); setNewSetupMake(''); } }} className="border rounded px-2 py-1 text-xs flex-1 outline-none focus:border-blue-400" placeholder="新增品牌..."/>
-                                        <button onClick={() => { if (newSetupMake) { updateSettings('makes', [...(settings.makes || []), newSetupMake]); setNewSetupMake(''); } }} className="bg-slate-800 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
-                                    </div>
-                                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                        {(settings.makes || []).map((m: string, i: number) => (
-                                            <div key={m} onClick={() => { setActiveSetupMake(m); setActiveSetupModel(''); }} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupMake === m ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-transparent hover:border-slate-300'}`}>
-                                                <div className="flex items-center flex-1 mr-1">
-                                                    <input type="text" defaultValue={m} onBlur={e => handleEditMake(i, m, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
-                                                </div>
-                                                <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                                                    <button onClick={() => handleMoveMake(i, 'up')} disabled={i === 0} className="p-1 hover:text-blue-600 disabled:opacity-30"><ChevronUp size={12}/></button>
-                                                    <button onClick={() => handleMoveMake(i, 'down')} disabled={i === settings.makes.length - 1} className="p-1 hover:text-blue-600 disabled:opacity-30"><ChevronDown size={12}/></button>
-                                                    <button onClick={() => handleDeleteMake(i, m)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[450px]">
+                            
+                            {/* 1. 品牌欄 */}
+                            <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 flex flex-col">
+                                <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700"><span className="flex items-center"><Car size={16} className="mr-2 text-blue-500"/> 1. 品牌 (Makes)</span></div>
+                                <div className="p-2 border-b border-slate-200 bg-white flex gap-1">
+                                    <input value={newSetupMake} onChange={e => setNewSetupMake(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupMake) { updateSettings('makes', [...(settings.makes || []), newSetupMake] as any); setNewSetupMake(''); } }} className="border rounded px-2 py-1 text-xs flex-1 outline-none focus:border-blue-400" placeholder="新增品牌..."/>
+                                    <button onClick={() => { if (newSetupMake) { updateSettings('makes', [...(settings.makes || []), newSetupMake] as any); setNewSetupMake(''); } }} className="bg-slate-800 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                 </div>
-
-                                {/* 2. 型號欄 */}
-                                <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-white flex flex-col">
-                                    <div className="p-3 border-b border-slate-200 bg-slate-50 font-bold text-slate-700"><span className="flex items-center"><CheckCircle size={16} className="mr-2 text-indigo-500"/> 2. 型號 (Models)</span></div>
-                                    {activeSetupMake ? (
-                                        <>
-                                            <div className="p-2 border-b border-slate-200 bg-indigo-50/30 flex gap-1">
-                                                <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] }); setNewSetupModel(''); } }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
-                                                <button onClick={() => { if (newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] }); setNewSetupModel(''); } }} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                    {(settings.makes || []).map((m: string, i: number) => (
+                                        <div key={m} onClick={() => { setActiveSetupMake(m); setActiveSetupModel(''); }} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupMake === m ? 'bg-blue-50 border-blue-400 shadow-sm' : 'bg-white border-transparent hover:border-slate-300'}`}>
+                                            <div className="flex items-center flex-1 mr-1">
+                                                <input type="text" defaultValue={m} onBlur={e => handleEditMake(i, m, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
                                             </div>
-                                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                                {(settings.models[activeSetupMake] || []).map((model: string, i: number) => (
-                                                    <div key={model} onClick={() => setActiveSetupModel(model)} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupModel === model ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'}`}>
-                                                        <div className="flex items-center flex-1 mr-1">
-                                                            <input type="text" defaultValue={model} onBlur={e => handleEditModel(activeSetupMake, i, model, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-indigo-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
-                                                        </div>
-                                                        <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                                                            <button onClick={() => handleMoveModel(activeSetupMake, i, 'up')} disabled={i === 0} className="p-1 hover:text-indigo-600 disabled:opacity-30"><ChevronUp size={12}/></button>
-                                                            <button onClick={() => handleMoveModel(activeSetupMake, i, 'down')} disabled={i === settings.models[activeSetupMake].length - 1} className="p-1 hover:text-indigo-600 disabled:opacity-30"><ChevronDown size={12}/></button>
-                                                            <button onClick={() => handleDeleteModel(activeSetupMake, i, model)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {(settings.models[activeSetupMake] || []).length === 0 && <div className="text-[10px] text-slate-400 text-center py-10">尚無型號</div>}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-6 text-center"><Car size={24} className="mb-2 opacity-30"/><p className="text-[10px]">請先選擇品牌</p></div>
-                                    )}
-                                </div>
-
-                                {/* 3. 海關代號欄 */}
-                                <div className="w-full md:w-1/3 bg-slate-50 flex flex-col">
-                                    <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700"><span className="flex items-center"><FileSignature size={16} className="mr-2 text-emerald-600"/> 3. 海關代號 (Codes)</span></div>
-                                    {activeSetupModel ? (
-                                        <>
-                                            <div className="p-2 border-b border-slate-200 bg-emerald-50/30 flex gap-1">
-                                                <input value={newSetupCode} onChange={e => setNewSetupCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupCode) { updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...((settings.codes || {})[activeSetupModel] || []), newSetupCode] }); setNewSetupCode(''); } }} className="border border-emerald-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-emerald-400 uppercase font-mono" placeholder={`為 ${activeSetupModel} 新增代號...`}/>
-                                                <button onClick={() => { if (newSetupCode) { updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...((settings.codes || {})[activeSetupModel] || []), newSetupCode] }); setNewSetupCode(''); } }} className="bg-emerald-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                                {((settings.codes || {})[activeSetupModel] || []).map((code: string, i: number) => (
-                                                    <div key={code} className="group flex justify-between items-center p-1.5 bg-white rounded border border-slate-100 hover:border-emerald-200 transition-colors">
-                                                        <div className="flex items-center flex-1 mr-1">
-                                                            <input type="text" defaultValue={code} onBlur={e => handleEditCode(activeSetupModel, i, e.target.value)} className="bg-transparent border-b border-transparent focus:border-emerald-300 outline-none w-full font-bold font-mono text-emerald-700 text-xs py-0.5 uppercase" />
-                                                        </div>
-                                                        <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity">
-                                                            <button onClick={() => handleMoveCode(activeSetupModel, i, 'up')} disabled={i === 0} className="p-1 hover:text-emerald-600 disabled:opacity-30"><ChevronUp size={12}/></button>
-                                                            <button onClick={() => handleMoveCode(activeSetupModel, i, 'down')} disabled={i === ((settings.codes || {})[activeSetupModel] || []).length - 1} className="p-1 hover:text-emerald-600 disabled:opacity-30"><ChevronDown size={12}/></button>
-                                                            <button onClick={() => handleDeleteCode(activeSetupModel, i)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {((settings.codes || {})[activeSetupModel] || []).length === 0 && <div className="text-[10px] text-slate-400 text-center py-10">尚無海關代號</div>}
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-6 text-center"><Car size={24} className="mb-2 opacity-30"/><p className="text-[10px]">請先選擇型號</p></div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* 摺疊式萬能列表渲染引擎 (已加入 內飾顏色、外觀顏色 等) */}
-                            {[
-                                { title: '外觀顏色 (Exterior Colors)', key: 'colors', icon: <Palette size={16}/>, placeholder: '例如: 白 (White)' },
-                                { title: '內飾顏色 (Interior Colors)', key: 'interiorColors', icon: <Armchair size={16}/>, placeholder: '例如: 黑 (Black)' },
-                                { title: '保養條款庫 (Warranty Terms)', key: 'warrantyTypes', icon: <ShieldCheck size={16}/>, placeholder: '例如: 5年/10萬公里' },
-                                { title: '收款公司/車房名單 (Vendors)', key: 'expenseCompanies', icon: <Wrench size={16}/>, placeholder: '例如: 新港龍汽車' },
-                                { title: '中港牌相關機構 (Institutions)', key: 'cbInstitutions', icon: <Building2 size={16}/>, placeholder: '例如: 中檢公司' },
-                                { title: '收款方式/類別 (Payment Types)', key: 'paymentTypes', icon: <DollarSign size={16}/>, placeholder: '例如: 訂金 (Deposit)' }
-                            ].map((dict) => {
-                                const list = Array.isArray(settings[dict.key as keyof SystemSettings]) ? (settings[dict.key as keyof SystemSettings] as string[]) : [];
-                                
-                                return (
-                                    <details key={dict.key} className="group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                        <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors">
-                                            <span className="flex items-center gap-2">{dict.icon} {dict.title}</span>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-xs text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded-full">{list.length} 項</span>
-                                                <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
-                                            </div>
-                                        </summary>
-                                        
-                                        <div className="p-4 pt-0">
-                                            <div className="flex gap-2 mb-4 pt-4 border-t border-slate-100">
-                                                <input 
-                                                    id={`newInput_${dict.key}`} 
-                                                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" 
-                                                    placeholder={`輸入新選項 (${dict.placeholder})`}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            const val = (e.target as HTMLInputElement).value;
-                                                            if (val) {
-                                                                const newList = [...(settings[dict.key as keyof SystemSettings] as any[] || []), val];
-                                                                updateSettings(dict.key as keyof SystemSettings, newList);
-                                                                (e.target as HTMLInputElement).value = '';
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <button 
-                                                    onClick={() => { 
-                                                        const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value;
-                                                        if (val) {
-                                                            const newList = [...(settings[dict.key as keyof SystemSettings] as any[] || []), val];
-                                                            updateSettings(dict.key as keyof SystemSettings, newList);
-                                                            (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = '';
-                                                        }
-                                                    }} 
-                                                    className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"
-                                                >
-                                                    <Plus size={16} className="mr-1"/> 新增
-                                                </button>
-                                            </div>
-
-                                            <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
-                                                {list.map((item: any, i: number) => {
-                                                    const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
-                                                    
-                                                    return (
-                                                        <div key={displayValue} className="group/item bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
-                                                            <div className="flex-1 flex items-center mr-4">
-                                                                <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
-                                                                <input 
-                                                                    type="text"
-                                                                    defaultValue={displayValue}
-                                                                    onBlur={(e) => {
-                                                                        if (!e.target.value.trim() || e.target.value === displayValue) return;
-                                                                        const newList = [...list];
-                                                                        newList[i] = e.target.value;
-                                                                        updateSettings(dict.key as keyof SystemSettings, newList);
-                                                                    }}
-                                                                    className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5"
-                                                                />
-                                                            </div>
-                                                            <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
-                                                                <button onClick={() => moveListItem(dict.key as keyof SystemSettings, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
-                                                                <button onClick={() => moveListItem(dict.key as keyof SystemSettings, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
-                                                                <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                                                <button onClick={() => {
-                                                                    const newList = [...list];
-                                                                    newList.splice(i, 1);
-                                                                    updateSettings(dict.key as keyof SystemSettings, newList);
-                                                                }} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                                {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                            <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                                <button onClick={() => handleMoveMake(i, 'up')} disabled={i === 0} className="p-1 hover:text-blue-600 disabled:opacity-30"><ChevronUp size={12}/></button>
+                                                <button onClick={() => handleMoveMake(i, 'down')} disabled={i === settings.makes.length - 1} className="p-1 hover:text-blue-600 disabled:opacity-30"><ChevronDown size={12}/></button>
+                                                <button onClick={() => handleDeleteMake(i, m)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
                                             </div>
                                         </div>
-                                    </details>
-                                );
-                            })}
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 2. 型號欄 */}
+                            <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-white flex flex-col">
+                                <div className="p-3 border-b border-slate-200 bg-slate-50 font-bold text-slate-700"><span className="flex items-center"><CheckCircle size={16} className="mr-2 text-indigo-500"/> 2. 型號 (Models)</span></div>
+                                {activeSetupMake ? (
+                                    <>
+                                        <div className="p-2 border-b border-slate-200 bg-indigo-50/30 flex gap-1">
+                                            <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
+                                            <button onClick={() => { if (newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                            {(settings.models[activeSetupMake] || []).map((model: string, i: number) => (
+                                                <div key={model} onClick={() => setActiveSetupModel(model)} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupModel === model ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'}`}>
+                                                    <div className="flex items-center flex-1 mr-1">
+                                                        <input type="text" defaultValue={model} onBlur={e => handleEditModel(activeSetupMake, i, model, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-indigo-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
+                                                    </div>
+                                                    <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                                        <button onClick={() => handleMoveModel(activeSetupMake, i, 'up')} disabled={i === 0} className="p-1 hover:text-indigo-600 disabled:opacity-30"><ChevronUp size={12}/></button>
+                                                        <button onClick={() => handleMoveModel(activeSetupMake, i, 'down')} disabled={i === settings.models[activeSetupMake].length - 1} className="p-1 hover:text-indigo-600 disabled:opacity-30"><ChevronDown size={12}/></button>
+                                                        <button onClick={() => handleDeleteModel(activeSetupMake, i, model)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(settings.models[activeSetupMake] || []).length === 0 && <div className="text-[10px] text-slate-400 text-center py-10">尚無型號</div>}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-6 text-center"><Car size={24} className="mb-2 opacity-30"/><p className="text-[10px]">請先選擇品牌</p></div>
+                                )}
+                            </div>
+
+                            {/* 3. 海關代號欄 */}
+                            <div className="w-full md:w-1/3 bg-slate-50 flex flex-col">
+                                <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700"><span className="flex items-center"><FileText size={16} className="mr-2 text-emerald-600"/> 3. 海關代號 (Codes)</span></div>
+                                {activeSetupModel ? (
+                                    <>
+                                        <div className="p-2 border-b border-slate-200 bg-emerald-50/30 flex gap-1">
+                                            <input value={newSetupCode} onChange={e => setNewSetupCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupCode) { updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...((settings.codes || {})[activeSetupModel] || []), newSetupCode] } as any); setNewSetupCode(''); } }} className="border border-emerald-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-emerald-400 uppercase font-mono" placeholder={`為 ${activeSetupModel} 新增代號...`}/>
+                                            <button onClick={() => { if (newSetupCode) { updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...((settings.codes || {})[activeSetupModel] || []), newSetupCode] } as any); setNewSetupCode(''); } }} className="bg-emerald-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                            {((settings.codes || {})[activeSetupModel] || []).map((code: string, i: number) => (
+                                                <div key={code} className="group flex justify-between items-center p-1.5 bg-white rounded border border-slate-100 hover:border-emerald-200 transition-colors">
+                                                    <div className="flex items-center flex-1 mr-1">
+                                                        <input type="text" defaultValue={code} onBlur={e => handleEditCode(activeSetupModel, i, e.target.value)} className="bg-transparent border-b border-transparent focus:border-emerald-300 outline-none w-full font-bold font-mono text-emerald-700 text-xs py-0.5 uppercase" />
+                                                    </div>
+                                                    <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => handleMoveCode(activeSetupModel, i, 'up')} disabled={i === 0} className="p-1 hover:text-emerald-600 disabled:opacity-30"><ChevronUp size={12}/></button>
+                                                        <button onClick={() => handleMoveCode(activeSetupModel, i, 'down')} disabled={i === ((settings.codes || {})[activeSetupModel] || []).length - 1} className="p-1 hover:text-emerald-600 disabled:opacity-30"><ChevronDown size={12}/></button>
+                                                        <button onClick={() => handleDeleteCode(activeSetupModel, i)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {((settings.codes || {})[activeSetupModel] || []).length === 0 && <div className="text-[10px] text-slate-400 text-center py-10">尚無海關代號</div>}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-6 text-center"><Car size={24} className="mb-2 opacity-30"/><p className="text-[10px]">請先選擇型號</p></div>
+                                )}
+                            </div>
                         </div>
-                    );
-                })()}
+
+                        {/* 摺疊式萬能列表渲染引擎 */}
+                        {[
+                            { title: '外觀顏色 (Exterior Colors)', key: 'colors', icon: <Palette size={16}/>, placeholder: '例如: 白 (White)' },
+                            { title: '內飾顏色 (Interior Colors)', key: 'interiorColors', icon: <Armchair size={16}/>, placeholder: '例如: 黑 (Black)' },
+                            { title: '保養條款庫 (Warranty Terms)', key: 'warrantyTypes', icon: <ShieldCheck size={16}/>, placeholder: '例如: 5年/10萬公里' },
+                            { title: '收款公司/車房名單 (Vendors)', key: 'expenseCompanies', icon: <Wrench size={16}/>, placeholder: '例如: 新港龍汽車' },
+                            { title: '中港牌相關機構 (Institutions)', key: 'cbInstitutions', icon: <Building2 size={16}/>, placeholder: '例如: 中檢公司' },
+                            { title: '收款方式/類別 (Payment Types)', key: 'paymentTypes', icon: <DollarSign size={16}/>, placeholder: '例如: 訂金 (Deposit)' }
+                        ].map((dict) => {
+                            const list = Array.isArray(settings[dict.key as keyof SystemSettings]) ? (settings[dict.key as keyof SystemSettings] as string[]) : [];
+                            return (
+                                <details key={dict.key} className="group bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <summary className="p-4 font-bold text-slate-700 cursor-pointer list-none flex items-center justify-between outline-none hover:bg-slate-50 transition-colors">
+                                        <span className="flex items-center gap-2">{dict.icon} {dict.title}</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-slate-400 font-normal bg-slate-100 px-2 py-0.5 rounded-full">{list.length} 項</span>
+                                            <ChevronDown size={18} className="transition-transform group-open:rotate-180 text-slate-400"/>
+                                        </div>
+                                    </summary>
+                                    <div className="p-4 pt-0">
+                                        <div className="flex gap-2 mb-4 pt-4 border-t border-slate-100">
+                                            <input id={`newInput_${dict.key}`} className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none flex-1 max-w-md focus:border-blue-400 focus:ring-1 ring-blue-400" placeholder={`輸入新選項 (${dict.placeholder})`} onKeyDown={(e) => { if (e.key === 'Enter') { const val = (e.target as HTMLInputElement).value; if (val) { addItem(dict.key as any, val); (e.target as HTMLInputElement).value = ''; } } }} />
+                                            <button onClick={() => { const val = (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value; if (val) { addItem(dict.key as any, val); (document.getElementById(`newInput_${dict.key}`) as HTMLInputElement).value = ''; } }} className="bg-slate-800 text-white px-4 rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center"><Plus size={16} className="mr-1"/> 新增</button>
+                                        </div>
+                                        <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+                                            {list.map((item: any, i: number) => {
+                                                const displayValue = typeof item === 'string' ? item : (item.name || JSON.stringify(item));
+                                                return (
+                                                    <div key={i} className="group/item bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
+                                                        <div className="flex-1 flex items-center mr-4">
+                                                            <span className="text-slate-400 font-mono w-6 text-xs">{i+1}.</span>
+                                                            <input type="text" defaultValue={displayValue} onBlur={(e) => editListItem(dict.key as any, i, e.target.value)} className="bg-transparent border-b border-transparent focus:border-blue-300 outline-none w-full font-bold text-slate-700 px-1 py-0.5" />
+                                                        </div>
+                                                        <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                                            <button onClick={() => moveListItem(dict.key as any, i, 'up')} disabled={i === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
+                                                            <button onClick={() => moveListItem(dict.key as any, i, 'down')} disabled={i === list.length - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
+                                                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                                            <button onClick={() => removeItem(dict.key as any, i)} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {list.length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此列表目前沒有任何選項。</div>}
+                                        </div>
+                                    </div>
+                                </details>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* 3. 財務與費用 (完整功能) */}
                 {activeTab === 'expenses_setup' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        {/* 費用預設表格 */}
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">財務費用預設值 (Financial Defaults)</h3>
                             <table className="w-full text-sm">
@@ -6076,7 +5984,7 @@ const SettingsManager = ({
                                     ))}
                                 </tbody>
                             </table>
-                            <button onClick={() => updateSettings('expenseTypes', [...(settings.expenseTypes||[]), { name: '新費用', defaultAmount: 0, defaultCompany: '', defaultDays: '0' }] as any, 'add')} className="mt-2 text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200 flex items-center w-fit"><Plus size={12} className="mr-1"/> 新增費用類型</button>
+                            <button onClick={() => updateSettings('expenseTypes', [...(settings.expenseTypes||[]), { name: '新費用', defaultAmount: 0, defaultCompany: '', defaultDays: '0' }] as any)} className="mt-2 text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200 flex items-center w-fit"><Plus size={12} className="mr-1"/> 新增費用類型</button>
                         </div>
                     </div>
                 )}
@@ -6084,7 +5992,6 @@ const SettingsManager = ({
                 {/* 4. 中港業務 (完整功能) */}
                 {activeTab === 'crossborder_setup' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        {/* 代辦項目表格 */}
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">中港代辦項目預設值 (CB Defaults)</h3>
                             <table className="w-full text-sm">
@@ -6106,7 +6013,7 @@ const SettingsManager = ({
                                     ))}
                                 </tbody>
                             </table>
-                            <button onClick={() => updateSettings('cbItems', [...(settings.cbItems||[]), { name: '新服務', defaultFee: 0, defaultDays: '7', defaultInst: '' }] as any, 'add')} className="mt-2 text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200 flex items-center w-fit"><Plus size={12} className="mr-1"/> 新增服務項目</button>
+                            <button onClick={() => updateSettings('cbItems', [...(settings.cbItems||[]), { name: '新服務', defaultFee: 0, defaultDays: '7', defaultInst: '' }] as any)} className="mt-2 text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200 flex items-center w-fit"><Plus size={12} className="mr-1"/> 新增服務項目</button>
                         </div>
                     </div>
                 )}
@@ -6195,7 +6102,7 @@ const SettingsManager = ({
                             <button onClick={() => {
                                 if(!newDocType) return;
                                 const current = settings.dbDocTypes[selectedDbCat] || [];
-                                updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: [...current, newDocType] } as any, 'add');
+                                updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: [...current, newDocType] } as any);
                                 setNewDocType('');
                             }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm">新增</button>
                         </div>
@@ -6204,37 +6111,14 @@ const SettingsManager = ({
                                 <span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border">{type} <X size={14} className="cursor-pointer hover:text-red-500" onClick={() => {
                                     const current = settings.dbDocTypes[selectedDbCat] || [];
                                     const newList = current.filter((_:any, i:number) => i !== idx);
-                                    updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList } as any, 'remove');
+                                    updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList } as any);
                                 }}/></span>
-                            ))}
-                        </div>
-
-                        <div className="space-y-2 mt-4">
-                            <p className="text-xs text-gray-400 mb-2">* 列表第一個項目將作為該分類的預設值</p>
-                            {(settings.dbDocTypes?.[selectedDbCat] || []).map((type:string, idx:number) => (
-                                <div key={idx} className="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-100">
-                                    <div className="flex items-center">
-                                        <span className="bg-slate-200 text-slate-600 text-[10px] w-5 h-5 flex items-center justify-center rounded-full mr-3 font-bold">{idx + 1}</span>
-                                        <span className="text-sm font-medium text-slate-700">{type}</span>
-                                        {idx === 0 && <span className="ml-2 text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">預設</span>}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <button onClick={() => moveDocType(selectedDbCat, idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronUp size={16}/></button>
-                                        <button onClick={() => moveDocType(selectedDbCat, idx, 'down')} disabled={idx === (settings.dbDocTypes[selectedDbCat]?.length || 0) - 1} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronDown size={16}/></button>
-                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                        <button onClick={() => {
-                                            const current = settings.dbDocTypes[selectedDbCat] || [];
-                                            const newList = current.filter((_:any, i:number) => i !== idx);
-                                            updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList } as any, 'remove');
-                                        }} className="p-1 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
-                                    </div>
-                                </div>
                             ))}
                         </div>
                     </div>
                 )}
 
-                {activeTab === 'reminders' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">系統提醒</h3><div className="bg-amber-50 p-4 rounded-lg mb-4"><label className="flex items-center"><input type="checkbox" checked={settings.reminders?.isEnabled} onChange={e=>updateSettings('reminders', {...settings.reminders, isEnabled: e.target.checked} as any, 'add')} className="mr-2"/> 開啟提醒功能</label></div></div> )}
+                {activeTab === 'reminders' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold text-slate-700 mb-4">系統提醒</h3><div className="bg-amber-50 p-4 rounded-lg mb-4"><label className="flex items-center"><input type="checkbox" checked={settings.reminders?.isEnabled} onChange={e=>updateSettings('reminders', {...settings.reminders, isEnabled: e.target.checked} as any)} className="mr-2"/> 開啟提醒功能</label></div></div> )}
 
                 {activeTab === 'logs' && ( <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 className="font-bold">系統操作日誌</h3><div className="mt-4 border rounded max-h-96 overflow-y-auto"><table className="w-full text-xs text-left"><tbody className="divide-y">{logs.map(l => (<tr key={l.id} className="hover:bg-slate-50"><td className="p-2 text-gray-500">{l.timestamp?.toDate().toLocaleString()}</td><td className="p-2 font-bold">{l.user}</td><td className="p-2">{l.action}</td><td className="p-2 text-gray-600">{l.detail}</td></tr>))}</tbody></table></div></div> )}
 
@@ -6247,7 +6131,7 @@ const SettingsManager = ({
                             <div className="flex gap-4 items-center">
                                 <select value={backupConfig.frequency} onChange={e => {
                                     const newConf = {...backupConfig, frequency: e.target.value};
-                                    setBackupConfig(newConf as any); updateSettings('backup', newConf as any, 'add');
+                                    setBackupConfig(newConf as any); updateSettings('backup', newConf as any);
                                 }} className="text-xs p-1 border rounded"><option value="manual">手動</option><option value="daily">每日</option><option value="weekly">每週</option></select>
                                 <button onClick={handleCloudBackup} disabled={isBackingUp} className="text-xs bg-indigo-600 text-white px-4 py-1.5 rounded font-bold">{isBackingUp ? '備份中...' : '立即雲端備份'}</button>
                             </div>
@@ -6282,7 +6166,6 @@ const SettingsManager = ({
         </div>
     );
 };
-
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 對客分享版) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
