@@ -228,6 +228,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [prpPrice, setPrpPrice] = useState('');
     const [carInfo, setCarInfo] = useState({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
     const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
+    const [draggedPhotoIdx, setDraggedPhotoIdx] = useState<number | null>(null);
     const [transport, setTransport] = useState({ type: 'SEA', departureDate: '', duration: '' });
     const [margin, setMargin] = useState('30000');
     const [originFees, setOriginFees] = useState<any>(REGION_CONFIGS['JP'].origin);
@@ -603,8 +604,17 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     return (
                                         <div key={item.id} onClick={() => setSelectedId(item.id)} className={`p-4 border-b border-slate-100 cursor-pointer transition-all border-l-4 ${isSelected ? 'bg-blue-50/80 border-l-blue-600' : 'hover:bg-slate-50 border-l-transparent'}`}>
                                             <div className="flex justify-between items-start mb-1.5">
-                                                <div className="flex items-center gap-1.5"><span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${st.color}`}>{st.label}</span><span className="text-[9px] text-slate-400 font-bold">{item.date}</span></div>
-                                                {item.isLocked && <Lock size={12} className="text-yellow-500"/>}
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${st.color}`}>{st.label}</span>
+                                                    <span className="text-[9px] text-slate-400 font-bold">{item.date}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {item.isLocked && <Lock size={12} className="text-yellow-500"/>}
+                                                    {/* ★ 加回刪除小按鈕 */}
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(item); }} disabled={item.isLocked} className="text-slate-300 hover:text-red-500 disabled:opacity-30 transition-colors" title="刪除">
+                                                        <Trash2 size={14}/>
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="font-black text-slate-800 text-sm truncate">{item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
                                             <div className="flex justify-between items-end mt-2.5">
@@ -763,15 +773,30 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">車輛相片 (支援多圖上傳)</label>
                                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                             {orderPhotos.map((url, i) => (
-                                                <div key={i} className="relative w-16 h-12 rounded-md border border-slate-300 overflow-hidden flex-none">
-                                                    {url === 'loading...' ? (
-                                                        <div className="w-full h-full flex items-center justify-center bg-slate-100"><Loader2 className="w-4 h-4 animate-spin text-blue-500"/></div>
-                                                    ) : (
-                                                        <img src={url} className="w-full h-full object-cover" />
-                                                    )}
-                                                    <button onClick={() => setOrderPhotos(orderPhotos.filter((_, idx) => idx !== i))} className="absolute top-0 right-0 bg-red-500/80 text-white p-0.5 rounded-bl-md"><Trash2 size={10}/></button>
-                                                </div>
-                                            ))}
+                                            <div 
+                                                key={i} 
+                                                draggable // ★ 啟用拖曳
+                                                onDragStart={() => setDraggedPhotoIdx(i)}
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDrop={(e) => {
+                                                    e.preventDefault();
+                                                    if (draggedPhotoIdx === null || draggedPhotoIdx === i) return;
+                                                    const newArr = [...orderPhotos];
+                                                    const item = newArr.splice(draggedPhotoIdx, 1)[0];
+                                                    newArr.splice(i, 0, item);
+                                                    setOrderPhotos(newArr);
+                                                    setDraggedPhotoIdx(null);
+                                                }}
+                                                className={`relative w-16 h-12 rounded-md border overflow-hidden flex-none cursor-move transition-transform ${draggedPhotoIdx === i ? 'opacity-50 border-blue-500 scale-95' : 'border-slate-300 hover:scale-105'}`}
+                                            >
+                                                {url === 'loading...' ? (
+                                                    <div className="w-full h-full flex items-center justify-center bg-slate-100"><Loader2 className="w-4 h-4 animate-spin text-blue-500"/></div>
+                                                ) : (
+                                                    <img src={url} className="w-full h-full object-cover pointer-events-none" />
+                                                )}
+                                                <button type="button" onClick={() => setOrderPhotos(orderPhotos.filter((_, idx) => idx !== i))} className="absolute top-0 right-0 bg-red-500/80 text-white p-0.5 rounded-bl-md hover:bg-red-600"><Trash2 size={10}/></button>
+                                            </div>
+                                        ))}
                                             {/* ★ 加上 multiple 屬性支援多圖上傳 */}
                                             <label className="w-16 h-12 rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 cursor-pointer hover:bg-slate-50 flex-none"><UploadCloud size={16}/><input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="hidden" /></label>
                                         </div>
