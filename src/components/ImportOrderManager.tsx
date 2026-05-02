@@ -838,8 +838,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                             </div>
                             
-                            {/* 中欄：雜費 */}
+                          {/* 中欄：雜費 */}
                             <div className={`w-full md:w-[40%] h-full overflow-y-auto p-4 md:p-6 space-y-8 bg-slate-50/50 pb-32 md:pb-6 md:border-r border-slate-200 ${mobileTab!=='fees'?'hidden md:block':''}`}>
+                                
+                                {/* 1. 出牌與智能保險 */}
                                 <div>
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4"><ShieldCheck className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3></div>
                                     <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 shadow-sm">
@@ -850,12 +852,14 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <div className="grid grid-cols-2 gap-6 mb-4"><InputField label="牌費" value={formatNum(hkLicenseFees.fee)} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, fee: v})} /><InputField label="實際保費" value={formatNum(hkLicenseFees.insurance || estIns.toString())} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, insurance: v})} /></div>
                                     <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg border border-red-100"><span>首次登記稅 (FRT)</span><span className="font-mono">{fmt(frtTax)}</span></div>
                                 </div>
+
+                                {/* 2. 其他雜費 (已完美修復並加入動態小計) */}
                                 <div>
-                                    <div>
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
                                         <Globe className="w-5 h-5 text-emerald-500" />
                                         <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">其他雜費</h3>
                                     </div>
+                                    
                                     <div className="mb-6">
                                         <div className="flex justify-between items-center mb-3">
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">當地雜費 ({regData.currency})</span>
@@ -867,6 +871,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             {Object.entries(originFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: val})} />))}
                                         </div>
                                     </div>
+                                    
                                     <div className="pt-4 border-t border-slate-200">
                                         <div className="flex justify-between items-center mb-3">
                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">香港雜費 (HKD)</span>
@@ -878,9 +883,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             {Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />))}
                                         </div>
                                     </div>
-                                </div>
-                                    <div className="mb-6"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">當地雜費 ({regData.currency})</span><div className="grid grid-cols-3 gap-x-4 gap-y-6">{Object.entries(originFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: val})} />))}</div></div>
-                                    <div className="pt-4 border-t border-slate-200"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 block">香港雜費 (HKD)</span><div className="grid grid-cols-3 gap-x-4 gap-y-6">{Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />))}</div></div>
                                 </div>
                             </div>
                             
