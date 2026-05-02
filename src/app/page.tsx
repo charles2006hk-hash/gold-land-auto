@@ -5789,7 +5789,7 @@ const SettingsManager = ({
                         delete newModels[makeName];
 
                         const newCodes = { ...(settings.codes || {}) };
-                        modelsToDelete.forEach(m => delete newCodes[m]);
+                        modelsToDelete.forEach((m: string) => delete newCodes[m]);
                         
                         updateSettings('makes', newMakes);
                         updateSettings('models', newModels);
