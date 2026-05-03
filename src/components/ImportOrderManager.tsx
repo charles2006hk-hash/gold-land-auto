@@ -609,8 +609,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     <span className="text-[9px] text-slate-400 font-bold">{item.date}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    {item.isLocked && <Lock size={12} className="text-yellow-500"/>}
-                                                    {/* ★ 加回刪除小按鈕 */}
+                                                    <button onClick={(e) => { e.stopPropagation(); toggleLock(item); }} className={`transition-colors ${item.isLocked ? 'text-yellow-500 hover:text-yellow-600' : 'text-slate-300 hover:text-yellow-500'}`} title={item.isLocked ? "解鎖" : "鎖定"}>
+                                                        {item.isLocked ? <Lock size={14}/> : <Unlock size={14}/>}
+                                                    </button>
                                                     <button onClick={(e) => { e.stopPropagation(); handleDelete(item); }} disabled={item.isLocked} className="text-slate-300 hover:text-red-500 disabled:opacity-30 transition-colors" title="刪除">
                                                         <Trash2 size={14}/>
                                                     </button>
@@ -699,7 +700,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </div>
                                             <div className="p-6 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center text-center relative min-h-[140px] md:min-h-[160px]">
                                                 <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-blue-200 opacity-80">Final Quote</p>
-                                                <p className="text-4xl xl:text-5xl font-black font-mono tracking-tighter drop-shadow-lg text-white">{fmt(selectedItem.results?.finalPrice)}</p>
+                                                <p className="text-3xl lg:text-4xl xl:text-5xl font-black font-mono tracking-tighter drop-shadow-lg text-white truncate w-full px-2" title={fmt(selectedItem.results?.finalPrice)}>
+                                                    {fmt(selectedItem.results?.finalPrice)}
+                                                </p>
                                                 <p className="text-[10px] text-blue-300 font-bold mt-3 bg-white/10 w-fit mx-auto px-3 py-1 rounded-full border border-white/10">預期利潤: {fmt(selectedItem.quote?.margin)}</p>
                                             </div>
                                         </div>
@@ -711,7 +714,18 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Gauge size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">排量 (cc)</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</p></div></div>
                                         <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><RotateCcw size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">咪數 (km)</p><p className="text-xs font-black text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</p></div></div>
                                         <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Users size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">座位</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.seats || '-'}</p></div></div>
-                                        <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><div className="w-4 h-4 rounded-full border border-slate-300" style={{backgroundColor: getColorHex(selectedItem.details?.exteriorColor)}}></div></div><div><p className="text-[9px] font-black text-slate-400 uppercase">外觀色</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.exteriorColor || '-'}</p></div></div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 flex gap-1 items-center shadow-sm">
+                                                <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-inner" style={{backgroundColor: getColorHex(selectedItem.details?.exteriorColor)}} title={`外觀: ${selectedItem.details?.exteriorColor}`}></div>
+                                                <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-inner" style={{backgroundColor: getColorHex(selectedItem.details?.interiorColor)}} title={`內飾: ${selectedItem.details?.interiorColor}`}></div>
+                                            </div>
+                                            <div className="min-w-0 overflow-hidden">
+                                                <p className="text-[9px] font-black text-slate-400 uppercase">外觀 / 內飾</p>
+                                                <p className="text-xs font-black text-slate-800 truncate max-w-[120px]" title={`${selectedItem.details?.exteriorColor || '-'} / ${selectedItem.details?.interiorColor || '-'}`}>
+                                                    {selectedItem.details?.exteriorColor || '-'} / {selectedItem.details?.interiorColor || '-'}
+                                                </p>
+                                            </div>
+                                        </div>
                                         <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Database size={16} className="text-slate-400"/></div><div className="overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">車身號碼</p><p className="text-[11px] font-mono font-black text-slate-800 truncate">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</p></div></div>
                                     </div>
 
