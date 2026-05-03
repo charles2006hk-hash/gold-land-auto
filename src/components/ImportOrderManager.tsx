@@ -5,7 +5,7 @@ import {
   List, Save, Ship, Car, 
   DollarSign, Trash2, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, CheckCircle, Search, Plus,
-  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar
+  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar, RefreshCw
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
@@ -226,6 +226,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [region, setRegion] = useState('JP');
     const [carPrice, setCarPrice] = useState('');
     const [prpPrice, setPrpPrice] = useState('');
+    const [orderRate, setOrderRate] = useState(''); // ★ 新增：匯率狀態
+    const [isFetchingRate, setIsFetchingRate] = useState(false); // ★ 新增：獲取中狀態
+    
     const [carInfo, setCarInfo] = useState({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
     const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
     const [draggedPhotoIdx, setDraggedPhotoIdx] = useState<number | null>(null);
@@ -240,11 +243,39 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [jpEra, setJpEra] = useState('Reiwa');
     const [jpEraYear, setJpEraYear] = useState('');
 
+    // ★★★ 核心功能：自動採集即時匯率 ★★★
+    const fetchLiveRate = async (targetRegion: string) => {
+        setIsFetchingRate(true);
+        try {
+            const res = await fetch('https://open.er-api.com/v6/latest/HKD');
+            const data = await res.json();
+            if (data && data.rates) {
+                const ratesMap: any = {
+                    'JP': 100 / data.rates.JPY, // 日本通常用百日圓匯率 (例如 0.051)
+                    'UK': 1 / data.rates.GBP,  // 英國 (例如 10.2)
+                    'OT': 1 / data.rates.USD   // 其他 (預設美金，例如 7.8)
+                };
+                const newRate = ratesMap[targetRegion] || 1;
+                setOrderRate(newRate.toFixed(4));
+            }
+        } catch (e) {
+            console.error("Fetch rate failed", e);
+        } finally {
+            setIsFetchingRate(false);
+        }
+    };
+
+    // 地區變更時，觸發匯率更新 (僅在新報價單時自動觸發)
     useEffect(() => {
         setOriginFees(REGION_CONFIGS[region].origin);
         setHkMiscFees(REGION_CONFIGS[region].hk_misc);
         setHkLicenseFees(REGION_CONFIGS[region].hk_license);
-    }, [region]);
+        
+        // ★ 如果是新建單據，自動抓即時匯率
+        if (!editingId) {
+            fetchLiveRate(region);
+        }
+    }, [region, editingId]);
 
     useEffect(() => {
         if (jpEraYear) {
@@ -280,7 +311,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
     // --- 計算邏輯 ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
-    const currentRate = settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8);
+    // ★ 匯率優先使用手動設定的 orderRate，若無則回退至 settings 或硬編碼
+    const currentRate = orderRate ? parseNum(orderRate) : (settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8));
+    
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
     const frtTax = calcFRT(parseNum(prpPrice));
     const totalOriginHKD = getFeeTotal(originFees) * currentRate;
@@ -448,7 +481,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         const rawRecord = {
             ts: Date.now(), date: new Date().toLocaleDateString('zh-HK'), region,
             details: { ...carInfo, transportType: transport.type, departureDate: transport.departureDate, shippingDuration: transport.duration },
-            vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate },
+            vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate }, // ★ 儲存當前使用的匯率
             fees: { origin: originFees, hk_misc: hkMiscFees, hk_license: hkLicenseFees, finalInsurance: finalIns },
             results: { carPriceHKD, totalOriginHKD, totalHkMisc, totalHkLicense, landedCost, totalCost, finalPrice, frtTax },
             quote: { margin: parseNum(margin), finalPrice },
@@ -475,7 +508,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     };
 
     const handleAddNew = () => {
-        setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice('');
+        setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice(''); setOrderRate('');
         setCarInfo({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
         setOrderPhotos([]); setTransport({ type: 'SEA', departureDate: '', duration: '' });
         setOriginFees(REGION_CONFIGS['JP'].origin); setHkMiscFees(REGION_CONFIGS['JP'].hk_misc); setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
@@ -485,6 +518,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const handleEdit = (item: any) => {
         setEditingId(item.id); setRegion(item.region || 'JP'); setOrderStatus(item.status || 'QUOTING');
         setCarPrice(formatNum(item.vals?.carPrice)); setPrpPrice(formatNum(item.vals?.prp));
+        setOrderRate(item.vals?.rate?.toString() || ''); // ★ 載入紀錄中的匯率
         setCarInfo({
             make: item.details?.make || item.details?.manufacturer || item.carInfo?.make || '', model: item.details?.model || item.carInfo?.model || '', year: item.details?.year || item.carInfo?.year || '',
             code: item.details?.code || item.carInfo?.code || '', exteriorColor: item.details?.exteriorColor || item.carInfo?.exteriorColor || '', interiorColor: item.details?.interiorColor || item.carInfo?.interiorColor || '',
@@ -588,7 +622,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 <button onClick={handleAddNew} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black text-sm flex justify-center items-center gap-2 hover:bg-blue-700 active:scale-95 transition shadow-sm"><Plus size={16}/> 新增報價單</button>
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋型號或車身號碼..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                    <input className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋型號..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto">
@@ -687,6 +721,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 <h3 className="font-black text-blue-400 text-xs tracking-widest uppercase mb-4 flex items-center gap-2"><DollarSign size={16}/> 成本結構</h3>
                                                 <div className="space-y-3">
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
+                                                    {/* ★ 顯示使用的匯率 */}
+                                                    <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">結算匯率</span><span className="font-mono text-sm text-yellow-400">{selectedItem.vals?.rate}</span></div>
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">到港成本</span><span className="font-mono text-sm">{fmt(selectedItem.results?.landedCost)}</span></div>
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">海關 A1 稅</span><span className="font-mono text-sm">{fmt(selectedItem.results?.frtTax)}</span></div>
                                                     <div className="flex justify-between items-end pt-2"><span className="text-xs text-emerald-400 font-black uppercase">總成本 (Cost)</span><span className="font-mono font-black text-xl text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
@@ -694,15 +730,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </div>
                                             
                                             <div className="p-4 md:p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center items-center text-center relative min-h-[140px] md:min-h-[160px]">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 text-blue-200 opacity-80 w-full relative z-10">Final Quote</p>
                                                 
-                                                {/* ★ 終極防走位：使用 inline-size 容器與 cqw 自動縮放，加上 whitespace-nowrap 絕對不折行 */}
                                                 <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                                     <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
-                                                    <span 
-                                                        className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap"
-                                                        style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}
-                                                    >
+                                                    <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap" style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}>
                                                         ${formatNum(selectedItem.results?.finalPrice)}
                                                     </span>
                                                 </div>
@@ -775,15 +807,32 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <DollarSign className="w-5 h-5 text-blue-600" />
                                         <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">核心價格與狀態</h3>
                                         <div className="ml-auto">
-                                            {/* ★ 狀態修改下拉選單 */}
                                             <select value={orderStatus} onChange={e=>setOrderStatus(e.target.value)} className="bg-slate-100 border border-slate-200 text-xs font-bold px-2 py-1 rounded outline-none text-slate-700 cursor-pointer">
                                                 {Object.values(STATUS_OPTIONS).map((s:any) => <option key={s.id} value={s.id}>{s.label}</option>)}
                                             </select>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
                                         <div><InputField label={`當地車價 (${regData.currency})`} value={carPrice} onChange={(v:any)=>setCarPrice(formatNum(v))} prefix={regData.symbol} placeholder="0" /><div className="text-[9px] text-slate-400 font-bold mt-1 text-right">折合 {fmt(carPriceHKD)}</div></div>
                                         <div><InputField label="海關 A1 零售價 (HKD)" value={prpPrice} onChange={(v:any)=>setPrpPrice(formatNum(v))} prefix="$" placeholder="填入 A1 價" />{frtTax > 0 && <div className="text-[9px] text-red-500 font-bold mt-1 text-right">入口稅 {fmt(frtTax)}</div>}</div>
+                                    </div>
+                                    
+                                    {/* ★ 新增：匯率設定區塊 */}
+                                    <div className="bg-blue-50 p-3 rounded-xl border border-blue-200 shadow-inner">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="text-[10px] font-black text-blue-700 uppercase tracking-widest flex items-center gap-1.5"><Globe size={12}/> 匯率設定 (Exchange Rate)</label>
+                                            <button onClick={() => fetchLiveRate(region)} className="text-[9px] font-bold text-white bg-blue-500 px-2 py-0.5 rounded flex items-center gap-1 hover:bg-blue-600 active:scale-95 transition-all">
+                                                {isFetchingRate ? <Loader2 size={10} className="animate-spin"/> : <RefreshCw size={10}/>} 獲取即時
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1 bg-white border border-blue-200 rounded-lg flex items-center px-3 py-1.5">
+                                                <span className="text-[10px] font-bold text-slate-400 mr-2">1 {regData.currency} =</span>
+                                                <input type="number" step="0.0001" value={orderRate} onChange={e => setOrderRate(e.target.value)} className="w-full bg-transparent text-sm font-black font-mono text-blue-800 outline-none" placeholder="0.0000"/>
+                                                <span className="text-[10px] font-bold text-slate-400 ml-2">HKD</span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-bold max-w-[80px] leading-tight">採集當天匯率<br/>可手動微調</div>
+                                        </div>
                                     </div>
                                 </div>
                                 
@@ -817,12 +866,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 <button type="button" onClick={() => setOrderPhotos(orderPhotos.filter((_, idx) => idx !== i))} className="absolute top-0 right-0 bg-red-500/80 text-white p-0.5 rounded-bl-md hover:bg-red-600"><Trash2 size={10}/></button>
                                             </div>
                                         ))}
-                                            {/* ★ 加上 multiple 屬性支援多圖上傳 */}
                                             <label className="w-16 h-12 rounded-md border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 cursor-pointer hover:bg-slate-50 flex-none"><UploadCloud size={16}/><input type="file" accept="image/*" multiple onChange={handlePhotoUpload} className="hidden" /></label>
                                         </div>
                                     </div>
                                     <div className="space-y-4">
-                                        {/* ★ 重新啟用智能 DataList 記憶選項 */}
                                         <div className="grid grid-cols-2 gap-4">
                                             <InputField label="品牌" value={carInfo.make} onChange={(v:any)=>setCarInfo({...carInfo, make:v})} list="makes_list" />
                                             <datalist id="makes_list">{settings?.makes?.map((m:any) => <option key={m} value={m}/>)}</datalist>
@@ -860,8 +907,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             
                             {/* 中欄：雜費 */}
                             <div className={`w-full md:w-[40%] h-full overflow-y-auto p-4 md:p-6 space-y-8 bg-slate-50/50 pb-32 md:pb-6 md:border-r border-slate-200 ${mobileTab!=='fees'?'hidden md:block':''}`}>
-                                
-                                {/* 1. 出牌與智能保險 */}
                                 <div>
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4"><ShieldCheck className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3></div>
                                     <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 shadow-sm">
@@ -873,7 +918,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg border border-red-100"><span>首次登記稅 (FRT)</span><span className="font-mono">{fmt(frtTax)}</span></div>
                                 </div>
 
-                                {/* 2. 其他雜費 (已完美修復並加入動態小計) */}
                                 <div>
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
                                         <Globe className="w-5 h-5 text-emerald-500" />
@@ -900,7 +944,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />))}
+                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (
+                                                <InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
@@ -910,19 +956,22 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             <div className={`w-full md:w-[25%] h-full flex flex-col overflow-y-auto p-4 md:p-6 bg-white pb-32 md:pb-6 ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
                                 <div className="flex-1 space-y-6">
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4 flex-none"><Zap className="w-5 h-5 text-amber-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">報價結算</h3></div>
-                                    <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-4"><div className="flex justify-between items-center border-b border-white/10 pb-2"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">到港成本</span> <span className="text-xl font-mono font-black">{fmt(landedCost)}</span></div><div className="flex justify-between items-center"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">總成本</span> <span className="text-2xl font-mono font-black text-blue-400">{fmt(totalCost)}</span></div></div>
-                                    <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3"><div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input type="text" value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded-lg p-1.5 pl-5 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div><input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/></div>
+                                    <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-4">
+                                        <div className="flex justify-between items-center border-b border-white/10 pb-2"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">到港成本</span> <span className="text-xl font-mono font-black">{fmt(landedCost)}</span></div>
+                                        <div className="flex justify-between items-center"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">總成本</span> <span className="text-2xl font-mono font-black text-blue-400">{fmt(totalCost)}</span></div>
+                                    </div>
+                                    <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3">
+                                        <div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input type="text" value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded-lg p-1.5 pl-5 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div>
+                                        <input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/>
+                                    </div>
+                                    
                                     <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-5 md:p-6 rounded-3xl shadow-2xl text-white flex flex-col items-center justify-center text-center relative overflow-hidden">
                                         <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
                                         <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-3 text-blue-100 opacity-80 w-full relative z-10">Final Quote</p>
                                         
-                                        {/* ★ 同步修復：使用 inline-size 容器與 cqw 自動縮放 */}
                                         <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                             <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
-                                            <span 
-                                                className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap"
-                                                style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}
-                                            >
+                                            <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap" style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}>
                                                 ${formatNum(finalPrice)}
                                             </span>
                                         </div>
