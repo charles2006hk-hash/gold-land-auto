@@ -251,12 +251,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             const data = await res.json();
             if (data && data.rates) {
                 const ratesMap: any = {
-                    'JP': 100 / data.rates.JPY, // 日本通常用百日圓匯率 (例如 0.051)
-                    'UK': 1 / data.rates.GBP,  // 英國 (例如 10.2)
-                    'OT': 1 / data.rates.USD   // 其他 (預設美金，例如 7.8)
+                    'JP': 1 / data.rates.JPY, // ★ 修正：1 日圓兌港幣 (大約 0.049x - 0.05x)
+                    'UK': 1 / data.rates.GBP, // 1 英鎊兌港幣 (大約 9.7x - 10.x)
+                    'OT': 1 / data.rates.USD  // 其他預設美金 (大約 7.78x - 7.8x)
                 };
                 const newRate = ratesMap[targetRegion] || 1;
-                setOrderRate(newRate.toFixed(4));
+                setOrderRate(newRate.toFixed(4)); // 保留 4 位小數，精準計算
             }
         } catch (e) {
             console.error("Fetch rate failed", e);
