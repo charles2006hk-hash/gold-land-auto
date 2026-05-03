@@ -297,7 +297,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         if (!db || !appId) return;
         const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`));
         return onSnapshot(q, (snap) => {
-            // ★ 修復 1：確保保留的是 Firebase 的真實 ID，不被舊數據的 ID 覆蓋
             const list = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a:any, b:any) => b.ts - a.ts);
             setHistory(list);
             if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
@@ -360,7 +359,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         const finalPriceToSave = oldFinalPrice ? oldFinalPrice : (totalCostObj + defaultMargin);
                         const marginToSave = oldFinalPrice ? (oldFinalPrice - totalCostObj) : defaultMargin;
 
-                        // ★ 修復 1：主動剔除舊的 ID 欄位，確保不污染新數據
                         const { id: oldId, ...itemData } = oldItem;
 
                         currentBatch.set(newRef, {
@@ -387,12 +385,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         e.target.value = '';
     };
 
-    // ★ 修復 2：支援多圖批次上傳與自動壓縮
     const handlePhotoUpload = async (e: any) => {
         const files = Array.from(e.target.files);
         if (!files || files.length === 0) return;
 
-        // 預先顯示 Loading 佔位符
         const loadingPlaceholders = files.map(() => "loading...");
         setOrderPhotos(prev => [...prev, ...loadingPlaceholders]);
 
@@ -408,7 +404,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     else { if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; } }
                     canvas.width = w; canvas.height = h;
                     const ctx = canvas.getContext('2d'); ctx?.drawImage(img, 0, 0, w, h);
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // ★ 自動 60% 高畫質壓縮
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
                     try {
                         const storage = getStorage();
                         const fileName = `import_orders/uploads/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
@@ -442,7 +438,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const handleSave = async () => {
         if (!carPrice || !prpPrice) return alert("請填寫基本車價與 PRP");
 
-        // ★ 修復 3：自動記憶新的代號 (code) 和內飾顏色 (interiorColor)
         if (updateSettings) {
             if (carInfo.make && !(settings?.makes || []).includes(carInfo.make)) updateSettings('makes', [...(settings?.makes || []), carInfo.make]);
             if (carInfo.exteriorColor && !(settings?.colors || []).includes(carInfo.exteriorColor)) updateSettings('colors', [...(settings?.colors || []), carInfo.exteriorColor]);
@@ -462,7 +457,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             createdBy: staffId || 'system'
         };
 
-        // ★ 防崩潰：強力過濾所有可能存在的 undefined 欄位，確保資料庫安全
         const cleanRecord = JSON.parse(JSON.stringify(rawRecord));
 
         try {
@@ -699,9 +693,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 </div>
                                             </div>
                                             
-                                            {/* ★ 下方為升級版：分離 HK$ 與數字，加入 flex-wrap 智能折行 ★ */}
                                             <div className="p-4 md:p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center items-center text-center relative min-h-[140px] md:min-h-[160px]">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 text-blue-200 opacity-80 w-full relative z-10">Final Quote</p>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
                                                 
                                                 <div className="flex flex-row flex-wrap items-baseline justify-center w-full gap-x-1.5 gap-y-1 overflow-hidden px-1 relative z-10">
                                                     <span className="text-xl md:text-2xl font-black text-blue-300 drop-shadow-md leading-none">HK$</span>
@@ -715,6 +708,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 </p>
                                             </div>
                                         </div>
+                                    </div>
 
                                     {/* 規格橫條 (Spec Bar) */}
                                     <div className="shrink-0 bg-slate-50 border border-slate-200 rounded-2xl p-4 lg:px-6 grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center justify-between gap-4 shadow-sm">
@@ -860,7 +854,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                             </div>
                             
-                          {/* 中欄：雜費 */}
+                            {/* 中欄：雜費 */}
                             <div className={`w-full md:w-[40%] h-full overflow-y-auto p-4 md:p-6 space-y-8 bg-slate-50/50 pb-32 md:pb-6 md:border-r border-slate-200 ${mobileTab!=='fees'?'hidden md:block':''}`}>
                                 
                                 {/* 1. 出牌與智能保險 */}
