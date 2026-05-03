@@ -696,10 +696,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             <div className="p-4 md:p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center items-center text-center relative min-h-[140px] md:min-h-[160px]">
                                                 <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
                                                 
-                                                {/* ★ 解決大總價走位：改為「上下兩層排版」，釋放橫向空間，並使用響應式字體級距 */}
-                                                <div className="flex flex-col items-center justify-center w-full relative z-10 px-2">
+                                                {/* ★ 終極防走位：使用 inline-size 容器與 cqw 自動縮放，加上 whitespace-nowrap 絕對不折行 */}
+                                                <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                                     <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
-                                                    <span className="text-4xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none w-full break-words">
+                                                    <span 
+                                                        className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap"
+                                                        style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}
+                                                    >
                                                         ${formatNum(selectedItem.results?.finalPrice)}
                                                     </span>
                                                 </div>
@@ -913,10 +916,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
                                         <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-3 text-blue-100 opacity-80 w-full relative z-10">Final Quote</p>
                                         
-                                        {/* ★ 同步解決編輯器模式的大總價走位 */}
-                                        <div className="flex flex-col items-center justify-center w-full relative z-10 px-2">
+                                        {/* ★ 同步修復：使用 inline-size 容器與 cqw 自動縮放 */}
+                                        <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                             <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
-                                            <span className="text-4xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none w-full break-words">
+                                            <span 
+                                                className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap"
+                                                style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}
+                                            >
                                                 ${formatNum(finalPrice)}
                                             </span>
                                         </div>
