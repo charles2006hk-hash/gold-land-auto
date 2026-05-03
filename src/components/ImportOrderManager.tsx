@@ -694,12 +694,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </div>
                                             
                                             <div className="p-4 md:p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center items-center text-center relative min-h-[140px] md:min-h-[160px]">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
                                                 
-                                                <div className="flex flex-row flex-wrap items-baseline justify-center w-full gap-x-1.5 gap-y-1 overflow-hidden px-1 relative z-10">
-                                                    <span className="text-xl md:text-2xl font-black text-blue-300 drop-shadow-md leading-none">HK$</span>
-                                                    <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none max-w-full" style={{ fontSize: 'clamp(2rem, 3.5vw, 3.5rem)' }} title={fmt(selectedItem.results?.finalPrice)}>
-                                                        {formatNum(selectedItem.results?.finalPrice)}
+                                                {/* ★ 解決大總價走位：改為「上下兩層排版」，釋放橫向空間，並使用響應式字體級距 */}
+                                                <div className="flex flex-col items-center justify-center w-full relative z-10 px-2">
+                                                    <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
+                                                    <span className="text-4xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none w-full break-words">
+                                                        ${formatNum(selectedItem.results?.finalPrice)}
                                                     </span>
                                                 </div>
 
@@ -909,16 +910,17 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-4"><div className="flex justify-between items-center border-b border-white/10 pb-2"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">到港成本</span> <span className="text-xl font-mono font-black">{fmt(landedCost)}</span></div><div className="flex justify-between items-center"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">總成本</span> <span className="text-2xl font-mono font-black text-blue-400">{fmt(totalCost)}</span></div></div>
                                     <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3"><div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input type="text" value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded-lg p-1.5 pl-5 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div><input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/></div>
                                     <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-5 md:p-6 rounded-3xl shadow-2xl text-white flex flex-col items-center justify-center text-center relative overflow-hidden">
-                                    <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-blue-100 opacity-80 w-full relative z-10">Final Quote</p>
-                                    
-                                    <div className="flex flex-row flex-wrap items-baseline justify-center w-full gap-x-1.5 gap-y-1 overflow-hidden px-1 relative z-10">
-                                        <span className="text-2xl md:text-3xl font-black text-blue-300 drop-shadow-md leading-none">HK$</span>
-                                        <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none max-w-full" style={{ fontSize: 'clamp(2.5rem, 4vw, 4rem)' }} title={fmt(finalPrice)}>
-                                            {formatNum(finalPrice)}
-                                        </span>
+                                        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-3 text-blue-100 opacity-80 w-full relative z-10">Final Quote</p>
+                                        
+                                        {/* ★ 同步解決編輯器模式的大總價走位 */}
+                                        <div className="flex flex-col items-center justify-center w-full relative z-10 px-2">
+                                            <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
+                                            <span className="text-4xl lg:text-3xl xl:text-4xl 2xl:text-5xl font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none w-full break-words">
+                                                ${formatNum(finalPrice)}
+                                            </span>
+                                        </div>
                                     </div>
-                                </div>
                                 </div>
                                 <div className="mt-6 pt-4 border-t border-slate-100 flex-none sticky bottom-0 bg-white pb-2 hidden md:block z-10"><button onClick={handleSave} className="w-full bg-green-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"><Save size={20}/> {editingId ? '更新並返回' : '儲存紀錄'}</button></div>
                             </div>
