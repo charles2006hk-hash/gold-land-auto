@@ -11,10 +11,11 @@ import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serve
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 
 // --- 專業級預設費用數據 ---
+// ★ 1. 這裡已經為各個地區加入了「排期驗車」
 const REGION_CONFIGS: any = {
-  JP: { id: 'JP', name: '日本', currency: 'JPY', symbol: '¥', origin: { auction: '20,000', shipping: '100,000', insurance: '0' }, hk_misc: { terminal: '500', emission: '5,500', glass: '2,000', booking: '1,000', fuel: '500', process: '2,000', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,000' } },
-  UK: { id: 'UK', name: '英國', currency: 'GBP', symbol: '£', origin: { shipping: '1,500', inspection: '300', insurance: '0', other: '200' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } },
-  OT: { id: 'OT', name: '其他', currency: 'USD', symbol: '$', origin: { shipping: '2,000', inspection: '500', insurance: '0', other: '500' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } }
+  JP: { id: 'JP', name: '日本', currency: 'JPY', symbol: '¥', origin: { auction: '20,000', shipping: '100,000', insurance: '0' }, hk_misc: { terminal: '500', emission: '5,500', glass: '2,000', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,000', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,000' } },
+  UK: { id: 'UK', name: '英國', currency: 'GBP', symbol: '£', origin: { shipping: '1,500', inspection: '300', insurance: '0', other: '200' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } },
+  OT: { id: 'OT', name: '其他', currency: 'USD', symbol: '$', origin: { shipping: '2,000', inspection: '500', insurance: '0', other: '500' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } }
 };
 
 const STATUS_OPTIONS: any = {
@@ -23,7 +24,6 @@ const STATUS_OPTIONS: any = {
     DELIVERED: { id: 'DELIVERED', label: '已交貨', color: 'bg-emerald-100 text-emerald-700 border-emerald-300' }
 };
 
-// ★ 新增：費用中文化對照表
 const FEE_LABELS: any = {
     auction: '拍賣手續費', shipping: '當地物流/海運', insurance: '保險', inspection: '當地驗車', other: '其他',
     terminal: '碼頭費', emission: '環保檢驗', glass: '驗玻璃', booking: '拖車/訂艙', fuel: '油費', process: '報關/處理費', misc: '雜費'
@@ -111,7 +111,6 @@ const InputField = ({ label, value, onChange, prefix, placeholder, list, type = 
     </div>
 );
 
-// ★ 升級：三段式標註日期的物流進度條
 const TransportProgressBar = ({ orderDate, departureDate, durationDays, type }: any) => {
     if (!orderDate && !departureDate) return <div className="text-xs font-bold text-slate-400 text-center py-2">未設定物流日期</div>;
 
@@ -158,7 +157,6 @@ const TransportProgressBar = ({ orderDate, departureDate, durationDays, type }: 
     );
 };
 
-// ★ 升級：報價單加入車輛總需時
 const QuotationPreview = ({ item, onClose }: any) => {
     if (!item) return null;
 
@@ -173,7 +171,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
         const start = new Date(orderDate).getTime();
         const depart = new Date(departureDate).getTime();
         const arrive = depart + (durationDays * 24 * 60 * 60 * 1000);
-        const license = arrive + (14 * 24 * 60 * 60 * 1000); // 預設抵港後 14 天出牌
+        const license = arrive + (14 * 24 * 60 * 60 * 1000); 
         const totalDays = Math.ceil((license - start) / (1000 * 60 * 60 * 24));
         
         estTotalDays = `${totalDays} 天 (Days)`;
@@ -274,8 +272,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [region, setRegion] = useState('JP');
     const [carPrice, setCarPrice] = useState('');
     const [prpPrice, setPrpPrice] = useState('');
-    const [orderRate, setOrderRate] = useState(''); // ★ 新增：匯率狀態
-    const [isFetchingRate, setIsFetchingRate] = useState(false); // ★ 新增：獲取中狀態
+    const [orderRate, setOrderRate] = useState(''); 
+    const [isFetchingRate, setIsFetchingRate] = useState(false); 
     
     const [carInfo, setCarInfo] = useState({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
     const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
@@ -291,7 +289,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [jpEra, setJpEra] = useState('Reiwa');
     const [jpEraYear, setJpEraYear] = useState('');
 
-    // ★★★ 核心功能：自動採集即時匯率 ★★★
     const fetchLiveRate = async (targetRegion: string) => {
         setIsFetchingRate(true);
         try {
@@ -299,12 +296,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             const data = await res.json();
             if (data && data.rates) {
                 const ratesMap: any = {
-                    'JP': 1 / data.rates.JPY, // ★ 修正：1 日圓兌港幣 (大約 0.049x - 0.05x)
-                    'UK': 1 / data.rates.GBP, // 1 英鎊兌港幣 (大約 9.7x - 10.x)
-                    'OT': 1 / data.rates.USD  // 其他預設美金 (大約 7.78x - 7.8x)
+                    'JP': 1 / data.rates.JPY, 
+                    'UK': 1 / data.rates.GBP, 
+                    'OT': 1 / data.rates.USD  
                 };
                 const newRate = ratesMap[targetRegion] || 1;
-                setOrderRate(newRate.toFixed(4)); // 保留 4 位小數，精準計算
+                setOrderRate(newRate.toFixed(4)); 
             }
         } catch (e) {
             console.error("Fetch rate failed", e);
@@ -313,14 +310,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
     };
 
-    // 地區變更時，觸發匯率更新 (僅在新報價單時自動觸發)
+    // ★ 2. 修復核心 Bug：只有在「新增」模式下，切換地區才載入預設費用
+    // 這樣在「編輯」模式下，從資料庫讀出來的歷史數據就不會被覆蓋掉了！
     useEffect(() => {
-        setOriginFees(REGION_CONFIGS[region].origin);
-        setHkMiscFees(REGION_CONFIGS[region].hk_misc);
-        setHkLicenseFees(REGION_CONFIGS[region].hk_license);
-        
-        // ★ 如果是新建單據，自動抓即時匯率
         if (!editingId) {
+            setOriginFees(REGION_CONFIGS[region].origin);
+            setHkMiscFees(REGION_CONFIGS[region].hk_misc);
+            setHkLicenseFees(REGION_CONFIGS[region].hk_license);
             fetchLiveRate(region);
         }
     }, [region, editingId]);
@@ -341,7 +337,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setSelectedPhotoIdx(0);
     }, [selectedId]);
 
-    // 智能狀態控制
     useEffect(() => {
         if (transport.departureDate) {
             const start = new Date(transport.departureDate).getTime();
@@ -353,7 +348,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 setOrderStatus('IN_PROGRESS'); 
             }
         } else if (transport.orderDate) {
-            // ★ 如果填了確認訂購日期，狀態自動轉為進行中
             setOrderStatus('IN_PROGRESS');
         } else if (!editingId) {
             setOrderStatus('QUOTING');
@@ -362,7 +356,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
     // --- 計算邏輯 ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
-    // ★ 匯率優先使用手動設定的 orderRate，若無則回退至 settings 或硬編碼
     const currentRate = orderRate ? parseNum(orderRate) : (settings?.rates?.[region] || (region === 'JP' ? 0.053 : region === 'UK' ? 10.2 : 7.8));
     
     const carPriceHKD = Math.round(parseNum(carPrice) * currentRate);
@@ -387,7 +380,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
     }, [db, appId]);
 
-    // 數據搬遷邏輯
     const handleMigrateOldData = async (e: any) => {
         const file = e.target.files?.[0];
         if (!file || !db) return;
@@ -532,7 +524,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         const rawRecord = {
             ts: Date.now(), date: new Date().toLocaleDateString('zh-HK'), region,
             details: { ...carInfo, transportType: transport.type, orderDate: transport.orderDate, departureDate: transport.departureDate, shippingDuration: transport.duration },
-            vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate }, // ★ 儲存當前使用的匯率
+            vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate },
             fees: { origin: originFees, hk_misc: hkMiscFees, hk_license: hkLicenseFees, finalInsurance: finalIns },
             results: { carPriceHKD, totalOriginHKD, totalHkMisc, totalHkLicense, landedCost, totalCost, finalPrice, frtTax },
             quote: { margin: parseNum(margin), finalPrice },
@@ -551,7 +543,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 const newDoc = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`), { ...cleanRecord, timestamp: serverTimestamp() });
                 setSelectedId(newDoc.id);
             }
-            // ★ 樂觀更新：即時反映在畫面上，無需重新讀取
             setHistory(prev => prev.map(h => h.id === editingId ? { ...h, ...cleanRecord, id: editingId } : h));
             alert("✅ 儲存成功！"); setView('dashboard'); setOrderPhotos([]); setEditingId(null);  
         } catch (e: any) { 
@@ -571,7 +562,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const handleEdit = (item: any) => {
         setEditingId(item.id); setRegion(item.region || 'JP'); setOrderStatus(item.status || 'QUOTING');
         setCarPrice(formatNum(item.vals?.carPrice)); setPrpPrice(formatNum(item.vals?.prp));
-        setOrderRate(item.vals?.rate?.toString() || ''); // ★ 載入紀錄中的匯率
+        setOrderRate(item.vals?.rate?.toString() || ''); 
         setCarInfo({
             make: item.details?.make || item.details?.manufacturer || item.carInfo?.make || '', model: item.details?.model || item.carInfo?.model || '', year: item.details?.year || item.carInfo?.year || '',
             code: item.details?.code || item.carInfo?.code || '', exteriorColor: item.details?.exteriorColor || item.carInfo?.exteriorColor || '', interiorColor: item.details?.interiorColor || item.carInfo?.interiorColor || '',
@@ -580,7 +571,16 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
         setOrderPhotos(item.photos || []);
         setTransport({ type: item.details?.transportType || 'SEA', orderDate: item.details?.orderDate || '', departureDate: item.details?.departureDate || '', duration: item.details?.shippingDuration || '' });
-        setOriginFees(flattenFees(item.fees?.origin)); setHkMiscFees(flattenFees(item.fees?.hk_misc)); setHkLicenseFees(flattenFees(item.fees?.hk_license));
+        
+        // ★ 3. 完美合併：讀取舊數據時，與最新的預設選項合併，確保舊單據也有「排期驗車」
+        const defaultOrigin = REGION_CONFIGS[item.region || 'JP'].origin;
+        const defaultHkMisc = REGION_CONFIGS[item.region || 'JP'].hk_misc;
+        const defaultHkLicense = REGION_CONFIGS[item.region || 'JP'].hk_license;
+        
+        setOriginFees({ ...defaultOrigin, ...flattenFees(item.fees?.origin) }); 
+        setHkMiscFees({ ...defaultHkMisc, ...flattenFees(item.fees?.hk_misc) }); 
+        setHkLicenseFees({ ...defaultHkLicense, ...flattenFees(item.fees?.hk_license) });
+        
         setMargin(formatNum(item.quote?.margin || '30000')); setView('calc');
     };
 
@@ -675,7 +675,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 <button onClick={handleAddNew} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black text-sm flex justify-center items-center gap-2 hover:bg-blue-700 active:scale-95 transition shadow-sm"><Plus size={16}/> 新增報價單</button>
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋型號..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                    <input className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋型號或車身號碼..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto">
@@ -774,7 +774,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 <h3 className="font-black text-blue-400 text-xs tracking-widest uppercase mb-4 flex items-center gap-2"><DollarSign size={16}/> 成本結構</h3>
                                                 <div className="space-y-3">
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
-                                                    {/* ★ 顯示使用的匯率 */}
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">結算匯率</span><span className="font-mono text-sm text-yellow-400">{selectedItem.vals?.rate}</span></div>
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">到港成本</span><span className="font-mono text-sm">{fmt(selectedItem.results?.landedCost)}</span></div>
                                                     <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">海關 A1 稅</span><span className="font-mono text-sm">{fmt(selectedItem.results?.frtTax)}</span></div>
@@ -783,7 +782,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </div>
                                             
                                             <div className="p-4 md:p-5 bg-gradient-to-br from-blue-700 to-indigo-900 flex-1 flex flex-col justify-center items-center text-center relative min-h-[140px] md:min-h-[160px]">
-                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 text-blue-200 opacity-80 w-full relative z-10">Final Quote</p>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
                                                 
                                                 <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                                     <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
@@ -870,7 +869,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div><InputField label="海關 A1 零售價 (HKD)" value={prpPrice} onChange={(v:any)=>setPrpPrice(formatNum(v))} prefix="$" placeholder="填入 A1 價" />{frtTax > 0 && <div className="text-[9px] text-red-500 font-bold mt-1 text-right">入口稅 {fmt(frtTax)}</div>}</div>
                                     </div>
                                     
-                                    {/* ★ 新增：匯率設定區塊 */}
                                     <div className="bg-blue-50 p-3 rounded-xl border border-blue-200 shadow-inner">
                                         <div className="flex justify-between items-center mb-2">
                                             <label className="text-[10px] font-black text-blue-700 uppercase tracking-widest flex items-center gap-1.5"><Globe size={12}/> 匯率設定 (Exchange Rate)</label>
@@ -897,7 +895,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             {orderPhotos.map((url, i) => (
                                             <div 
                                                 key={i} 
-                                                draggable // ★ 啟用拖曳
+                                                draggable 
                                                 onDragStart={() => setDraggedPhotoIdx(i)}
                                                 onDragOver={(e) => e.preventDefault()}
                                                 onDrop={(e) => {
@@ -998,7 +996,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={getFeeLabel(k)} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})}  /> ))}
+                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (
+                                                <InputField key={k} label={getFeeLabel(k)} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})}  /> 
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
