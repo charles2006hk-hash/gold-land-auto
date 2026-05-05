@@ -291,7 +291,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     // ★ 權限判定
     const currentUser = systemUsers?.find((u: any) => u.email === staffId);
     const isBoss = staffId === 'BOSS';
-    const dataAccess = currentUser?.dataAccess || 'all'; // 'all' 或 'assigned'
+    const dataAccess = currentUser?.dataAccess || 'all'; 
     const canViewAll = isBoss || dataAccess === 'all';
     const hasModuleAccess = isBoss || (currentUser?.modules || []).includes('all') || (currentUser?.modules || []).includes('import_orders');
 
@@ -384,15 +384,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
     }, [db, appId, hasModuleAccess]);
 
-    // ★ 權限過濾器：決定左側列表能看到什麼
     const filteredHistory = history.filter(h => {
-        // 1. 資料權限檢查
         if (!canViewAll) {
             if (h.createdBy !== staffId && !(h.assignedTo || []).includes(staffId)) {
-                return false; // 既不是建立者，也沒被指派，就隱藏
+                return false; 
             }
         }
-        // 2. 搜尋檢查
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             return (h.details?.model || '').toLowerCase().includes(q) || (h.details?.chassisNo || '').toLowerCase().includes(q);
@@ -543,7 +540,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             if (carInfo.code && !(settings?.codes || []).includes(carInfo.code)) updateSettings('codes', [...(settings?.codes || []), carInfo.code]);
         }
         
-        // ★ 繼承舊紀錄的建立者與被指派者，若無則設為當前員工
         const existingRecord = editingId ? history.find(h => h.id === editingId) : null;
         const recordCreator = existingRecord?.createdBy || staffId;
         const recordAssignedTo = existingRecord?.assignedTo || [];
@@ -647,7 +643,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, item.id), { isLocked: !item.isLocked });
     };
 
-    // ★ 處理員工指派的函數
     const handleAssignUser = async (item: any, userEmail: string) => {
         const currentAssigned = item.assignedTo || [];
         const newAssigned = currentAssigned.includes(userEmail) 
@@ -773,7 +768,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     </div>
                                                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.make || selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500 font-bold">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
                                                     
-                                                    {/* 指派員工 UI */}
+                                                    {/* ★ 指派員工 UI (老闆或主管點擊這裡指派！) */}
                                                     {canViewAll && systemUsers && systemUsers.length > 0 && (
                                                         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
                                                             <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><UserPlus size={12}/> 指派給:</span>
@@ -795,19 +790,21 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 </div>
                                             </div>
 
-                                            {/* ★ 滾動主體區塊：避免排版被壓扁 */}
-                                            <div className="flex-1 overflow-y-auto pr-2 space-y-4 pb-20">
+                                            {/* ★ 滾動主體區塊：重構排版，圖片最大化，移除雜費 */}
+                                            <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-4 pb-20">
                                                 
-                                                {/* 上半部：左畫廊 (2/3) + 右財務 (1/3) */}
-                                                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-stretch">
+                                                {/* 上半部：左畫廊 (擴展佔滿剩餘空間) + 右財務 (固定寬度) */}
+                                                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 flex-1 min-h-[400px]">
                                                     
-                                                    {/* 左側：畫廊 */}
-                                                    <div className="w-full lg:w-2/3 h-[250px] sm:h-[350px] flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2 min-h-[300px]">
+                                                    {/* 左側：大面積畫廊 (flex-1 讓它自動撐滿) */}
+                                                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2">
                                                         {selectedItem.photos?.length > 0 ? (
                                                             <>
                                                                 <div className="flex-1 relative rounded-xl overflow-hidden bg-white flex items-center justify-center cursor-zoom-in group" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
                                                                     <img src={selectedItem.photos[selectedPhotoIdx]} className="w-full h-full object-contain p-2" />
-                                                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1.5 rounded-full text-[10px] font-black backdrop-blur-md opacity-100 group-hover:opacity-0 transition-opacity">{selectedPhotoIdx + 1} / {selectedItem.photos.length}</div>
+                                                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1.5 rounded-full text-[10px] font-black backdrop-blur-md opacity-100 group-hover:opacity-0 transition-opacity">
+                                                                        {selectedPhotoIdx + 1} / {selectedItem.photos.length}
+                                                                    </div>
                                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all flex items-center justify-center">
                                                                         <div className="bg-white/95 text-slate-800 px-4 py-2 rounded-lg font-black text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow-lg flex items-center gap-1.5 transform scale-95 group-hover:scale-100"><Search size={14}/> 點擊放大下載</div>
                                                                     </div>
@@ -828,7 +825,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     </div>
 
                                                     {/* 右側：深色財務面板 */}
-                                                    <div className="w-full lg:w-1/3 flex flex-col bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white min-h-[300px]">
+                                                    <div className="w-full lg:w-[320px] xl:w-[360px] flex-none flex flex-col bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white">
                                                         <div className="p-4 md:p-6 border-b border-white/10 shrink-0">
                                                             <h3 className="font-black text-blue-400 text-xs tracking-widest uppercase mb-4 flex items-center gap-2"><DollarSign size={16}/> 成本結構</h3>
                                                             <div className="space-y-3">
@@ -869,50 +866,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Database size={16} className="text-slate-400"/></div><div className="overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">車身號碼</p><p className="text-[11px] font-mono font-black text-slate-800 truncate">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</p></div></div>
                                                 </div>
 
-                                                {/* 下半部：雜費細項與物流 */}
-                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 pb-4">
-                                                    {/* 左：雜費 */}
-                                                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm">
-                                                        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-4"><Globe className="w-5 h-5 text-emerald-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">當地與香港雜費</h3></div>
-                                                        <div className="mb-4">
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">當地雜費 ({REGION_CONFIGS[selectedItem.region || 'JP']?.currency})</span>
-                                                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-sm">小計: {REGION_CONFIGS[selectedItem.region || 'JP']?.symbol}{formatNum(getFeeTotal(selectedItem.fees?.origin))}</span>
-                                                            </div>
-                                                            <div className="grid grid-cols-3 gap-2">
-                                                                {Object.entries(selectedItem.fees?.origin || {}).map(([k, v]:any) => (<div key={k} className="bg-white p-2 rounded border border-slate-100"><p className="text-[9px] text-slate-400 uppercase mb-0.5 truncate">{getFeeLabel(k)}</p><p className="text-xs font-bold font-mono text-slate-700">{formatNum(v)}</p></div>))}
-                                                            </div>
-                                                        </div>
-                                                        <div className="pt-4 border-t border-slate-200">
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">香港雜費 (HKD)</span>
-                                                                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shadow-sm">小計: {fmt(getFeeTotal(selectedItem.fees?.hk_misc))}</span>
-                                                            </div>
-                                                            <div className="grid grid-cols-3 gap-2">
-                                                                {Object.entries(selectedItem.fees?.hk_misc || {}).map(([k, v]:any) => (<div key={k} className="bg-white p-2 rounded border border-slate-100"><p className="text-[9px] text-slate-400 uppercase mb-0.5 truncate">{getFeeLabel(k)}</p><p className="text-xs font-bold font-mono text-slate-700">{formatNum(v)}</p></div>))}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* 右：出牌與保險 + 物流 */}
-                                                    <div className="space-y-4 lg:space-y-6">
-                                                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                                                            <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-4"><ShieldCheck className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與保險</h3></div>
-                                                            <div className="grid grid-cols-2 gap-4">
-                                                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">牌費</p><p className="text-sm font-bold font-mono text-slate-800">{formatNum(selectedItem.fees?.hk_license?.fee || 0)}</p></div>
-                                                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">實際保費</p><p className="text-sm font-bold font-mono text-slate-800">{formatNum(selectedItem.fees?.finalInsurance || 0)}</p></div>
-                                                            </div>
-                                                            <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 mt-4"><span>首次登記稅 (FRT)</span><span className="font-mono">{fmt(selectedItem.results?.frtTax)}</span></div>
-                                                        </div>
-                                                        
-                                                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                                                            {selectedItem.details?.departureDate ? (
-                                                                <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
-                                                            ) : (
-                                                                <div className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={14}/> 未設定運輸日期</div>
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                                {/* 底部物流 (Footer) - ★ 一整條貫穿底部 */}
+                                                <div className="shrink-0 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                                                    {selectedItem.details?.departureDate ? (
+                                                        <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
+                                                    ) : (
+                                                        <div className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={14}/> 未設定運輸日期</div>
+                                                    )}
                                                 </div>
                                             </div> {/* 滾動主體結束 */}
 
@@ -1092,14 +1052,20 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         </div>
                                     </div>
                                     
-                                    {/* 右欄：總結算 */}
+                                    {/* 右欄：總結算 (編輯模式) ★★★ 已加入所有結算數據 ★★★ */}
                                     <div className={`w-full md:w-[25%] h-full flex flex-col overflow-y-auto p-4 md:p-6 bg-white pb-32 md:pb-6 ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
                                         <div className="flex-1 space-y-6">
                                             <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4 flex-none"><Zap className="w-5 h-5 text-amber-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">報價結算</h3></div>
-                                            <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-4">
-                                                <div className="flex justify-between items-center border-b border-white/10 pb-2"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">到港成本</span> <span className="text-xl font-mono font-black">{fmt(landedCost)}</span></div>
-                                                <div className="flex justify-between items-center"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">總成本</span> <span className="text-2xl font-mono font-black text-blue-400">{fmt(totalCost)}</span></div>
+                                            
+                                            {/* ★ 修復：編輯模式的結算黑卡加入完整數據 */}
+                                            <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-xl space-y-3">
+                                                <div className="flex justify-between items-end border-b border-white/10 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{regData.symbol}{formatNum(carPrice)}</span></div>
+                                                <div className="flex justify-between items-end border-b border-white/10 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">結算匯率</span><span className="font-mono text-sm text-yellow-400">{currentRate}</span></div>
+                                                <div className="flex justify-between items-end border-b border-white/10 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">海關 A1 稅</span><span className="font-mono text-sm">{fmt(frtTax)}</span></div>
+                                                <div className="flex justify-between items-end border-b border-white/10 pb-2"><span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">到港成本</span> <span className="text-sm font-mono font-black">{fmt(landedCost)}</span></div>
+                                                <div className="flex justify-between items-end pt-1"><span className="text-[11px] text-emerald-400 font-bold uppercase tracking-widest">總成本 (Cost)</span> <span className="text-xl font-mono font-black text-emerald-400">{fmt(totalCost)}</span></div>
                                             </div>
+                                            
                                             <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 space-y-3">
                                                 <div className="flex justify-between items-center"><label className="text-xs font-black text-emerald-800">期望利潤</label> <div className="relative w-24"><span className="absolute left-2 top-1 text-[10px] text-emerald-400">$</span><input type="text" value={margin} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full bg-white border border-emerald-200 rounded-lg p-1.5 pl-5 text-right font-mono font-bold text-emerald-700 text-sm outline-none" /></div></div>
                                                 <input type="range" min="0" max="200000" step="5000" value={parseNum(margin)} onChange={e=>setMargin(formatNum(e.target.value))} className="w-full accent-emerald-500 mt-2"/>
