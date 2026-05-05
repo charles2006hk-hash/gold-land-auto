@@ -563,7 +563,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const handleAddNew = () => {
         setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice(''); setOrderRate('');
         setCarInfo({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
-        setOrderPhotos([]); setTransport({ type: 'SEA', departureDate: '', duration: '' });
+        setOrderPhotos([]); setTransport({ type: 'SEA', orderDate: '', departureDate: '', duration: '' });
         setOriginFees(REGION_CONFIGS['JP'].origin); setHkMiscFees(REGION_CONFIGS['JP'].hk_misc); setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
         setMargin('30000'); setOrderStatus('QUOTING'); setView('calc');
     };
