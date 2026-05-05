@@ -5291,6 +5291,7 @@ const SettingsManager = ({
     const permissionGroups = [
         { key: 'dashboard', label: '儀表板 (Dashboard)' },
         { key: 'inventory', label: '車輛/庫存/圖庫 (Inventory)' },
+        { key: 'import_orders', label: '海外訂車 (Import)' }, // ★ 加上這行，這樣老闆就能在「用戶與權限」勾選誰能進這個模塊
         { key: 'business', label: '中港/流程業務 (Business)' },
         { key: 'reports', label: '財務報表 (Reports)' },
         { key: 'database', label: '資料庫/客戶 (Database)' },
@@ -12424,6 +12425,7 @@ const CreateDocModule = ({
                     appId={appId}
                     inventory={visibleInventory}
                     settings={settings}
+                    systemUsers={systemUsers}
                 />
             </div>
         )}
