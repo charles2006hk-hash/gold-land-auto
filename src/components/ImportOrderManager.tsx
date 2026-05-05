@@ -12,9 +12,9 @@ import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "fir
 
 // --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
-  JP: { id: 'JP', name: '日本', currency: 'JPY', symbol: '¥', origin: { auction: '20,000', shipping: '100,000', insurance: '0' }, hk_misc: { terminal: '500', emission: '5,500', glass: '2,000', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,000', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,000' } },
-  UK: { id: 'UK', name: '英國', currency: 'GBP', symbol: '£', origin: { shipping: '1,500', inspection: '300', insurance: '0', other: '200' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } },
-  OT: { id: 'OT', name: '其他', currency: 'USD', symbol: '$', origin: { shipping: '2,000', inspection: '500', insurance: '0', other: '500' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } }
+  JP: { id: 'JP', name: '日本', currency: 'JPY', symbol: '¥', origin: { auction: '200,000', shipping: '100,000', insurance: '0' }, hk_misc: { terminal: '2,400', emission: '7,000', glass: '6,000', "排期驗車": '2,385', booking: '1,000', fuel: '500', process: '8,000', misc: '3,000' }, hk_license: { fee: '5,794', insurance: '3,000' } },
+  UK: { id: 'UK', name: '英國', currency: 'GBP', symbol: '£', origin: { shipping: '5,000', inspection: '500', insurance: '300', other: '200' }, hk_misc: { terminal: '2,400', emission: '7,000', glass: '6,000', "排期驗車": '2,385', booking: '1,000', fuel: '500', process: '8,000', misc: '3,000' }, hk_license: { fee: '5,794', insurance: '3,000' } },
+  OT: { id: 'OT', name: '其他', currency: 'USD', symbol: '$', origin: { shipping: '3,000', inspection: '500', insurance: '300', other: '500' }, hk_misc: { terminal: '2,400', emission: '7,000', glass: '6,000', "排期驗車": '2,385', booking: '1,000', fuel: '500', process: '8,000', misc: '3,000' }, hk_license: { fee: '5,794', insurance: '3,000' } }
 };
 
 const STATUS_OPTIONS: any = {
