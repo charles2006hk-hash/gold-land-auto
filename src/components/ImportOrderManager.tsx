@@ -23,6 +23,13 @@ const STATUS_OPTIONS: any = {
     DELIVERED: { id: 'DELIVERED', label: '已交貨', color: 'bg-emerald-100 text-emerald-700 border-emerald-300' }
 };
 
+// ★ 新增：費用中文化對照表
+const FEE_LABELS: any = {
+    auction: '拍賣手續費', shipping: '當地物流/海運', insurance: '保險', inspection: '當地驗車', other: '其他',
+    terminal: '碼頭費', emission: '環保檢驗', glass: '驗玻璃', booking: '拖車/訂艙', fuel: '油費', process: '報關/處理費', misc: '雜費'
+};
+const getFeeLabel = (key: string) => FEE_LABELS[key] || key.toUpperCase();
+
 // --- 輔助函數 ---
 const calcFRT = (prp: number) => {
     let v = prp; let t = 0;
@@ -104,39 +111,75 @@ const InputField = ({ label, value, onChange, prefix, placeholder, list, type = 
     </div>
 );
 
-const TransportProgressBar = ({ departureDate, durationDays, type }: any) => {
-    if (!departureDate || !durationDays) return null;
-    const start = new Date(departureDate).getTime();
-    const days = parseFloat(durationDays) || 0;
-    const end = start + (days * 24 * 60 * 60 * 1000);
+// ★ 升級：三段式標註日期的物流進度條
+const TransportProgressBar = ({ orderDate, departureDate, durationDays, type }: any) => {
+    if (!orderDate && !departureDate) return <div className="text-xs font-bold text-slate-400 text-center py-2">未設定物流日期</div>;
+
     const now = Date.now();
+    const orderT = orderDate ? new Date(orderDate).getTime() : null;
+    const departT = departureDate ? new Date(departureDate).getTime() : null;
+    const durationMs = (parseFloat(durationDays) || 0) * 24 * 60 * 60 * 1000;
+    const arriveT = departT && durationMs ? departT + durationMs : null;
+
     let percentage = 0;
-    if (now > start) percentage = Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
+    if (arriveT && now >= arriveT) percentage = 100;
+    else if (departT && arriveT && now >= departT) percentage = 30 + ((now - departT) / (arriveT - departT)) * 70;
+    else if (orderT && departT && now >= orderT) percentage = 10 + ((now - orderT) / (departT - orderT)) * 20;
+    else if (orderT && now >= orderT) percentage = 10;
+
     const isArrived = percentage >= 100;
-    const arrivalDate = new Date(end).toLocaleDateString('zh-HK');
+    const Icon = type === 'AIR' ? Plane : Ship;
+    
     return (
-        <div className="w-full flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-2 shrink-0 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                {type === 'AIR' ? <Plane size={14} className="text-slate-600"/> : <Ship size={14} className="text-slate-600"/>}
-                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">物流狀態</span>
-            </div>
-            <div className="w-full sm:flex-1 relative h-2.5 bg-slate-200 rounded-full mt-1 sm:mt-0">
+        <div className="w-full flex flex-col mt-1">
+            <div className="relative w-full h-2.5 bg-slate-200 rounded-full overflow-visible mb-2">
                 <div className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ${isArrived ? 'bg-emerald-500' : 'bg-blue-600'}`} style={{ width: `${percentage}%` }}></div>
                 <div className="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10" style={{ left: `${percentage}%`, transform: `translate(-50%, -50%)` }}>
                     <div className={`p-1 rounded-full shadow-md border-2 border-white ${isArrived ? 'bg-emerald-500' : 'bg-blue-600'}`}>
-                        {type === 'AIR' ? <Plane className="w-2.5 h-2.5 text-white" /> : <Ship className="w-2.5 h-2.5 text-white" />}
+                        <Icon className="w-2.5 h-2.5 text-white" />
                     </div>
                 </div>
             </div>
-            <div className="shrink-0 text-[10px] font-bold text-slate-500">
-                {isArrived ? '已抵達' : `預計抵港: ${arrivalDate}`}
+            <div className="flex justify-between text-[10px] font-bold">
+                <div className="text-left w-1/3">
+                    <div className="text-slate-400 uppercase">確認訂購</div>
+                    <div className="text-slate-700">{orderDate || '-'}</div>
+                </div>
+                <div className="text-center w-1/3">
+                    <div className="text-slate-400 uppercase">出發</div>
+                    <div className="text-blue-600">{departureDate || '-'}</div>
+                </div>
+                <div className="text-right w-1/3">
+                    <div className="text-slate-400 uppercase">預計抵達</div>
+                    <div className="text-emerald-600">{arriveT ? new Date(arriveT).toLocaleDateString('zh-HK') : '-'}</div>
+                </div>
             </div>
         </div>
     );
 };
 
+// ★ 升級：報價單加入車輛總需時
 const QuotationPreview = ({ item, onClose }: any) => {
     if (!item) return null;
+
+    const orderDate = item.details?.orderDate;
+    const departureDate = item.details?.departureDate;
+    const durationDays = parseFloat(item.details?.shippingDuration) || 0;
+    
+    let estTotalDays = 'TBC (待定)';
+    let estHKLicenseDate = 'TBC (待定)';
+    
+    if (orderDate && departureDate && durationDays) {
+        const start = new Date(orderDate).getTime();
+        const depart = new Date(departureDate).getTime();
+        const arrive = depart + (durationDays * 24 * 60 * 60 * 1000);
+        const license = arrive + (14 * 24 * 60 * 60 * 1000); // 預設抵港後 14 天出牌
+        const totalDays = Math.ceil((license - start) / (1000 * 60 * 60 * 24));
+        
+        estTotalDays = `${totalDays} 天 (Days)`;
+        estHKLicenseDate = new Date(license).toLocaleDateString('en-GB'); 
+    }
+
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
             <div className="bg-white w-full max-w-[210mm] h-[90vh] md:h-[297mm] md:max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl scale-95 md:scale-100 origin-center transition-transform">
@@ -171,9 +214,14 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             </div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
-                            <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport Info</h3>
-                            <p className="text-xs font-bold">Shipping: {item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</p>
-                            <p className="text-xs text-slate-500 mt-1">Departure: {item.details?.departureDate || 'TBC'}</p>
+                            <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport & Timeline (物流與時間)</h3>
+                            <div className="space-y-1 text-xs">
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Shipping:</span> <span className="font-bold">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Order Date:</span> <span className="font-bold">{orderDate || 'TBC'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
+                            </div>
+                            <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 14 days for HK customs & licensing.</p>
                         </div>
                     </div>
                     <table className="w-full text-sm mb-10">
@@ -232,7 +280,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [carInfo, setCarInfo] = useState({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
     const [orderPhotos, setOrderPhotos] = useState<string[]>([]);
     const [draggedPhotoIdx, setDraggedPhotoIdx] = useState<number | null>(null);
-    const [transport, setTransport] = useState({ type: 'SEA', departureDate: '', duration: '' });
+    const [transport, setTransport] = useState({ type: 'SEA', orderDate: '', departureDate: '', duration: '' });
     const [margin, setMargin] = useState('30000');
     const [originFees, setOriginFees] = useState<any>(REGION_CONFIGS['JP'].origin);
     const [hkMiscFees, setHkMiscFees] = useState<any>(REGION_CONFIGS['JP'].hk_misc);
@@ -304,10 +352,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             } else {
                 setOrderStatus('IN_PROGRESS'); 
             }
+        } else if (transport.orderDate) {
+            // ★ 如果填了確認訂購日期，狀態自動轉為進行中
+            setOrderStatus('IN_PROGRESS');
         } else if (!editingId) {
             setOrderStatus('QUOTING');
         }
-    }, [transport.departureDate, transport.duration, editingId]);
+    }, [transport.orderDate, transport.departureDate, transport.duration, editingId]);
 
     // --- 計算邏輯 ---
     const regData = REGION_CONFIGS[region] || REGION_CONFIGS['JP'];
@@ -480,7 +531,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
         const rawRecord = {
             ts: Date.now(), date: new Date().toLocaleDateString('zh-HK'), region,
-            details: { ...carInfo, transportType: transport.type, departureDate: transport.departureDate, shippingDuration: transport.duration },
+            details: { ...carInfo, transportType: transport.type, orderDate: transport.orderDate, departureDate: transport.departureDate, shippingDuration: transport.duration },
             vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate }, // ★ 儲存當前使用的匯率
             fees: { origin: originFees, hk_misc: hkMiscFees, hk_license: hkLicenseFees, finalInsurance: finalIns },
             results: { carPriceHKD, totalOriginHKD, totalHkMisc, totalHkLicense, landedCost, totalCost, finalPrice, frtTax },
@@ -500,7 +551,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 const newDoc = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`), { ...cleanRecord, timestamp: serverTimestamp() });
                 setSelectedId(newDoc.id);
             }
-            alert("✅ 儲存成功！"); setView('dashboard'); setOrderPhotos([]); setEditingId(null);
+            // ★ 樂觀更新：即時反映在畫面上，無需重新讀取
+            setHistory(prev => prev.map(h => h.id === editingId ? { ...h, ...cleanRecord, id: editingId } : h));
+            alert("✅ 儲存成功！"); setView('dashboard'); setOrderPhotos([]); setEditingId(null);  
         } catch (e: any) { 
             console.error(e);
             alert("儲存失敗: " + e.message); 
@@ -526,7 +579,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             mileage: item.details?.mileage || item.carInfo?.mileage || '', chassis: item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || ''
         });
         setOrderPhotos(item.photos || []);
-        setTransport({ type: item.details?.transportType || 'SEA', departureDate: item.details?.departureDate || '', duration: item.details?.shippingDuration || '' });
+        setTransport({ type: item.details?.transportType || 'SEA', orderDate: item.details?.orderDate || '', departureDate: item.details?.departureDate || '', duration: item.details?.shippingDuration || '' });
         setOriginFees(flattenFees(item.fees?.origin)); setHkMiscFees(flattenFees(item.fees?.hk_misc)); setHkLicenseFees(flattenFees(item.fees?.hk_license));
         setMargin(formatNum(item.quote?.margin || '30000')); setView('calc');
     };
@@ -770,7 +823,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     {/* 底部物流 (Footer) */}
                                     <div className="shrink-0 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                                         {selectedItem.details?.departureDate ? (
-                                            <TransportProgressBar departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
+                                            <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
                                         ) : (
                                             <div className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={14}/> 未設定運輸日期</div>
                                         )}
@@ -897,10 +950,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4"><Plane className="w-5 h-5 text-slate-700" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">運輸資訊</h3></div>
-                                    <div className="grid grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         <div className="col-span-1"><label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">方式</label><select value={transport.type} onChange={e=>setTransport({...transport, type: e.target.value})} className="w-full bg-white md:bg-transparent border-b-2 border-slate-200 py-1 pl-1 text-sm font-bold text-slate-800 outline-none"><option value="SEA">船運</option><option value="AIR">空運</option></select></div>
-                                        <div className="col-span-2"><InputField label="出發日期" type="date" value={transport.departureDate} onChange={(v:any)=>setTransport({...transport, departureDate: v})} /></div>
-                                        <div className="col-span-3"><InputField label="需時 (天)" type="number" value={transport.duration} onChange={(v:any)=>setTransport({...transport, duration: v})} /></div>
+                                        <div className="col-span-1"><InputField label="確認訂購日期" type="date" value={transport.orderDate} onChange={(v:any)=>setTransport({...transport, orderDate: v})} /></div>
+                                        <div className="col-span-1"><InputField label="出發日期" type="date" value={transport.departureDate} onChange={(v:any)=>setTransport({...transport, departureDate: v})} /></div>
+                                        <div className="col-span-1"><InputField label="航程 (天)" type="number" value={transport.duration} onChange={(v:any)=>setTransport({...transport, duration: v})} /></div>
                                     </div>
                                 </div>
                             </div>
@@ -932,7 +986,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-                                            {Object.entries(originFees).map(([k, v]:any) => (<InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: val})} />))}
+                                            {Object.entries(originFees).map(([k, v]:any) => (<InputField key={k} label={getFeeLabel(k)} value={formatNum(v)} onChange={(val:any)=>setOriginFees({...originFees, [k]: val})} />))}
                                         </div>
                                     </div>
                                     
@@ -944,9 +998,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-x-4 gap-y-6">
-                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (
-                                                <InputField key={k} label={k} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})} />
-                                            ))}
+                                            {Object.entries(hkMiscFees).map(([k, v]:any) => (<InputField key={k} label={getFeeLabel(k)} value={formatNum(v)} onChange={(val:any)=>setHkMiscFees({...hkMiscFees, [k]: val})}  /> ))}
                                         </div>
                                     </div>
                                 </div>
