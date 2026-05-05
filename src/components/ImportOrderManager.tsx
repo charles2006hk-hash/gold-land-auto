@@ -791,16 +791,16 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             </div>
 
                                             {/* ★ 滾動主體區塊：重構排版，圖片最大化，移除雜費 */}
-                                            <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-4 pb-20">
+                                            <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-4 pb-20 lg:pb-6">
                                                 
                                                 {/* 上半部：左畫廊 (擴展佔滿剩餘空間) + 右財務 (固定寬度) */}
-                                                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 flex-1 min-h-[400px]">
+                                                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 flex-1 min-h-[450px] lg:min-h-[55vh]">
                                                     
                                                     {/* 左側：大面積畫廊 (flex-1 讓它自動撐滿) */}
-                                                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2">
+                                                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2.5">
                                                         {selectedItem.photos?.length > 0 ? (
                                                             <>
-                                                                <div className="flex-1 relative rounded-xl overflow-hidden bg-white flex items-center justify-center cursor-zoom-in group" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
+                                                                <div className="flex-1 relative rounded-xl overflow-hidden bg-white flex items-center justify-center cursor-zoom-in group border border-slate-100 shadow-sm" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
                                                                     <img src={selectedItem.photos[selectedPhotoIdx]} className="w-full h-full object-contain p-2" />
                                                                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-3 py-1.5 rounded-full text-[10px] font-black backdrop-blur-md opacity-100 group-hover:opacity-0 transition-opacity">
                                                                         {selectedPhotoIdx + 1} / {selectedItem.photos.length}
@@ -810,9 +810,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                                     </div>
                                                                 </div>
                                                                 {selectedItem.photos.length > 1 && (
-                                                                    <div className="h-16 mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 shrink-0">
+                                                                    <div className="h-20 mt-2.5 flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 shrink-0">
                                                                         {selectedItem.photos.map((p: string, idx: number) => (
-                                                                            <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-20 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-sm' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                                                                            <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-24 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                                                                 <img src={p} className="w-full h-full object-cover" />
                                                                             </div>
                                                                         ))}
@@ -820,7 +820,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                                 )}
                                                             </>
                                                         ) : (
-                                                            <div className="flex-1 flex flex-col items-center justify-center text-slate-300"><ImageIcon size={64}/></div>
+                                                            <div className="flex-1 flex flex-col items-center justify-center text-slate-300 bg-white rounded-xl border border-slate-100"><ImageIcon size={64}/></div>
                                                         )}
                                                     </div>
 
@@ -841,7 +841,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                             <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
                                                             <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                                                 <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
-                                                                <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap" style={{ fontSize: 'clamp(1.2rem, 15cqw, 3.5rem)' }}>
+                                                                <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap" style={{ fontSize: 'clamp(1.5rem, 15cqw, 4rem)' }}>
                                                                     ${formatNum(selectedItem.results?.finalPrice)}
                                                                 </span>
                                                             </div>
@@ -850,12 +850,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     </div>
                                                 </div>
 
-                                                {/* 規格橫條 (Spec Bar) */}
-                                                <div className="shrink-0 bg-slate-50 border border-slate-200 rounded-2xl p-4 lg:px-6 grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center justify-between gap-4 shadow-sm">
-                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Cog size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">波箱</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.transmission || '-'}</p></div></div>
-                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Gauge size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">排量 (cc)</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</p></div></div>
-                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><RotateCcw size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">咪數 (km)</p><p className="text-xs font-black text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</p></div></div>
-                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Users size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">座位</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.seats || '-'}</p></div></div>
+                                                {/* 規格橫條 (Spec Bar) - ★ 增加 mt-auto 自動往下推到底部 */}
+                                                <div className="mt-auto shrink-0 bg-slate-50 border border-slate-200 rounded-2xl p-4 lg:px-6 grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center justify-between gap-4 shadow-sm">
+                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Cog size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">波箱</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.transmission || '-'}</p></div></div>
+                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Gauge size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">排量 (cc)</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</p></div></div>
+                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><RotateCcw size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">咪數 (km)</p><p className="text-xs font-black text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</p></div></div>
+                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Users size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">座位</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.seats || '-'}</p></div></div>
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 flex gap-1 items-center shadow-sm">
                                                             <div className="w-3.5 h-3.5 rounded-full border border-slate-300 shadow-inner" style={{backgroundColor: getColorHex(selectedItem.details?.exteriorColor)}} title={`外觀: ${selectedItem.details?.exteriorColor}`}></div>
@@ -863,10 +863,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                         </div>
                                                         <div className="min-w-0 overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">外觀 / 內飾</p><p className="text-xs font-black text-slate-800 truncate max-w-[120px]" title={`${selectedItem.details?.exteriorColor || '-'} / ${selectedItem.details?.interiorColor || '-'}`}>{selectedItem.details?.exteriorColor || '-'} / {selectedItem.details?.interiorColor || '-'}</p></div>
                                                     </div>
-                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Database size={16} className="text-slate-400"/></div><div className="overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">車身號碼</p><p className="text-[11px] font-mono font-black text-slate-800 truncate">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</p></div></div>
+                                                    <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Database size={16} className="text-slate-400"/></div><div className="overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">車身號碼</p><p className="text-[11px] font-mono font-black text-slate-800 truncate">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</p></div></div>
                                                 </div>
 
-                                                {/* 底部物流 (Footer) - ★ 一整條貫穿底部 */}
+                                                {/* 底部物流 (Footer) - 一整條貫穿底部 */}
                                                 <div className="shrink-0 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                                                     {selectedItem.details?.departureDate ? (
                                                         <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
@@ -875,7 +875,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     )}
                                                 </div>
                                             </div> {/* 滾動主體結束 */}
-
                                         </div>
                                     ) : (
                                         <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8 text-center h-full">
