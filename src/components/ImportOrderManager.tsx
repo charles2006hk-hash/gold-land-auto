@@ -5,13 +5,12 @@ import {
   List, Save, Ship, Car, 
   DollarSign, Trash2, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, CheckCircle, Search, Plus,
-  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar, RefreshCw
+  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar, RefreshCw, UserPlus
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 
 // --- 專業級預設費用數據 ---
-// ★ 1. 這裡已經為各個地區加入了「排期驗車」
 const REGION_CONFIGS: any = {
   JP: { id: 'JP', name: '日本', currency: 'JPY', symbol: '¥', origin: { auction: '20,000', shipping: '100,000', insurance: '0' }, hk_misc: { terminal: '500', emission: '5,500', glass: '2,000', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,000', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,000' } },
   UK: { id: 'UK', name: '英國', currency: 'GBP', symbol: '£', origin: { shipping: '1,500', inspection: '300', insurance: '0', other: '200' }, hk_misc: { terminal: '500', emission: '6,500', glass: '2,500', "排期驗車": '0', booking: '1,000', fuel: '500', process: '2,500', misc: '1,000' }, hk_license: { fee: '5,794', insurance: '2,500' } },
@@ -254,7 +253,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
 // ==========================================
 // 主系統組件 ImportOrderManager
 // ==========================================
-export default function ImportOrderManager({ db, staffId, appId, settings, updateSettings }: any) {
+export default function ImportOrderManager({ db, staffId, appId, settings, updateSettings, systemUsers = [] }: any) {
     const [view, setView] = useState<'dashboard' | 'calc'>('dashboard');
     const [mobileTab, setMobileTab] = useState<'basic' | 'fees' | 'result'>('basic');
     
@@ -289,6 +288,12 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [jpEra, setJpEra] = useState('Reiwa');
     const [jpEraYear, setJpEraYear] = useState('');
 
+    // ★ 權限判定
+    const currentUser = systemUsers?.find((u: any) => u.email === staffId);
+    const isBoss = staffId === 'BOSS';
+    const dataAccess = currentUser?.dataAccess || 'all'; // 'all' 或 'assigned'
+    const canViewAll = isBoss || dataAccess === 'all';
+
     const fetchLiveRate = async (targetRegion: string) => {
         setIsFetchingRate(true);
         try {
@@ -310,8 +315,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
     };
 
-    // ★ 2. 修復核心 Bug：只有在「新增」模式下，切換地區才載入預設費用
-    // 這樣在「編輯」模式下，從資料庫讀出來的歷史數據就不會被覆蓋掉了！
     useEffect(() => {
         if (!editingId) {
             setOriginFees(REGION_CONFIGS[region].origin);
@@ -379,6 +382,24 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
         });
     }, [db, appId]);
+
+    // ★ 權限過濾器：決定左側列表能看到什麼
+    const filteredHistory = history.filter(h => {
+        // 1. 資料權限檢查
+        if (!canViewAll) {
+            if (h.createdBy !== staffId && !(h.assignedTo || []).includes(staffId)) {
+                return false; // 既不是建立者，也沒被指派，就隱藏
+            }
+        }
+        // 2. 搜尋檢查
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            return (h.details?.model || '').toLowerCase().includes(q) || (h.details?.chassisNo || '').toLowerCase().includes(q);
+        }
+        return true;
+    });
+
+    const selectedItem = history.find(h => h.id === selectedId);
 
     const handleMigrateOldData = async (e: any) => {
         const file = e.target.files?.[0];
@@ -520,6 +541,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             if (carInfo.interiorColor && !(settings?.interiorColors || []).includes(carInfo.interiorColor)) updateSettings('interiorColors', [...(settings?.interiorColors || []), carInfo.interiorColor]);
             if (carInfo.code && !(settings?.codes || []).includes(carInfo.code)) updateSettings('codes', [...(settings?.codes || []), carInfo.code]);
         }
+        
+        // ★ 繼承舊紀錄的建立者與被指派者，若無則設為當前員工
+        const existingRecord = editingId ? history.find(h => h.id === editingId) : null;
+        const recordCreator = existingRecord?.createdBy || staffId;
+        const recordAssignedTo = existingRecord?.assignedTo || [];
 
         const rawRecord = {
             ts: Date.now(), date: new Date().toLocaleDateString('zh-HK'), region,
@@ -530,7 +556,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             quote: { margin: parseNum(margin), finalPrice },
             photos: orderPhotos.filter(p => p !== "loading..."), 
             status: orderStatus,
-            createdBy: staffId || 'system'
+            createdBy: recordCreator,
+            assignedTo: recordAssignedTo
         };
 
         const cleanRecord = JSON.parse(JSON.stringify(rawRecord));
@@ -572,7 +599,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setOrderPhotos(item.photos || []);
         setTransport({ type: item.details?.transportType || 'SEA', orderDate: item.details?.orderDate || '', departureDate: item.details?.departureDate || '', duration: item.details?.shippingDuration || '' });
         
-        // ★ 3. 完美合併：讀取舊數據時，與最新的預設選項合併，確保舊單據也有「排期驗車」
+        // ★ 完美合併：讀取舊數據時，與最新的預設選項合併，確保舊單據也有「排期驗車」
         const defaultOrigin = REGION_CONFIGS[item.region || 'JP'].origin;
         const defaultHkMisc = REGION_CONFIGS[item.region || 'JP'].hk_misc;
         const defaultHkLicense = REGION_CONFIGS[item.region || 'JP'].hk_license;
@@ -620,15 +647,21 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, item.id), { isLocked: !item.isLocked });
     };
 
-    const filteredHistory = history.filter(h => {
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            return (h.details?.model || '').toLowerCase().includes(q) || (h.details?.chassisNo || '').toLowerCase().includes(q);
+    // ★ 處理員工指派的函數
+    const handleAssignUser = async (item: any, userEmail: string) => {
+        const currentAssigned = item.assignedTo || [];
+        const newAssigned = currentAssigned.includes(userEmail) 
+            ? currentAssigned.filter((e: string) => e !== userEmail) 
+            : [...currentAssigned, userEmail];
+        
+        try {
+            await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, item.id), { assignedTo: newAssigned });
+            // 樂觀更新畫面
+            setHistory(prev => prev.map(h => h.id === item.id ? { ...h, assignedTo: newAssigned } : h));
+        } catch (err) {
+            alert("指派失敗");
         }
-        return true;
-    });
-
-    const selectedItem = history.find(h => h.id === selectedId);
+    };
 
     // ================= UI 渲染 =================
     return (
@@ -723,15 +756,36 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     
                                     {/* 頂部 Header */}
                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 border-b border-slate-100 pb-4">
-                                        <div>
+                                        <div className="w-full sm:w-auto">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider border ${STATUS_OPTIONS[selectedItem.status || 'QUOTING'].color}`}>{STATUS_OPTIONS[selectedItem.status || 'QUOTING'].label}</span>
                                                 <span className="bg-blue-100 text-blue-900 text-[10px] font-black px-2 py-0.5 rounded uppercase">{selectedItem.region}</span>
                                                 <span className="text-xs text-slate-400 font-bold ml-2">{selectedItem.date}</span>
                                             </div>
                                             <h2 className="text-2xl font-black text-slate-900 tracking-tight">{selectedItem.details?.make || selectedItem.details?.manufacturer || selectedItem.carInfo?.make} {selectedItem.details?.model || selectedItem.carInfo?.model} <span className="text-slate-500 font-bold">{selectedItem.details?.year || selectedItem.carInfo?.year}</span></h2>
+                                            
+                                            {/* ★ 指派員工 UI (僅老闆/主管可見) */}
+                                            {canViewAll && systemUsers && systemUsers.length > 0 && (
+                                                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><UserPlus size={12}/> 指派給:</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {systemUsers.filter((u:any) => u.email !== 'BOSS').map((u:any) => {
+                                                            const isAssigned = (selectedItem.assignedTo || []).includes(u.email);
+                                                            return (
+                                                                <button 
+                                                                    key={u.email}
+                                                                    onClick={(e) => { e.stopPropagation(); handleAssignUser(selectedItem, u.email); }}
+                                                                    className={`text-[10px] px-2 py-1 rounded-md border transition-all ${isAssigned ? 'bg-indigo-100 border-indigo-300 text-indigo-800 font-black shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50 font-bold'}`}
+                                                                >
+                                                                    {u.email}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="flex gap-2 flex-wrap">
+                                        <div className="flex gap-2 flex-wrap sm:ml-auto">
                                             <button onClick={() => handleEdit(selectedItem)} className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-black text-xs transition flex items-center gap-2 shadow-sm border border-slate-200"><Pencil size={14}/> 編輯資料</button>
                                             <button onClick={() => handleImportToInventory(selectedItem)} className="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl font-black text-xs transition flex items-center gap-2 shadow-sm"><Database size={14}/> 匯入庫存</button>
                                         </div>
@@ -819,13 +873,49 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200"><Database size={16} className="text-slate-400"/></div><div className="overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">車身號碼</p><p className="text-[11px] font-mono font-black text-slate-800 truncate">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</p></div></div>
                                     </div>
 
-                                    {/* 底部物流 (Footer) */}
-                                    <div className="shrink-0 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                                        {selectedItem.details?.departureDate ? (
-                                            <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
-                                        ) : (
-                                            <div className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={14}/> 未設定運輸日期</div>
-                                        )}
+                                    {/* ★ 預覽模式：純唯讀顯示雜費與結算 (不被 useState 覆蓋) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20 md:pb-6">
+                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm">
+                                            <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-4"><Globe className="w-5 h-5 text-emerald-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">當地與香港雜費</h3></div>
+                                            
+                                            <div className="mb-4">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">當地雜費 ({REGION_CONFIGS[selectedItem.region || 'JP']?.currency})</span>
+                                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-sm">小計: {REGION_CONFIGS[selectedItem.region || 'JP']?.symbol}{formatNum(getFeeTotal(selectedItem.fees?.origin))}</span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {Object.entries(selectedItem.fees?.origin || {}).map(([k, v]:any) => (<div key={k} className="bg-white p-2 rounded border border-slate-100"><p className="text-[9px] text-slate-400 uppercase mb-0.5 truncate">{getFeeLabel(k)}</p><p className="text-xs font-bold font-mono text-slate-700">{formatNum(v)}</p></div>))}
+                                                </div>
+                                            </div>
+                                            <div className="pt-4 border-t border-slate-200">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">香港雜費 (HKD)</span>
+                                                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shadow-sm">小計: {fmt(getFeeTotal(selectedItem.fees?.hk_misc))}</span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {Object.entries(selectedItem.fees?.hk_misc || {}).map(([k, v]:any) => (<div key={k} className="bg-white p-2 rounded border border-slate-100"><p className="text-[9px] text-slate-400 uppercase mb-0.5 truncate">{getFeeLabel(k)}</p><p className="text-xs font-bold font-mono text-slate-700">{formatNum(v)}</p></div>))}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                                                <div className="flex items-center gap-2 border-b border-slate-200 pb-3 mb-4"><ShieldCheck className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與保險</h3></div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">牌費</p><p className="text-sm font-bold font-mono text-slate-800">{formatNum(selectedItem.fees?.hk_license?.fee || 0)}</p></div>
+                                                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100"><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">實際保費</p><p className="text-sm font-bold font-mono text-slate-800">{formatNum(selectedItem.fees?.finalInsurance || 0)}</p></div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 mt-4"><span>首次登記稅 (FRT)</span><span className="font-mono">{fmt(selectedItem.results?.frtTax)}</span></div>
+                                            </div>
+                                            
+                                            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                                                {selectedItem.details?.departureDate ? (
+                                                    <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
+                                                ) : (
+                                                    <div className="text-[10px] font-bold text-slate-400 text-center uppercase tracking-widest flex items-center justify-center gap-2"><Calendar size={14}/> 未設定運輸日期</div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
                                 </div>
@@ -868,7 +958,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         <div><InputField label={`當地車價 (${regData.currency})`} value={carPrice} onChange={(v:any)=>setCarPrice(formatNum(v))} prefix={regData.symbol} placeholder="0" /><div className="text-[9px] text-slate-400 font-bold mt-1 text-right">折合 {fmt(carPriceHKD)}</div></div>
                                         <div><InputField label="海關 A1 零售價 (HKD)" value={prpPrice} onChange={(v:any)=>setPrpPrice(formatNum(v))} prefix="$" placeholder="填入 A1 價" />{frtTax > 0 && <div className="text-[9px] text-red-500 font-bold mt-1 text-right">入口稅 {fmt(frtTax)}</div>}</div>
                                     </div>
-                                    
+
                                     <div className="bg-blue-50 p-3 rounded-xl border border-blue-200 shadow-inner">
                                         <div className="flex justify-between items-center mb-2">
                                             <label className="text-[10px] font-black text-blue-700 uppercase tracking-widest flex items-center gap-1.5"><Globe size={12}/> 匯率設定 (Exchange Rate)</label>
@@ -957,7 +1047,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                             </div>
                             
-                            {/* 中欄：雜費 */}
+                            {/* 中欄：雜費 (編輯模式，資料可修改) */}
                             <div className={`w-full md:w-[40%] h-full overflow-y-auto p-4 md:p-6 space-y-8 bg-slate-50/50 pb-32 md:pb-6 md:border-r border-slate-200 ${mobileTab!=='fees'?'hidden md:block':''}`}>
                                 <div>
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4"><ShieldCheck className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3></div>
@@ -1004,7 +1094,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                 </div>
                             </div>
                             
-                            {/* 右欄：總結算 */}
+                            {/* 右欄：總結算 (編輯模式) */}
                             <div className={`w-full md:w-[25%] h-full flex flex-col overflow-y-auto p-4 md:p-6 bg-white pb-32 md:pb-6 ${mobileTab!=='result'?'hidden md:flex' : ''}`}>
                                 <div className="flex-1 space-y-6">
                                     <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4 flex-none"><Zap className="w-5 h-5 text-amber-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">報價結算</h3></div>
