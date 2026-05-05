@@ -1065,7 +1065,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
     const allMenuItems = [
         { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard, permission: 'dashboard' },
         { id: 'inventory', label: '車輛管理', icon: Car, permission: 'inventory' },
-        { id: 'import_orders', label: '海外訂車管家', icon: Ship, permission: 'inventory' }, // ★ 新增呢行！
+        { id: 'import_orders', label: '海外訂車管家', icon: Ship, permission: 'import_orders' },
         { id: 'create_doc', label: '開單系統', icon: FileText, permission: 'inventory' }, // 開單通常跟隨車庫
         { id: 'reports', label: '財務總覽', icon: Briefcase, permission: 'reports' },
         { id: 'cross_border', label: '中港業務', icon: Globe, permission: 'business' }, 
