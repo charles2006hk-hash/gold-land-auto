@@ -790,14 +790,14 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 </div>
                                             </div>
 
-                                            {/* ★ 滾動主體區塊：重構排版，圖片最大化，移除雜費 */}
-                                            <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-4 pb-20 lg:pb-6">
+                                            {/* ★ 滾動主體區塊：高度自適應縮放，確保物流 Bar 完美顯示在底部免捲動 */}
+                                            <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-3 pb-20 lg:pb-1">
                                                 
-                                                {/* 上半部：左畫廊 (擴展佔滿剩餘空間) + 右財務 (固定寬度) */}
-                                                <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 flex-1 min-h-[450px] lg:min-h-[55vh]">
+                                                {/* 上半部：左畫廊 + 右財務 (改用 lg:min-h-0 讓 Flexbox 自動壓縮高度，不撐爆螢幕) */}
+                                                <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-[350px] lg:min-h-0">
                                                     
-                                                    {/* 左側：大面積畫廊 (flex-1 讓它自動撐滿) */}
-                                                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2.5">
+                                                    {/* 左側：大面積畫廊 (flex-1 讓它自動撐滿，並隨螢幕高度縮放) */}
+                                                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2">
                                                         {selectedItem.photos?.length > 0 ? (
                                                             <>
                                                                 <div className="flex-1 relative rounded-xl overflow-hidden bg-white flex items-center justify-center cursor-zoom-in group border border-slate-100 shadow-sm" onClick={() => setZoomPhoto(selectedItem.photos[selectedPhotoIdx])}>
@@ -810,9 +810,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                                     </div>
                                                                 </div>
                                                                 {selectedItem.photos.length > 1 && (
-                                                                    <div className="h-20 mt-2.5 flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 shrink-0">
+                                                                    <div className="h-16 lg:h-20 mt-2 flex gap-2 overflow-x-auto pb-1 scrollbar-hide px-1 shrink-0">
                                                                         {selectedItem.photos.map((p: string, idx: number) => (
-                                                                            <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-24 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}>
+                                                                            <div key={idx} onClick={() => setSelectedPhotoIdx(idx)} className={`w-20 lg:w-24 h-full flex-none rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${selectedPhotoIdx === idx ? 'border-blue-500 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}>
                                                                                 <img src={p} className="w-full h-full object-cover" />
                                                                             </div>
                                                                         ))}
@@ -826,14 +826,14 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
                                                     {/* 右側：深色財務面板 */}
                                                     <div className="w-full lg:w-[320px] xl:w-[360px] flex-none flex flex-col bg-slate-900 rounded-2xl shadow-xl overflow-hidden text-white">
-                                                        <div className="p-4 md:p-6 border-b border-white/10 shrink-0">
+                                                        <div className="p-4 md:p-5 border-b border-white/10 shrink-0">
                                                             <h3 className="font-black text-blue-400 text-xs tracking-widest uppercase mb-4 flex items-center gap-2"><DollarSign size={16}/> 成本結構</h3>
                                                             <div className="space-y-3">
                                                                 <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">當地車價</span><span className="font-mono text-sm">{REGION_CONFIGS[selectedItem.region]?.symbol}{formatNum(selectedItem.vals?.carPrice)}</span></div>
                                                                 <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">結算匯率</span><span className="font-mono text-sm text-yellow-400">{selectedItem.vals?.rate}</span></div>
                                                                 <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">到港成本</span><span className="font-mono text-sm">{fmt(selectedItem.results?.landedCost)}</span></div>
                                                                 <div className="flex justify-between items-end border-b border-white/5 pb-2"><span className="text-[10px] text-slate-400 font-bold uppercase">海關 A1 稅</span><span className="font-mono text-sm">{fmt(selectedItem.results?.frtTax)}</span></div>
-                                                                <div className="flex justify-between items-end pt-2"><span className="text-xs text-emerald-400 font-black uppercase">總成本 (Cost)</span><span className="font-mono font-black text-xl text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
+                                                                <div className="flex justify-between items-end pt-1.5"><span className="text-xs text-emerald-400 font-black uppercase">總成本 (Cost)</span><span className="font-mono font-black text-xl text-emerald-400">{fmt(selectedItem.results?.totalCost)}</span></div>
                                                             </div>
                                                         </div>
                                                         
@@ -841,7 +841,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                             <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-3 text-blue-200 opacity-80 w-full relative z-10">Final Customer Quote</p>
                                                             <div className="flex flex-col items-center justify-center w-full relative z-10 px-1 overflow-hidden" style={{ containerType: 'inline-size' }}>
                                                                 <span className="text-sm font-black text-blue-300 drop-shadow-md leading-none mb-1 tracking-widest">HKD</span>
-                                                                <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap" style={{ fontSize: 'clamp(1.5rem, 15cqw, 4rem)' }}>
+                                                                <span className="font-black font-mono tracking-tighter drop-shadow-lg text-white leading-none whitespace-nowrap" style={{ fontSize: 'clamp(1.5rem, 15cqw, 3.5rem)' }}>
                                                                     ${formatNum(selectedItem.results?.finalPrice)}
                                                                 </span>
                                                             </div>
@@ -850,8 +850,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     </div>
                                                 </div>
 
-                                                {/* 規格橫條 (Spec Bar) - ★ 增加 mt-auto 自動往下推到底部 */}
-                                                <div className="mt-auto shrink-0 bg-slate-50 border border-slate-200 rounded-2xl p-4 lg:px-6 grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center justify-between gap-4 shadow-sm">
+                                                {/* 規格橫條 (Spec Bar) - ★ 縮減 padding 節省高度，並加上 mt-auto 推到最底 */}
+                                                <div className="mt-auto shrink-0 bg-slate-50 border border-slate-200 rounded-2xl p-3 lg:px-5 lg:py-3 grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-wrap items-center justify-between gap-3 shadow-sm">
                                                     <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Cog size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">波箱</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.transmission || '-'}</p></div></div>
                                                     <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Gauge size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">排量 (cc)</p><p className="text-xs font-black text-slate-800">{selectedItem.details?.cc || selectedItem.details?.engineCapacity || '-'}</p></div></div>
                                                     <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><RotateCcw size={16} className="text-blue-500"/></div><div><p className="text-[9px] font-black text-slate-400 uppercase">咪數 (km)</p><p className="text-xs font-black text-slate-800">{formatNum(selectedItem.details?.mileage) || '-'}</p></div></div>
@@ -866,8 +866,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                     <div className="flex items-center gap-3"><div className="p-2 bg-white rounded-lg border border-slate-200 shadow-sm"><Database size={16} className="text-slate-400"/></div><div className="overflow-hidden"><p className="text-[9px] font-black text-slate-400 uppercase">車身號碼</p><p className="text-[11px] font-mono font-black text-slate-800 truncate">{selectedItem.details?.chassisNo || selectedItem.details?.chassis || '-'}</p></div></div>
                                                 </div>
 
-                                                {/* 底部物流 (Footer) - 一整條貫穿底部 */}
-                                                <div className="shrink-0 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                                                {/* 底部物流 (Footer) - ★ 縮減 padding 節省高度 */}
+                                                <div className="shrink-0 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                                                     {selectedItem.details?.departureDate ? (
                                                         <TransportProgressBar orderDate={selectedItem.details?.orderDate} departureDate={selectedItem.details?.departureDate} durationDays={selectedItem.details?.shippingDuration} type={selectedItem.details?.transportType} />
                                                     ) : (
