@@ -27,6 +27,10 @@ import {
     DB_CATEGORIES, DOCUMENT_FIELD_SCHEMA
 } from '@/config/constants';
 
+// --- 輔助工具函數 ---
+const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
+const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
 import { compressImage } from '@/utils/imageHelpers';
 import ImportOrderManager from '@/components/ImportOrderManager';
 import DocumentTemplate from '@/components/DocumentTemplate';
