@@ -7,7 +7,7 @@ import { Check } from 'lucide-react';
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
 // 1. 橢圓形公司印章
-const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
+export const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
     <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
         <div className="absolute w-full h-full rounded-[50%] border-[3px] border-[#1e3a8a]"></div>
         <div className="absolute w-[92%] h-[88%] rounded-[50%] border-[1px] border-[#1e3a8a]"></div>
@@ -20,7 +20,7 @@ const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) =>
 );
 
 // 2. 簽名SVG
-const SignatureImg = () => (
+export const SignatureImg = () => (
     <div className="w-[30mm] h-[15mm] relative">
         <svg viewBox="0 0 150 80" className="w-full h-full text-black opacity-80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M10,50 C30,30 60,70 90,40 S130,20 140,50" />
