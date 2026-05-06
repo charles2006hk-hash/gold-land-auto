@@ -377,7 +377,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 {depositItems.map((item: any, idx: number) => (
                                                     <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border px-1 py-0.5 font-bold pl-4">Less: {item.label}</td><td className="border px-1 py-0.5 text-right font-mono font-bold text-[10px]">{formatCurrency(item.amount)}</td></tr>
                                                 ))}
-                                                <tr className="bg-red-50/50 font-black"><td className="border px-1 py-0.5 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border px-1 py-0.5 text-right font-mono text-[12px] text-red-600">{formatCurrency(balance)}</td></tr>
+                                                <tr className="bg-red-50/50 font-black"><td className="border px-1 py-0.5 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border px-1 py-0.5 text-right font-mono text-[13px] text-red-600">{formatCurrency(balance)}</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
@@ -419,27 +419,25 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             )}
                         </div>
 
-                        {/* ★★★ 解決印章被切斷的核心修改區塊 ★★★ */}
-                        <div className="mt-auto no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-                            <div className="grid grid-cols-2 gap-12 mt-2">
-                                <div className="text-center">
-                                    <div className="relative h-[20mm] w-full">
-                                        {showStampAndSig && (
-                                            <>
-                                                <div className="absolute bottom-[-3mm] left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
-                                                <div className="absolute bottom-[-1mm] left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                                            </>
-                                        )}
-                                    </div>
-                                    <div className="border-t border-slate-800 pt-1">
-                                        <p className="font-bold text-[8px] uppercase leading-none">For {formData.companyNameEn}</p>
-                                    </div>
+                        {/* ★★★ 解決印章被切斷的核心修改區塊 (使用 Flexbox 防斷裂與上移對齊) ★★★ */}
+                        <div className="mt-2 w-full flex gap-12 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                            <div className="flex-1 text-center flex flex-col justify-end">
+                                <div className="h-[28mm] w-full flex items-end justify-center pb-1">
+                                    {showStampAndSig && (
+                                        <div className="relative flex items-center justify-center">
+                                            <div className="opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
+                                            <div className="absolute z-10"><SignatureImg /></div>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="text-center">
-                                    <div className="h-[20mm] w-full"></div>
-                                    <div className="border-t border-slate-800 pt-1">
-                                        <p className="font-bold text-[8px] uppercase leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : (isBill ? "Received By" : "Customer Signature")}</p>
-                                    </div>
+                                <div className="border-t border-slate-800 pt-1">
+                                    <p className="font-bold text-[8px] uppercase leading-none">For {formData.companyNameEn}</p>
+                                </div>
+                            </div>
+                            <div className="flex-1 text-center flex flex-col justify-end">
+                                <div className="h-[28mm] w-full"></div>
+                                <div className="border-t border-slate-800 pt-1">
+                                    <p className="font-bold text-[8px] uppercase leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : (isBill ? "Received By" : "Customer Signature")}</p>
                                 </div>
                             </div>
                         </div>
@@ -450,7 +448,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             </div>
         );
     };
-
+    
     if (viewMode === 'list') {
         return (
             <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
