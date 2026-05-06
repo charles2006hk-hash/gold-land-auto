@@ -9592,9 +9592,21 @@ const VehicleFormModal = ({
                                         </select>
                                     </div>
 
-                                    <div className="bg-red-100/80 p-3 md:p-2 rounded-xl md:rounded border-2 border-red-300 sm:col-span-2 shadow-inner w-full min-w-0">
-                                        <label className="block text-xs md:text-[10px] text-red-800 font-black mb-1 uppercase">Purchase Price (收車價 HKD)</label>
-                                        <div className="flex items-center"><span className="text-red-700 font-mono text-2xl mr-1 font-black">$</span><input name="costPrice" value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="w-full bg-white p-2 rounded-lg text-2xl md:text-xl outline-none font-mono font-black text-red-800 shadow-sm min-w-0" placeholder="0"/></div>
+                                    <div className="bg-red-100/80 p-3 md:p-2 rounded-xl md:rounded border-2 border-red-300 sm:col-span-2 shadow-inner w-full min-w-0 flex flex-col justify-between">
+                                        <label className="block text-xs md:text-[10px] text-red-800 font-black mb-1 uppercase">Purchase Price (收車本金 HKD)</label>
+                                        <div className="flex items-center mb-2"><span className="text-red-700 font-mono text-xl mr-1 font-black">$</span><input value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="w-full bg-white p-1.5 rounded text-lg outline-none font-mono font-black text-red-800 shadow-sm min-w-0" placeholder="0"/></div>
+                                        
+                                        <div className="border-t border-red-200/50 pt-2 flex justify-between items-center mt-auto">
+                                            <span className="text-[10px] font-bold text-red-700 uppercase tracking-widest">Total HKD Cost (港幣總成本)</span>
+                                            <span className="text-red-700 font-mono text-xl font-black">
+                                                ${(() => {
+                                                    const baseCost = Number(costStr.replace(/,/g, '')) || 0;
+                                                    const finalTotal = Math.round((baseCost + totalExpenses) * 100) / 100;
+                                                    return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(finalTotal);
+                                                })()}
+                                            </span>
+                                            <input type="hidden" name="costPrice" value={Math.round(((Number(costStr.replace(/,/g, '')) || 0) + totalExpenses) * 100) / 100} />
+                                        </div>
                                     </div>
                                     
                                     <div className="w-full min-w-0"><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Offset Amount (對數 HKD)</label><input name="acq_offsetAmount" defaultValue={formatNumberInput(String((v as any).acquisition?.offsetAmount||''))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right text-blue-700 font-bold shadow-sm min-w-0" placeholder="$0"/></div>
