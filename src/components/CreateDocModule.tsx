@@ -5,6 +5,7 @@ import {
   FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe 
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from "firebase/firestore";
+import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 
 // 輔助格式化函數
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
