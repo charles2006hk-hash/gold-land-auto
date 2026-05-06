@@ -2,22 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft 
+  FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe 
 } from 'lucide-react';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 
 // 輔助格式化函數
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
-// ------------------------------------------------------------------
-// ★★★ 主組件：Create Document Module ★★★
-// ------------------------------------------------------------------
 export default function CreateDocModule({ 
     inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO
 }: { 
     inventory: any[];
-    openPrintPreview: any; // ★ 放寬型別檢查，解決 TypeScript 編譯衝突
+    openPrintPreview: any;
     db: any;
     staffId: string;
     appId: string;
@@ -34,15 +31,25 @@ export default function CreateDocModule({
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
     
+    // ★ 相片抓取狀態
+    const [carPhotos, setCarPhotos] = useState<string[]>([]);
+
     const [formData, setFormData] = useState({
-        companyNameEn: COMPANY_INFO.name_en, companyNameCh: COMPANY_INFO.name_ch,
-        companyAddress: COMPANY_INFO.address_ch, companyPhone: COMPANY_INFO.phone, companyEmail: COMPANY_INFO.email, 
+        companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
+        companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+        companyAddress: COMPANY_INFO?.address_ch || '', 
+        companyPhone: COMPANY_INFO?.phone || '', 
+        companyEmail: COMPANY_INFO?.email || '', 
         
         customerName: '', customerId: '', customerAddress: '', customerPhone: '',
-        regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '',
+        
+        // ★ 車輛資料擴增 (加入了波箱、容積、里數、座位、手數)
+        regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', 
+        transmission: 'Automatic', engineSize: '', mileage: '', seat: '', previousOwners: '',
+        
         price: '', deposit: '', balance: '', 
         
-        docDate: new Date().toISOString().split('T')[0], // ★
+        docDate: new Date().toISOString().split('T')[0], 
         deliveryDate: new Date().toISOString().split('T')[0], 
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
         remarks: '', paymentMethod: 'Cheque',
@@ -56,7 +63,10 @@ export default function CreateDocModule({
         overseasTotalFee: '',
         chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         localTotalFee: '',
-        chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false
+        chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false,
+
+        // ★ 新增：用於合約列印的相片
+        contractPhotos: [] as string[]
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -80,7 +90,40 @@ export default function CreateDocModule({
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
     });
 
-    // ★ 核心修復 2：極致強化搜尋引擎，確保搜乜都出
+    // 智能抓取車輛相片 (聯動圖庫)
+    useEffect(() => {
+        if (!db || !appId || !selectedCarId || selectedCarId === 'BLANK') {
+            setCarPhotos([]);
+            return;
+        }
+        const q = query(
+            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), 
+            where('status', '==', 'linked'), 
+            where('relatedVehicleId', '==', selectedCarId)
+        );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list: string[] = [];
+            let cover = '';
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.isPrimary) cover = data.url;
+                else list.push(data.url);
+            });
+            if (cover) list.unshift(cover);
+            
+            const invCar = inventory.find(v => v.id === selectedCarId);
+            const merged = Array.from(new Set([...list, ...(invCar?.photos || [])]));
+            setCarPhotos(merged);
+
+            // ★ 自動預選前 5 張相片 (只限新增單據時)
+            if (!docId && formData.contractPhotos.length === 0) {
+                setFormData(prev => ({ ...prev, contractPhotos: merged.slice(0, 5) }));
+            }
+        });
+        return () => unsubscribe();
+    }, [selectedCarId, db, appId, inventory, docId]);
+
+
     const filteredDocHistory = savedDocs.filter((doc: any) => {
         if (filterType !== 'All' && doc.type !== filterType) return false;
         
@@ -122,6 +165,7 @@ export default function CreateDocModule({
             setSelectedDocType(externalRequest.type);
             const newFormData = { ...externalRequest.formData };
             if (!newFormData.docDate) newFormData.docDate = new Date().toISOString().split('T')[0];
+            if (!newFormData.contractPhotos) newFormData.contractPhotos = [];
             
             setFormData(newFormData);
             setChecklist(externalRequest.checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -165,6 +209,7 @@ export default function CreateDocModule({
         setSelectedDocType(doc.type);
         const newFormData = { ...doc.formData };
         if (!newFormData.docDate) newFormData.docDate = doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+        if (!newFormData.contractPhotos) newFormData.contractPhotos = [];
         
         setFormData(newFormData);
         setChecklist(doc.checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -221,7 +266,14 @@ export default function CreateDocModule({
             chassisNo: car.chassisNo || '', engineNo: car.engineNo || '', year: car.year || '',
             color: car.colorExt || car.color || '',
             colorInterior: car.colorInt || car.colorInterior || car.innerColor || '',
+            
+            // ★ 完美寫入詳細資料
+            transmission: car.transmission || 'Automatic',
+            engineSize: car.engineSize ? car.engineSize.toString() : '',
+            mileage: car.mileage ? car.mileage.toString() : '',
             seat: car.seating ? car.seating.toString() : '',
+            previousOwners: car.previousOwners !== undefined ? car.previousOwners.toString() : '',
+
             price: car.price ? car.price.toString() : '',
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
             customerId: car.customerID || '', customerAddress: car.customerAddress || '',
@@ -232,7 +284,8 @@ export default function CreateDocModule({
             
             etaFormat: 'date', etaDays: '',
             etaDate: car.eta || car.acquisition?.eta || '',
-            orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None'
+            orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None',
+            contractPhotos: [] // 點擊新車時清空，交由 useEffect 自動帶入
         }));
 
         const autoPayments: { id: string, label: string, amount: number }[] = [];
@@ -278,6 +331,7 @@ export default function CreateDocModule({
         setFormData(prev => ({ 
             ...prev, 
             regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
+            transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [],
             docDate: new Date().toISOString().split('T')[0], 
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
@@ -306,6 +360,7 @@ export default function CreateDocModule({
         const dummyVehicle: any = {
             id: finalId || docId || 'DRAFT', 
             ...formData,
+            photos: formData.contractPhotos || [], // ★ 將挑選好的相片傳入模板
             price: Number(formData.price), 
             deposit: depositItems.reduce((sum, item) => sum + item.amount, 0),
             customerID: formData.customerId, 
@@ -324,7 +379,7 @@ export default function CreateDocModule({
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
 
-    // --- 實時預覽 ---
+    // --- 即時預覽元件 (LivePreview) ---
     const LivePreview = () => {
         const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
         const isQuotation = selectedDocType === 'quotation';
@@ -337,6 +392,7 @@ export default function CreateDocModule({
         const hkFee = Number(formData.localTotalFee) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
 
+        // ★ 同步修復：如果是海外訂單，基礎車價直接等於海外+本地雜費總和
         const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
         const balance = basePrice + extrasTotal - deposit;
 
@@ -357,12 +413,13 @@ export default function CreateDocModule({
 
         return (
             <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
-                <div className="bg-white shadow-2xl origin-top" style={{ width: '210mm', height: '297mm', transform: 'scale(0.8)', marginBottom: '-40%' }}>
+                <div className="bg-white shadow-2xl origin-top flex flex-col justify-between" style={{ width: '210mm', height: '297mm', transform: 'scale(0.8)', marginBottom: '-40%' }}>
                     <div className="p-10 font-sans text-slate-900 h-full flex flex-col relative">
+                        
                         {/* Header */}
                         <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
                             <div className="flex items-center gap-4">
-                                <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-20 h-20 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
+                                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-20 h-20 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
                                 <div>
                                     <h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1>
                                     <h2 className="text-lg font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2>
@@ -380,39 +437,72 @@ export default function CreateDocModule({
                             </div>
                         </div>
 
-                        {/* Customer Info */}
-                        <div className="mb-4 border p-3 rounded bg-slate-50 flex justify-between">
-                            <div className="text-[10px]">
-                                <p className="text-slate-500 font-bold uppercase mb-1">Customer / Bill To:</p>
-                                <p className="text-sm font-bold">{formData.customerName || '(Client Name)'}</p>
-                                <p>{formData.customerAddress}</p>
-                                <p className="mt-1 font-mono">{formData.customerPhone}</p>
-                            </div>
-                            <div className="text-[10px] text-right">
-                                <p>Reg No: <span className="font-bold text-sm">{formData.regMark || 'Untitled'}</span></p>
-                                <p>{formData.make} {formData.model}</p>
-                            </div>
-                        </div>
-
                         {/* Content Area */}
                         <div className="flex-1">
                             {(!isBill) ? (
                                 <>
-                                    <div className="mb-3">
-                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part B: Vehicle Details</div>
-                                        <table className="w-full text-[10px] border-collapse border border-slate-300">
-                                            <tbody>
-                                                <tr>
-                                                    <td className="border p-1.5 bg-slate-50 font-bold w-[15%]">Reg. No.</td><td className="border p-1.5 font-mono font-bold w-[35%]">{formData.regMark || 'TBC'}</td>
-                                                    <td className="border p-1.5 bg-slate-50 font-bold w-[15%]">Make/Model</td><td className="border p-1.5 w-[35%]">{formData.make} {formData.model}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td className="border p-1.5 bg-slate-50 font-bold">Chassis No.</td><td className="border p-1.5 font-mono">{formData.chassisNo || 'TBC'}</td>
-                                                    <td className="border p-1.5 bg-slate-50 font-bold">Engine No.</td><td className="border p-1.5 font-mono">{formData.engineNo || 'TBC'}</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                    {/* Part A & B 左右並排 */}
+                                    <div className="grid grid-cols-2 gap-4 mb-3">
+                                        <div>
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part A: Customer Details</div>
+                                            <div className="border border-slate-300 p-2 text-[10px] min-h-[50px]">
+                                                <p><span className="text-slate-500 font-bold">NAME:</span> {formData.customerName || '(Client Name)'}</p>
+                                                <p><span className="text-slate-500 font-bold">TEL:</span> {formData.customerPhone}</p>
+                                                <p><span className="text-slate-500 font-bold">ID NO:</span> {formData.customerId}</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-1">Part B: Vehicle Details</div>
+                                            {/* ★★★ 擴增車輛資料表 ★★★ */}
+                                            <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                                <tbody>
+                                                    <tr>
+                                                        <td className="border p-1 bg-slate-50 font-bold w-[25%]">Reg. No.</td>
+                                                        <td className="border p-1 font-mono font-bold w-[25%]">{formData.regMark || 'TBC'}</td>
+                                                        <td className="border p-1 bg-slate-50 font-bold w-[25%]">Make/Model</td>
+                                                        <td className="border p-1 w-[25%]">{formData.make} {formData.model}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Chassis No.</td>
+                                                        <td className="border p-1 font-mono">{formData.chassisNo || 'TBC'}</td>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Engine No.</td>
+                                                        <td className="border p-1 font-mono">{formData.engineNo || 'TBC'}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Year</td>
+                                                        <td className="border p-1">{formData.year}</td>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Color (Ext/Int)</td>
+                                                        <td className="border p-1">{formData.color || '-'} / {formData.colorInterior || '-'}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Mileage</td>
+                                                        <td className="border p-1">{formData.mileage ? `${Number(formData.mileage).toLocaleString()} km` : '-'}</td>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Engine Cap.</td>
+                                                        <td className="border p-1">{formData.engineSize ? `${formData.engineSize} cc` : '-'}</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Transmission</td>
+                                                        <td className="border p-1">{formData.transmission === 'Manual' ? 'Manual (手波)' : (formData.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td>
+                                                        <td className="border p-1 bg-slate-50 font-bold">Seat / Prev. Owner</td>
+                                                        <td className="border p-1">{formData.seat || '-'} 座 / {formData.previousOwners || '0'} 手</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
+
+                                    {/* ★★★ 車輛縮圖區 (最多5張) ★★★ */}
+                                    {formData.contractPhotos.length > 0 && (
+                                        <div className="mb-3">
+                                            <div className="bg-slate-100 border border-slate-200 rounded-lg p-1.5 flex gap-2 justify-center items-center">
+                                                {formData.contractPhotos.map((url: string, idx: number) => (
+                                                    <div key={idx} className="w-[36mm] h-[25mm] rounded-md overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0">
+                                                        <img src={url} className="w-full h-full object-cover" alt="car-thumb" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {hasOrderDetails && (
                                         <div className="mb-3 break-inside-avoid">
@@ -455,8 +545,8 @@ export default function CreateDocModule({
                                             <table className="w-full text-[10px] border-collapse border border-slate-300">
                                                 <tbody>
                                                     <tr>
-                                                        <td className="border p-1.5 font-bold w-1/2">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (車價：當地與到港總費用)' : 'Vehicle Price (車價)'}</td>
-                                                        <td className="border p-1.5 text-right font-mono font-bold">{formData.orderType === 'Overseas' ? formatCurrency(orderFeesTotal) : formatCurrency(price)}</td>
+                                                        <td className="border p-1.5 font-bold w-1/2">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td>
+                                                        <td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(basePrice)}</td>
                                                     </tr>
                                                     
                                                     {docItems.filter(i=>i.isSelected).map((item, i) => (
@@ -478,12 +568,13 @@ export default function CreateDocModule({
                                         </div>
                                     </>
                                 ) : (
+                                    /* Invoice / Receipt 佈局 */
                                     <table className="w-full text-[10px] border-collapse mb-6">
                                         <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
                                         <tbody>
                                             <tr className="border-b">
-                                                <td className="p-2 font-medium">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (車價：當地與到港總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td>
-                                                <td className="p-2 text-right font-mono font-bold">{formData.orderType === 'Overseas' ? formatCurrency(orderFeesTotal) : formatCurrency(price)}</td>
+                                                <td className="p-2 font-medium">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td>
+                                                <td className="p-2 text-right font-mono font-bold">{formatCurrency(basePrice)}</td>
                                             </tr>
 
                                             {docItems.filter(i=>i.isSelected).map((item, i) => (
@@ -512,7 +603,7 @@ export default function CreateDocModule({
                                 </div>
                             )}
 
-                            {(!isBill) && showTerms && (
+                            {!isBill && showTerms && (
                                 <div className="mb-4 p-2 border border-slate-300 bg-gray-50 text-[8px] leading-relaxed text-justify font-serif break-inside-avoid">
                                     {isQuotation ? (
                                         <>
@@ -608,7 +699,6 @@ export default function CreateDocModule({
                         <table className="w-full text-sm text-left border-collapse bg-white shadow-sm">
                             <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
                                 <tr>
-                                    {/* ★ 核心修復 3：列表加入單據日期與總金額 */}
                                     <th className="p-3 w-28">單據日期</th>
                                     <th className="p-3 w-32">單據類型</th>
                                     <th className="p-3">摘要內容</th>
@@ -627,10 +717,8 @@ export default function CreateDocModule({
                                         ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.year || ''} ${doc.formData.make || ''} ${doc.formData.model || ''}`
                                         : doc.summary;
                                     
-                                    // ★ 判斷顯示日期：優先用 formData.docDate
                                     const docDateStr = doc.formData?.docDate || (doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : 'N/A');
 
-                                    // ★ 計算總金額
                                     const price = Number(doc.formData?.price) || 0;
                                     const ovFee = Number(doc.formData?.overseasTotalFee) || 0;
                                     const hkFee = Number(doc.formData?.localTotalFee) || 0;
@@ -719,7 +807,6 @@ export default function CreateDocModule({
                                 <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent outline-none focus:border-blue-400"/>
                             </div>
                             
-                            {/* ★ 單據日期與交收日期 (獨立設定區) */}
                             <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
                                 <div className="text-[10px] font-bold text-indigo-600 mb-2 uppercase tracking-wider">單據與交易日期 (Dates)</div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -763,7 +850,7 @@ export default function CreateDocModule({
                                                     <span className="text-[10px] font-bold text-purple-700">{formData.overseasCountry === 'Japan' ? '日本' : '海外'}當地費用包含：</span>
                                                     <div className="flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                                         <span className="text-[10px] font-bold text-purple-500">總額 $</span>
-                                                        <input name="overseasTotalFee" type="number" value={formData.overseasTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs"/>
+                                                        <input name="overseasTotalFee" type="number" value={formData.overseasTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs focus:ring-1 ring-purple-400"/>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
@@ -780,7 +867,7 @@ export default function CreateDocModule({
                                                     <span className="text-[10px] font-bold text-purple-700">香港到港費用包含：</span>
                                                     <div className="flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                                         <span className="text-[10px] font-bold text-purple-500">總額 $</span>
-                                                        <input name="localTotalFee" type="number" value={formData.localTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs"/>
+                                                        <input name="localTotalFee" type="number" value={formData.localTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs focus:ring-1 ring-purple-400"/>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
@@ -817,6 +904,67 @@ export default function CreateDocModule({
                                     )}
                                 </div>
                             )}
+
+                            <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200">
+                                <div className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-wider">車輛基本資料 (Vehicle Data)</div>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Reg Mark</span><input name="regMark" value={formData.regMark} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Year</span><input name="year" value={formData.year} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
+                                </div>
+                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Make (廠牌)</span><input name="make" value={formData.make} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Model (型號)</span><input name="model" value={formData.model} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Ext.</span><input name="color" value={formData.color} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Int.</span><input name="colorInterior" value={formData.colorInterior || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                </div>
+                                
+                                {/* ★ 擴增車輛資料填寫區 */}
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine Cap (容積)</span><input name="engineSize" value={formData.engineSize} onChange={handleChange} placeholder="cc" className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Mileage (里數)</span><input name="mileage" value={formData.mileage} onChange={handleChange} placeholder="km" className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Transmission</span>
+                                        <select name="transmission" value={formData.transmission} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 cursor-pointer">
+                                            <option value="Automatic">Auto</option><option value="Manual">Manual</option>
+                                        </select>
+                                    </div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Seating</span><input name="seat" value={formData.seat} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 text-center"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Prev Owners</span><input name="previousOwners" value={formData.previousOwners} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 text-center"/></div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Chassis No.</span><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine No.</span><input name="engineNo" value={formData.engineNo} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                </div>
+                            </div>
+
+                            {/* ★★★ 相片縮圖選取區 ★★★ */}
+                            <div className="p-3 bg-white rounded-xl border border-slate-300 shadow-sm mt-3">
+                                <div className="text-[10px] font-bold text-slate-600 mb-2">單據相片 (點擊選取，最多選5張)</div>
+                                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                                    {carPhotos.map((url, idx) => {
+                                        const isSelected = formData.contractPhotos?.includes(url);
+                                        return (
+                                            <div 
+                                                key={idx} 
+                                                onClick={() => {
+                                                    let newPhotos = [...(formData.contractPhotos || [])];
+                                                    if (isSelected) newPhotos = newPhotos.filter(p => p !== url);
+                                                    else if (newPhotos.length < 5) newPhotos.push(url);
+                                                    else alert("最多只能選擇 5 張相片");
+                                                    setFormData({...formData, contractPhotos: newPhotos});
+                                                }} 
+                                                className={`relative w-20 h-14 rounded-lg border-2 cursor-pointer flex-shrink-0 transition-all ${isSelected ? 'border-blue-500 shadow-md scale-100' : 'border-transparent opacity-50 hover:opacity-80 scale-95'}`}
+                                            >
+                                                <img src={url} className="w-full h-full object-cover rounded-md" />
+                                                {isSelected && <div className="absolute top-0 right-0 bg-blue-500 text-white rounded-bl-lg p-0.5"><Check size={12}/></div>}
+                                            </div>
+                                        )
+                                    })}
+                                    {carPhotos.length === 0 && <div className="text-xs text-gray-400 py-4 w-full text-center bg-slate-50 rounded-lg border border-dashed">圖庫中無此車輛相片</div>}
+                                </div>
+                            </div>
 
                             <div className="p-3 bg-yellow-50/50 rounded-xl border border-yellow-200 mb-3">
                                 <div className="flex justify-between items-center mb-3">
@@ -889,24 +1037,6 @@ export default function CreateDocModule({
                                     <input value={newItemDesc} onChange={e=>setNewItemDesc(e.target.value)} placeholder="新增項目 (如: 代辦費)..." className="flex-1 text-xs border rounded-lg p-2 outline-none focus:ring-2 ring-green-200"/>
                                     <input type="number" value={newItemAmount} onChange={e=>setNewItemAmount(e.target.value)} placeholder="$ 金額" className="w-20 text-xs border rounded-lg p-2 outline-none font-mono text-right focus:ring-2 ring-green-200"/>
                                     <button onClick={addItem} className="bg-green-600 text-white px-3 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm active:scale-95 transition-transform"><Plus size={16}/></button>
-                                </div>
-                            </div>
-
-                            <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200">
-                                <div className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-wider">車輛基本資料 (Vehicle Data)</div>
-                                <div className="grid grid-cols-2 gap-3 mb-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Reg Mark</span><input name="regMark" value={formData.regMark} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Year</span><input name="year" value={formData.year} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
-                                </div>
-                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Make (廠牌)</span><input name="make" value={formData.make} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Model (型號)</span><input name="model" value={formData.model} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                <div className="grid grid-cols-2 gap-3 mb-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Ext.</span><input name="color" value={formData.color} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Int.</span><input name="colorInterior" value={formData.colorInterior || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Chassis No.</span><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine No.</span><input name="engineNo" value={formData.engineNo} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
                                 </div>
                             </div>
 
