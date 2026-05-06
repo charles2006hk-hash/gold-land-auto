@@ -29,6 +29,7 @@ export const SignatureImg = () => (
 export default function DocumentTemplate({ previewDoc, selectedVehicle, docType, COMPANY_INFO }: any) {
     const activeVehicle = previewDoc?.vehicle || selectedVehicle;
     const activeType = previewDoc?.type || docType;
+
     if (!activeVehicle) return null;
 
     const itemsToRender = (activeVehicle as any).selectedItems || [];
@@ -46,7 +47,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     
     const companyEn = COMPANY_INFO?.name_en || 'GOLD LAND AUTO';
     const companyCh = COMPANY_INFO?.name_ch || '金田汽車';
-    const curCustomer = { name: activeVehicle.customerName || '', phone: activeVehicle.customerPhone || '', hkid: activeVehicle.customerID || '', address: activeVehicle.customerAddress || '' };
+
+    const curCustomer = {
+        name: activeVehicle.customerName || '',
+        phone: activeVehicle.customerPhone || '',
+        hkid: activeVehicle.customerID || '',
+        address: activeVehicle.customerAddress || ''
+    };
 
     const price = Number(activeVehicle.price) || 0;
     const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
@@ -117,18 +124,18 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     );
 
     const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-2 grid grid-cols-2 gap-12 no-break">
+        <div className="mt-4 grid grid-cols-2 gap-12 no-break">
             <div className="relative pt-8 border-t border-slate-800 text-center">
                 {showStampAndSig && (
                     <>
-                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                        <div className="absolute -top-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
+                        <div className="absolute -top-4 left-1/2 -translate-x-1/2"><SignatureImg /></div>
                     </>
                 )}
-                <p className="font-bold text-[9px] uppercase mt-2">{labelLeft}</p>
+                <p className="font-bold text-[9px] uppercase mt-4">{labelLeft}</p>
             </div>
             <div className="pt-8 border-t border-slate-800 text-center">
-                <p className="font-bold text-[9px] uppercase mt-2">{labelRight}</p>
+                <p className="font-bold text-[9px] uppercase mt-4">{labelRight}</p>
                 <p className="text-[8px] text-gray-500 mt-1">ID: {curCustomer.hkid}</p>
             </div>
         </div>
@@ -148,7 +155,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     <div className="grid grid-cols-3 gap-2 mb-1.5">
                         <div className="no-break col-span-1">
                             <div className="bg-slate-800 text-white text-[8px] font-bold px-1.5 py-0.5 uppercase mb-0.5">Part A: Customer</div>
-                            <div className="border border-slate-300 p-1 text-[8px] h-[48px] flex flex-col justify-center space-y-0.5">
+                            <div className="border border-slate-300 p-1.5 text-[8px] h-[52px] flex flex-col justify-center space-y-0.5">
                                 <p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> <span className="font-bold">{curCustomer.name}</span></p>
                                 <p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {curCustomer.phone}</p>
                                 <p className="truncate"><span className="text-slate-500 font-bold">ID NO:</span> {curCustomer.hkid}</p>
@@ -156,7 +163,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                         </div>
                         <div className="no-break col-span-2">
                             <div className="bg-slate-800 text-white text-[8px] font-bold px-1.5 py-0.5 uppercase mb-0.5">Part B: Vehicle Details</div>
-                            <table className="w-full text-[8px] border-collapse border border-slate-300 h-[48px]">
+                            <table className="w-full text-[8px] border-collapse border border-slate-300 h-[52px]">
                                 <tbody>
                                     <tr>
                                         <td className="border px-1 py-0.5 bg-slate-50 font-bold w-[16%]">Reg. No.</td><td className="border px-1 py-0.5 font-mono font-bold w-[34%] text-[9px]">{activeVehicle.regMark || 'TBC'}</td>
@@ -187,7 +194,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                         <div className="mb-1.5 no-break">
                             <div className="bg-slate-100 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
                                 {carPhotos.map((url: string, idx: number) => (
-                                    <div key={idx} className="w-[34mm] h-[20mm] rounded overflow-hidden border border-slate-300 bg-white flex-shrink-0"><img src={url} className="w-full h-full object-cover" /></div>
+                                    <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white flex-shrink-0"><img src={url} className="w-full h-full object-cover" /></div>
                                 ))}
                             </div>
                         </div>
