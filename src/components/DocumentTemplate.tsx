@@ -30,7 +30,7 @@ export const SignatureImg = () => (
 );
 
 // ------------------------------------------------------------------
-// ★★★ 全域列印模板引擎 (v7.3 完整展開版：擴增車輛資料 + 5圖縮圖區) ★★★
+// ★★★ 全域列印模板引擎 (v8.0: 完美 1/3-2/3 排版與全數據顯示) ★★★
 // ------------------------------------------------------------------
 export default function DocumentTemplate({ previewDoc, selectedVehicle, docType, COMPANY_INFO }: any) {
     const activeVehicle = previewDoc?.vehicle || selectedVehicle;
@@ -63,7 +63,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         address: activeVehicle.customerAddress || ''
     };
 
-    // 核心修復：修正海外訂車金額計算邏輯
+    // 金額計算
     const price = Number(activeVehicle.price) || 0;
     const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
     const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
@@ -79,7 +79,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const soldDate = (activeVehicle as any).soldDate || '___________'; 
     const handoverTime = (activeVehicle as any).handoverTime || '_______';
 
-    // ★ 智能讀取圖片：最多取 5 張
+    // 圖片處理：最多取 5 張
     const carPhotos = (activeVehicle.photos || []).slice(0, 5);
 
     // 單據標題判定
@@ -140,7 +140,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const AttachmentsSection = () => (
         <div className="mb-3 border border-slate-300 p-2 text-[10px] bg-slate-50 no-break">
             <div className="font-bold mb-1 uppercase border-b border-slate-300 pb-1">Attachments (隨車附件):</div>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-4 mt-1">
                 <div className="flex items-center"><div className="w-3 h-3 border border-black mr-1 flex items-center justify-center">{checklist.vrd && <Check size={10}/>}</div> VRD (牌薄)</div>
                 <div className="flex items-center"><div className="w-3 h-3 border border-black mr-1 flex items-center justify-center">{checklist.keys && <Check size={10}/>}</div> Spare Key (後備匙)</div>
                 <div className="flex items-center"><div className="w-3 h-3 border border-black mr-1 flex items-center justify-center">{checklist.tools && <Check size={10}/>}</div> Tools (工具)</div>
@@ -163,7 +163,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             </div>
             <div className="pt-12 border-t border-slate-800 text-center">
                 <p className="font-bold text-[10px] uppercase mt-6">{labelRight}</p>
-                <p className="text-[9px] text-gray-500">ID: {curCustomer.hkid}</p>
+                <p className="text-[9px] text-gray-500 mt-1">ID: {curCustomer.hkid}</p>
             </div>
         </div>
     );
@@ -185,31 +185,33 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     <PrintStyle />
                     <HeaderSection />
                     
-                    {/* Part A & B 左右並排 */}
-                    <div className="grid grid-cols-2 gap-4 mb-3">
-                        <div className="no-break">
+                    {/* ★★★ 修復排版變形：改為 3 等分網格，客戶佔1，車輛佔2 ★★★ */}
+                    <div className="grid grid-cols-3 gap-4 mb-3">
+                        {/* 左邊 1/3 客戶資料 */}
+                        <div className="no-break col-span-1">
                             <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-1">
-                                Part A: {(isPurchase||isConsignment) ? 'Vendor (賣方)' : 'Purchaser (買方)'} Details
+                                Part A: {(isPurchase||isConsignment) ? 'Vendor (賣方)' : 'Purchaser (買方)'}
                             </div>
-                            <div className="border border-slate-300 p-2 text-[9px] min-h-[50px]">
-                                <p><span className="text-slate-500 font-bold">NAME:</span> {curCustomer.name}</p>
-                                <p><span className="text-slate-500 font-bold">TEL:</span> {curCustomer.phone}</p>
-                                <p><span className="text-slate-500 font-bold">ID NO:</span> {curCustomer.hkid}</p>
+                            <div className="border border-slate-300 p-2 text-[9px] h-[64px] flex flex-col justify-center space-y-1">
+                                <p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> <span className="font-bold">{curCustomer.name}</span></p>
+                                <p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {curCustomer.phone}</p>
+                                <p className="truncate"><span className="text-slate-500 font-bold">ID NO:</span> {curCustomer.hkid}</p>
                             </div>
                         </div>
                         
-                        <div className="no-break">
+                        {/* 右邊 2/3 車輛資料 */}
+                        <div className="no-break col-span-2">
                             <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-1">
                                 Part B: Vehicle Details
                             </div>
-                            {/* ★★★ 擴增車輛資料表 ★★★ */}
-                            <table className="w-full text-[9px] border-collapse border border-slate-300">
+                            {/* ★★★ 精確控制 td 寬度，防止內容撐破 ★★★ */}
+                            <table className="w-full text-[9px] border-collapse border border-slate-300 h-[64px]">
                                 <tbody>
                                     <tr>
-                                        <td className="border p-1 bg-slate-50 font-bold w-[25%]">Reg. No.</td>
-                                        <td className="border p-1 font-mono font-bold w-[25%]">{activeVehicle.regMark || 'TBC'}</td>
-                                        <td className="border p-1 bg-slate-50 font-bold w-[25%]">Make/Model</td>
-                                        <td className="border p-1 w-[25%]">{activeVehicle.make} {activeVehicle.model}</td>
+                                        <td className="border p-1 bg-slate-50 font-bold w-[16%]">Reg. No.</td>
+                                        <td className="border p-1 font-mono font-bold w-[34%] text-[10px]">{activeVehicle.regMark || 'TBC'}</td>
+                                        <td className="border p-1 bg-slate-50 font-bold w-[16%]">Make/Model</td>
+                                        <td className="border p-1 w-[34%] text-[10px] font-bold">{activeVehicle.make} {activeVehicle.model}</td>
                                     </tr>
                                     <tr>
                                         <td className="border p-1 bg-slate-50 font-bold">Chassis No.</td>
@@ -227,12 +229,12 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <td className="border p-1 bg-slate-50 font-bold">Mileage</td>
                                         <td className="border p-1">{activeVehicle.mileage ? `${Number(activeVehicle.mileage).toLocaleString()} km` : '-'}</td>
                                         <td className="border p-1 bg-slate-50 font-bold">Engine Cap.</td>
-                                        <td className="border p-1">{activeVehicle.engineSize ? `${activeVehicle.engineSize} cc` : '-'}</td>
+                                        <td className="border p-1">{activeVehicle.engineSize ? `${activeVehicle.engineSize} ${activeVehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</td>
                                     </tr>
                                     <tr>
                                         <td className="border p-1 bg-slate-50 font-bold">Transmission</td>
-                                        <td className="border p-1">{activeVehicle.transmission === 'Manual' ? 'Manual (手波)' : (activeVehicle.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td>
-                                        <td className="border p-1 bg-slate-50 font-bold">Seat / Prev. Owner</td>
+                                        <td className="border p-1">{activeVehicle.transmission === 'Manual' ? 'Manual (手)' : (activeVehicle.transmission === 'Automatic' ? 'Auto (自)' : '-')}</td>
+                                        <td className="border p-1 bg-slate-50 font-bold">Seat / Prev.</td>
                                         <td className="border p-1">{activeVehicle.seat || activeVehicle.seating || '-'} 座 / {activeVehicle.previousOwners || '0'} 手</td>
                                     </tr>
                                 </tbody>
@@ -322,7 +324,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                     <td className="border p-1.5 font-bold w-1/2">
                                         {((activeVehicle as any).orderType === 'Overseas') ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}
                                     </td>
-                                    <td className="border p-1.5 text-right font-mono font-bold">{formatCurrency(basePrice)}</td>
+                                    <td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(basePrice)}</td>
                                 </tr>
                                 
                                 {/* 附加費 */}
@@ -339,20 +341,20 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
 
                                 {/* 訂金與扣減 */}
                                 {depositItems.map((item: any, idx: number) => (
-                                    <tr key={`dep-${idx}`} className="text-blue-700">
-                                        <td className="border p-1.5 font-bold">
+                                    <tr key={`dep-${idx}`} className="text-blue-700 bg-blue-50/30">
+                                        <td className="border p-1.5 font-bold pl-4">
                                             Less: {item.label}
                                         </td>
-                                        <td className="border p-1.5 text-right font-mono font-bold">
+                                        <td className="border p-1.5 text-right font-mono font-bold text-[11px]">
                                             {formatCurrency(item.amount)}
                                         </td>
                                     </tr>
                                 ))}
 
                                 {/* 結餘 */}
-                                <tr className="bg-slate-50 font-black">
-                                    <td className="border p-1.5 uppercase text-xs">Balance (總結餘/尾數)</td>
-                                    <td className="border p-1.5 text-right font-mono text-sm text-red-600">{formatCurrency(balance)}</td>
+                                <tr className="bg-red-50/50 font-black">
+                                    <td className="border p-1.5 uppercase text-[11px]">Balance Due (總結餘/尾數)</td>
+                                    <td className="border p-1.5 text-right font-mono text-[13px] text-red-600">{formatCurrency(balance)}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -435,7 +437,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             <td className="p-2 font-bold">
                                 {((activeVehicle as any).orderType === 'Overseas') ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${activeVehicle.make} ${activeVehicle.model})`}
                             </td>
-                            <td className="p-2 text-right font-mono font-bold">
+                            <td className="p-2 text-right font-mono font-bold text-[11px]">
                                 {formatCurrency(basePrice)}
                             </td>
                         </tr>
@@ -454,16 +456,16 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
 
                         {/* 已付訂金 */}
                         {depositItems.map((item: any, idx: number) => (
-                            <tr key={`dep-${idx}`} className="border-b text-blue-700">
+                            <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
                                 <td className="p-2 font-bold pl-4">Less: {item.label}</td>
-                                <td className="p-2 text-right font-mono font-bold">{formatCurrency(item.amount)}</td>
+                                <td className="p-2 text-right font-mono font-bold text-[11px]">{formatCurrency(item.amount)}</td>
                             </tr>
                         ))}
                     </tbody>
                     <tfoot>
-                        <tr className="bg-slate-50 font-bold text-xs border-t-2 border-slate-800">
-                            <td className="p-2 text-right uppercase tracking-widest">Balance Due (餘額)</td>
-                            <td className="p-2 text-right font-mono text-sm text-red-600">
+                        <tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800">
+                            <td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td>
+                            <td className="p-2 text-right font-mono text-[13px] text-red-600">
                                 {formatCurrency(balance)}
                             </td>
                         </tr>
