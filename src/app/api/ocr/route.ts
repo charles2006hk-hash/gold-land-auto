@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     // =================================================================================
     // 2. 智能偵錯版 API 呼叫 (遇到 404 會自動列出可用模型)
     // =================================================================================
-    const defaultModel = 'gemini-2.5-pro';
+    const defaultModel = 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${defaultModel}:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
