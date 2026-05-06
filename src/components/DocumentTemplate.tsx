@@ -135,21 +135,28 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     );
 
     const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-10 grid grid-cols-2 gap-12 no-break">
-            {/* pt-1 把文字拉到緊貼橫線 */}
-            <div className="relative pt-1 border-t border-slate-800 text-center">
-                {showStampAndSig && (
-                    <>
-                        {/* bottom-full 讓印章剛好踩在橫線上，translate-y-3 微調蓋住橫線的效果 */}
-                        <div className="absolute bottom-full translate-y-3 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                        <div className="absolute bottom-full translate-y-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                    </>
-                )}
-                <p className="font-bold text-[9px] uppercase mt-1 leading-none">{labelLeft}</p>
+        <div className="mt-2 grid grid-cols-2 gap-12 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+            <div className="text-center">
+                {/* 建立實體的保護盒，確保印章不會被切斷 */}
+                <div className="relative h-[20mm] w-full">
+                    {showStampAndSig && (
+                        <>
+                            <div className="absolute bottom-[-3mm] left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
+                            <div className="absolute bottom-[-1mm] left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                        </>
+                    )}
+                </div>
+                {/* 簽名橫線 */}
+                <div className="border-t border-slate-800 pt-1">
+                    <p className="font-bold text-[9px] uppercase leading-none">{labelLeft}</p>
+                </div>
             </div>
-            <div className="pt-1 border-t border-slate-800 text-center">
-                <p className="font-bold text-[9px] uppercase mt-1 leading-none">{labelRight}</p>
-                <p className="text-[8px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>
+            <div className="text-center">
+                <div className="h-[20mm] w-full"></div>
+                <div className="border-t border-slate-800 pt-1">
+                    <p className="font-bold text-[9px] uppercase leading-none">{labelRight}</p>
+                    <p className="text-[8px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>
+                </div>
             </div>
         </div>
     );
