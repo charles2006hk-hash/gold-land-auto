@@ -295,17 +295,17 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         return (
             <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
                 <div className="bg-white shadow-2xl origin-top flex flex-col justify-between" style={{ width: '210mm', height: '297mm', transform: 'scale(0.8)', marginBottom: '-40%' }}>
-                    <div className="p-10 font-sans text-slate-900 h-full flex flex-col relative">
-                        <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
-                            <div className="flex items-center gap-4">
-                                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-20 h-20 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
-                                <div><h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1><h2 className="text-lg font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2><div className="text-[10px] text-slate-500 mt-1 leading-tight font-serif"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div></div>
+                    <div className="p-6 font-sans text-slate-900 h-full flex flex-col relative">
+                        <div className="flex justify-between items-start mb-2 border-b-2 border-slate-800 pb-1.5">
+                            <div className="flex items-center gap-2">
+                                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-12 h-12 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
+                                <div><h1 className="text-lg font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1><h2 className="text-sm font-bold text-slate-700 tracking-widest leading-tight mt-0.5">{formData.companyNameCh}</h2><div className="text-[7px] text-slate-500 mt-0.5 leading-tight font-serif"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div></div>
                             </div>
                             <div className="text-right">
-                                <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
-                                <div className="text-xs font-bold text-slate-600 tracking-[0.5em] text-center">{t.ch}</div>
-                                <div className="mt-2 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
-                                <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
+                                <div className="text-sm font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
+                                <div className="text-[9px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
+                                <div className="mt-1 text-[8px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
+                                <div className="text-[8px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
                             </div>
                         </div>
 
@@ -377,7 +377,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 {depositItems.map((item: any, idx: number) => (
                                                     <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border px-1 py-0.5 font-bold pl-4">Less: {item.label}</td><td className="border px-1 py-0.5 text-right font-mono font-bold text-[10px]">{formatCurrency(item.amount)}</td></tr>
                                                 ))}
-                                                <tr className="bg-red-50/50 font-black"><td className="border px-1 py-0.5 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border px-1 py-0.5 text-right font-mono text-[13px] text-red-600">{formatCurrency(balance)}</td></tr>
+                                                <tr className="bg-red-50/50 font-black"><td className="border px-1 py-0.5 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border px-1 py-0.5 text-right font-mono text-[12px] text-red-600">{formatCurrency(balance)}</td></tr>
                                             </tbody>
                                         </table>
                                     </div>
@@ -419,23 +419,31 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             )}
                         </div>
 
-                        {/* Signature */}
-                        <div className="mt-auto no-break">
-                            <div className="grid grid-cols-2 gap-12 mt-10">
-                                <div className="relative pt-1 border-t border-slate-800 text-center">
-                                    {showStampAndSig && (
-                                        <>
-                                            <div className="absolute bottom-full translate-y-3 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
-                                            <div className="absolute bottom-full translate-y-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                                        </>
-                                    )}
-                                    <p className="font-bold text-[9px] uppercase mt-1 leading-none">For {formData.companyNameEn}</p>
+                        {/* ★★★ 解決印章被切斷的核心修改區塊 ★★★ */}
+                        <div className="mt-auto no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                            <div className="grid grid-cols-2 gap-12 mt-2">
+                                <div className="text-center">
+                                    <div className="relative h-[20mm] w-full">
+                                        {showStampAndSig && (
+                                            <>
+                                                <div className="absolute bottom-[-3mm] left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
+                                                <div className="absolute bottom-[-1mm] left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className="border-t border-slate-800 pt-1">
+                                        <p className="font-bold text-[8px] uppercase leading-none">For {formData.companyNameEn}</p>
+                                    </div>
                                 </div>
-                                <div className="pt-1 border-t border-slate-800 text-center">
-                                    <p className="font-bold text-[9px] uppercase mt-1 leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : "Customer Signature"}</p>
+                                <div className="text-center">
+                                    <div className="h-[20mm] w-full"></div>
+                                    <div className="border-t border-slate-800 pt-1">
+                                        <p className="font-bold text-[8px] uppercase leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : (isBill ? "Received By" : "Customer Signature")}</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                        {/* 結束 */}
 
                     </div>
                 </div>
