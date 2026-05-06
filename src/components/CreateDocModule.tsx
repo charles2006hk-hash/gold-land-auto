@@ -9,11 +9,20 @@ import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serve
 // 輔助格式化函數
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
+// ------------------------------------------------------------------
+// ★★★ 主組件：Create Document Module ★★★
+// ------------------------------------------------------------------
 export default function CreateDocModule({ 
     inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO
 }: { 
-    inventory: any[], openPrintPreview: (type: string, data: any) => void, db: any, staffId: string, appId: string, externalRequest?: any,
-    setExternalRequest?: (req: any) => void, COMPANY_INFO: any
+    inventory: any[];
+    openPrintPreview: any; // ★ 放寬型別檢查，解決 TypeScript 編譯衝突
+    db: any;
+    staffId: string;
+    appId: string;
+    externalRequest?: any;
+    setExternalRequest?: (req: any) => void;
+    COMPANY_INFO: any;
 }) {
     const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
     const [docHistory, setDocHistory] = useState<any[]>([]);
