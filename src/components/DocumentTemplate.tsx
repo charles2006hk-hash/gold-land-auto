@@ -135,27 +135,26 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     );
 
     const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-2 grid grid-cols-2 gap-12 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-            <div className="text-center">
-                {/* 建立實體的保護盒，確保印章不會被切斷 */}
-                <div className="relative h-[20mm] w-full">
+        <div className="mt-2 w-full flex gap-12 no-break" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+            <div className="flex-1 text-center flex flex-col justify-end">
+                {/* 建立 28mm 實體高度，使用 Flex 讓印章乖乖待在裡面，絕不被切斷 */}
+                <div className="h-[28mm] w-full flex items-end justify-center pb-1">
                     {showStampAndSig && (
-                        <>
-                            <div className="absolute bottom-[-3mm] left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                            <div className="absolute bottom-[-1mm] left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                        </>
+                        <div className="relative flex items-center justify-center">
+                            <div className="opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
+                            <div className="absolute z-10"><SignatureImg /></div>
+                        </div>
                     )}
                 </div>
-                {/* 簽名橫線 */}
                 <div className="border-t border-slate-800 pt-1">
                     <p className="font-bold text-[9px] uppercase leading-none">{labelLeft}</p>
                 </div>
             </div>
-            <div className="text-center">
-                <div className="h-[20mm] w-full"></div>
+            <div className="flex-1 text-center flex flex-col justify-end">
+                <div className="h-[28mm] w-full"></div>
                 <div className="border-t border-slate-800 pt-1">
                     <p className="font-bold text-[9px] uppercase leading-none">{labelRight}</p>
-                    <p className="text-[8px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>
+                    {curCustomer.hkid && <p className="text-[8px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>}
                 </div>
             </div>
         </div>
