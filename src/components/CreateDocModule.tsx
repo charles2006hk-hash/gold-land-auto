@@ -6,63 +6,24 @@ import {
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy } from "firebase/firestore";
 
-// --- 預設公司資料 (可視需要調整或由外部傳入) ---
-const COMPANY_INFO = {
-    name_en: "GOLD LAND AUTO",
-    name_ch: "金田汽車",
-    address_en: "Rm 11, 22/F, Blk B, New Trade Plaza, 6 On Ping St, Shek Mun, Shatin, N.T., HK",
-    address_ch: "香港沙田石門安平街6號新貿中心B座22樓11室",
-    phone: "+852 3996 9796",
-    email: "marketing@goldlandhk.com",
-    logo_url: "/GL_APPLOGO.png" 
-};
-
 // 輔助格式化函數
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
-// --- 印章與簽名組件 ---
-const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: string }) => (
-    <div className="w-[45mm] h-[28mm] flex items-center justify-center relative select-none mix-blend-multiply transform -rotate-6 opacity-90" style={{ color: '#1e3a8a' }}>
-        <div className="absolute w-full h-full rounded-[50%] border-[3px] border-[#1e3a8a]"></div>
-        <div className="absolute w-[92%] h-[88%] rounded-[50%] border-[1px] border-[#1e3a8a]"></div>
-        <div className="absolute w-full h-full flex flex-col items-center justify-center z-10">
-            <div className="text-[9px] font-black tracking-widest absolute top-5 uppercase text-center w-[85%] leading-none break-words">{nameEn}</div>
-            <div className="text-[14px] font-black tracking-[0.3em] leading-none">{nameCh}</div>
-            <div className="text-[5px] font-bold tracking-widest absolute bottom-5 uppercase leading-none">AUTHORIZED SIGNATURE</div>
-        </div>
-    </div>
-);
-
-const SignatureImg = () => (
-    <div className="w-[30mm] h-[15mm] relative">
-        <svg viewBox="0 0 150 80" className="w-full h-full text-black opacity-80" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M10,50 C30,30 60,70 90,40 S130,20 140,50" />
-            <path d="M30,60 C50,50 80,50 110,45" strokeWidth="1.5" />
-        </svg>
-    </div>
-);
-
-// ------------------------------------------------------------------
-// ★★★ 主組件：Create Document Module ★★★
-// ------------------------------------------------------------------
 export default function CreateDocModule({ 
-    inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest 
+    inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO
 }: { 
     inventory: any[], openPrintPreview: (type: string, data: any) => void, db: any, staffId: string, appId: string, externalRequest?: any,
-    setExternalRequest?: (req: any) => void 
+    setExternalRequest?: (req: any) => void, COMPANY_INFO: any
 }) {
-    // 視圖模式
     const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
     const [docHistory, setDocHistory] = useState<any[]>([]);
     const [mobileStep, setMobileStep] = useState<'list' | 'edit' | 'preview'>('list');
     
-    // 編輯器狀態
     const [docId, setDocId] = useState<string | null>(null);
     const [selectedDocType, setSelectedDocType] = useState('sales_contract');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
     
-    // 表單數據
     const [formData, setFormData] = useState({
         companyNameEn: COMPANY_INFO.name_en, companyNameCh: COMPANY_INFO.name_ch,
         companyAddress: COMPANY_INFO.address_ch, companyPhone: COMPANY_INFO.phone, companyEmail: COMPANY_INFO.email, 
@@ -71,8 +32,7 @@ export default function CreateDocModule({
         regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '',
         price: '', deposit: '', balance: '', 
         
-        // ★ 核心修復 1：獨立出單據日期
-        docDate: new Date().toISOString().split('T')[0], 
+        docDate: new Date().toISOString().split('T')[0], // ★
         deliveryDate: new Date().toISOString().split('T')[0], 
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
         remarks: '', paymentMethod: 'Cheque',
@@ -98,7 +58,6 @@ export default function CreateDocModule({
     const [showTerms, setShowTerms] = useState(true);
     const [showStampAndSig, setShowStampAndSig] = useState(true); 
 
-    // 過濾器與搜尋狀態
     const [filterType, setFilterType] = useState<string>('All');
     const [docSearchTerm, setDocSearchTerm] = useState('');
     const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
@@ -111,13 +70,12 @@ export default function CreateDocModule({
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
     });
 
-    // ★ 核心修復 2 & 3：極致強化搜尋引擎，確保搜乜都出，列表包含總額
+    // ★ 核心修復 2：極致強化搜尋引擎，確保搜乜都出
     const filteredDocHistory = savedDocs.filter((doc: any) => {
         if (filterType !== 'All' && doc.type !== filterType) return false;
         
         if (docSearchTerm) {
             const searchLower = docSearchTerm.toLowerCase();
-            // 將所有可能的欄位全部結合成一個大字串，進行全面掃描！
             const searchStr = [
                 doc.summary,
                 doc.formData?.customerName,
@@ -138,7 +96,6 @@ export default function CreateDocModule({
         }
 
         if (isDateFilterEnabled) {
-            // 改為使用自訂的 docDate 進行區間過濾
             const docDateStr = doc.formData?.docDate || (doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : '');
             if (!docDateStr) return false; 
             if (filterStartDate && docDateStr < filterStartDate) return false;
@@ -149,13 +106,10 @@ export default function CreateDocModule({
 
     const DEFAULT_REMARKS = "匯豐銀行香港賬戶：747-057347-838\n賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO\n「轉數快」識別碼 6134530";
 
-    // --- Effects ---
     useEffect(() => {
         if (externalRequest) {
             setDocId(externalRequest.id);
             setSelectedDocType(externalRequest.type);
-            
-            // 防呆：確保導入舊單據時也有 docDate
             const newFormData = { ...externalRequest.formData };
             if (!newFormData.docDate) newFormData.docDate = new Date().toISOString().split('T')[0];
             
@@ -190,7 +144,6 @@ export default function CreateDocModule({
         }
     }, [selectedDocType]);
 
-    // --- Actions ---
     const startNewDoc = () => {
         setDocId(null);
         handleSelectBlank();
@@ -200,8 +153,6 @@ export default function CreateDocModule({
     const editDoc = (doc: any) => {
         setDocId(doc.id);
         setSelectedDocType(doc.type);
-        
-        // 防呆補齊
         const newFormData = { ...doc.formData };
         if (!newFormData.docDate) newFormData.docDate = doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
         
@@ -254,7 +205,6 @@ export default function CreateDocModule({
 
     const handleSelectCar = (car: any) => {
         setSelectedCarId(car.id);
-        
         setFormData(prev => ({
             ...prev,
             regMark: car.regMark || '', make: car.make || '', model: car.model || '',
@@ -266,7 +216,6 @@ export default function CreateDocModule({
             customerName: car.customerName || '', customerPhone: car.customerPhone || '',
             customerId: car.customerID || '', customerAddress: car.customerAddress || '',
             
-            // ★ 新增：帶入今日作為單據日期
             docDate: new Date().toISOString().split('T')[0],
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
@@ -278,9 +227,7 @@ export default function CreateDocModule({
 
         const autoPayments: { id: string, label: string, amount: number }[] = [];
         if (car.payments && car.payments.length > 0) {
-            car.payments.forEach((p: any) => {
-                autoPayments.push({ id: p.id, label: `${p.type} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 });
-            });
+            car.payments.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 }); });
         } else {
             autoPayments.push({ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 });
         }
@@ -321,7 +268,7 @@ export default function CreateDocModule({
         setFormData(prev => ({ 
             ...prev, 
             regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
-            docDate: new Date().toISOString().split('T')[0], // ★
+            docDate: new Date().toISOString().split('T')[0], 
             deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
             
@@ -367,7 +314,7 @@ export default function CreateDocModule({
         openPrintPreview(selectedDocType as any, dummyVehicle);
     };
 
-    // --- 即時預覽元件 (LivePreview) ---
+    // --- 實時預覽 ---
     const LivePreview = () => {
         const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
         const isQuotation = selectedDocType === 'quotation';
@@ -393,9 +340,7 @@ export default function CreateDocModule({
         };
         const t = titleMap[selectedDocType] || titleMap['sales_contract'];
 
-        // ★ 預覽畫面顯示正確的單據日期
         const displayDate = formData.docDate ? new Date(formData.docDate).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
-
         const hasOrderDetails = (isQuotation || selectedDocType === 'sales_contract') && formData.orderType && formData.orderType !== 'None';
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
@@ -404,7 +349,6 @@ export default function CreateDocModule({
             <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
                 <div className="bg-white shadow-2xl origin-top" style={{ width: '210mm', height: '297mm', transform: 'scale(0.8)', marginBottom: '-40%' }}>
                     <div className="p-10 font-sans text-slate-900 h-full flex flex-col relative">
-                        
                         {/* Header */}
                         <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4">
                             <div className="flex items-center gap-4">
@@ -524,7 +468,6 @@ export default function CreateDocModule({
                                         </div>
                                     </>
                                 ) : (
-                                    /* Invoice / Receipt 佈局 */
                                     <table className="w-full text-[10px] border-collapse mb-6">
                                         <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
                                         <tbody>
@@ -655,6 +598,7 @@ export default function CreateDocModule({
                         <table className="w-full text-sm text-left border-collapse bg-white shadow-sm">
                             <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
                                 <tr>
+                                    {/* ★ 核心修復 3：列表加入單據日期與總金額 */}
                                     <th className="p-3 w-28">單據日期</th>
                                     <th className="p-3 w-32">單據類型</th>
                                     <th className="p-3">摘要內容</th>
@@ -673,8 +617,10 @@ export default function CreateDocModule({
                                         ? `${doc.formData.customerName || '無聯絡人'} - ${doc.formData.regMark || '無車牌'} - ${doc.formData.year || ''} ${doc.formData.make || ''} ${doc.formData.model || ''}`
                                         : doc.summary;
                                     
+                                    // ★ 判斷顯示日期：優先用 formData.docDate
                                     const docDateStr = doc.formData?.docDate || (doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : 'N/A');
 
+                                    // ★ 計算總金額
                                     const price = Number(doc.formData?.price) || 0;
                                     const ovFee = Number(doc.formData?.overseasTotalFee) || 0;
                                     const hkFee = Number(doc.formData?.localTotalFee) || 0;
@@ -763,6 +709,7 @@ export default function CreateDocModule({
                                 <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent outline-none focus:border-blue-400"/>
                             </div>
                             
+                            {/* ★ 單據日期與交收日期 (獨立設定區) */}
                             <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100">
                                 <div className="text-[10px] font-bold text-indigo-600 mb-2 uppercase tracking-wider">單據與交易日期 (Dates)</div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -806,7 +753,7 @@ export default function CreateDocModule({
                                                     <span className="text-[10px] font-bold text-purple-700">{formData.overseasCountry === 'Japan' ? '日本' : '海外'}當地費用包含：</span>
                                                     <div className="flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                                         <span className="text-[10px] font-bold text-purple-500">總額 $</span>
-                                                        <input name="overseasTotalFee" type="number" value={formData.overseasTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs focus:ring-1 ring-purple-400"/>
+                                                        <input name="overseasTotalFee" type="number" value={formData.overseasTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs"/>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
@@ -823,7 +770,7 @@ export default function CreateDocModule({
                                                     <span className="text-[10px] font-bold text-purple-700">香港到港費用包含：</span>
                                                     <div className="flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                                         <span className="text-[10px] font-bold text-purple-500">總額 $</span>
-                                                        <input name="localTotalFee" type="number" value={formData.localTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs focus:ring-1 ring-purple-400"/>
+                                                        <input name="localTotalFee" type="number" value={formData.localTotalFee} onChange={handleChange} placeholder="0" className="w-20 p-1 bg-transparent border-b border-purple-300 outline-none text-right font-mono font-bold text-purple-800 text-xs"/>
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-wrap gap-2">
