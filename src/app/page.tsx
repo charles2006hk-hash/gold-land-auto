@@ -9554,10 +9554,27 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                     
-                                    <div className="flex justify-end pt-4 border-t border-red-200 w-full">
+                                    <div className="flex flex-col sm:flex-row justify-between items-end pt-4 border-t border-red-200 w-full gap-4">
+                                        <div className="text-xs font-bold text-red-500/80 bg-red-50 px-3 py-2 rounded-lg border border-red-100 flex items-center">
+                                            <Wrench size={14} className="mr-1.5"/>
+                                            維修與雜費成本: {formatCurrency(totalExpenses)}
+                                        </div>
                                         <div className="text-right w-full sm:w-auto">
                                             <span className="text-xs md:text-[10px] text-red-500 font-bold uppercase block mb-1">Total HKD Cost (港幣總成本)</span>
-                                            <div className="flex items-center justify-end bg-white border-2 border-red-200 p-2 rounded-xl shadow-sm"><span className="text-red-700 font-mono text-2xl mr-1 font-black">$</span><input name="costPrice" value={costStr} onChange={e=>setCostStr(formatNumberInput(e.target.value))} className="bg-transparent text-3xl md:text-2xl outline-none font-mono font-black text-red-700 text-right w-full sm:w-40 min-w-0" placeholder="0"/></div>
+                                            <div className="flex items-center justify-end bg-white border-2 border-red-200 p-2 rounded-xl shadow-sm">
+                                                <span className="text-red-700 font-mono text-2xl mr-1 font-black">$</span>
+                                                {/* ★ 智能總計：包含(未含稅成本 + 稅金) 或 (收車價) + 維修雜費 */}
+                                                <span className="bg-transparent text-3xl md:text-2xl font-mono font-black text-red-700 text-right w-full sm:w-auto min-w-0">
+                                                    {(() => {
+                                                        const baseCost = Number(costStr.replace(/,/g, '')) || 0;
+                                                        // 解決 JS 浮點數誤差 (0.1+0.2=0.30000000004)
+                                                        const finalTotal = Math.round((baseCost + totalExpenses) * 100) / 100;
+                                                        return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(finalTotal);
+                                                    })()}
+                                                </span>
+                                                {/* 隱藏的 Input 為了給 saveVehicle 讀取 */}
+                                                <input type="hidden" name="costPrice" value={Math.round(((Number(costStr.replace(/,/g, '')) || 0) + totalExpenses) * 100) / 100} />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
