@@ -159,7 +159,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             </div>
         </div>
     );
-
+    
     if (activeType.includes('contract') || isQuotation) {
         const hasOrderDetails = (isQuotation || activeType === 'sales_contract') && (activeVehicle as any).orderType && (activeVehicle as any).orderType !== 'None';
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
