@@ -44,7 +44,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
     
-    // ★ 核心：優先讀取單據的專屬日期 (docDate)，若無才使用今天
+    // ★ 核心修復：優先讀取單據的專屬日期 (docDate)，若無才使用今天
     const docDateVal = (activeVehicle as any).docDate || (activeVehicle as any).formData?.docDate;
     
     let today = new Date().toLocaleDateString('en-GB');
@@ -302,7 +302,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                         {isQuotation ? (
                             <>
                                 <p className="mb-1"><span className="font-bold">VALIDITY:</span> This quotation is valid for 14 days from the date of issue. Prices and ETA are subject to change without prior notice due to exchange rate fluctuations and overseas shipping schedules.</p>
-                                <p><span className="font-bold">注意事項：</span> 本報價單有效期為發出日起計 14 天。因海外匯率波動及船期變更，報價內之預計費用及到港時間 (ETA) 或會於未經事先通知下作適度調整。</p>
+                                <p><span className="font-bold">注意事項：</span> 本報價單有效期為發出日起計 14 天。因海外匯率波動及船期變更，預計費用及到港時間 (ETA) 或會於未經事先通知下作適度調整。</p>
                             </>
                         ) : (
                             <>
