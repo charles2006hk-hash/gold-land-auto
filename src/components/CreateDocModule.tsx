@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe 
+  FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft 
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
