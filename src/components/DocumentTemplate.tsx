@@ -135,19 +135,21 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     );
 
     const SignatureSection = ({ labelLeft, labelRight }: any) => (
-        <div className="mt-8 grid grid-cols-2 gap-12 no-break">
-            <div className="relative pt-12 border-t border-slate-800 text-center">
+        <div className="mt-10 grid grid-cols-2 gap-12 no-break">
+            {/* pt-1 把文字拉到緊貼橫線 */}
+            <div className="relative pt-1 border-t border-slate-800 text-center">
                 {showStampAndSig && (
                     <>
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                        {/* bottom-full 讓印章剛好踩在橫線上，translate-y-3 微調蓋住橫線的效果 */}
+                        <div className="absolute bottom-full translate-y-3 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
+                        <div className="absolute bottom-full translate-y-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
                     </>
                 )}
-                <p className="font-bold text-[10px] uppercase mt-6">{labelLeft}</p>
+                <p className="font-bold text-[9px] uppercase mt-1 leading-none">{labelLeft}</p>
             </div>
-            <div className="pt-12 border-t border-slate-800 text-center">
-                <p className="font-bold text-[10px] uppercase mt-6">{labelRight}</p>
-                <p className="text-[9px] text-gray-500 mt-1">ID: {curCustomer.hkid}</p>
+            <div className="pt-1 border-t border-slate-800 text-center">
+                <p className="font-bold text-[9px] uppercase mt-1 leading-none">{labelRight}</p>
+                <p className="text-[8px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>
             </div>
         </div>
     );
