@@ -419,19 +419,20 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             )}
                         </div>
 
+                        {/* Signature */}
                         <div className="mt-auto no-break">
-                            <div className="grid grid-cols-2 gap-12 mt-4">
-                                <div className="pt-10 border-t border-slate-800 text-center relative">
+                            <div className="grid grid-cols-2 gap-12 mt-10">
+                                <div className="relative pt-1 border-t border-slate-800 text-center">
                                     {showStampAndSig && (
                                         <>
-                                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
-                                            <div className="absolute -top-4 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                                            <div className="absolute bottom-full translate-y-3 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh}/></div>
+                                            <div className="absolute bottom-full translate-y-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
                                         </>
                                     )}
-                                    <p className="font-bold text-[9px] uppercase mt-4">For {formData.companyNameEn}</p>
+                                    <p className="font-bold text-[9px] uppercase mt-1 leading-none">For {formData.companyNameEn}</p>
                                 </div>
-                                <div className="pt-10 border-t border-slate-800 text-center">
-                                    <p className="font-bold text-[9px] uppercase mt-4">{isQuotation ? "Client Confirmation (客戶確認)" : "Customer Signature"}</p>
+                                <div className="pt-1 border-t border-slate-800 text-center">
+                                    <p className="font-bold text-[9px] uppercase mt-1 leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : "Customer Signature"}</p>
                                 </div>
                             </div>
                         </div>
