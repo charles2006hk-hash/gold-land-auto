@@ -8169,9 +8169,7 @@ const DatabaseSelector = ({
                   currentUser={currentUser}
               />
           )}
-              />
-          )}
-
+          
           {/* Report Tab - 讓它內部也可以滾動 */}
                 {activeTab === 'reports' && (
                     <div className="flex-1 overflow-hidden flex flex-col">
