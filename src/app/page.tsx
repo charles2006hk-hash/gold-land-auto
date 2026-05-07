@@ -8167,6 +8167,7 @@ const DatabaseSelector = ({
                   updateSettings={updateSettings}
                   systemUsers={systemUsers}
                   currentUser={currentUser}
+                  updateSubItem={updateSubItem}
               />
           )}
           
