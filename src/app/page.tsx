@@ -37,6 +37,7 @@ import DocumentTemplate from '@/components/DocumentTemplate';
 import CreateDocModule from '@/components/CreateDocModule';
 import VehicleFormModal from '@/components/VehicleFormModal';
 import SettingsManager from '@/components/SettingsManager';
+import FinanceModule from '@/components/FinanceModule';
 
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
