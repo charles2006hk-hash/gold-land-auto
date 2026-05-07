@@ -8147,9 +8147,9 @@ const DatabaseSelector = ({
                   db={db}
                   staffId={staffId}
                   appId={appId}
-                  clients={clients}              // 連動 VRD 需要這個
+                  clients={clients}              
                   settings={settings}
-                  editingVehicle={editingVehicle} // ★ 關鍵：必須把要編輯的車傳進去，彈窗才會開！
+                  editingVehicle={editingVehicle} 
                   setEditingVehicle={setEditingVehicle}
                   activeTab={activeTab}
                   setActiveTab={setActiveTab}
@@ -8164,10 +8164,11 @@ const DatabaseSelector = ({
                   onJumpToDoc={handleJumpToDoc}
                   addSalesAddon={addSalesAddon}
                   deleteSalesAddon={deleteSalesAddon}
-                  updateSettings={updateSettings}  {/* 👈 補上這行 */}
-                  systemUsers={systemUsers}        {/* 👈 補上這行 */}
-                  currentUser={currentUser}        {/* 👈 補上這行 */}
-          />
+                  updateSettings={updateSettings}
+                  systemUsers={systemUsers}
+                  currentUser={currentUser}
+              />
+          )}
               />
           )}
 
