@@ -305,7 +305,6 @@ const SettingsManager = ({
 
     useEffect(() => {
         if (activeTab === 'logs' && db) {
-            const { query, collection, orderBy, limit, onSnapshot } = require("firebase/firestore");
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), orderBy('timestamp', 'desc'), limit(50)); 
             const unsub = onSnapshot(q, (snap: any) => {
                 const list: any[] = [];
