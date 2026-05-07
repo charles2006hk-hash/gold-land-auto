@@ -8164,6 +8164,10 @@ const DatabaseSelector = ({
                   onJumpToDoc={handleJumpToDoc}
                   addSalesAddon={addSalesAddon}
                   deleteSalesAddon={deleteSalesAddon}
+                  updateSettings={updateSettings}  {/* 👈 補上這行 */}
+                  systemUsers={systemUsers}        {/* 👈 補上這行 */}
+                  currentUser={currentUser}        {/* 👈 補上這行 */}
+          />
               />
           )}
 
