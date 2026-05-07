@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
-    DownloadCloud, Trash2, X, Check
+    DownloadCloud, Trash2, X, Check, Printer
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
