@@ -67,7 +67,7 @@ const getColorHex = (colorName: string) => {
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
     updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc,
-    addSalesAddon = () => {}, deleteSalesAddon = () => {}
+    addSalesAddon = () => {}, deleteSalesAddon = () => {},
     updateSettings, systemUsers, currentUser
 }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
