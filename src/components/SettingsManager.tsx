@@ -6,7 +6,7 @@ import {
     LayoutDashboard, BellRing, Car, DollarSign, Globe, Users, Database, 
     Bell, FileText, DownloadCloud, Plus, ChevronUp, ChevronDown, Trash2, 
     ShieldCheck, Info, X, Palette, Armchair, Wrench, Receipt, BarChart3, 
-    Upload, Key, CheckCircle, AlertTriangle, Search, ArrowLeft
+    Upload, Key, CheckCircle, AlertTriangle, Search, ArrowLeft, Building2
 } from 'lucide-react';
 import { doc, setDoc, collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
 import { ref, uploadString } from 'firebase/storage';
