@@ -1576,3 +1576,5 @@ const VehicleFormModal = ({
       </div>
     );
 };
+
+export default VehicleFormModal;
