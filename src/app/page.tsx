@@ -4002,19 +4002,21 @@ const SmartNewsTicker = () => {
             }
         };
 
-        // ★ 新增：模擬去 DATA.GOV.HK 抓取運輸署最新的首次登記車輛數據
+        // ★ 呼叫我們自己的 Next.js 後端 API 去獲取香港運輸署數據
         const fetchVehicleStats = async () => {
             try {
-                // 這裡未來可以換成真的從您的 Next.js 後端 API (例如 /api/td-stats) 去抓取並解析政府 JSON
-                // 目前先放一個極度擬真的寫死數據來展示介面效果
-                setTimeout(() => {
-                    setCarSalesStats({
-                        month: new Date().getMonth() === 0 ? 12 : new Date().getMonth(), // 通常政府數據會 delay 1 個月
-                        evCount: '2,845',
-                        petrolCount: '912',
-                        total: '3,757'
-                    });
-                }, 1500);
+                const res = await fetch('/api/td-stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.month) {
+                        setCarSalesStats({
+                            month: data.month,
+                            evCount: data.evCount,
+                            petrolCount: data.petrolCount,
+                            total: data.total
+                        });
+                    }
+                }
             } catch (error) {
                 console.error("Vehicle stats fetch error", error);
             }
