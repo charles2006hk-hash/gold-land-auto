@@ -4055,17 +4055,28 @@ const SmartNewsTicker = () => {
 
             {/* ★★★ 金融實時翻頁區 (加寬以容納指數與漲跌幅) ★★★ */}
             <div className="flex-none bg-slate-800 text-white h-full relative overflow-hidden flex items-center justify-center min-w-[130px] md:min-w-[160px] border-r border-slate-700 z-10 shadow-inner">
-                {financialStats.map((stat, idx) => (
-                    <div 
-                        key={idx} 
-                        className={`absolute inset-0 flex items-center justify-center px-1.5 md:px-2 transition-all duration-500 ease-in-out ${
-                            finIndex === idx ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-                        }`}
-                    >
-                        <span className="text-[9px] md:text-[10px] text-slate-300 mr-1.5 whitespace-nowrap">{stat.label}</span>
-                        <span className={`text-[10px] md:text-[11px] font-bold font-mono tracking-tight whitespace-nowrap ${stat.color}`}>{stat.value}</span>
-                    </div>
-                ))}
+                {financialStats.map((stat, idx) => {
+                    // ★ 動態顏色判斷：升用綠色，跌用紅色
+                    let finalColor = stat.color;
+                    const valStr = String(stat.value);
+                    if (valStr.includes('+') || valStr.includes('▲')) {
+                        finalColor = 'text-green-400';
+                    } else if (valStr.includes('-') || valStr.includes('▼')) {
+                        finalColor = 'text-red-400';
+                    }
+
+                    return (
+                        <div 
+                            key={idx} 
+                            className={`absolute inset-0 flex items-center justify-center px-1.5 md:px-2 transition-all duration-500 ease-in-out ${
+                                finIndex === idx ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+                            }`}
+                        >
+                            <span className="text-[9px] md:text-[10px] text-slate-300 mr-1.5 whitespace-nowrap">{stat.label}</span>
+                            <span className={`text-[10px] md:text-[11px] font-bold font-mono tracking-tight whitespace-nowrap ${finalColor}`}>{stat.value}</span>
+                        </div>
+                    );
+                })}
             </div>
 
             {/* 右側新聞滾動文字 */}
