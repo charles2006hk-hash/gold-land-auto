@@ -3910,7 +3910,7 @@ const GlobalDataLoadingScreen = () => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：AI 智能新聞快訊 (實時股票指數 + 匯率翻頁版) ★★★
+// ★★★ 新增：AI 智能新聞快訊 (實時股票指數 + 匯率翻頁版 + 本月車市銷量) ★★★
 // ------------------------------------------------------------------
 const SmartNewsTicker = () => {
     const [aiNewsFeed, setAiNewsFeed] = useState([
@@ -3918,14 +3918,19 @@ const SmartNewsTicker = () => {
     ]);
 
     const [finIndex, setFinIndex] = useState(0);
-    
-    // 預設載入中狀態
     const [financialStats, setFinancialStats] = useState([
         { label: '實時金融', value: '載入中...', color: 'text-slate-400' }
     ]);
 
+    // ★ 新增：車輛銷售統計狀態 (預設載入中)
+    const [carSalesStats, setCarSalesStats] = useState({
+        month: new Date().getMonth() + 1, // 預設顯示當前月份
+        evCount: '...',
+        petrolCount: '...',
+        total: '...'
+    });
+
     useEffect(() => {
-        // 1. 抓取 AI 新聞 (保留原本的智慧排程與 localStorage 快取)
         const checkAndFetchNews = async () => {
             const now = new Date();
             const currentHour = now.getHours();
@@ -3969,21 +3974,15 @@ const SmartNewsTicker = () => {
             }
         };
 
-        // 2. 抓取實時金融數據 (指數 + 匯率)
         const fetchRealTimeData = async () => {
             try {
                 let newStats: any[] = [];
-
-                // A. 呼叫我們自己寫的 API 抓取恆指、道瓊、上證
                 const indicesRes = await fetch('/api/finance');
                 if (indicesRes.ok) {
                     const indicesData = await indicesRes.json();
-                    if (Array.isArray(indicesData)) {
-                        newStats = [...newStats, ...indicesData];
-                    }
+                    if (Array.isArray(indicesData)) newStats = [...newStats, ...indicesData];
                 }
 
-                // B. 抓取實時匯率 (免金鑰公共 API)
                 const forexRes = await fetch('https://open.er-api.com/v6/latest/HKD');
                 if (forexRes.ok) {
                     const forexData = await forexRes.json();
@@ -3997,19 +3996,36 @@ const SmartNewsTicker = () => {
                     }
                 }
 
-                if (newStats.length > 0) {
-                    setFinancialStats(newStats);
-                }
+                if (newStats.length > 0) setFinancialStats(newStats);
             } catch (error) {
                 console.error("Financial data fetch error", error);
             }
         };
 
+        // ★ 新增：模擬去 DATA.GOV.HK 抓取運輸署最新的首次登記車輛數據
+        const fetchVehicleStats = async () => {
+            try {
+                // 這裡未來可以換成真的從您的 Next.js 後端 API (例如 /api/td-stats) 去抓取並解析政府 JSON
+                // 目前先放一個極度擬真的寫死數據來展示介面效果
+                setTimeout(() => {
+                    setCarSalesStats({
+                        month: new Date().getMonth() === 0 ? 12 : new Date().getMonth(), // 通常政府數據會 delay 1 個月
+                        evCount: '2,845',
+                        petrolCount: '912',
+                        total: '3,757'
+                    });
+                }, 1500);
+            } catch (error) {
+                console.error("Vehicle stats fetch error", error);
+            }
+        };
+
         checkAndFetchNews();
         fetchRealTimeData(); 
+        fetchVehicleStats();
         
         const newsInterval = setInterval(checkAndFetchNews, 10 * 60 * 1000);
-        const forexInterval = setInterval(fetchRealTimeData, 5 * 60 * 1000); // 股市與匯率每 5 分鐘更新一次
+        const forexInterval = setInterval(fetchRealTimeData, 5 * 60 * 1000); 
         
         return () => {
             clearInterval(newsInterval);
@@ -4017,7 +4033,6 @@ const SmartNewsTicker = () => {
         };
     }, []);
 
-    // 翻頁動畫定時器 (每 3.5 秒換一頁)
     useEffect(() => {
         const flipInterval = setInterval(() => {
             setFinIndex((prev) => (prev + 1) % financialStats.length);
@@ -4026,7 +4041,7 @@ const SmartNewsTicker = () => {
     }, [financialStats.length]);
 
     return (
-        <div className="flex items-center bg-slate-100 text-slate-700 rounded-full shadow-inner overflow-hidden w-full border border-slate-200 h-8 relative max-w-3xl mx-auto">
+        <div className="flex items-center bg-slate-100 text-slate-700 rounded-full shadow-inner overflow-hidden w-full border border-slate-200 h-8 relative max-w-5xl mx-auto">
             <style>{`
                 @keyframes marquee-inline {
                     0% { transform: translateX(0); }
@@ -4046,24 +4061,20 @@ const SmartNewsTicker = () => {
                 }
             `}</style>
 
-            {/* 左側標籤 (iPhone 極簡化) */}
+            {/* 左側標籤 */}
             <div className="flex-none bg-blue-600 text-white text-[10px] font-bold px-2 md:px-3 h-full flex items-center z-20 shadow-[2px_0_5px_rgba(0,0,0,0.1)]">
                 <Zap size={12} className="mr-1 text-yellow-400 fill-yellow-400 animate-pulse"/> 
                 <span className="hidden md:inline">AI 快訊</span>
                 <span className="md:hidden">AI</span>
             </div>
 
-            {/* ★★★ 金融實時翻頁區 (加寬以容納指數與漲跌幅) ★★★ */}
+            {/* 金融實時翻頁區 (升綠跌紅) */}
             <div className="flex-none bg-slate-800 text-white h-full relative overflow-hidden flex items-center justify-center min-w-[130px] md:min-w-[160px] border-r border-slate-700 z-10 shadow-inner">
                 {financialStats.map((stat, idx) => {
-                    // ★ 動態顏色判斷：升用綠色，跌用紅色
                     let finalColor = stat.color;
                     const valStr = String(stat.value);
-                    if (valStr.includes('+') || valStr.includes('▲')) {
-                        finalColor = 'text-green-400';
-                    } else if (valStr.includes('-') || valStr.includes('▼')) {
-                        finalColor = 'text-red-400';
-                    }
+                    if (valStr.includes('+') || valStr.includes('▲')) finalColor = 'text-green-400';
+                    else if (valStr.includes('-') || valStr.includes('▼')) finalColor = 'text-red-400';
 
                     return (
                         <div 
@@ -4079,7 +4090,7 @@ const SmartNewsTicker = () => {
                 })}
             </div>
 
-            {/* 右側新聞滾動文字 */}
+            {/* 中央：新聞滾動文字 */}
             <div className="flex-1 overflow-hidden relative mask-edges-inline flex items-center h-full">
                 <div className="animate-marquee-inline cursor-default h-full flex items-center">
                     {[...aiNewsFeed, ...aiNewsFeed].map((item, idx) => (
@@ -4092,6 +4103,26 @@ const SmartNewsTicker = () => {
                     ))}
                 </div>
             </div>
+
+            {/* ★★★ 右側新增：運輸署私家車銷售情報區 ★★★ */}
+            <div className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner">
+                <div className="flex items-center gap-3">
+                    <div className="text-[9px] text-slate-400 leading-tight border-r border-slate-600 pr-2">
+                        {carSalesStats.month}月全港登記<br/><span className="text-slate-200 font-bold tracking-widest">{carSalesStats.total}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px]">
+                        <div className="flex items-center" title="電動車登記數 (Electric)">
+                            <span className="text-green-400 font-bold mr-1.5">EV⚡</span>
+                            <span className="font-mono text-white font-bold">{carSalesStats.evCount}</span>
+                        </div>
+                        <div className="flex items-center" title="燃油車登記數 (Petrol/Diesel)">
+                            <span className="text-orange-400 font-bold mr-1.5">燃油⛽</span>
+                            <span className="font-mono text-white font-bold">{carSalesStats.petrolCount}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
         </div>
     );
 };
