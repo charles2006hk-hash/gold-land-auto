@@ -4,8 +4,8 @@ import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/fire
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { getAuth, signInAnonymously } from 'firebase/auth'; 
 
-// ★ 修正：如果您是 Vercel 免費版 (Hobby)，最高只能設 10。設 60 伺服器會直接報錯拒絕工作！
-export const maxDuration = 10;
+// ★ Vercel 免費版最高限制 10-15 秒，這個設定能確保它撐到極限不隨便斷線
+export const maxDuration = 10; 
 
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
@@ -16,24 +16,14 @@ const firebaseConfig = {
   appId: "1:817229766566:web:73314925fe0a4d43917967"
 };
 
-// 初始化 Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
 const auth = getAuth(app); 
 
-// ==================================================================
-// ★★★ 新增：API 連線測試通道 ★★★
-// ==================================================================
-export async function GET() {
-    return NextResponse.json({ 
-        success: true, 
-        message: "🟢 綠燈！API 運作完全正常！Vercel 伺服器隨時準備好接收 iPhone 捷徑的請求。" 
-    });
-}
-
 export async function POST(request: Request) {
     try {
+        // ★ 複用登入狀態，省下每次重新登入的 2 秒鐘，減少逾時機率
         if (!auth.currentUser) {
             await signInAnonymously(auth);
         }
@@ -46,7 +36,6 @@ export async function POST(request: Request) {
         }
 
         const safeFileName = fileName ? fileName.replace(/[^a-zA-Z0-9.\-_]/g, '') : 'image.jpg';
-        
         const filePath = `media/gold-land-auto/ios_${Date.now()}_${safeFileName}`;
         const storageRef = ref(storage, filePath);
         
@@ -59,6 +48,10 @@ export async function POST(request: Request) {
             fileName: fileName || 'iOS_Upload.jpg',
             tags: ["Inbox", "iPhone 捷徑"],
             status: 'unassigned',
+            
+            // ★★★ 破案關鍵：加上這個標籤，系統的「導入選單」才看得見它！ ★★★
+            mediaType: 'document', 
+            
             aiData: {},
             createdAt: serverTimestamp(),
             uploadedBy: staffId || 'BOSS'
