@@ -3483,42 +3483,42 @@ const BusinessProcessModule = ({
                                             
                                             {/* 左：資料準備 (Source) */}
                                             <div className="space-y-6">
+                                                
                                                 {/* ★★★ 這裡掛載剛剛寫好的 Modal ★★★ */}
-                                                  {showTdPackModal && (
-                                                      <TDTaskPackModal 
-                                                          vehicle={editingVehicle} 
-                                                          onClose={() => setShowTdPackModal(false)} 
-                                                      />
-                                                  )}
-                                                  
-                                                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                                                      <div className="flex justify-between items-center mb-4">
-                                                          <h4 className="font-bold text-slate-700 flex items-center">
-                                                              <Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備
-                                                          </h4>
-                                                          {/* ★★★ 這裡加入觸發按鈕 ★★★ */}
-                                                          <button 
-                                                              onClick={() => setShowTdPackModal(true)}
-                                                              className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
-                                                          >
-                                                              🖨️ 生成 TD 打包單
-                                                          </button>
-                                                      </div>
-                                                      
-                                                      <div className="space-y-3">
-                                                          {(stepData.fields || []).map((field: string) => {
-                                                              const val = getFieldValue(field);
-                                                              const labels: any = { regMark: '香港車牌', chassisNo: '車架號', engineNo: '引擎號', driver1: '主司機', driver1_id: '證件號', hkCompany: '香港公司', mainlandCompany: '內地公司', colorExt: '顏色' };
-                                                              return (
-                                                                  <div key={field} onClick={() => {navigator.clipboard.writeText(val); alert("已複製: "+val)}} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer group transition-all">
-                                                                      <div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{labels[field] || field}</div><div className="font-mono font-bold text-slate-800 text-lg">{val || '-'}</div></div>
-                                                                      <div className="p-2 bg-white rounded-lg text-slate-300 group-hover:text-blue-500 shadow-sm"><Copy size={16}/></div>
-                                                                  </div>
-                                                              );
-                                                          })}
-                                                          {(!stepData.fields || stepData.fields.length === 0) && <div className="text-slate-400 text-sm italic text-center py-4 bg-slate-50 rounded-xl">此步驟無需複製特定資料</div>}
-                                                      </div>
-                                                  </div>
+                                                {showTdPackModal && (
+                                                    <TDTaskPackModal 
+                                                        vehicle={editingVehicle} 
+                                                        onClose={() => setShowTdPackModal(false)} 
+                                                    />
+                                                )}
+
+                                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                    <div className="flex justify-between items-center mb-4">
+                                                        <h4 className="font-bold text-slate-700 flex items-center">
+                                                            <Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備
+                                                        </h4>
+                                                        {/* ★★★ 這裡加入觸發按鈕 ★★★ */}
+                                                        <button 
+                                                            onClick={() => setShowTdPackModal(true)}
+                                                            className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
+                                                        >
+                                                            🖨️ 生成 TD 打包單
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    <div className="space-y-3">
+                                                        {(stepData.fields || []).map((field: string) => {
+                                                            const val = getFieldValue(field);
+                                                            const labels: any = { regMark: '香港車牌', chassisNo: '車架號', engineNo: '引擎號', driver1: '主司機', driver1_id: '證件號', hkCompany: '香港公司', mainlandCompany: '內地公司', colorExt: '顏色' };
+                                                            return (
+                                                                <div key={field} onClick={() => {navigator.clipboard.writeText(val); alert("已複製: "+val)}} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer group transition-all">
+                                                                    <div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{labels[field] || field}</div><div className="font-mono font-bold text-slate-800 text-lg">{val || '-'}</div></div>
+                                                                    <div className="p-2 bg-white rounded-lg text-slate-300 group-hover:text-blue-500 shadow-sm"><Copy size={16}/></div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {(!stepData.fields || stepData.fields.length === 0) && <div className="text-slate-400 text-sm italic text-center py-4 bg-slate-50 rounded-xl">此步驟無需複製特定資料</div>}
+                                                    </div>
                                                 </div>
 
                                                 <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
