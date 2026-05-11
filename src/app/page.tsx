@@ -3129,6 +3129,174 @@ const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => 
 };
 
 // ------------------------------------------------------------------
+// ★★★ 新增：運輸署業務打包系統 (TD Task Pack Generator) ★★★
+// ------------------------------------------------------------------
+const TDTaskPackModal = ({ vehicle, onClose }: any) => {
+    const [taskType, setTaskType] = useState('TD22');
+    
+    const taskConfigs: Record<string, any> = {
+        'TD22': {
+            name: '車輛過戶 (TD22)',
+            title: '運輸署 - 車輛過戶代辦清單',
+            docs: ['買賣雙方已簽署的 TD22 表格正本', '買賣雙方身份證副本 (或公司 BR 副本)', '車輛登記文件 (牌簿 VRD) 正本', '新車主名下的有效汽車保險 (Cover Note)', '最近三個月內的地址證明'],
+            fee: '$1,000 (過戶費)'
+        },
+        'TD558': {
+            name: '續領牌費 (TD558)',
+            title: '運輸署 - 續領車輛牌照代辦清單',
+            docs: ['已簽署的 TD558 表格正本', '登記車主身份證副本', '車輛登記文件 (牌簿 VRD) 正本', '有效汽車保險 (涵蓋新牌照期)', '最近三個月內的地址證明', '驗車合格證明書 (如車齡超過6年)'],
+            fee: '視乎引擎容積 (預設 $5,074 或以上)'
+        },
+        'TD148': {
+            name: '留用/套用車牌 (TD148)',
+            title: '運輸署 - 留用/套用車牌代辦清單',
+            docs: ['已簽署的 TD148 表格正本', '登記車主身份證副本', '車輛登記文件 (牌簿 VRD) 正本', '地址證明'],
+            fee: '$560 (留牌費)'
+        }
+    };
+
+    const handlePrintPack = () => {
+        const config = taskConfigs[taskType];
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('請允許瀏覽器彈出視窗以進行列印');
+            return;
+        }
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>運輸署辦理打包單 - ${vehicle.regMark}</title>
+                <style>
+                    @page { size: A4; margin: 20mm; }
+                    body { font-family: "Helvetica Neue", "Microsoft JhengHei", sans-serif; color: #333; line-height: 1.6; }
+                    .header { border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+                    .header h1 { margin: 0; color: #1e3a8a; font-size: 24px; }
+                    .header .meta { text-align: right; font-size: 12px; color: #666; }
+                    .section { margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
+                    .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 10px; margin-top: 0; }
+                    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+                    th, td { padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+                    th { width: 30%; color: #64748b; font-weight: normal; }
+                    td { font-weight: bold; color: #0f172a; }
+                    .checklist { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+                    .checklist li { margin-bottom: 12px; display: flex; align-items: flex-start; }
+                    .checkbox { width: 16px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 12px; margin-top: 2px; flex-shrink: 0; }
+                    .footer { margin-top: 40px; font-size: 12px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+                    .sign-box { margin-top: 30px; display: flex; justify-content: space-between; }
+                    .sign-line { border-bottom: 1px solid #333; width: 200px; margin-top: 40px; text-align: center; padding-bottom: 5px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div>
+                        <h1>${config.title}</h1>
+                        <p style="margin: 5px 0 0 0; font-weight: bold; font-size: 18px;">車牌號碼: ${vehicle.regMark || '未出牌'}</p>
+                    </div>
+                    <div class="meta">
+                        列印日期: ${new Date().toLocaleDateString('zh-HK')}<br/>
+                        系統編號: ${vehicle.id ? vehicle.id.substring(0, 8).toUpperCase() : 'N/A'}
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3 class="section-title">車輛與車主預填資料 (Vehicle & Owner Info)</h3>
+                    <table>
+                        <tr><th>廠牌及型號 (Make & Model)</th><td>${vehicle.make || '-'} ${vehicle.model || '-'}</td></tr>
+                        <tr><th>製造年份 (Year of Mfg)</th><td>${vehicle.year || '-'}</td></tr>
+                        <tr><th>底盤號碼 (Chassis No.)</th><td style="font-family: monospace;">${vehicle.chassisNo || '-'}</td></tr>
+                        <tr><th>引擎號碼 (Engine No.)</th><td style="font-family: monospace;">${vehicle.engineNo || '-'}</td></tr>
+                        <tr><th>登記車主 (Registered Owner)</th><td>${vehicle.registeredOwnerName || vehicle.customerName || '-'}</td></tr>
+                        <tr><th>身份證/公司編號 (ID/CI No.)</th><td>${vehicle.registeredOwnerId || vehicle.customerID || '-'}</td></tr>
+                        <tr><th>車主地址 (Address)</th><td>${vehicle.customerAddress || '-'}</td></tr>
+                    </table>
+                </div>
+
+                <div class="section">
+                    <h3 class="section-title">必須攜帶文件清單 (Required Documents Checklist)</h3>
+                    <ul class="checklist">
+                        ${config.docs.map((doc: string) => `<li><div class="checkbox"></div><span>${doc}</span></li>`).join('')}
+                    </ul>
+                    <div style="margin-top: 15px; padding: 10px; background-color: #f8fafc; border-radius: 4px; font-size: 12px; border-left: 3px solid #f59e0b;">
+                        <strong>政府規費預算:</strong> ${config.fee} (請備妥足夠現金或支票)
+                    </div>
+                </div>
+
+                <div class="sign-box">
+                    <div>
+                        <div class="sign-line"></div>
+                        <div>負責同事簽收 (Handled By)</div>
+                    </div>
+                    <div>
+                        <div class="sign-line"></div>
+                        <div>日期 (Date)</div>
+                    </div>
+                </div>
+
+                <div class="footer">
+                    Gold Land Auto DMS - 自動生成之辦理清單 (內部文件)
+                </div>
+
+                <script>
+                    window.onload = function() { window.print(); }
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                    <h3 className="font-bold flex items-center">🖨️ 生成運輸署業務打包單</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
+                </div>
+                
+                <div className="p-5 bg-slate-50 border-b border-slate-200">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">1. 選擇辦理業務類型</label>
+                    <select 
+                        value={taskType} 
+                        onChange={(e) => setTaskType(e.target.value)}
+                        className="w-full p-3 rounded-xl border border-slate-300 font-bold text-slate-800 outline-none focus:ring-2 ring-blue-500 cursor-pointer"
+                    >
+                        {Object.keys(taskConfigs).map(key => (
+                            <option key={key} value={key}>{taskConfigs[key].name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="p-5 flex-1">
+                    <h4 className="text-xs font-bold text-slate-500 mb-3">文件查核預覽 (Checklist)</h4>
+                    <div className="space-y-2">
+                        {taskConfigs[taskType].docs.map((doc: string, idx: number) => (
+                            <div key={idx} className="flex items-start text-sm text-slate-700 bg-slate-50 p-2 rounded border border-slate-100">
+                                <div className="w-4 h-4 border-2 border-slate-400 rounded mr-3 mt-0.5 shrink-0 bg-white"></div>
+                                <span>{doc}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="p-4 bg-white border-t border-slate-200">
+                    <button 
+                        onClick={handlePrintPack}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center"
+                    >
+                        生成並列印打包單 (PDF)
+                    </button>
+                    <p className="text-[10px] text-slate-400 text-center mt-3">
+                        提示：系統會自動將 {vehicle.regMark} 的車身及車主資料填入清單中，方便同事核對。
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
 // ★★★ 新增：業務辦理流程模組 (Business Process Module) - v17.1 修復版 ★★★
 // ------------------------------------------------------------------
 const BusinessProcessModule = ({ 
@@ -3148,6 +3316,7 @@ const BusinessProcessModule = ({
     const [photo, setPhoto] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    const [showTdPackModal, setShowTdPackModal] = useState(false);
     // 處理日誌保存與下一步
     const handleSaveLog = async (currentStepName: string, nextStepIndex: number) => {
         if (!editingVehicle || !editingVehicle.id) return;
@@ -3314,21 +3483,42 @@ const BusinessProcessModule = ({
                                             
                                             {/* 左：資料準備 (Source) */}
                                             <div className="space-y-6">
-                                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                                                    <h4 className="font-bold text-slate-700 mb-4 flex items-center"><Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備 (點擊複製)</h4>
-                                                    <div className="space-y-3">
-                                                        {(stepData.fields || []).map((field: string) => {
-                                                            const val = getFieldValue(field);
-                                                            const labels: any = { regMark: '香港車牌', chassisNo: '車架號', engineNo: '引擎號', driver1: '主司機', driver1_id: '證件號', hkCompany: '香港公司', mainlandCompany: '內地公司', colorExt: '顏色' };
-                                                            return (
-                                                                <div key={field} onClick={() => {navigator.clipboard.writeText(val); alert("已複製: "+val)}} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer group transition-all">
-                                                                    <div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{labels[field] || field}</div><div className="font-mono font-bold text-slate-800 text-lg">{val || '-'}</div></div>
-                                                                    <div className="p-2 bg-white rounded-lg text-slate-300 group-hover:text-blue-500 shadow-sm"><Copy size={16}/></div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                        {(!stepData.fields || stepData.fields.length === 0) && <div className="text-slate-400 text-sm italic text-center py-4 bg-slate-50 rounded-xl">此步驟無需複製特定資料</div>}
-                                                    </div>
+                                                {/* ★★★ 這裡掛載剛剛寫好的 Modal ★★★ */}
+                                                  {showTdPackModal && (
+                                                      <TDTaskPackModal 
+                                                          vehicle={editingVehicle} 
+                                                          onClose={() => setShowTdPackModal(false)} 
+                                                      />
+                                                  )}
+                                                  
+                                                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                                      <div className="flex justify-between items-center mb-4">
+                                                          <h4 className="font-bold text-slate-700 flex items-center">
+                                                              <Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備
+                                                          </h4>
+                                                          {/* ★★★ 這裡加入觸發按鈕 ★★★ */}
+                                                          <button 
+                                                              onClick={() => setShowTdPackModal(true)}
+                                                              className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
+                                                          >
+                                                              🖨️ 生成 TD 打包單
+                                                          </button>
+                                                      </div>
+                                                      
+                                                      <div className="space-y-3">
+                                                          {(stepData.fields || []).map((field: string) => {
+                                                              const val = getFieldValue(field);
+                                                              const labels: any = { regMark: '香港車牌', chassisNo: '車架號', engineNo: '引擎號', driver1: '主司機', driver1_id: '證件號', hkCompany: '香港公司', mainlandCompany: '內地公司', colorExt: '顏色' };
+                                                              return (
+                                                                  <div key={field} onClick={() => {navigator.clipboard.writeText(val); alert("已複製: "+val)}} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-blue-50 hover:border-blue-200 cursor-pointer group transition-all">
+                                                                      <div><div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{labels[field] || field}</div><div className="font-mono font-bold text-slate-800 text-lg">{val || '-'}</div></div>
+                                                                      <div className="p-2 bg-white rounded-lg text-slate-300 group-hover:text-blue-500 shadow-sm"><Copy size={16}/></div>
+                                                                  </div>
+                                                              );
+                                                          })}
+                                                          {(!stepData.fields || stepData.fields.length === 0) && <div className="text-slate-400 text-sm italic text-center py-4 bg-slate-50 rounded-xl">此步驟無需複製特定資料</div>}
+                                                      </div>
+                                                  </div>
                                                 </div>
 
                                                 <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
