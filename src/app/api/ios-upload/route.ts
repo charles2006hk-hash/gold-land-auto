@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
-// ★ 新增：引入驗證模組
 import { getAuth, signInAnonymously } from 'firebase/auth'; 
+
+// ★ 關鍵修復 1：強制延長 Vercel 的執行時限至 60 秒 (預設只有 10~15 秒，極易逾時)
+export const maxDuration = 60;
 
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
@@ -18,13 +20,15 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
-// ★ 新增：初始化 Auth
 const auth = getAuth(app); 
 
 export async function POST(request: Request) {
     try {
-        // ★ 關鍵修復：讓這支 API 取得「匿名寫入權限」，這樣 Firebase 就不會阻擋了！
-        await signInAnonymously(auth);
+        // ★ 關鍵修復 2：先檢查是否已經有登入狀態。
+        // 伺服器會暫存狀態，如果已經登入就直接用，能省下每次重新申請匿名帳號的 2~3 秒！
+        if (!auth.currentUser) {
+            await signInAnonymously(auth);
+        }
 
         // 接收來自 iPhone 捷徑的資料
         const body = await request.json();
