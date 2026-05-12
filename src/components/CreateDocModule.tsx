@@ -43,7 +43,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
         remarks: '', paymentMethod: 'Cheque',
         orderType: 'None', overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: '',
-        overseasTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
+        overseasTotalFee: '', localTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         contractPhotos: [] as string[]
     });
 
