@@ -2323,37 +2323,41 @@ const MediaLibraryModule = ({ db, storage, staffId, appId, settings, inventory }
         }
     };
 
-    // ★★★ 智能圖庫資料讀取 (嚴格權限版：Inbox 私有化) ★★★
+   // ★★★ 智能圖庫資料讀取 (正式索引版：效能優化 + 權限解鎖) ★★★
     useEffect(() => {
         if (!db || !staffId) return;
-        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), orderBy('createdAt', 'desc'));
+
+        // 因為您已經建立了索引，我們這裡可以使用 orderBy 讓 Firebase 伺服器做排序，效能最高
+        const q = query(
+            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), 
+            orderBy('createdAt', 'desc')
+        );
         
         return onSnapshot(q, (snap) => {
             const list: MediaLibraryItem[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
             
-            // 過濾邏輯
+            // 這裡進行過濾，確保 BOSS 能看到所有 Inbox，且不分大小寫
             const myImages = list.filter(img => {
-                // 1. 如果是管理員 (BOSS)，看全部 (包含所有人的 Inbox 和所有已連結圖片)
-                if (staffId === 'BOSS') {
-                     return true; 
+                const currentStaff = String(staffId).toUpperCase();
+                const uploader = String(img.uploadedBy || '').toUpperCase();
+
+                // 1. 如果是 BOSS，無條件顯示所有 Inbox 圖片
+                if (currentStaff === 'BOSS') {
+                    return true;
                 }
                 
-                // 2. 如果是員工...
-                
-                //情況 A：已歸檔 (Linked) 的圖片
-                // 邏輯：看是否屬於「我能看到的車」(visibleInventory)
+                // 2. 如果是普通員工
+                // A. 已歸檔的圖片：顯示與現有庫存匹配的
                 if (img.status === 'linked' && img.relatedVehicleId) {
                     return inventory.some((v: Vehicle) => v.id === img.relatedVehicleId);
                 }
                 
-                // 情況 B：未歸檔 (Inbox) 的圖片
-                // ★★★ 關鍵修改：只看「我自己上傳的」 ★★★
+                // B. 待處理 (Inbox) 的圖片：只顯示自己傳的 (忽略大小寫)
                 if (img.status === 'unassigned' || !img.status) {
-                    return img.uploadedBy === staffId;
+                    return uploader === currentStaff;
                 }
                 
-                // 其他情況不顯示
                 return false; 
             });
 
