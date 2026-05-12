@@ -35,11 +35,26 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "沒有收到圖片資料" }, { status: 400 });
         }
 
-        const safeFileName = fileName ? fileName.replace(/[^a-zA-Z0-9.\-_]/g, '') : 'image.jpg';
+        // ==========================================
+        // ★ 升級防呆：確保檔名乾淨，並且強制加上 .jpg 副檔名
+        // ==========================================
+        let safeFileName = fileName ? fileName.replace(/[^a-zA-Z0-9.\-_]/g, '') : `image_${Date.now()}`;
+        if (!safeFileName.toLowerCase().endsWith('.jpg') && !safeFileName.toLowerCase().endsWith('.jpeg') && !safeFileName.toLowerCase().endsWith('.png')) {
+            safeFileName += '.jpg';
+        }
+
         const filePath = `media/gold-land-auto/ios_${Date.now()}_${safeFileName}`;
         const storageRef = ref(storage, filePath);
         
-        await uploadString(storageRef, fileBase64, 'base64');
+        // ==========================================
+        // ★★★ 破案關鍵：強制告訴 Firebase 這是一張圖片！ ★★★
+        // ==========================================
+        const metadata = {
+            contentType: 'image/jpeg',
+        };
+        
+        // ★ 帶上 metadata 一起上傳，解決 application/octet-stream 問題
+        await uploadString(storageRef, fileBase64, 'base64', metadata);
         const downloadURL = await getDownloadURL(storageRef);
 
         await addDoc(collection(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'media_library'), {
