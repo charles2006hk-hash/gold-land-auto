@@ -65,7 +65,7 @@ export async function POST(request: Request) {
             status: 'unassigned',
             
             // ★★★ 破案關鍵：加上這個標籤，系統的「導入選單」才看得見它！ ★★★
-            mediaType: 'document', 
+            mediaType: 'vehicle', 
             
             aiData: {},
             createdAt: serverTimestamp(),
