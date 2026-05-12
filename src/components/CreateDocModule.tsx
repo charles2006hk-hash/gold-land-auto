@@ -8,7 +8,7 @@ import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
 const overseasOptions = [
-    {k:'chk_ov_local', l:'當地人費用'}, {k:'chk_ov_auction', l:'拍賣手續'}, {k:'chk_ov_shipping', l:'運輸'}, 
+    {k:'chk_ov_price', l:'車價'}, {k:'chk_ov_local', l:'當地人費用'}, {k:'chk_ov_auction', l:'拍賣手續'}, {k:'chk_ov_shipping', l:'運輸'}, 
     {k:'chk_ov_ins', l:'保險'}, {k:'chk_ov_tax', l:'稅金'}, {k:'chk_ov_doc', l:'文件費'}, {k:'chk_ov_misc', l:'雜費'}
 ];
 
@@ -43,8 +43,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), 
         remarks: '', paymentMethod: 'Cheque',
         orderType: 'None', overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: '',
-        overseasTotalFee: '', chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
-        localTotalFee: '', chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false,
+        overseasTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         contractPhotos: [] as string[]
     });
 
@@ -252,7 +251,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '',
-            chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false, etaFormat: 'date', etaDays: '', etaDate: ''
+            chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false, etaFormat: 'date', etaDays: '', etaDate: ''
         }));
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
