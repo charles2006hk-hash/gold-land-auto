@@ -6152,10 +6152,38 @@ const deleteVehicle = async (id: string) => {
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
     
-    // 1. 更新車輛本身的收款紀錄 (保留原本的功能)
-    updateSubItem(vehicleId, 'payments', [...(v.payments || []), payment]);
+    // 1. 更新車輛本身的收款紀錄 (包含原本已收 + 本次新增)
+    const newPaymentsList = [...(v.payments || []), payment];
+    updateSubItem(vehicleId, 'payments', newPaymentsList);
 
-    // ★★★ 2. 新增：自動於「開單系統」生成對應的收據 (Receipt) ★★★
+    // ★ 2. 抓取車輛的「額外收費項目」(中港、附加費、未付維修等) 確保開單系統的總價計算精準
+    const extraItems: any[] = [];
+    if (v.crossBorder?.tasks) {
+        v.crossBorder.tasks.forEach((t: any, i: number) => { 
+            if (t.fee > 0) extraItems.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true }); 
+        });
+    }
+    if ((v as any).salesAddons) {
+        (v as any).salesAddons.forEach((addon: any, i: number) => { 
+            if (addon.amount > 0) extraItems.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false }); 
+        });
+    }
+    if (v.maintenanceRecords) {
+        const unpaidMaint = v.maintenanceRecords.filter((m:any) => m.charge > 0 && m.chargeStatus !== 'Paid');
+        unpaidMaint.forEach((m:any, i:number) => {
+            extraItems.push({ id: `maint_${i}`, desc: `[維修] ${m.item}`, amount: m.charge, isSelected: true });
+        });
+    }
+
+    // ★ 3. 整理所有收款紀錄為「收據明細」(歷史收款 + 本次收款)
+    const depositItemsList = newPaymentsList.map((p: any, idx: number) => ({
+        id: p.id || `pay_${idx}`,
+        // 判斷：如果是本次這筆，標示「本次收款」，如果是歷史紀錄，標示「前期已付」
+        label: p.id === payment.id ? `本次收款 (${p.type})` : `前期已付 (${p.type} @ ${p.date})`,
+        amount: Number(p.amount) || 0
+    }));
+
+    // ★★★ 4. 自動於「開單系統」生成完美對應的收據 (Receipt) ★★★
     try {
         const receiptData = {
             type: 'receipt', // 指定為收據
@@ -6177,12 +6205,16 @@ const deleteVehicle = async (id: string) => {
                 price: v.price ? v.price.toString() : '0', 
                 deliveryDate: payment.date, // 使用收款日期
                 paymentMethod: payment.method || 'Cash',
-                remarks: payment.note || ''
+                remarks: payment.note || '',
+                // 加入海外訂單支援
+                orderType: v.acquisition?.type === 'Import' ? 'Overseas' : 'None',
+                overseasCountry: 'Japan',
+                overseasTotalFee: v.acquisition?.localChargesForeign || 0,
+                localTotalFee: v.acquisition?.portFee || 0,
             },
             checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
-            docItems: [], // 額外收費項目留空
-            // 將本次收款轉化為收據上的明細
-            depositItems: [{ id: payment.id, label: `收款項目: ${payment.type}`, amount: Number(payment.amount) || 0 }],
+            docItems: extraItems,           // 帶入額外費用 (對齊車價)
+            depositItems: depositItemsList, // 帶入所有歷史+本次收款 (讓尾數正確遞減)
             showTerms: false, 
             summary: `${v.customerName || '未填寫客戶'} - ${v.regMark || '無車牌'} - 自動生成收據 (${payment.type})`,
             updatedAt: serverTimestamp(),
@@ -6193,7 +6225,7 @@ const deleteVehicle = async (id: string) => {
         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), receiptData);
         
         // 彈出成功提示
-        alert(`✅ 收款已記錄！\n系統已自動於開單模塊生成一張「正式收據」。`);
+        alert(`✅ 收款已記錄！\n系統已自動於開單模塊生成一張餘額精準的「正式收據」。`);
     } catch (e) {
         console.error("自動生成收據失敗:", e);
     }
