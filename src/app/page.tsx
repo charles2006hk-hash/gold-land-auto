@@ -6838,7 +6838,7 @@ const DatabaseSelector = ({
                   {/* 點擊後展開的分析面板 */}
                   {showMarketIntelligence && (() => {
                       // ★ 終極魔法：直接綁定系統的實時資料庫，只要 API 抓完，這裡 0.1 秒內自動顯示，完全不用重新整理！
-                      const realTimeMarketStats = dbEntries.find(d => d.docType === '市場大數據');
+                      const realTimeMarketStats = dbEntries.find(d => d.docType === '市場大數據') as any;
 
                       return (
                       <div className="w-full mt-3 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-2xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300 max-h-[65vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700">
