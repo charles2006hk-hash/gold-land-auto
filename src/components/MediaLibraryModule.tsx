@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { 
     collection, query, orderBy, onSnapshot, doc, updateDoc, 
-    serverTimestamp, deleteDoc, writeBatch, where 
+    serverTimestamp, deleteDoc, writeBatch, where, , addDoc 
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '@/utils/imageHelpers';
