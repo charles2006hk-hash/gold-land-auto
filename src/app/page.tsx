@@ -5655,7 +5655,8 @@ const deleteVehicle = async (id: string) => {
             showTerms: false, 
             summary: `${v.customerName || '未填寫客戶'} - ${v.regMark || '無車牌'} - 自動生成收據 (${payment.type})`,
             updatedAt: serverTimestamp(),
-            createdAt: serverTimestamp()
+            createdAt: serverTimestamp(),
+            createdBy: staffId
         };
         
         // 寫入開單系統的資料庫
@@ -7078,6 +7079,7 @@ const DatabaseSelector = ({
                   externalRequest={externalDocRequest}
                   setExternalRequest={setExternalDocRequest}
                   COMPANY_INFO={COMPANY_INFO}
+                  currentUser={currentUser} // ★★★ 新增：傳遞使用者權限
               />
           )}
           
