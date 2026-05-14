@@ -63,6 +63,7 @@ export type DatabaseEntry = {
     renewalUnit?: 'year' | 'month'; 
     customReminders?: any[];
     extractedData?: any;
+    isPublic?: boolean;
 };
 
 export type MediaLibraryItem = {
