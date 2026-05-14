@@ -21,95 +21,58 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-export async function GET(request: Request) {
-    console.log("========== 開始抓取香港政府真實車市數據 (智慧比對版) ==========");
-    try {
-        if (!auth.currentUser) {
-            await signInAnonymously(auth);
-        }
+// src/app/api/sync-market-data/route.ts (部分關鍵代碼)
+// ...前面初始化代碼保持不變...
 
-        console.log("[步驟 1] 正在向 DATA.GOV.HK 請求最新 CSV 數據...");
+export async function GET(request: Request) {
+    try {
+        if (!auth.currentUser) await signInAnonymously(auth);
+
         const govCsvUrl = "https://www.td.gov.hk/datagovhk_tis/mttd-csv/en/table41e_eng.csv";
-        
         const response = await fetch(govCsvUrl);
-        if (!response.ok) throw new Error("政府數據網站連線失敗");
-        
         const csvText = await response.text();
         const lines = csvText.split('\n');
 
-        console.log(`[步驟 2] 成功下載！共取得 ${lines.length} 行數據，開始解析...`);
-
-        let evCount = 0;
-        let petrolCount = 0;
-        let totalCount = 0;
-        let usedImportCount = 0; 
-
-        for (let i = 5; i < lines.length; i++) {
-            const row = lines[i].toLowerCase();
-            if (!row || row.trim() === '') continue;
-
-            if (row.includes('electric')) evCount++;
-            if (row.includes('petrol')) petrolCount++;
-            if (row.includes('used')) usedImportCount++; 
-            totalCount++;
-        }
-
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1;
-        
-        // ★ 核心升級 1：綁定一個固定的檔案 ID (例如: market_stats_2026_05)
+        const brandData: { [key: string]: any } = {};
+
+        // 解析 CSV (從數據列開始)
+        for (let i = 6; i < lines.length; i++) {
+            const cols = lines[i].split(',');
+            if (cols.length < 5) continue;
+
+            const make = cols[0].trim().toUpperCase(); // 品牌名
+            const fuelType = cols[2].trim();          // 燃料
+            const status = cols[3].trim();            // New/Used
+            const count = parseInt(cols[4]) || 0;     // 數量
+
+            if (!make || make === 'TOTAL') continue;
+
+            if (!brandData[make]) {
+                brandData[make] = { total: 0, new: 0, used: 0, ev: 0 };
+            }
+
+            brandData[make].total += count;
+            if (status.toLowerCase() === 'new') brandData[make].new += count;
+            if (status.toLowerCase() === 'used') brandData[make].used += count;
+            if (fuelType.toLowerCase().includes('electric')) brandData[make].ev += count;
+        }
+
         const documentId = `market_stats_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
         const docRef = doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database', documentId);
 
-        console.log(`[步驟 3] 檢查資料庫是否已有相同數據 (${documentId})...`);
-        const docSnap = await getDoc(docRef);
-
-        // ★ 核心升級 2：智慧比對邏輯
-        if (docSnap.exists()) {
-            const existingData = docSnap.data();
-            // 如果資料庫裡的「總車數」跟我們剛剛算出來的一模一樣，代表政府沒更新，我們也不用更新！
-            if (existingData.analysis && existingData.analysis.totalRowsProcessed === totalCount) {
-                console.log("👉 數據完全相同，跳過寫入，節省資源！");
-                return NextResponse.json({ 
-                    success: true, 
-                    message: "資料庫已是最新狀態，無需重複寫入！", 
-                    data: existingData 
-                });
-            }
-        }
-
-        console.log("[步驟 4] 發現新數據！準備寫入資料庫...");
         const processedData = {
-            category: "Other",          
-            docType: "市場大數據",       
-            name: `${currentYear}年${currentMonth}月 香港私家車首次登記分析`, 
-            analysis: {
-                totalRowsProcessed: totalCount,
-                electricVehicles: evCount,
-                petrolVehicles: petrolCount,
-                importedUsedCars: usedImportCount
-            },
-            rawDataUrl: govCsvUrl, 
-            source: "DATA.GOV.HK 運輸署 表4.1e",
+            category: "Other", docType: "市場大數據",
+            name: `${currentYear}年${currentMonth}月 香港車市品牌分析`,
+            brands: brandData, // ★ 這裡存入了各品牌的詳細數據
             updatedAt: serverTimestamp(),
-            // 如果原本沒有這個檔案才押上創建時間
-            ...(docSnap.exists() ? {} : { createdAt: serverTimestamp() }),
-            managedBy: "System_Auto_Bot"          
+            managedBy: "System_Auto_Bot"
         };
 
-        // 用 setDoc (有就覆寫更新，沒有就建立) 取代 addDoc
         await setDoc(docRef, processedData, { merge: true });
-        
-        console.log("[步驟 5] 真實數據寫入/更新大成功！");
-
-        return NextResponse.json({ 
-            success: true, 
-            message: docSnap.exists() ? "發現數據變動，已成功更新！" : "全新月份數據，已成功建立！", 
-            data: processedData 
-        });
-
+        return NextResponse.json({ success: true, documentId });
     } catch (error: any) {
-        console.error("[發生錯誤]:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
