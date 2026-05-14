@@ -21,7 +21,7 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 export async function GET(request: Request) {
-    console.log("========== 開始抓取香港政府真實車市數據 (精準解析版) ==========");
+    console.log("========== 開始抓取香港政府真實車市數據 (防彈解析版) ==========");
     try {
         if (!auth.currentUser) await signInAnonymously(auth);
 
@@ -30,48 +30,65 @@ export async function GET(request: Request) {
         if (!response.ok) throw new Error("政府數據網站連線失敗");
         
         const csvText = await response.text();
-        const lines = csvText.split('\n');
+        const lines = csvText.split(/\r?\n/);
 
         const brandData: { [key: string]: any } = {};
         let latestYearMonth = "";
         const validRows: any[] = [];
 
         // ==========================================
-        // ★ 階段一：清洗雙引號，對齊欄位，找出「最新月份」
+        // ★ 核心修復 1：防彈級 CSV 分割與動態欄位定位
         // ==========================================
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
 
-            // 清除所有的雙引號，然後用逗號分割
-            const cols = line.split(',').map(c => c.replace(/['"]/g, '').trim());
-            
-            // 政府標準格式：[0]年月, [1]品牌, [2]新舊, [3]燃料, [4]車型, [5]數量
-            if (cols.length < 6) continue;
+            // 1. 完美分割 CSV (忽略雙引號內的逗號)
+            let cols = [];
+            let inQuotes = false;
+            let current = "";
+            for (let char of line) {
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === ',' && !inQuotes) { cols.push(current.trim()); current = ""; }
+                else current += char;
+            }
+            cols.push(current.trim());
+            // 移除外層引號
+            cols = cols.map(c => c.replace(/^"|"$/g, '').trim());
 
-            const yearMonth = cols[0]; 
-            // 確保這是一行有效的數據 (例如 2026/04 或 202604)
-            if (yearMonth.match(/^\d{4}\/?\d{2}$/)) {
-                // 記錄 CSV 檔案中最新的一個月
+            // 2. 動態尋找「年月」的欄位 (例如: 202605 或 2026/05)
+            const ymIdx = cols.findIndex(c => /^\d{4}[\/\-]?\d{2}$/.test(c));
+            
+            // 如果找到了年月，且後面還有足夠的欄位 (廠牌, 狀態, 燃料, 數量)
+            if (ymIdx !== -1 && cols.length > ymIdx + 3) {
+                const yearMonth = cols[ymIdx].replace(/[\/\-]/g, ''); // 統一格式 202605
                 if (yearMonth > latestYearMonth) latestYearMonth = yearMonth;
-                
+
+                // 3. 從最後面倒找「數量」欄位 (因為車型可能有幾個字)
+                let count = 0;
+                for (let j = cols.length - 1; j > ymIdx + 3; j--) {
+                    if (/^\d+$/.test(cols[j])) {
+                        count = parseInt(cols[j], 10);
+                        break;
+                    }
+                }
+
                 validRows.push({
                     yearMonth,
-                    make: cols[1].toUpperCase(),
-                    status: cols[2].toLowerCase(),
-                    fuelType: cols[3].toLowerCase(),
-                    count: parseInt(cols[5]) || 0 // 第 6 欄才是數量
+                    make: cols[ymIdx + 1].toUpperCase(),
+                    status: cols[ymIdx + 2].toLowerCase(),
+                    fuelType: cols[ymIdx + 3].toLowerCase(),
+                    count: count
                 });
             }
         }
 
         // ==========================================
-        // ★ 階段二：只過濾並加總「最新月份」的數據
+        // ★ 核心修復 2：只處理最新月份
         // ==========================================
         let evCount = 0, petrolCount = 0, totalCount = 0, usedImportCount = 0;
 
         validRows.forEach(row => {
-            // 剔除舊月份與雜訊
             if (row.yearMonth !== latestYearMonth) return;
             if (!row.make || row.make === 'TOTAL' || row.make === 'MAKE') return;
 
@@ -79,26 +96,22 @@ export async function GET(request: Request) {
                 brandData[row.make] = { total: 0, new: 0, used: 0, ev: 0 };
             }
 
-            // 加總各項數據
             brandData[row.make].total += row.count;
             totalCount += row.count;
 
             if (row.status.includes('new')) brandData[row.make].new += row.count;
-            if (row.status.includes('used')) {
+            if (row.status.includes('used') || row.status.includes('unregistered')) {
                 brandData[row.make].used += row.count;
-                usedImportCount += row.count; // 計算水貨二手車
+                usedImportCount += row.count; 
             }
             if (row.fuelType.includes('electric')) {
                 brandData[row.make].ev += row.count;
                 evCount += row.count;
-            } else if (row.fuelType.includes('petrol') || row.fuelType.includes('diesel')) {
+            } else {
                 petrolCount += row.count;
             }
         });
 
-        // ==========================================
-        // ★ 階段三：寫入資料庫覆蓋舊檔案
-        // ==========================================
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1;
         const documentId = `market_stats_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
