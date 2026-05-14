@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         if (!auth.currentUser) await signInAnonymously(auth);
 
         // 1. 透過政府 CKAN API 動態尋找「最新月份」的車輛細節 CSV 網址
-        const ckanUrl = 'https://data.gov.hk/api/3/action/package_show?id=hk-td-wcms_11-first-reg-vehicle';
+        const ckanUrl = 'https://data.gov.hk/en-data/api/3/action/package_show?id=hk-td-wcms_11-first-reg-vehicle';
         const pkgRes = await fetch(ckanUrl);
         const pkgData = await pkgRes.json();
         
