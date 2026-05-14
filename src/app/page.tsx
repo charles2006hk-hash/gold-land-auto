@@ -6824,27 +6824,26 @@ const DatabaseSelector = ({
               {/* ========================================================= */}
               {/* ★★★ 市場大數據與資金轉流推算 (精緻摺疊版) ★★★ */}
               {/* ========================================================= */}
-              <div className="mt-4 flex flex-col items-end">
-                  {/* 精緻的懸浮小按鈕 (預設只顯示這個) */}
+              <div className="flex flex-col items-end flex-none w-full mb-4">
                   <button 
                       onClick={() => {
                           setShowMarketIntelligence(!showMarketIntelligence);
-                          // 當打開時，自動抓取最新的市場數據
+                          // 打開時，自動尋找資料庫中最新的市場大數據
                           if (!showMarketIntelligence && !marketStats) {
-                              const currentYear = new Date().getFullYear();
-                              const currentMonth = new Date().getMonth() + 1;
-                              const documentId = `market_models_${currentYear}年${currentMonth}月`; // 根據新版 API 的命名習慣，如果找不到可換回 market_stats
-                              
-                              import('firebase/firestore').then(({ doc, getDoc }) => {
-                                  // 嘗試抓取最新數據，這裡用模糊匹配或直接呼叫 API 也可以，這裡以讀取 DB 為主
-                                  const docRef = doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', documentId);
-                                  getDoc(docRef).then(snap => {
-                                      if (snap.exists()) setMarketStats(snap.data());
+                              import('firebase/firestore').then(({ collection, query, orderBy, limit, getDocs }) => {
+                                  const q = query(
+                                      collection(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'database'),
+                                      orderBy('createdAt', 'desc'),
+                                      limit(20)
+                                  );
+                                  getDocs(q).then(snap => {
+                                      const statsDoc = snap.docs.find(d => d.data().docType === '市場大數據');
+                                      if (statsDoc) setMarketStats(statsDoc.data());
                                   });
                               });
                           }
                       }}
-                      className="group flex items-center gap-2 bg-slate-800 hover:bg-blue-600 text-blue-300 hover:text-white px-4 py-2 rounded-full shadow-md transition-all duration-300 ease-in-out border border-slate-700"
+                      className="group flex items-center gap-2 bg-slate-800 hover:bg-blue-600 text-blue-300 hover:text-white px-4 py-2 rounded-full shadow-md transition-all duration-300 ease-in-out border border-slate-700 mt-2"
                   >
                       <Zap size={16} className={`${showMarketIntelligence ? 'text-yellow-400' : 'text-blue-400'} group-hover:text-yellow-300`} />
                       <span className="text-sm font-medium">
@@ -6852,19 +6851,19 @@ const DatabaseSelector = ({
                       </span>
                   </button>
 
-                  {/* 點擊後展開的超大分析面板 */}
+                  {/* 點擊後展開的分析面板 */}
                   {showMarketIntelligence && (
                       <div className="w-full mt-3 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-2xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300 max-h-[65vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700">
                           
                           <div className="flex justify-between items-end mb-6 border-b border-blue-800/50 pb-4 flex-none">
                               <h2 className="text-xl font-bold text-blue-100 flex items-center gap-2">
-                                  <span>📈</span> 採購雷達 (基於政府 {marketStats?.name ? marketStats.name.substring(0,8) : '最新'} 出牌數據)
+                                  <span>📈</span> 採購雷達 (基於 {marketStats?.name ? marketStats.name.substring(0,8) : '政府最新'} 出牌數據)
                               </h2>
                               <button 
                                   onClick={() => window.open('/api/sync-market-data', '_blank')}
                                   className="text-xs bg-blue-600/50 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors border border-blue-500/50 flex items-center shadow"
                               >
-                                  <RefreshCw size={12} className="mr-1.5"/> 同步政府最新明細
+                                  <RefreshCw size={12} className="mr-1.5"/> 同步最新明細
                               </button>
                           </div>
 
@@ -6911,16 +6910,14 @@ const DatabaseSelector = ({
                                   </h3>
                                   
                                   <div className="space-y-3 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
-                                      {/* 利用您的 inventory 來動態計算各型號的售出天數 */}
                                       {(() => {
-                                          const soldCars = inventory.filter(v => v.status === 'Sold' && v.stockInDate && v.stockOutDate);
+                                          const soldCars = inventory.filter((v:any) => v.status === 'Sold' && v.stockInDate && v.stockOutDate);
                                           const modelStats: Record<string, { count: number, totalDays: number }> = {};
                                           
-                                          soldCars.forEach(car => {
+                                          soldCars.forEach((car:any) => {
                                               const key = `${car.make} ${car.model}`;
-                                              const inDate = new Date(car.stockInDate!).getTime();
-                                              const outDate = new Date(car.stockOutDate!).getTime();
-                                              // 防呆機制：如果出庫日小於入庫日(輸入錯誤)，強制算0天
+                                              const inDate = new Date(car.stockInDate).getTime();
+                                              const outDate = new Date(car.stockOutDate).getTime();
                                               let days = Math.floor((outDate - inDate) / (1000 * 60 * 60 * 24));
                                               if (days < 0) days = 0; 
                                               
@@ -6930,29 +6927,29 @@ const DatabaseSelector = ({
                                           });
 
                                           const turnoverList = Object.entries(modelStats)
-                                              .filter(([,data]) => data.count >= 1) // 有賣過就列出來
+                                              .filter(([,data]) => data.count >= 1) 
                                               .map(([key, data]) => ({
                                                   key,
                                                   avgDays: Math.round(data.totalDays / data.count),
                                                   count: data.count
                                               }))
-                                              .sort((a,b) => a.avgDays - b.avgDays); // 賣得越快排越前面
+                                              .sort((a,b) => a.avgDays - b.avgDays); 
 
                                           if (turnoverList.length === 0) {
                                               return <div className="text-center py-10 text-slate-500 text-sm">累積足夠的歷史銷售數據後<br/>系統將自動推算轉流極快的車型</div>;
                                           }
 
                                           return turnoverList.map(item => (
-                                              <div key={item.key} className="bg-slate-800/80 p-3 rounded-lg border-l-4 border-yellow-500 hover:bg-slate-700 transition-colors">
-                                                  <div className="flex justify-between mb-1.5">
-                                                      <span className="font-bold text-sm tracking-wide">{item.key}</span>
-                                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.avgDays <= 15 ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                                          {item.avgDays <= 15 ? '極速變現' : '穩定周轉'}
-                                                      </span>
+                                              <div key={item.key} className="bg-slate-800/80 p-3 rounded-lg border-l-4 border-yellow-500 hover:bg-slate-700 transition-colors flex justify-between items-center">
+                                                  <div>
+                                                      <div className="font-bold text-sm tracking-wide text-slate-100 mb-1">{item.key}</div>
+                                                      <div className="text-[10px] text-slate-400">銷售樣本：<span className="text-white font-mono">{item.count}</span> 台</div>
                                                   </div>
-                                                  <div className="text-xs text-slate-300 flex justify-between">
-                                                      <span>平均售出：<strong className="text-white font-mono">{item.avgDays} 天</strong></span>
-                                                      <span>銷售樣本：<strong className="text-white font-mono">{item.count} 台</strong></span>
+                                                  <div className="text-right">
+                                                      <div className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block mb-1 ${item.avgDays <= 15 ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                                          {item.avgDays <= 15 ? '極速變現' : '穩定周轉'}
+                                                      </div>
+                                                      <div className="text-xs text-slate-300">平均 <strong className="text-white font-mono text-lg">{item.avgDays}</strong> 天</div>
                                                   </div>
                                               </div>
                                           ));
