@@ -5198,6 +5198,9 @@ export default function GoldLandAutoDMS() {
   const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
   const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock'); // ★ 新增：手機版儀表板分頁狀態
+  // ★★★ 新增：市場大數據分析模塊開關 ★★★
+  const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
+  const [marketStats, setMarketStats] = useState<any>(null);
   // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
   const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -6818,6 +6821,156 @@ const DatabaseSelector = ({
                 <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
               </div>
 
+              {/* ★★★ 新增：市場與轉流推算模塊 (Market Intelligence) ★★★ */}
+              <div className="flex-none mt-4">
+                  <button 
+                      onClick={() => {
+                          setShowMarketIntelligence(!showMarketIntelligence);
+                          // 當打開時，去抓取最新的市場數據
+                          if (!showMarketIntelligence && !marketStats) {
+                              const currentYear = new Date().getFullYear();
+                              const currentMonth = new Date().getMonth() + 1;
+                              const documentId = `market_stats_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
+                              
+                              import('firebase/firestore').then(({ doc, getDoc }) => {
+                                  const docRef = doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', documentId);
+                                  getDoc(docRef).then(snap => {
+                                      if (snap.exists()) setMarketStats(snap.data());
+                                  });
+                              });
+                          }
+                      }}
+                      className={`w-full p-4 rounded-xl shadow-sm text-left flex items-center justify-between transition-all duration-300 ${
+                          showMarketIntelligence 
+                          ? 'bg-gradient-to-r from-blue-900 to-indigo-900 text-white' 
+                          : 'bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md'
+                      }`}
+                  >
+                      <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${showMarketIntelligence ? 'bg-white/20' : 'bg-blue-50 text-blue-600'}`}>
+                              <BarChart3 size={24} />
+                          </div>
+                          <div>
+                              <h3 className={`font-bold text-lg leading-tight ${showMarketIntelligence ? 'text-white' : 'text-slate-800'}`}>
+                                  市場情報與資金轉流推算
+                              </h3>
+                              <p className={`text-xs ${showMarketIntelligence ? 'text-blue-200' : 'text-slate-500'}`}>
+                                  交叉比對香港運輸署出牌數據與本公司庫存銷售速度，尋找高流轉目標。
+                              </p>
+                          </div>
+                      </div>
+                      <ChevronDown size={24} className={`transition-transform duration-300 ${showMarketIntelligence ? 'rotate-180 text-white' : 'text-slate-400'}`} />
+                  </button>
+
+                  {/* 展開的分析面板 */}
+                  {showMarketIntelligence && (
+                      <div className="mt-2 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300">
+                          
+                          <div className="flex justify-between items-end mb-6 border-b border-blue-800/50 pb-4">
+                              <h2 className="text-xl font-bold text-blue-100 flex items-center gap-2">
+                                  <span>📈</span> 本月市場動態 (基於 {marketStats?.name || '政府數據'})
+                              </h2>
+                              <button 
+                                  onClick={() => window.open('/api/sync-market-data', '_blank')}
+                                  className="text-xs bg-blue-600/50 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors border border-blue-500/50 flex items-center"
+                              >
+                                  <RefreshCw size={12} className="mr-1.5"/> 同步最新政府數據
+                              </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* 左側：市場熱門品牌榜 */}
+                              <div className="bg-slate-800/60 p-5 rounded-xl border border-slate-700/50 shadow-inner">
+                                  <h3 className="text-[13px] font-bold text-blue-300 mb-4 flex items-center tracking-wider uppercase">
+                                      <Zap size={14} className="mr-1.5 text-yellow-400"/> 運輸署本月熱門出牌品牌 (新車 + 水貨)
+                                  </h3>
+                                  
+                                  {marketStats?.brands ? (
+                                      <div className="space-y-2">
+                                          {Object.entries(marketStats.brands)
+                                              .sort(([,a]:any, [,b]:any) => b.total - a.total)
+                                              .slice(0, 8) // 取前 8 名
+                                              .map(([brand, data]: any) => (
+                                              <div key={brand} className="flex justify-between items-center bg-slate-800/80 p-2.5 rounded-lg hover:bg-slate-700 transition-colors">
+                                                  <span className="font-bold text-sm tracking-wide">{brand}</span>
+                                                  <div className="text-right">
+                                                      <span className="text-green-400 font-bold font-mono">{data.total.toLocaleString()} 台</span>
+                                                      <div className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                                          水貨: {data.used.toLocaleString()} | 電動: {data.ev.toLocaleString()}
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  ) : (
+                                      <div className="text-center py-10 text-slate-500 text-sm">
+                                          尚未同步本月品牌數據<br/>請點擊右上角按鈕同步
+                                      </div>
+                                  )}
+                                  <p className="text-[10px] text-slate-500 mt-4 text-right">
+                                      * 數據來源：DATA.GOV.HK 表4.1e
+                                  </p>
+                              </div>
+
+                              {/* 右側：公司轉流推算 */}
+                              <div className="bg-slate-800/60 p-5 rounded-xl border border-slate-700/50 shadow-inner">
+                                  <h3 className="text-[13px] font-bold text-yellow-400 mb-4 flex items-center tracking-wider uppercase">
+                                      <DollarSign size={14} className="mr-1.5"/> 公司資金轉流推算 (Turnover Analysis)
+                                  </h3>
+                                  
+                                  <div className="space-y-3">
+                                      {/* 利用您的 inventory 來動態計算各型號的售出天數 */}
+                                      {(() => {
+                                          const soldCars = inventory.filter(v => v.status === 'Sold' && v.stockInDate && v.stockOutDate);
+                                          const modelStats: Record<string, { count: number, totalDays: number }> = {};
+                                          
+                                          soldCars.forEach(car => {
+                                              const key = `${car.make} ${car.model}`;
+                                              const days = Math.floor((new Date(car.stockOutDate!).getTime() - new Date(car.stockInDate!).getTime()) / (1000 * 60 * 60 * 24));
+                                              if (!modelStats[key]) modelStats[key] = { count: 0, totalDays: 0 };
+                                              modelStats[key].count++;
+                                              modelStats[key].totalDays += days;
+                                          });
+
+                                          const turnoverList = Object.entries(modelStats)
+                                              .filter(([,data]) => data.count >= 2) // 至少賣過2台才具參考價值
+                                              .map(([key, data]) => ({
+                                                  key,
+                                                  avgDays: Math.round(data.totalDays / data.count),
+                                                  count: data.count
+                                              }))
+                                              .sort((a,b) => a.avgDays - b.avgDays) // 賣得越快排越前面
+                                              .slice(0, 5); // 取前5名
+
+                                          if (turnoverList.length === 0) {
+                                              return <div className="text-center py-10 text-slate-500 text-sm">累積足夠的歷史銷售數據後<br/>系統將自動推算轉流極快的車型</div>;
+                                          }
+
+                                          return turnoverList.map(item => (
+                                              <div key={item.key} className="bg-slate-800/80 p-3 rounded-lg border-l-4 border-yellow-500 hover:bg-slate-700 transition-colors">
+                                                  <div className="flex justify-between mb-1.5">
+                                                      <span className="font-bold text-sm tracking-wide">{item.key}</span>
+                                                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.avgDays <= 15 ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                                          {item.avgDays <= 15 ? '極速變現' : '穩定周轉'}
+                                                      </span>
+                                                  </div>
+                                                  <div className="text-xs text-slate-300 flex justify-between">
+                                                      <span>歷史平均售出：<strong className="text-white font-mono">{item.avgDays} 天</strong></span>
+                                                      <span>銷售樣本：<strong className="text-white font-mono">{item.count} 台</strong></span>
+                                                  </div>
+                                                  {item.avgDays <= 15 && (
+                                                      <p className="text-[10px] text-green-400/80 mt-2">💡 建議：資金轉流極快，可提高收購預算，見車即收。</p>
+                                                  )}
+                                              </div>
+                                          ));
+                                      })()}
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  )}
+              </div>
+              
               {/* 提醒中心 */}
               {(() => {
                   const docAlerts: any[] = [];
