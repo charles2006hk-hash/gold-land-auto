@@ -17,7 +17,7 @@ const localOptions = [
     {k:'chk_hk_reg', l:'出牌文件'}, {k:'chk_hk_ins', l:'保險'}, {k:'chk_hk_misc', l:'雜費'}
 ];
 
-export default function CreateDocModule({ inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO }: any) { 
+export default function CreateDocModule({ inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO, currentUser }: any) { 
     const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
     const [docHistory, setDocHistory] = useState<any[]>([]);
     const [mobileStep, setMobileStep] = useState<'list' | 'edit' | 'preview'>('list');
@@ -136,11 +136,29 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (!db || !appId) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot: any) => {
-            setSavedDocs(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));   
-            setDocHistory(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));  
+            const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));   
+            
+            // ★★★ 核心：開單系統機密過濾 ★★★
+            const isAdmin = staffId === 'BOSS' || currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all');
+
+            const secureDocs = list.filter((doc: any) => {
+                if (isAdmin) return true; // 管理員看全部
+
+                // 1. 如果單據是自己開的 (新版特徵)
+                if (doc.createdBy === staffId) return true;
+
+                // 2. 舊單據沒有開單人怎麼辦？我們去查這台車是不是他負責的！
+                const relatedCar = inventory.find((v: any) => v.regMark && v.regMark === doc.formData?.regMark);
+                if (relatedCar && relatedCar.managedBy === staffId) return true;
+
+                return false;
+            });
+
+            setSavedDocs(secureDocs);
+            setDocHistory(secureDocs);  
         });
         return () => unsubscribe();
-    }, [db, appId, inventory, staffId]); 
+    }, [db, appId, inventory, staffId, currentUser]); 
 
     useEffect(() => {
         if (selectedDocType === 'sales_contract' || selectedDocType === 'quotation') {
@@ -179,7 +197,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const saveDocRecord = async () => {
         if (!db || !staffId) return null;
         const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
-        const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, updatedAt: serverTimestamp(), summary: summaryStr };
+        const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId };
 
         try {
             let currentId = docId;
