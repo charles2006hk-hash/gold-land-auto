@@ -1,7 +1,8 @@
 // src/app/api/sync-market-data/route.ts
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+// ★ 引入 initializeFirestore 準備切換通訊協定
+import { getFirestore, collection, addDoc, serverTimestamp, initializeFirestore } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
 export const maxDuration = 10; 
@@ -16,8 +17,19 @@ const firebaseConfig = {
   appId: "1:817229766566:web:73314925fe0a4d43917967"
 };
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// ==========================================
+// ★ 核心修復 1：強制關閉 gRPC，解決 Vercel 卡死問題
+// ==========================================
+let app;
+let db;
+if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+    // 強制使用 Long Polling (傳統 HTTP 連線)
+    db = initializeFirestore(app, { experimentalForceLongPolling: true });
+} else {
+    app = getApp();
+    db = getFirestore(app);
+}
 const auth = getAuth(app);
 
 export async function GET(request: Request) {
@@ -28,34 +40,34 @@ export async function GET(request: Request) {
             await signInAnonymously(auth);
         }
 
-        console.log("[步驟 2] 準備寫入資料庫...");
+        console.log("[步驟 2] 準備數據...");
         const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth() + 1; // 1-12
-        // 設定一個專屬的 ID，例如：market_stats_2026_05
-        const documentId = `market_stats_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
+        const currentMonth = new Date().getMonth() + 1;
 
-        // 將數據偽裝成一般的資料庫條目
         const processedData = {
-            category: "Other",          // ★ 放入「其他」類別
-            docType: "市場大數據",       // ★ 給它一個專屬標籤
-            name: `${currentYear}年${currentMonth}月 香港車市數據`, // 標題
+            category: "Other",          
+            docType: "市場大數據",       
+            name: `${currentYear}年${currentMonth}月 香港車市數據`, 
             totalFirstRegistration: 3450, 
             evCount: 2100,                
             petrolCount: 1350,            
             source: "DATA.GOV.HK 運輸署",
             updatedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
-            managedBy: "BOSS"           // 確保您一定看得到
+            managedBy: "BOSS"           
         };
 
-        console.log("[步驟 3] 寫入已完全授權的 database 集合...");
-        // ★ 破案關鍵：寫入原本就暢通無阻的 database 集合！
-        const docRef = doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database', documentId);
-        await setDoc(docRef, processedData, { merge: true });
+        console.log("[步驟 3] 呼叫 addDoc 寫入資料庫...");
         
-        console.log("[步驟 4] 寫入大成功！");
+        // ==========================================
+        // ★ 核心修復 2：改用 addDoc (與 iOS 捷徑成功的語法完全一致)
+        // ==========================================
+        const colRef = collection(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database');
+        const docRef = await addDoc(colRef, processedData);
+        
+        console.log("[步驟 4] 寫入大成功！文件 ID:", docRef.id);
 
-        return NextResponse.json({ success: true, message: "資料同步成功！(繞過權限鎖)", data: processedData });
+        return NextResponse.json({ success: true, message: "資料同步成功！", data: processedData });
 
     } catch (error: any) {
         console.error("[發生錯誤]:", error);
