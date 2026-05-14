@@ -3,11 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     Database, Plus, Search, Trash2, Edit, Save, 
     FileText, File, AlertTriangle, X, Loader2, Zap, DownloadCloud,
-    User as UserIcon, Bell, Printer, ImageIcon
+    User as UserIcon, Bell, Printer, ImageIcon,
+    ArrowLeft, Upload, RefreshCw, ShieldCheck
 } from 'lucide-react';
 import { 
     collection, addDoc, deleteDoc, doc, onSnapshot, query, 
-    orderBy, serverTimestamp, writeBatch, updateDoc, getDocs, where 
+    orderBy, serverTimestamp, writeBatch, updateDoc, getDocs, where,
+    Firestore
 } from 'firebase/firestore';
 import { DatabaseEntry, SystemSettings, Vehicle, DatabaseAttachment } from '@/types';
 import { DB_CATEGORIES, DOCUMENT_FIELD_SCHEMA } from '@/config/constants';
