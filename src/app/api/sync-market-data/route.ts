@@ -1,10 +1,11 @@
 // src/app/api/sync-market-data/route.ts
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore/lite';
+// ★ 引入 doc, getDoc, setDoc 來做精準比對和覆寫
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
-export const maxDuration = 15; // 稍微拉長一點，給政府網站下載 CSV 的時間
+export const maxDuration = 15; 
 export const dynamic = 'force-dynamic'; 
 
 const firebaseConfig = {
@@ -21,16 +22,13 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 export async function GET(request: Request) {
-    console.log("========== 開始抓取香港政府真實車市數據 ==========");
+    console.log("========== 開始抓取香港政府真實車市數據 (智慧比對版) ==========");
     try {
         if (!auth.currentUser) {
             await signInAnonymously(auth);
         }
 
         console.log("[步驟 1] 正在向 DATA.GOV.HK 請求最新 CSV 數據...");
-        
-        // ★ 核心升級：直接對接運輸署《表4.1e: 私家車首次登記統計數字》的官方英文版 CSV
-        // (使用英文版可以避免中文 Big5/UTF8 編碼亂碼的問題)
         const govCsvUrl = "https://www.td.gov.hk/datagovhk_tis/mttd-csv/en/table41e_eng.csv";
         
         const response = await fetch(govCsvUrl);
@@ -41,59 +39,72 @@ export async function GET(request: Request) {
 
         console.log(`[步驟 2] 成功下載！共取得 ${lines.length} 行數據，開始解析...`);
 
-        // ==========================================
-        // ★ 輕量級數據分析 (計算電動車、燃油車、總數)
-        // ==========================================
         let evCount = 0;
         let petrolCount = 0;
         let totalCount = 0;
-        let usedImportCount = 0; // 二手進口水貨車
+        let usedImportCount = 0; 
 
-        // 簡單遍歷 CSV 內容 (跳過標題列)
         for (let i = 5; i < lines.length; i++) {
             const row = lines[i].toLowerCase();
             if (!row || row.trim() === '') continue;
 
-            // 如果該行包含數字，我們簡單做個關鍵字過濾統計
-            // (實際欄位根據 TD CSV 格式可再做更精細的 split(',') 陣列切割)
             if (row.includes('electric')) evCount++;
             if (row.includes('petrol')) petrolCount++;
-            if (row.includes('used')) usedImportCount++; // 首次登記時的狀態為 Used
+            if (row.includes('used')) usedImportCount++; 
             totalCount++;
         }
 
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1;
+        
+        // ★ 核心升級 1：綁定一個固定的檔案 ID (例如: market_stats_2026_05)
+        const documentId = `market_stats_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
+        const docRef = doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database', documentId);
 
-        console.log("[步驟 3] 準備寫入資料庫...");
+        console.log(`[步驟 3] 檢查資料庫是否已有相同數據 (${documentId})...`);
+        const docSnap = await getDoc(docRef);
+
+        // ★ 核心升級 2：智慧比對邏輯
+        if (docSnap.exists()) {
+            const existingData = docSnap.data();
+            // 如果資料庫裡的「總車數」跟我們剛剛算出來的一模一樣，代表政府沒更新，我們也不用更新！
+            if (existingData.analysis && existingData.analysis.totalRowsProcessed === totalCount) {
+                console.log("👉 數據完全相同，跳過寫入，節省資源！");
+                return NextResponse.json({ 
+                    success: true, 
+                    message: "資料庫已是最新狀態，無需重複寫入！", 
+                    data: existingData 
+                });
+            }
+        }
+
+        console.log("[步驟 4] 發現新數據！準備寫入資料庫...");
         const processedData = {
             category: "Other",          
             docType: "市場大數據",       
             name: `${currentYear}年${currentMonth}月 香港私家車首次登記分析`, 
-            
-            // 寫入真實解析出來的數據
             analysis: {
                 totalRowsProcessed: totalCount,
                 electricVehicles: evCount,
                 petrolVehicles: petrolCount,
-                importedUsedCars: usedImportCount // 對車行非常有用的水貨車指標
+                importedUsedCars: usedImportCount
             },
-            
-            rawDataUrl: govCsvUrl, // 保留原始檔案網址，未來可以在網頁端直接下載
+            rawDataUrl: govCsvUrl, 
             source: "DATA.GOV.HK 運輸署 表4.1e",
             updatedAt: serverTimestamp(),
-            createdAt: serverTimestamp(),
-            managedBy: "System_Auto_Bot" // 標示為系統機器人自動抓取           
+            // 如果原本沒有這個檔案才押上創建時間
+            ...(docSnap.exists() ? {} : { createdAt: serverTimestamp() }),
+            managedBy: "System_Auto_Bot"          
         };
 
-        const colRef = collection(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database');
-        const docRef = await addDoc(colRef, processedData);
+        // 用 setDoc (有就覆寫更新，沒有就建立) 取代 addDoc
+        await setDoc(docRef, processedData, { merge: true });
         
-        console.log("[步驟 4] 真實數據寫入大成功！");
+        console.log("[步驟 5] 真實數據寫入/更新大成功！");
 
         return NextResponse.json({ 
             success: true, 
-            message: "真實政府數據同步成功！", 
+            message: docSnap.exists() ? "發現數據變動，已成功更新！" : "全新月份數據，已成功建立！", 
             data: processedData 
         });
 
