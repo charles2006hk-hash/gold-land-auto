@@ -20,8 +20,8 @@ const firebaseConfig = {
 // ==========================================
 // ★ 核心修復 1：強制關閉 gRPC，解決 Vercel 卡死問題
 // ==========================================
-let app;
-let db;
+let app: any;
+let db: any;
 if (getApps().length === 0) {
     app = initializeApp(firebaseConfig);
     // 強制使用 Long Polling (傳統 HTTP 連線)
