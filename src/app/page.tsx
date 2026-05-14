@@ -136,14 +136,17 @@ const initFirebaseSystem = () => {
       }
     }
     
-    // ★★★ 效能大升級：啟用 Firestore 本地永久快取 ★★★
+    // ★★★ 效能大升級：啟用 Firestore 本地永久快取 + 強制關閉 QUIC 解決斷線 ★★★
     try {
         db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+            experimentalForceLongPolling: true // ★ 打上疫苗：強制使用最穩定的 HTTP 長連線
         });
     } catch (e) {
-        // 如果瀏覽器唔支援快取 (例如無痕模式)，就降級用普通版
-        db = getFirestore(app);
+        // 如果瀏覽器唔支援快取 (例如無痕模式)，就降級用普通版，但也必須強制長連線
+        db = initializeFirestore(app, {
+            experimentalForceLongPolling: true // ★ 打上疫苗：強制使用最穩定的 HTTP 長連線
+        });
     }
     
     storage = getStorage(app);
