@@ -6822,27 +6822,11 @@ const DatabaseSelector = ({
               </div>
 
               {/* ========================================================= */}
-              {/* ★★★ 市場大數據與資金轉流推算 (精緻摺疊版) ★★★ */}
+              {/* ★★★ 市場大數據與資金轉流推算 (即時響應版) ★★★ */}
               {/* ========================================================= */}
               <div className="flex flex-col items-end flex-none w-full mb-4">
                   <button 
-                      onClick={() => {
-                          setShowMarketIntelligence(!showMarketIntelligence);
-                          // 打開時，自動尋找資料庫中最新的市場大數據
-                          if (!showMarketIntelligence && !marketStats) {
-                              import('firebase/firestore').then(({ collection, query, orderBy, limit, getDocs }) => {
-                                  const q = query(
-                                      collection(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'database'),
-                                      orderBy('createdAt', 'desc'),
-                                      limit(20)
-                                  );
-                                  getDocs(q).then(snap => {
-                                      const statsDoc = snap.docs.find(d => d.data().docType === '市場大數據');
-                                      if (statsDoc) setMarketStats(statsDoc.data());
-                                  });
-                              });
-                          }
-                      }}
+                      onClick={() => setShowMarketIntelligence(!showMarketIntelligence)}
                       className="group flex items-center gap-2 bg-slate-800 hover:bg-blue-600 text-blue-300 hover:text-white px-4 py-2 rounded-full shadow-md transition-all duration-300 ease-in-out border border-slate-700 mt-2"
                   >
                       <Zap size={16} className={`${showMarketIntelligence ? 'text-yellow-400' : 'text-blue-400'} group-hover:text-yellow-300`} />
@@ -6852,12 +6836,16 @@ const DatabaseSelector = ({
                   </button>
 
                   {/* 點擊後展開的分析面板 */}
-                  {showMarketIntelligence && (
+                  {showMarketIntelligence && (() => {
+                      // ★ 終極魔法：直接綁定系統的實時資料庫，只要 API 抓完，這裡 0.1 秒內自動顯示，完全不用重新整理！
+                      const realTimeMarketStats = dbEntries.find(d => d.docType === '市場大數據');
+
+                      return (
                       <div className="w-full mt-3 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-2xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300 max-h-[65vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700">
                           
                           <div className="flex justify-between items-end mb-6 border-b border-blue-800/50 pb-4 flex-none">
                               <h2 className="text-xl font-bold text-blue-100 flex items-center gap-2">
-                                  <span>📈</span> 採購雷達 (基於 {marketStats?.name ? marketStats.name.substring(0,8) : '政府最新'} 出牌數據)
+                                  <span>📈</span> 採購雷達 (基於 {realTimeMarketStats?.name ? realTimeMarketStats.name.substring(0,10) : '政府最新'} 出牌數據)
                               </h2>
                               <button 
                                   onClick={() => window.open('/api/sync-market-data', '_blank')}
@@ -6874,9 +6862,9 @@ const DatabaseSelector = ({
                                       <Zap size={14} className="mr-1.5 text-yellow-400"/> 運輸署本月熱門車型榜 (新車 vs 二手水貨)
                                   </h3>
                                   
-                                  {marketStats?.topModels ? (
+                                  {realTimeMarketStats?.topModels ? (
                                       <div className="space-y-2 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
-                                          {marketStats.topModels.map((car: any, idx: number) => (
+                                          {realTimeMarketStats.topModels.map((car: any, idx: number) => (
                                               <div key={idx} className="flex justify-between items-center bg-slate-800/80 p-3 rounded-lg hover:bg-slate-700 transition-colors border-l-4 border-blue-500">
                                                   <div className="min-w-0 pr-2">
                                                       <span className="font-bold text-sm tracking-wide block text-slate-100 truncate">{car.make} {car.model}</span>
@@ -6958,7 +6946,8 @@ const DatabaseSelector = ({
                               </div>
                           </div>
                       </div>
-                  )}
+                      );
+                  })()}
               </div>
               
               {/* 提醒中心 */}
