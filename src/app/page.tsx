@@ -6863,8 +6863,8 @@ const DatabaseSelector = ({
                   </button>
 
                   {/* 展開的分析面板 */}
-                  {showMarketIntelligence && (
-                      <div className="mt-2 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300">
+{showMarketIntelligence && (
+    <div className="mt-2 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300 max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700">
                           
                           <div className="flex justify-between items-end mb-6 border-b border-blue-800/50 pb-4">
                               <h2 className="text-xl font-bold text-blue-100 flex items-center gap-2">
