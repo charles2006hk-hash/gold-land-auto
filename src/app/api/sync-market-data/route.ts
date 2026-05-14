@@ -1,8 +1,8 @@
 // src/app/api/sync-market-data/route.ts
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-// ★ 引入 initializeFirestore 準備切換通訊協定
-import { getFirestore, collection, addDoc, serverTimestamp, initializeFirestore } from 'firebase/firestore';
+// ★★★ 終極殺招：改匯入 'firebase/firestore/lite' (純 HTTP 模式，保證不卡死) ★★★
+import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
 export const maxDuration = 10; 
@@ -17,23 +17,13 @@ const firebaseConfig = {
   appId: "1:817229766566:web:73314925fe0a4d43917967"
 };
 
-// ==========================================
-// ★ 核心修復 1：強制關閉 gRPC，解決 Vercel 卡死問題
-// ==========================================
-let app: any;
-let db: any;
-if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
-    // 強制使用 Long Polling (傳統 HTTP 連線)
-    db = initializeFirestore(app, { experimentalForceLongPolling: true });
-} else {
-    app = getApp();
-    db = getFirestore(app);
-}
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// 直接使用 Lite 版的 getFirestore，不需要任何複雜的設定
+const db = getFirestore(app);
 const auth = getAuth(app);
 
 export async function GET(request: Request) {
-    console.log("========== 同步市場數據開始 ==========");
+    console.log("========== 同步市場數據開始 (Lite 模式) ==========");
     try {
         if (!auth.currentUser) {
             console.log("[步驟 1] 正在進行匿名登入...");
@@ -59,9 +49,6 @@ export async function GET(request: Request) {
 
         console.log("[步驟 3] 呼叫 addDoc 寫入資料庫...");
         
-        // ==========================================
-        // ★ 核心修復 2：改用 addDoc (與 iOS 捷徑成功的語法完全一致)
-        // ==========================================
         const colRef = collection(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database');
         const docRef = await addDoc(colRef, processedData);
         
