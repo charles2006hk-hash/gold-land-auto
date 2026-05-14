@@ -5198,9 +5198,10 @@ export default function GoldLandAutoDMS() {
   const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
   const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock'); // ★ 新增：手機版儀表板分頁狀態
-  // ★★★ 新增：市場大數據分析模塊開關 ★★★
+  // ★★★ 新增：市場大數據分析模塊狀態 ★★★
   const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
   const [marketStats, setMarketStats] = useState<any>(null);
+  const [marketSearchQuery, setMarketSearchQuery] = useState(""); // ★ 新增：過濾搜尋用的字串
   // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
   const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -6822,7 +6823,7 @@ const DatabaseSelector = ({
               </div>
 
               {/* ========================================================= */}
-              {/* ★★★ 市場大數據與資金轉流推算 (即時響應版) ★★★ */}
+              {/* ★★★ 市場大數據與資金轉流推算 (具備搜尋過濾版) ★★★ */}
               {/* ========================================================= */}
               <div className="flex flex-col items-end flex-none w-full mb-4">
                   <button 
@@ -6837,37 +6838,69 @@ const DatabaseSelector = ({
 
                   {/* 點擊後展開的分析面板 */}
                   {showMarketIntelligence && (() => {
-                      // ★ 終極魔法：直接綁定系統的實時資料庫，只要 API 抓完，這裡 0.1 秒內自動顯示，完全不用重新整理！
-                      // ★ 終極魔法：過濾出真正擁有 topModels (車型明細) 的新版數據，並按時間拿最新的一筆！
-const realTimeMarketStats = dbEntries
-    .filter(d => d.docType === '市場大數據' && (d as any).topModels)
-    .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] as any;
+                      // 取得實時數據
+                      const realTimeMarketStats = dbEntries
+                          .filter(d => d.docType === '市場大數據' && (d as any).topModels)
+                          .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0] as any;
+
+                      // ★ 搜尋過濾邏輯 (左側政府數據)
+                      const filteredTopModels = realTimeMarketStats?.topModels?.filter((car: any) => {
+                          if (!marketSearchQuery) return true;
+                          const q = marketSearchQuery.toLowerCase();
+                          return car.make.toLowerCase().includes(q) || car.model.toLowerCase().includes(q);
+                      }) || [];
 
                       return (
-                      <div className="w-full mt-3 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-2xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300 max-h-[65vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700">
+                      <div className="w-full mt-3 bg-gradient-to-br from-slate-900 to-blue-950 rounded-2xl shadow-2xl p-5 md:p-6 text-white border border-blue-800 animate-in slide-in-from-top-4 fade-in duration-300 max-h-[75vh] overflow-y-auto scrollbar-thin scrollbar-thumb-blue-700">
                           
-                          <div className="flex justify-between items-end mb-6 border-b border-blue-800/50 pb-4 flex-none">
-                              <h2 className="text-xl font-bold text-blue-100 flex items-center gap-2">
-                                  <span>📈</span> 採購雷達 (基於 {realTimeMarketStats?.name ? realTimeMarketStats.name.substring(0,10) : '政府最新'} 出牌數據)
+                          <div className="flex justify-between items-end mb-4 border-b border-blue-800/50 pb-4 flex-none gap-4">
+                              <h2 className="text-xl font-bold text-blue-100 flex items-center gap-2 whitespace-nowrap">
+                                  <span>📈</span> 採購雷達 
+                                  <span className="text-xs text-blue-400 bg-blue-900/30 px-2 py-1 rounded hidden md:inline-block">
+                                      基於 {realTimeMarketStats?.name ? realTimeMarketStats.name.substring(0,10) : '政府最新'} 出牌數據
+                                  </span>
                               </h2>
+                              
                               <button 
                                   onClick={() => window.open('/api/sync-market-data', '_blank')}
-                                  className="text-xs bg-blue-600/50 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors border border-blue-500/50 flex items-center shadow"
+                                  className="text-xs bg-blue-600/50 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors border border-blue-500/50 flex items-center shadow whitespace-nowrap"
                               >
                                   <RefreshCw size={12} className="mr-1.5"/> 同步最新明細
                               </button>
+                          </div>
+
+                          {/* ★ 新增：全域搜尋框 */}
+                          <div className="mb-5 flex-none relative">
+                              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                  <Search size={16} className="text-slate-400" />
+                              </div>
+                              <input
+                                  type="text"
+                                  placeholder="輸入品牌或型號進行比對 (例如: TOYOTA, TESLA, ALPHARD)..."
+                                  value={marketSearchQuery}
+                                  onChange={(e) => setMarketSearchQuery(e.target.value)}
+                                  className="block w-full pl-10 pr-10 py-2.5 border border-slate-700 rounded-xl leading-5 bg-slate-800/80 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-shadow"
+                              />
+                              {marketSearchQuery && (
+                                  <button 
+                                      onClick={() => setMarketSearchQuery('')}
+                                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white"
+                                  >
+                                      <X size={16} />
+                                  </button>
+                              )}
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                               {/* 左側：市場熱門車型大數據榜 */}
                               <div className="bg-slate-800/60 p-5 rounded-xl border border-slate-700/50 shadow-inner flex flex-col max-h-[400px]">
                                   <h3 className="text-[13px] font-bold text-blue-300 mb-4 flex items-center tracking-wider uppercase flex-none">
-                                      <Zap size={14} className="mr-1.5 text-yellow-400"/> 運輸署本月熱門車型榜 (新車 vs 二手水貨)
+                                      <Zap size={14} className="mr-1.5 text-yellow-400"/> 運輸署本月出牌榜 ({filteredTopModels.length} 筆)
                                   </h3>
                                   
-                                  {realTimeMarketStats?.topModels ? (
+                                  {filteredTopModels.length > 0 ? (
                                       <div className="space-y-2 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
-                                          {realTimeMarketStats.topModels.map((car: any, idx: number) => (
+                                          {filteredTopModels.map((car: any, idx: number) => (
                                               <div key={idx} className="flex justify-between items-center bg-slate-800/80 p-3 rounded-lg hover:bg-slate-700 transition-colors border-l-4 border-blue-500">
                                                   <div className="min-w-0 pr-2">
                                                       <span className="font-bold text-sm tracking-wide block text-slate-100 truncate">{car.make} {car.model}</span>
@@ -6886,7 +6919,7 @@ const realTimeMarketStats = dbEntries
                                       </div>
                                   ) : (
                                       <div className="text-center py-10 text-slate-500 text-sm">
-                                          尚未同步最新車型數據<br/>請點擊右上角按鈕同步
+                                          {marketSearchQuery ? '找不到符合的車型' : '尚未同步最新車型數據'}
                                       </div>
                                   )}
                                   <p className="text-[10px] text-slate-500 mt-4 text-right flex-none">
@@ -6897,7 +6930,7 @@ const realTimeMarketStats = dbEntries
                               {/* 右側：公司轉流推算 */}
                               <div className="bg-slate-800/60 p-5 rounded-xl border border-slate-700/50 shadow-inner flex flex-col max-h-[400px]">
                                   <h3 className="text-[13px] font-bold text-yellow-400 mb-4 flex items-center tracking-wider uppercase flex-none">
-                                      <DollarSign size={14} className="mr-1.5"/> 公司資金轉流推算 (Turnover Analysis)
+                                      <DollarSign size={14} className="mr-1.5"/> 公司資金轉流推算
                                   </h3>
                                   
                                   <div className="space-y-3 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
@@ -6917,8 +6950,13 @@ const realTimeMarketStats = dbEntries
                                               modelStats[key].totalDays += days;
                                           });
 
+                                          // ★ 搜尋過濾邏輯 (右側內部數據)
                                           const turnoverList = Object.entries(modelStats)
-                                              .filter(([,data]) => data.count >= 1) 
+                                              .filter(([key, data]) => {
+                                                  if (data.count < 1) return false;
+                                                  if (!marketSearchQuery) return true;
+                                                  return key.toLowerCase().includes(marketSearchQuery.toLowerCase());
+                                              }) 
                                               .map(([key, data]) => ({
                                                   key,
                                                   avgDays: Math.round(data.totalDays / data.count),
@@ -6927,7 +6965,9 @@ const realTimeMarketStats = dbEntries
                                               .sort((a,b) => a.avgDays - b.avgDays); 
 
                                           if (turnoverList.length === 0) {
-                                              return <div className="text-center py-10 text-slate-500 text-sm">累積足夠的歷史銷售數據後<br/>系統將自動推算轉流極快的車型</div>;
+                                              return <div className="text-center py-10 text-slate-500 text-sm">
+                                                  {marketSearchQuery ? '公司尚未售出過此車型' : '累積歷史銷售數據後自動推算'}
+                                              </div>;
                                           }
 
                                           return turnoverList.map(item => (
