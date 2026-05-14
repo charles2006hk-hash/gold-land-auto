@@ -1,7 +1,7 @@
 // src/app/api/sync-market-data/route.ts
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore/lite';
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore/lite';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
 export const maxDuration = 15; 
@@ -21,122 +21,117 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 export async function GET(request: Request) {
-    console.log("========== 開始抓取香港政府真實車市數據 (防彈解析版) ==========");
+    console.log("========== 開始抓取香港政府【車型細節】大數據 ==========");
     try {
         if (!auth.currentUser) await signInAnonymously(auth);
 
-        const govCsvUrl = "https://www.td.gov.hk/datagovhk_tis/mttd-csv/en/table41e_eng.csv";
-        const response = await fetch(govCsvUrl);
-        if (!response.ok) throw new Error("政府數據網站連線失敗");
+        // 1. 透過政府 CKAN API 動態尋找「最新月份」的車輛細節 CSV 網址
+        const ckanUrl = 'https://data.gov.hk/api/3/action/package_show?id=hk-td-wcms_11-first-reg-vehicle';
+        const pkgRes = await fetch(ckanUrl);
+        const pkgData = await pkgRes.json();
         
-        const csvText = await response.text();
-        const lines = csvText.split(/\r?\n/);
+        // 篩選出英文版的 CSV (格式最穩定)
+        const resources = pkgData.result.resources.filter((r: any) => 
+            r.format.toLowerCase() === 'csv' && r.name.toLowerCase().includes('english')
+        );
+        // 按發布日期排序，拿最新的一個月
+        resources.sort((a: any, b: any) => new Date(b.created).getTime() - new Date(a.created).getTime());
+        
+        const latestResource = resources[0];
+        const csvUrl = latestResource.url;
+        
+        // 解析標題找出月份，例如 "Particulars of first registered vehicles(English) - Mar 2026"
+        const titleMatch = latestResource.name.match(/- ([A-Za-z]+ \d{4})/);
+        const reportMonth = titleMatch ? titleMatch[1] : "最新月份";
+        const documentId = `market_models_${reportMonth.replace(' ', '_')}`;
 
-        const brandData: { [key: string]: any } = {};
-        let latestYearMonth = "";
-        const validRows: any[] = [];
-
-        // ==========================================
-        // ★ 核心修復 1：防彈級 CSV 分割與動態欄位定位
-        // ==========================================
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-
-            // 1. 完美分割 CSV (忽略雙引號內的逗號)
-            let cols = [];
-            let inQuotes = false;
-            let current = "";
-            for (let char of line) {
-                if (char === '"') inQuotes = !inQuotes;
-                else if (char === ',' && !inQuotes) { cols.push(current.trim()); current = ""; }
-                else current += char;
-            }
-            cols.push(current.trim());
-            // 移除外層引號
-            cols = cols.map(c => c.replace(/^"|"$/g, '').trim());
-
-            // 2. 動態尋找「年月」的欄位 (例如: 202605 或 2026/05)
-            const ymIdx = cols.findIndex(c => /^\d{4}[\/\-]?\d{2}$/.test(c));
-            
-            // 如果找到了年月，且後面還有足夠的欄位 (廠牌, 狀態, 燃料, 數量)
-            if (ymIdx !== -1 && cols.length > ymIdx + 3) {
-                const yearMonth = cols[ymIdx].replace(/[\/\-]/g, ''); // 統一格式 202605
-                if (yearMonth > latestYearMonth) latestYearMonth = yearMonth;
-
-                // 3. 從最後面倒找「數量」欄位 (因為車型可能有幾個字)
-                let count = 0;
-                for (let j = cols.length - 1; j > ymIdx + 3; j--) {
-                    if (/^\d+$/.test(cols[j])) {
-                        count = parseInt(cols[j], 10);
-                        break;
-                    }
-                }
-
-                validRows.push({
-                    yearMonth,
-                    make: cols[ymIdx + 1].toUpperCase(),
-                    status: cols[ymIdx + 2].toLowerCase(),
-                    fuelType: cols[ymIdx + 3].toLowerCase(),
-                    count: count
-                });
-            }
+        // 2. 檢查資料庫是否已抓過這個月
+        const docRef = doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database', documentId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return NextResponse.json({ success: true, message: `資料庫已有 ${reportMonth} 數據`, data: docSnap.data() });
         }
 
-        // ==========================================
-        // ★ 核心修復 2：只處理最新月份
-        // ==========================================
-        let evCount = 0, petrolCount = 0, totalCount = 0, usedImportCount = 0;
+        console.log(`[下載中] 正在抓取 ${reportMonth} 的明細數據...`);
+        
+        // 3. 下載並逐行解析數千筆的車輛明細 CSV
+        const csvRes = await fetch(csvUrl);
+        const csvText = await csvRes.text();
+        const lines = csvText.split(/\r?\n/);
+        
+        // 自動定位欄位索引
+        const headers = lines[0].toLowerCase().split(',').map(h => h.replace(/"/g, '').trim());
+        const classIdx = headers.findIndex(h => h.includes('class'));
+        const makeIdx = headers.findIndex(h => h.includes('make'));
+        const modelIdx = headers.findIndex(h => h.includes('model'));
+        const statusIdx = headers.findIndex(h => h.includes('status')); // 狀態 (A=新, C2=舊)
+        const fuelIdx = headers.findIndex(h => h.includes('fuel'));
 
-        validRows.forEach(row => {
-            if (row.yearMonth !== latestYearMonth) return;
-            if (!row.make || row.make === 'TOTAL' || row.make === 'MAKE') return;
+        const modelsData: Record<string, any> = {};
+        let totalCount = 0;
 
-            if (!brandData[row.make]) {
-                brandData[row.make] = { total: 0, new: 0, used: 0, ev: 0 };
+        for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            
+            // 安全分割 CSV
+            const cols = [];
+            let inQuotes = false;
+            let current = "";
+            for (let char of lines[i]) {
+                if (char === '"') inQuotes = !inQuotes;
+                else if (char === ',' && !inQuotes) { cols.push(current.trim().replace(/^"|"$/g, '')); current = ""; }
+                else current += char;
+            }
+            cols.push(current.trim().replace(/^"|"$/g, ''));
+
+            // ★ 只挑選「私家車 Private Car」
+            if (cols[classIdx]?.toLowerCase() !== 'private car') continue;
+
+            const make = cols[makeIdx]?.toUpperCase();
+            const model = cols[modelIdx]?.toUpperCase();
+            if (!make || !model) continue;
+
+            // 清理車型名稱中的多餘空格
+            const cleanModel = model.replace(/\s+/g, ' ');
+            const key = `${make} ${cleanModel}`;
+            const status = cols[statusIdx] || '';
+            const fuel = cols[fuelIdx]?.toLowerCase() || '';
+
+            if (!modelsData[key]) {
+                modelsData[key] = { make, model: cleanModel, total: 0, new: 0, used: 0, ev: 0 };
             }
 
-            brandData[row.make].total += row.count;
-            totalCount += row.count;
+            modelsData[key].total++;
+            totalCount++;
 
-            if (row.status.includes('new')) brandData[row.make].new += row.count;
-            if (row.status.includes('used') || row.status.includes('unregistered')) {
-                brandData[row.make].used += row.count;
-                usedImportCount += row.count; 
-            }
-            if (row.fuelType.includes('electric')) {
-                brandData[row.make].ev += row.count;
-                evCount += row.count;
-            } else {
-                petrolCount += row.count;
-            }
-        });
+            // ★ 核心判斷：政府代碼 'A' 為全新車，其他代碼(C2, B 等)曾於外地登記，即為「二手水貨」
+            if (status === 'A') modelsData[key].new++;
+            else modelsData[key].used++;
 
-        const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth() + 1;
-        const documentId = `market_stats_${currentYear}_${currentMonth.toString().padStart(2, '0')}`;
-        const docRef = doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'database', documentId);
+            // 判斷電動車
+            if (fuel.includes('electric')) modelsData[key].ev++;
+        }
+
+        // 將物件轉為陣列，並排序取前 100 名暢銷車型 (節省資料庫空間)
+        const topModels = Object.values(modelsData)
+            .sort((a: any, b: any) => b.total - a.total)
+            .slice(0, 100);
 
         const processedData = {
             category: "Other",          
             docType: "市場大數據",       
-            name: `${latestYearMonth} 香港私家車首次登記分析 (政府出牌數據)`, 
-            analysis: {
-                totalRowsProcessed: totalCount,
-                electricVehicles: evCount,
-                petrolVehicles: petrolCount,
-                importedUsedCars: usedImportCount
-            },
-            brands: brandData,
-            rawDataUrl: govCsvUrl, 
-            source: "DATA.GOV.HK 運輸署 表4.1e",
+            name: `${reportMonth} 香港車市型號排行 (新車/水貨分析)`, 
+            topModels: topModels,
+            analysis: { totalPrivateCars: totalCount },
+            rawDataUrl: csvUrl, 
+            source: "DATA.GOV.HK 首次登記車輛細節",
             updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
             managedBy: "System_Auto_Bot"          
         };
 
         await setDoc(docRef, processedData, { merge: true });
-        
-        return NextResponse.json({ success: true, message: "解析成功", data: processedData });
+        return NextResponse.json({ success: true, message: "型號大數據抓取成功！", data: processedData });
 
     } catch (error: any) {
         console.error("[發生錯誤]:", error);
