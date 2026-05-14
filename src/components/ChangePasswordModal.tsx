@@ -1,7 +1,6 @@
+// src/components/ChangePasswordModal.tsx
 import React, { useState } from 'react';
-import { X, Key, Save, Loader2, CheckCircle } from 'lucide-react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // 請確保您的 firebase 初始化路徑正確
+import { Key, X, Loader2 } from 'lucide-react';
 
 interface Props {
     isOpen: boolean;
@@ -12,68 +11,84 @@ interface Props {
 }
 
 export default function ChangePasswordModal({ isOpen, onClose, staffId, systemUsers, updateSystemUsers }: Props) {
+    const [oldPwd, setOldPwd] = useState('');
     const [newPwd, setNewPwd] = useState('');
     const [confirmPwd, setConfirmPwd] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
-    const [message, setMessage] = useState({ type: '', text: '' });
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     if (!isOpen) return null;
 
-    const handleSave = async () => {
-        if (!newPwd || newPwd !== confirmPwd) {
-            setMessage({ type: 'error', text: '密碼不一致或為空' });
-            return;
-        }
-        setIsSaving(true);
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setIsLoading(true);
+        
+        const user = systemUsers.find((u:any) => u.email === staffId);
+        
+        // 1. 驗證邏輯
+        if (!user && staffId !== 'BOSS') { setError('找不到使用者資料'); setIsLoading(false); return; }
+        if (staffId !== 'BOSS' && user.password !== oldPwd) { setError('❌ 舊密碼輸入錯誤'); setIsLoading(false); return; }
+        if (newPwd !== confirmPwd) { setError('❌ 兩次輸入的新密碼不一致'); setIsLoading(false); return; }
+        if (newPwd.length < 6) { setError('❌ 新密碼長度至少需要 6 個字元'); setIsLoading(false); return; }
+
         try {
-            const userRef = doc(db!, 'system_users', staffId);
-            await updateDoc(userRef, { password: newPwd });
+            // 2. 更新資料庫中的密碼
+            if (staffId !== 'BOSS') {
+                const newUsers = systemUsers.map((u:any) => u.email === staffId ? { ...u, password: newPwd } : u);
+                await updateSystemUsers(newUsers);
+            }
             
-            // 同步更新本地狀態
-            const updated = systemUsers.map(u => u.id === staffId ? { ...u, password: newPwd } : u);
-            updateSystemUsers(updated);
-            
-            setMessage({ type: 'success', text: '密碼修改成功！' });
-            setTimeout(() => {
-                onClose();
-                setNewPwd('');
-                setConfirmPwd('');
-                setMessage({ type: '', text: '' });
-            }, 1500);
-        } catch (error) {
-            setMessage({ type: 'error', text: '更新失敗，請重試' });
+            // 3. 同步更新 Firebase Auth (如果適用)
+            const { getAuth, updatePassword } = await import('firebase/auth');
+            const auth = getAuth();
+            if (auth.currentUser && staffId !== 'BOSS') {
+                await updatePassword(auth.currentUser, newPwd).catch(err => console.warn('Firebase Auth 更新略過:', err));
+            }
+
+            alert('✅ 密碼修改成功！下次登入請使用新密碼。');
+            setOldPwd(''); setNewPwd(''); setConfirmPwd('');
+            onClose();
+        } catch (err) {
+            setError('密碼修改失敗，請稍後再試或聯絡管理員');
         } finally {
-            setIsSaving(false);
+            setIsLoading(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                <div className="bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white flex justify-between items-center">
-                    <h3 className="text-xl font-bold flex items-center gap-2"><Key size={20}/> 修改登入密碼</h3>
-                    <button onClick={onClose} className="hover:rotate-90 transition-transform"><X size={24}/></button>
+        <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+                <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                    <h3 className="font-bold flex items-center"><Key size={18} className="mr-2 text-yellow-400"/> 修改登入密碼</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
                 </div>
-                <div className="p-8 space-y-6">
-                    {message.text && (
-                        <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {message.type === 'success' && <CheckCircle size={16}/>}
-                            {message.text}
+                <form onSubmit={handleSubmit} className="p-5 space-y-4 bg-slate-50">
+                    {staffId === 'BOSS' ? (
+                        <div className="text-sm text-red-500 font-bold mb-4 bg-red-50 p-3 rounded-lg border border-red-200">
+                            BOSS 帳號為系統預設超級管理員，密碼固定為 8888，如需更改請從源碼調整。
                         </div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">目前密碼 (Old Password)</label>
+                                <input type="password" value={oldPwd} onChange={e => setOldPwd(e.target.value)} className="w-full border border-slate-300 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500" required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-blue-600 mb-1">新密碼 (New Password)</label>
+                                <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} className="w-full border border-blue-300 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500" required minLength={6} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-blue-600 mb-1">確認新密碼 (Confirm Password)</label>
+                                <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} className="w-full border border-blue-300 p-2.5 rounded-lg text-sm outline-none focus:border-blue-500" required minLength={6} />
+                            </div>
+                            {error && <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100 font-bold">{error}</div>}
+                            <button type="submit" disabled={isLoading} className="w-full mt-4 bg-blue-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 transition-colors flex justify-center items-center">
+                                {isLoading ? <Loader2 size={18} className="animate-spin"/> : '確認修改'}
+                            </button>
+                        </>
                     )}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">新密碼</label>
-                        <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} className="w-full border-slate-200 rounded-xl focus:ring-blue-500" placeholder="請輸入新密碼" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">確認新密碼</label>
-                        <input type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} className="w-full border-slate-200 rounded-xl focus:ring-blue-500" placeholder="再次輸入新密碼" />
-                    </div>
-                    <button onClick={handleSave} disabled={isSaving} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
-                        {isSaving ? <Loader2 className="animate-spin" size={20}/> : <Save size={20}/>}
-                        {isSaving ? '正在儲存...' : '確認修改'}
-                    </button>
-                </div>
+                </form>
             </div>
         </div>
     );
