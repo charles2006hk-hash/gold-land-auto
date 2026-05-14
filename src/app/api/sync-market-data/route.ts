@@ -2,9 +2,11 @@
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth'; // ★ 補回這個 Auth 模組
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
 export const maxDuration = 10; 
+// ★ 破案關鍵：強制 Next.js 每次都真實執行，絕對不要用快取！
+export const dynamic = 'force-dynamic'; 
 
 const firebaseConfig = {
   apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
@@ -17,42 +19,40 @@ const firebaseConfig = {
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app); // ★ 初始化 Auth
+const auth = getAuth(app);
 
 export async function GET(request: Request) {
+    console.log("========== 測試開始 ==========");
     try {
-        // ★★★ 破案關鍵：先取得登入金牌，Firebase 才不會無限重試卡死 ★★★
+        console.log("[步驟 1] API 已觸發");
+
+        console.log("[步驟 2] 檢查登入狀態...");
         if (!auth.currentUser) {
+            console.log("[步驟 2a] 正在進行匿名登入...");
             await signInAnonymously(auth);
+            console.log("[步驟 2b] 匿名登入成功！");
+        } else {
+            console.log("[步驟 2c] 之前已登入");
         }
 
-        // 模擬數據清洗過程
-        const currentYear = new Date().getFullYear();
-        const currentMonth = new Date().getMonth() + 1; // 1-12
-        const documentId = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
-
+        console.log("[步驟 3] 準備寫入資料庫...");
+        const documentId = `test-${Date.now()}`;
         const processedData = {
             yearMonth: documentId,
-            vehicleClass: "Private Car", 
-            totalFirstRegistration: 3450, 
-            evCount: 2100,                
-            petrolCount: 1350,            
-            source: "DATA.GOV.HK 運輸署",
+            test: "This is a test",
             updatedAt: serverTimestamp(),
         };
 
-        // 寫入 Firebase 數據庫
-        // ★ 核心修復：將路徑移入已授權的 CHARLES_data 安全網內
-        await setDoc(doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'market_statistics', documentId), processedData, { merge: true });
+        console.log("[步驟 4] 開始呼叫 Firebase setDoc...");
+        const docRef = doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'market_statistics', documentId);
+        await setDoc(docRef, processedData, { merge: true });
+        
+        console.log("[步驟 5] Firebase 寫入大成功！");
 
-        return NextResponse.json({ 
-            success: true, 
-            message: `成功同步 ${documentId} 香港私家車出牌數據`,
-            data: processedData 
-        });
+        return NextResponse.json({ success: true, message: "測試成功！沒有超時！" });
 
     } catch (error: any) {
-        console.error("同步市場數據失敗:", error);
+        console.error("[發生錯誤]:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
