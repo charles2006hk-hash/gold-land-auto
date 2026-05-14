@@ -6369,7 +6369,18 @@ const DatabaseSelector = ({
                                   
                                   <div className="space-y-3 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
                                       {(() => {
-                                          const soldCars = inventory.filter((v:any) => v.status === 'Sold' && v.stockInDate && v.stockOutDate);
+                                          // 1. 判定權限：管理員可以看到全公司數據
+                                          const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
+                                          
+                                          // 2. 過濾售出車輛：管理員看全部，普通員工只看自己 managedBy 的車
+                                          const soldCars = inventory.filter((v:any) => {
+                                              const basicFilter = v.status === 'Sold' && v.stockInDate && v.stockOutDate;
+                                              if (!basicFilter) return false;
+                                              
+                                              if (isAdmin) return true; // 老闆/管理員放行全公司
+                                              return v.managedBy === staffId; // 普通員工只看自己的
+                                          });
+
                                           const modelStats: Record<string, { count: number, totalDays: number }> = {};
                                           
                                           soldCars.forEach((car:any) => {
@@ -6384,7 +6395,7 @@ const DatabaseSelector = ({
                                               modelStats[key].totalDays += days;
                                           });
 
-                                          // ★ 搜尋過濾邏輯 (右側內部數據)
+                                          // 3. 搜尋過濾邏輯
                                           const turnoverList = Object.entries(modelStats)
                                               .filter(([key, data]) => {
                                                   if (data.count < 1) return false;
@@ -6400,9 +6411,11 @@ const DatabaseSelector = ({
 
                                           if (turnoverList.length === 0) {
                                               return <div className="text-center py-10 text-slate-500 text-sm">
-                                                  {marketSearchQuery ? '公司尚未售出過此車型' : '累積歷史銷售數據後自動推算'}
+                                                  {marketSearchQuery ? '找不到符合搜尋的記錄' : (isAdmin ? '全公司尚未售出車輛' : '您目前尚未有成功售出並記錄的車輛')}
                                               </div>;
                                           }
+                                          
+                                        
 
                                           return turnoverList.map(item => (
                                               <div key={item.key} className="bg-slate-800/80 p-3 rounded-lg border-l-4 border-yellow-500 hover:bg-slate-700 transition-colors flex justify-between items-center">
