@@ -42,7 +42,8 @@ export async function GET(request: Request) {
         };
 
         // 寫入 Firebase 數據庫
-        await setDoc(doc(db, 'artifacts', 'gold-land-auto', 'market_statistics', documentId), processedData, { merge: true });
+        // ★ 核心修復：將路徑移入已授權的 CHARLES_data 安全網內
+        await setDoc(doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'market_statistics', documentId), processedData, { merge: true });
 
         return NextResponse.json({ 
             success: true, 
