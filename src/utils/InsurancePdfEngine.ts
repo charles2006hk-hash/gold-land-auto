@@ -87,7 +87,7 @@ export const generateInsuranceForm = async (vehicle: any, company: 'DahSing' | '
 
         // 5. 導出並觸發下載
         const finalPdfBytes = await pdfDoc.save();
-        const blob = new Blob([finalPdfBytes], { type: 'application/pdf' });
+        const blob = new Blob([finalPdfBytes as any], { type: 'application/pdf' });
         const downloadUrl = URL.createObjectURL(blob);
         
         const link = document.createElement('a');
