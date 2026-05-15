@@ -1280,28 +1280,27 @@ const BusinessProcessModule = ({
                                                 {showInsuranceModal && <InsuranceProposalModal vehicle={editingVehicle} onClose={() => setShowInsuranceModal(false)} />}
 
                                                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                                                    <div className="flex justify-between items-center mb-4">
-                                                        <h4 className="font-bold text-slate-700 flex items-center">
-                                                            <Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備
-                                                        </h4>
-                                                        
-                                                        {/* ★★★ 動態按鈕：如果是保險步驟就顯示保險按鈕，否則顯示 TD 打包單 ★★★ */}
-                                                        {isInsuranceStep ? (
-                                                            <button 
-                                                                onClick={() => setShowInsuranceModal(true)}
-                                                                className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-100 font-bold shadow-sm transition-transform active:scale-95 flex items-center"
-                                                            >
-                                                                🛡️ 生成保險投保書
-                                                            </button>
-                                                        ) : (
-                                                            <button 
-                                                                onClick={() => setShowTdPackModal(true)}
-                                                                className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
-                                                            >
-                                                                🖨️ 生成 TD 打包單
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                   <div className="flex justify-between items-center mb-4">
+                                                      <h4 className="font-bold text-slate-700 flex items-center">
+                                                          <Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備
+                                                      </h4>
+                                                      
+                                                      {/* ★ 改為永遠並排顯示兩個按鈕，方便業務隨時調用 ★ */}
+                                                      <div className="flex items-center gap-2">
+                                                          <button 
+                                                              onClick={() => setShowTdPackModal(true)}
+                                                              className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
+                                                          >
+                                                              🖨️ 生成 TD 打包單
+                                                          </button>
+                                                          <button 
+                                                              onClick={() => setShowInsuranceModal(true)}
+                                                              className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-100 font-bold shadow-sm transition-transform active:scale-95 flex items-center"
+                                                          >
+                                                              🛡️ 生成保險投保書
+                                                          </button>
+                                                      </div>
+                                                  </div>
                                                     
                                                     <div className="space-y-3">
                                                         {(stepData.fields || []).map((field: string) => {
