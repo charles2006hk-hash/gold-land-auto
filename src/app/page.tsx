@@ -1035,7 +1035,76 @@ const TDTaskPackModal = ({ vehicle, onClose }: any) => {
 };
 
 // ------------------------------------------------------------------
-// ★★★ 新增：業務辦理流程模組 (Business Process Module) - v17.1 修復版 ★★★
+// ★★★ 新增：保險投保書選擇彈窗 (Insurance Proposal Modal) ★★★
+// ------------------------------------------------------------------
+import { generateInsuranceForm } from '@/utils/InsurancePdfEngine'; // ★ 請確保路徑正確
+
+const InsuranceProposalModal = ({ vehicle, onClose }: any) => {
+    const [company, setCompany] = useState<'DahSing' | 'Zurich'>('DahSing');
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    const handleGenerate = async () => {
+        setIsGenerating(true);
+        const success = await generateInsuranceForm(vehicle, company);
+        setIsGenerating(false);
+        if (success) onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                    <h3 className="font-bold flex items-center">🛡️ 生成保險投保書 (Proposal Form)</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
+                </div>
+                
+                <div className="p-5 bg-slate-50 border-b border-slate-200">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">1. 選擇保險公司 (由 俊銘保險 代理)</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button 
+                            onClick={() => setCompany('DahSing')}
+                            className={`p-4 rounded-xl border-2 font-bold flex flex-col items-center justify-center transition-all ${company === 'DahSing' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-md scale-105' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}
+                        >
+                            大新保險
+                            <span className="text-[10px] font-normal mt-1 opacity-70">Dah Sing Insurance</span>
+                        </button>
+                        <button 
+                            onClick={() => setCompany('Zurich')}
+                            className={`p-4 rounded-xl border-2 font-bold flex flex-col items-center justify-center transition-all ${company === 'Zurich' ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-md scale-105' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}
+                        >
+                            蘇黎世保險
+                            <span className="text-[10px] font-normal mt-1 opacity-70">Zurich Insurance</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="p-5 flex-1">
+                    <h4 className="text-xs font-bold text-slate-500 mb-3">即將導入的數據預覽</h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-100 p-3 rounded-xl border border-slate-200 font-mono">
+                        <div><span className="text-slate-400">車主:</span> {vehicle.registeredOwnerName || vehicle.customerName || '未填寫'}</div>
+                        <div><span className="text-slate-400">車牌:</span> {vehicle.regMark || '未填寫'}</div>
+                        <div className="col-span-2"><span className="text-slate-400">廠型:</span> {vehicle.make} {vehicle.model} ({vehicle.year})</div>
+                        <div className="col-span-2"><span className="text-slate-400">底盤:</span> {vehicle.chassisNo || '未填寫'}</div>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-white border-t border-slate-200">
+                    <button 
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center disabled:opacity-50"
+                    >
+                        {isGenerating ? <Loader2 className="animate-spin mr-2"/> : <Printer size={16} className="mr-2"/>}
+                        {isGenerating ? '生成中...' : '生成並下載 PDF'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ------------------------------------------------------------------
+// ★★★ 業務辦理流程模組 (Business Process Module) ★★★
 // ------------------------------------------------------------------
 const BusinessProcessModule = ({ 
     db, staffId, appId, inventory, updateVehicle 
@@ -1043,19 +1112,20 @@ const BusinessProcessModule = ({
     db: any, 
     staffId: string, 
     appId: string, 
-    inventory: Vehicle[], // ★ 修復：明確定義這是 Vehicle 陣列
+    inventory: Vehicle[], 
     updateVehicle: any 
 }) => {
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    // 內部狀態：記錄輸入框
     const [note, setNote] = useState('');
     const [photo, setPhoto] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
+    // Modal 控制狀態
     const [showTdPackModal, setShowTdPackModal] = useState(false);
-    // 處理日誌保存與下一步
+    const [showInsuranceModal, setShowInsuranceModal] = useState(false); // ★ 新增：保險 Modal 控制
+
     const handleSaveLog = async (currentStepName: string, nextStepIndex: number) => {
         if (!editingVehicle || !editingVehicle.id) return;
         setIsSaving(true);
@@ -1079,14 +1149,12 @@ const BusinessProcessModule = ({
 
         await updateVehicle(editingVehicle.id, { activeWorkflow: updatedWf });
         
-        // 更新本地狀態
         setEditingVehicle(prev => prev ? { ...prev, activeWorkflow: updatedWf } : null);
         setNote('');
         setPhoto(null);
         setIsSaving(false);
     };
 
-    // 處理新開案件
     const handleStartWorkflow = async (typeKey: string) => {
         if (!editingVehicle || !editingVehicle.id) return;
         if (!confirm("確定為此車輛開啟新案件？")) return;
@@ -1101,37 +1169,32 @@ const BusinessProcessModule = ({
         setEditingVehicle(prev => prev ? { ...prev, activeWorkflow: newWf } : null);
     };
 
-    // 讀取欄位資料 (包含 CrossBorder 內的資料)
     const getFieldValue = (field: string) => {
         if (!editingVehicle) return '';
-        // 優先找根目錄，再找 crossBorder
         const val = (editingVehicle as any)[field] || 
                     editingVehicle.crossBorder?.[field as keyof CrossBorderData] || 
                     (editingVehicle.crossBorder as any)?.[`cb_${field}`] || '';
         return val;
     };
 
-    // 篩選列表 (現在 v 會自動被識別為 Vehicle 類型，不會報錯了)
     const activeCases = inventory.filter(v => v.activeWorkflow);
     const filteredCases = activeCases.filter(v => (v.regMark || '').includes(searchTerm.toUpperCase()));
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-slate-50 animate-fade-in">
             
-            {/* 1. 頂部工具列 */}
             <div className="flex justify-between items-center p-4 bg-white border-b border-slate-200 flex-none shadow-sm z-10">
                 <div>
                     <h2 className="text-2xl font-bold text-slate-800 flex items-center"><Briefcase size={24} className="mr-2 text-blue-600"/> 業務辦理中心</h2>
                     <p className="text-xs text-slate-500">集中處理港車北上、兩地牌新辦及維護流程</p>
                 </div>
-                {/* 簡單的選車按鈕 */}
                 <div className="relative">
                     <select 
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 font-bold text-sm outline-none cursor-pointer appearance-none pr-8"
                         onChange={(e) => {
                             const v = inventory.find(i => i.id === e.target.value);
                             if(v) setEditingVehicle(v);
-                            e.target.value = ""; // 重置
+                            e.target.value = "";
                         }}
                     >
                         <option value="">+ 開啟新案件 (選擇車輛)</option>
@@ -1143,10 +1206,7 @@ const BusinessProcessModule = ({
                 </div>
             </div>
 
-            {/* 2. 主工作區 (左右分割) */}
             <div className="flex flex-1 overflow-hidden">
-                
-                {/* 左側：案件列表 (Case List) */}
                 <div className="w-80 bg-white border-r border-slate-200 flex flex-col flex-none">
                     <div className="p-3 border-b bg-slate-50 relative">
                         <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -1178,16 +1238,9 @@ const BusinessProcessModule = ({
                                 </div>
                             );
                         })}
-                        
-                        {filteredCases.length === 0 && (
-                            <div className="text-center py-10 text-slate-400 text-xs">
-                                <p>尚無進行中的案件</p>
-                            </div>
-                        )}
                     </div>
                 </div>
 
-                {/* 右側：智能辦事助手 (The Action Window) */}
                 <div className="flex-1 bg-slate-50 flex flex-col overflow-hidden relative">
                     {editingVehicle ? (
                         editingVehicle.activeWorkflow ? (() => {
@@ -1198,9 +1251,11 @@ const BusinessProcessModule = ({
                             
                             if (!template || !stepData) return <div className="p-10">流程數據錯誤</div>;
 
+                            // ★ 判斷目前步驟是否與保險相關
+                            const isInsuranceStep = stepData.name.includes('保險') || template.name.includes('保險');
+
                             return (
                                 <div className="flex flex-col h-full">
-                                    {/* A. 流程進度條 */}
                                     <div className="bg-white border-b border-slate-200 p-4 shadow-sm flex-none">
                                         <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide pb-2">
                                             {template.steps.map((s:any, i:number) => (
@@ -1215,33 +1270,37 @@ const BusinessProcessModule = ({
                                         </div>
                                     </div>
 
-                                    {/* B. 辦事工作區 */}
                                     <div className="flex-1 overflow-y-auto p-6">
                                         <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
                                             
                                             {/* 左：資料準備 (Source) */}
                                             <div className="space-y-6">
                                                 
-                                                {/* ★★★ 這裡掛載剛剛寫好的 Modal ★★★ */}
-                                                {showTdPackModal && (
-                                                    <TDTaskPackModal 
-                                                        vehicle={editingVehicle} 
-                                                        onClose={() => setShowTdPackModal(false)} 
-                                                    />
-                                                )}
+                                                {showTdPackModal && <TDTaskPackModal vehicle={editingVehicle} onClose={() => setShowTdPackModal(false)} />}
+                                                {showInsuranceModal && <InsuranceProposalModal vehicle={editingVehicle} onClose={() => setShowInsuranceModal(false)} />}
 
                                                 <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                                                     <div className="flex justify-between items-center mb-4">
                                                         <h4 className="font-bold text-slate-700 flex items-center">
                                                             <Clipboard size={18} className="mr-2 text-blue-500"/> 資料準備
                                                         </h4>
-                                                        {/* ★★★ 這裡加入觸發按鈕 ★★★ */}
-                                                        <button 
-                                                            onClick={() => setShowTdPackModal(true)}
-                                                            className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
-                                                        >
-                                                            🖨️ 生成 TD 打包單
-                                                        </button>
+                                                        
+                                                        {/* ★★★ 動態按鈕：如果是保險步驟就顯示保險按鈕，否則顯示 TD 打包單 ★★★ */}
+                                                        {isInsuranceStep ? (
+                                                            <button 
+                                                                onClick={() => setShowInsuranceModal(true)}
+                                                                className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-100 font-bold shadow-sm transition-transform active:scale-95 flex items-center"
+                                                            >
+                                                                🛡️ 生成保險投保書
+                                                            </button>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => setShowTdPackModal(true)}
+                                                                className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100 font-bold shadow-sm transition-transform active:scale-95"
+                                                            >
+                                                                🖨️ 生成 TD 打包單
+                                                            </button>
+                                                        )}
                                                     </div>
                                                     
                                                     <div className="space-y-3">
@@ -1272,11 +1331,11 @@ const BusinessProcessModule = ({
                                                 </div>
                                             </div>
 
-                                            {/* 右：結果紀錄 (Result) */}
+                                            {/* 右：結果紀錄 (Result) 保持不變 */}
                                             <div className="flex flex-col bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-full">
+                                                {/* ...原有的紀錄區塊代碼... */}
                                                 <h4 className="font-bold text-slate-700 mb-4 flex items-center"><FileCheck size={18} className="mr-2 text-green-600"/> 辦理結果紀錄</h4>
                                                 
-                                                {/* 歷史紀錄預覽 */}
                                                 <div className="flex-1 bg-slate-50 rounded-xl p-3 mb-4 overflow-y-auto max-h-60 border border-slate-100 space-y-3">
                                                     {(wf.logs || []).slice().reverse().map((log:any, idx:number) => (
                                                         <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-xs">
@@ -1288,7 +1347,6 @@ const BusinessProcessModule = ({
                                                     {(wf.logs || []).length === 0 && <div className="text-center text-slate-400 text-xs py-10">尚無紀錄</div>}
                                                 </div>
 
-                                                {/* 輸入區 */}
                                                 <div className="mt-auto space-y-3">
                                                     <textarea 
                                                         value={note} 
@@ -1325,13 +1383,11 @@ const BusinessProcessModule = ({
                                                     </div>
                                                 </div>
                                             </div>
-
                                         </div>
                                     </div>
                                 </div>
                             );
                         })() : (
-                            // 未開案狀態：顯示開案按鈕
                             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10">
                                 <GitMerge size={64} className="mb-4 opacity-20"/>
                                 <h3 className="text-xl font-bold text-slate-600 mb-2">{editingVehicle.regMark} 尚未開啟流程</h3>
@@ -1349,7 +1405,6 @@ const BusinessProcessModule = ({
                             </div>
                         )
                     ) : (
-                        // 未選車狀態
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                             <Briefcase size={64} className="mb-4 opacity-20"/>
                             <p>請選擇左側案件，或點擊上方「開啟新案件」</p>
