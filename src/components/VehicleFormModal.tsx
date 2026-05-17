@@ -5,7 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { 
     ChevronLeft, Car, X, FileText, DollarSign, DownloadCloud, Wrench, Globe, 
     Database, Search, Link, Bell, Eye, Share2, Trash2, User as UserIcon, Check, 
-    CalendarDays, MapPin, Loader2, Image as ImageIcon, Edit, ShieldCheck, ArrowRight, UserCircle, History, ChevronDown, ChevronUp, Save
+    CalendarDays, MapPin, Loader2, Image as ImageIcon, Edit, ShieldCheck, ArrowRight, UserCircle, History, 
+    ChevronDown, ChevronUp, Save, Calculator
 } from 'lucide-react';
 import { query, collection, where, onSnapshot, getDocs } from "firebase/firestore";
 
@@ -14,6 +15,7 @@ import { COMPANY_INFO, ALL_CB_PORTS, PORTS_HK_GD, PORTS_MO_GD } from '@/config/c
 import { Vehicle, CrossBorderData, Payment, Expense } from '@/types';
 import { compressImage } from '@/utils/imageHelpers';
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
+import { calculateAutoLoan } from '@/utils/LoanCalculator';
 
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
@@ -99,8 +101,8 @@ const VehicleFormModal = ({
     }, [v.id, v.payments]);
 
 
-    // ★ 終極防跳走：將分頁狀態綁定到 SessionStorage，無論點刷新都唔會彈走！
-    const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb' | 'service'>(() => {
+    // ★ 擴充 rightTab，加入 'finance'
+    const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb' | 'service' | 'finance'>(() => {
         if (typeof window !== 'undefined') return (sessionStorage.getItem('gla_veh_tab') as any) || 'vrd';
         return 'vrd';
     });
@@ -109,6 +111,9 @@ const VehicleFormModal = ({
         if (typeof window !== 'undefined') sessionStorage.setItem('gla_veh_tab', rightTab);
     }, [rightTab]);
     
+    // ★★★ 新增：計數機的狀態參數 ★★★
+    const [financeMonths, setFinanceMonths] = useState(48);
+    const [financeRate, setFinanceRate] = useState(3.5);
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
 
@@ -543,6 +548,9 @@ const VehicleFormModal = ({
                 {/* ★ 新增：手機版維修保養按鈕 */}
                 <button type="button" onClick={() => setRightTab('service')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'service' ? 'border-orange-600 text-orange-700' : 'border-transparent text-slate-500'}`}><Wrench size={16} className="inline mr-1 mb-0.5"/>維修/保養</button>
                 <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
+                {/* ★★★ 加在這裡 (手機版) ★★★ */}
+                <button type="button" onClick={() => setRightTab('finance')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'finance' ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-slate-500'}`}><Calculator size={16} className="inline mr-1 mb-0.5"/>💰上會計數</button>
+            
             </div>
 
             {/* ================= 左側欄 (VRD & Photos) ================= */}
@@ -849,6 +857,8 @@ const VehicleFormModal = ({
                     {/* ★ 新增：桌面版維修保養按鈕 */}
                     <button type="button" onClick={() => setRightTab('service')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'service' ? 'border-orange-600 text-orange-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Wrench size={16} className="inline mr-1 mb-0.5"/>維修與保養</button>
                     <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
+                    {/* ★★★ 加在這裡 (桌面版) ★★★ */}
+                    <button type="button" onClick={() => setRightTab('finance')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'finance' ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Calculator size={16} className="inline mr-1 mb-0.5"/>💰上會計數</button>
                 </div>
 
                 {/* 分頁內容區 */}
@@ -1525,6 +1535,97 @@ const VehicleFormModal = ({
                     </div>
                 </div>
 
+                {/* ===== Tab 5: 上會計數機 (Finance & Insurance) ===== */}
+                    <div className={`${rightTab === 'finance' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
+                        <div className="bg-gradient-to-br from-cyan-900 to-slate-900 p-5 rounded-2xl text-white shadow-xl relative overflow-hidden">
+                            {/* 裝飾背景 */}
+                            <Calculator size={150} className="absolute right-0 bottom-0 opacity-10 -rotate-12 translate-x-8 translate-y-8"/>
+                            
+                            <h3 className="font-bold text-lg mb-6 flex items-center border-b border-cyan-700/50 pb-3">
+                                <Calculator className="mr-2 text-cyan-400" size={24}/> OCBC 汽車貸款智能試算
+                            </h3>
+
+                            {(() => {
+                                // 自動抓取目前輸入的車價與已付訂金
+                                const currentPrice = Number(priceStr.replace(/,/g, '')) || 0;
+                                const currentPaid = (v.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
+                                const calcResult = calculateAutoLoan(currentPrice, currentPaid, financeMonths, financeRate);
+
+                                return (
+                                    <div className="space-y-5 relative z-10">
+                                        {/* 輸入區塊 */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="bg-black/20 p-3 rounded-xl border border-white/10">
+                                                <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1 block">車價總額 (Price)</label>
+                                                <div className="text-xl font-mono font-bold">{formatCurrency(currentPrice)}</div>
+                                            </div>
+                                            <div className="bg-black/20 p-3 rounded-xl border border-white/10">
+                                                <label className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider mb-1 block">已付訂金 (Paid Deposit)</label>
+                                                <div className="text-xl font-mono font-bold text-emerald-400">{formatCurrency(currentPaid)}</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1 block">期數 (Months)</label>
+                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className="w-full bg-white/10 border border-white/20 rounded-lg p-3 outline-none text-sm font-bold font-mono cursor-pointer text-white">
+                                                    <option value="24" className="text-black">24 個月</option>
+                                                    <option value="36" className="text-black">36 個月</option>
+                                                    <option value="48" className="text-black">48 個月</option>
+                                                    <option value="60" className="text-black">60 個月</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1 block">平息 (Flat Rate %)</label>
+                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className="w-full bg-white/10 border border-white/20 rounded-lg p-3 outline-none text-sm font-bold font-mono text-white" />
+                                            </div>
+                                        </div>
+
+                                        {/* 顯示結果 */}
+                                        {calcResult.error ? (
+                                            <div className="bg-red-500/20 border border-red-500/50 p-4 rounded-xl text-red-200 text-sm text-center font-bold flex items-center justify-center">
+                                                <AlertTriangle size={18} className="mr-2"/> {calcResult.error}
+                                            </div>
+                                        ) : (
+                                            <div className="bg-white rounded-xl p-5 text-slate-900 shadow-inner mt-4">
+                                                <div className="flex justify-between items-end border-b border-slate-200 pb-4 mb-4">
+                                                    <div>
+                                                        <span className="font-black text-slate-800 text-lg">每月輕鬆供款</span>
+                                                        <span className="block text-[10px] font-bold text-slate-400 uppercase mt-0.5">Monthly Installment</span>
+                                                    </div>
+                                                    <span className="text-4xl font-black text-red-600 font-mono tracking-tighter drop-shadow-sm">
+                                                        ${calcResult.monthlyInstallment?.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-sm font-mono font-bold text-slate-500">
+                                                    <span className="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">總貸款額: ${calcResult.loanAmount?.toLocaleString()}</span>
+                                                    <span className="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">總利息: ${calcResult.totalInterest?.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* ★ 機密區塊：回佣顯示 (僅限 BOSS 或擁有全權限者) ★ */}
+                                        {(!calcResult.error && (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all')) && (
+                                            <div className="bg-black/40 backdrop-blur-md border border-yellow-500/50 p-5 rounded-xl mt-6 shadow-2xl">
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <h4 className="text-sm font-black text-yellow-500 uppercase tracking-widest flex items-center drop-shadow-md">
+                                                            <Building2 size={16} className="mr-2"/> 內部機密 (佣金預估)
+                                                        </h4>
+                                                        <p className="text-[10px] text-slate-400 mt-1 font-mono">基於 {financeMonths}個月 / 利率 {financeRate}% 計算 (回佣率: {calcResult.commissionRate}%)</p>
+                                                    </div>
+                                                    <div className="text-3xl font-black text-green-400 font-mono drop-shadow-md">
+                                                        ${calcResult.dealerCommission?.toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                
                 {/* 底部儲存列 (吸底設計) */}
                 <div className="p-4 border-t border-slate-300 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between gap-4 items-start md:items-center flex-none w-full z-20 overflow-x-hidden">
                     <div className="w-full md:flex-1 max-w-2xl min-w-0">
