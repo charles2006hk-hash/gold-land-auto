@@ -29,6 +29,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [carPhotos, setCarPhotos] = useState<string[]>([]);
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
 
+    // 👇👇👇 請把這段加在這裡 👇👇👇
+    const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
+
+    const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+        setToastMsg({text, type});
+        setTimeout(() => setToastMsg(null), 3000); 
+    };
     // ★ 權限判斷
     const isAdmin = staffId === 'BOSS' || currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all');
 
