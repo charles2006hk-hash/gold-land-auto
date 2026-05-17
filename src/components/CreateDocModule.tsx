@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw } from 'lucide-react';
+import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where, getDocs } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
+import { calculateAutoLoan } from '@/utils/LoanCalculator'; // ★ 匯入計數引擎
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
@@ -28,6 +29,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [carPhotos, setCarPhotos] = useState<string[]>([]);
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
 
+    // ★ 權限判斷
+    const isAdmin = staffId === 'BOSS' || currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all');
+
     const [formData, setFormData] = useState({
         companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
         companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
@@ -44,7 +48,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         remarks: '', paymentMethod: 'Cheque',
         orderType: 'None', overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: '',
         overseasTotalFee: '', localTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
-        contractPhotos: [] as string[]
+        contractPhotos: [] as string[],
+        
+        // ★★★ 新增：上會相關欄位 ★★★
+        isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: ''
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -137,23 +144,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot: any) => {
             const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));   
-            
-            // ★★★ 核心：開單系統機密過濾 ★★★
-            const isAdmin = staffId === 'BOSS' || currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all');
-
             const secureDocs = list.filter((doc: any) => {
-                if (isAdmin) return true; // 管理員看全部
-
-                // 1. 如果單據是自己開的 (新版特徵)
+                if (isAdmin) return true; 
                 if (doc.createdBy === staffId) return true;
-
-                // 2. 舊單據沒有開單人怎麼辦？我們去查這台車是不是他負責的！
                 const relatedCar = inventory.find((v: any) => v.regMark && v.regMark === doc.formData?.regMark);
                 if (relatedCar && relatedCar.managedBy === staffId) return true;
-
                 return false;
             });
-
             setSavedDocs(secureDocs);
             setDocHistory(secureDocs);  
         });
@@ -269,7 +266,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '',
-            chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false, etaFormat: 'date', etaDays: '', etaDate: ''
+            chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false, etaFormat: 'date', etaDays: '', etaDate: '',
+            isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: ''
         }));
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
@@ -288,6 +286,36 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             depositItems: depositItems, showTerms: showTerms, companyNameEn: formData.companyNameEn, companyNameCh: formData.companyNameCh, companyEmail: formData.companyEmail, companyPhone: formData.companyPhone, paymentMethod: formData.paymentMethod 
         };
         openPrintPreview(selectedDocType, dummyVehicle);
+    };
+
+    // ★★★ 自動計算上會 ★★★
+    const handleCalculateLoan = () => {
+        const price = Number(formData.price) || 0;
+        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + i.amount, 0);
+        const dep = depositItems.reduce((sum, item) => sum + item.amount, 0);
+        
+        // 總貸款額 = 車價 + 附加項目 - 已付訂金
+        const loan = (price + extrasTotal) - dep;
+        
+        if (loan < 80000) { 
+            alert("⚠️ 貸款額不可少於 HK$80,000"); 
+            return; 
+        }
+        
+        setFormData(prev => ({...prev, financeAmount: String(loan)}));
+        
+        const calc = calculateAutoLoan(price + extrasTotal, dep, Number(formData.financeMonths), Number(formData.financeRate));
+        
+        if(!calc.error) {
+            setFormData(prev => ({
+                ...prev, 
+                financeMonthly: String(calc.monthlyInstallment), 
+                financeCommission: String(calc.dealerCommission)
+            }));
+            showToast('✅ 上會計數完成！', 'success');
+        } else {
+            showToast(`❌ ${calc.error}`, 'error');
+        }
     };
 
     const LivePreview = () => {
@@ -391,6 +419,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1.5 font-bold pl-4">Less: {item.label}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(item.amount)}</td></tr>
                                             ))}
                                             <tr className="bg-red-50/50 font-black"><td className="border p-1.5 uppercase text-[11px]">Balance Due (總結餘/尾數)</td><td className="border p-1.5 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr>
+                                            
+                                            {/* ★★★ 動態渲染上會資訊 ★★★ */}
+                                            {formData.isFinance && (
+                                                <tr className="bg-cyan-50/30 text-[10px]">
+                                                    <td colSpan={2} className="border p-1.5 text-cyan-800">
+                                                        <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
+                                                    </td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
@@ -406,6 +443,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     {depositItems.map((item: any, idx: number) => (
                                         <tr key={`dep-${idx}`} className="border-b"><td className="p-2 font-bold text-slate-600">Less: {item.label}{selectedDocType === 'receipt' && idx === depositItems.length - 1 && <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>}</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">{formatCurrency(item.amount)}</td></tr>
                                     ))}
+                                    {/* ★★★ 動態渲染上會資訊 (發票/收據版) ★★★ */}
+                                    {formData.isFinance && (
+                                        <tr className="bg-cyan-50/30 text-[10px]">
+                                            <td colSpan={2} className="p-2 text-cyan-800">
+                                                <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                                 <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr></tfoot>
                             </table>
@@ -817,6 +862,76 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             <option value="USDT">USDT (泰達幣)</option>
                                             <option value="Trade-in">對數 (Trade-in)</option>
                                         </select>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* ★★★ 新增：上會計數機區塊 ★★★ */}
+                            <div className="p-3 bg-cyan-50/50 rounded-xl border border-cyan-200 mb-3 animate-in fade-in">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="flex items-center text-[10px] font-bold text-cyan-800 uppercase tracking-wider cursor-pointer">
+                                        <input type="checkbox" checked={formData.isFinance} onChange={e => setFormData(prev => ({...prev, isFinance: e.target.checked}))} className="mr-2 accent-cyan-600"/>
+                                        上會/分期安排 (Finance Options)
+                                    </label>
+                                    {formData.isFinance && (
+                                        <button type="button" onClick={handleCalculateLoan} className="text-[10px] font-bold bg-cyan-600 text-white px-3 py-1.5 rounded-lg shadow-sm hover:bg-cyan-700 active:scale-95 transition-transform flex items-center">
+                                            <Calculator size={12} className="mr-1"/> 自動計算
+                                        </button>
+                                    )}
+                                </div>
+
+                                {formData.isFinance && (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 pt-3 border-t border-cyan-200">
+                                        <div>
+                                            <label className="text-[9px] font-bold text-cyan-600 mb-1 block">上會銀行 (Bank)</label>
+                                            <select name="financeBank" value={formData.financeBank} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded bg-white outline-none cursor-pointer text-cyan-900 font-bold">
+                                                <option value="OCBC">OCBC (華僑銀行)</option>
+                                                <option value="Hitachi">Hitachi (日立)</option>
+                                                <option value="Orix">Orix (歐力士)</option>
+                                                <option value="Public">Public (大眾)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-cyan-600 mb-1 block">貸款額 (Loan Amt)</label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1.5 text-cyan-400 text-xs">$</span>
+                                                <input name="financeAmount" value={formData.financeAmount} onChange={handleChange} className="w-full text-xs p-1.5 pl-5 border border-cyan-300 rounded outline-none font-mono text-cyan-900 font-bold" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-cyan-600 mb-1 block">期數 (Months)</label>
+                                            <select name="financeMonths" value={formData.financeMonths} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded bg-white outline-none cursor-pointer text-cyan-900 font-bold font-mono">
+                                                <option value="24">24</option>
+                                                <option value="36">36</option>
+                                                <option value="48">48</option>
+                                                <option value="60">60</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold text-cyan-600 mb-1 block">平息 (Flat Rate %)</label>
+                                            <input name="financeRate" type="number" step="0.01" value={formData.financeRate} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded outline-none font-mono text-cyan-900 font-bold" />
+                                        </div>
+                                        
+                                        <div className="col-span-2 bg-white p-2 rounded border border-cyan-200 flex flex-col justify-center mt-1 shadow-sm">
+                                            <label className="text-[9px] font-bold text-cyan-600 mb-0.5">每月供款 (Monthly)</label>
+                                            <div className="text-base font-black text-red-600 font-mono">
+                                                ${formatCurrency(Number(formData.financeMonthly))}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* ★ 隱藏回佣欄位，僅限管理層查看 ★ */}
+                                        {isAdmin ? (
+                                            <div className="col-span-2 bg-slate-800 p-2 rounded border border-slate-700 flex flex-col justify-center mt-1 shadow-sm">
+                                                <label className="text-[9px] font-bold text-slate-400 mb-0.5">內部參考: 預計車行回佣 (Comm.)</label>
+                                                <div className="text-base font-black text-green-400 font-mono">
+                                                    ${formatCurrency(Number(formData.financeCommission))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="col-span-2 flex items-center justify-center text-[10px] text-slate-400 italic">
+                                                (佣金資料已隱藏)
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
