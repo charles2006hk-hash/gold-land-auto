@@ -1536,85 +1536,89 @@ const VehicleFormModal = ({
                 </div>
 
                 {/* ===== Tab 5: 上會計數機 (Finance & Insurance) ===== */}
-                    <div className={`${rightTab === 'finance' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
-                        <div className="bg-gradient-to-br from-cyan-900 to-slate-900 p-5 rounded-2xl text-white shadow-xl relative overflow-hidden">
-                            {/* 裝飾背景 */}
-                            <Calculator size={150} className="absolute right-0 bottom-0 opacity-10 -rotate-12 translate-x-8 translate-y-8"/>
+                    <div className={`${rightTab === 'finance' ? 'block' : 'hidden'} animate-fade-in pb-28 w-full`}>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
                             
-                            <h3 className="font-bold text-lg mb-6 flex items-center border-b border-cyan-700/50 pb-3">
-                                <Calculator className="mr-2 text-cyan-400" size={24}/> OCBC 汽車貸款智能試算
+                            <h3 className="font-bold text-lg mb-6 flex items-center border-b border-slate-100 pb-3 text-slate-800">
+                                <Calculator className="mr-2 text-blue-600" size={24}/> OCBC 汽車貸款智能試算
                             </h3>
 
                             {(() => {
                                 // 自動抓取目前輸入的車價與已付訂金
                                 const currentPrice = Number(priceStr.replace(/,/g, '')) || 0;
                                 const currentPaid = (v.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
-                                const calcResult = calculateAutoLoan(currentPrice, currentPaid, financeMonths, financeRate);
+                                
+                                // ★ 智能判斷：如果狀態是二手或寄賣，就用二手車佣金表
+                                const isUsedCar = v.purchaseType === 'Used' || v.purchaseType === 'Consignment';
+                                const calcResult = calculateAutoLoan(currentPrice, currentPaid, financeMonths, financeRate, true, isUsedCar);
 
                                 return (
                                     <div className="space-y-5 relative z-10">
                                         {/* 輸入區塊 */}
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-black/20 p-3 rounded-xl border border-white/10">
-                                                <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1 block">車價總額 (Price)</label>
-                                                <div className="text-xl font-mono font-bold">{formatCurrency(currentPrice)}</div>
+                                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">車價總額 (Price)</label>
+                                                <div className="text-xl font-mono font-bold text-slate-800">{formatCurrency(currentPrice)}</div>
                                             </div>
-                                            <div className="bg-black/20 p-3 rounded-xl border border-white/10">
-                                                <label className="text-[10px] text-emerald-300 font-bold uppercase tracking-wider mb-1 block">已付訂金 (Paid Deposit)</label>
-                                                <div className="text-xl font-mono font-bold text-emerald-400">{formatCurrency(currentPaid)}</div>
+                                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                                                <label className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1 block">已付首期/訂金 (Paid Deposit)</label>
+                                                <div className="text-xl font-mono font-bold text-emerald-700">{formatCurrency(currentPaid)}</div>
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1 block">期數 (Months)</label>
-                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className="w-full bg-white/10 border border-white/20 rounded-lg p-3 outline-none text-sm font-bold font-mono cursor-pointer text-white">
-                                                    <option value="24" className="text-black">24 個月</option>
-                                                    <option value="36" className="text-black">36 個月</option>
-                                                    <option value="48" className="text-black">48 個月</option>
-                                                    <option value="60" className="text-black">60 個月</option>
+                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">期數 (Months)</label>
+                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-3 outline-none text-sm font-bold font-mono cursor-pointer text-slate-800 focus:ring-2 ring-blue-100 shadow-sm">
+                                                    <option value="24">24 個月</option>
+                                                    <option value="36">36 個月</option>
+                                                    <option value="48">48 個月</option>
+                                                    <option value="60">60 個月</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider mb-1 block">平息 (Flat Rate %)</label>
-                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className="w-full bg-white/10 border border-white/20 rounded-lg p-3 outline-none text-sm font-bold font-mono text-white" />
+                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">平息 (Flat Rate %)</label>
+                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-3 outline-none text-sm font-bold font-mono text-slate-800 focus:ring-2 ring-blue-100 shadow-sm" />
                                             </div>
                                         </div>
 
                                         {/* 顯示結果 */}
                                         {calcResult.error ? (
-                                            <div className="bg-red-500/20 border border-red-500/50 p-4 rounded-xl text-red-200 text-sm text-center font-bold flex items-center justify-center">
+                                            <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-600 text-sm text-center font-bold flex items-center justify-center">
                                                 <AlertTriangle size={18} className="mr-2"/> {calcResult.error}
                                             </div>
                                         ) : (
-                                            <div className="bg-white rounded-xl p-5 text-slate-900 shadow-inner mt-4">
-                                                <div className="flex justify-between items-end border-b border-slate-200 pb-4 mb-4">
+                                            <div className="bg-blue-50/50 rounded-xl p-5 border border-blue-100 shadow-sm mt-4">
+                                                <div className="flex justify-between items-end border-b border-blue-200 pb-4 mb-4">
                                                     <div>
-                                                        <span className="font-black text-slate-800 text-lg">每月輕鬆供款</span>
-                                                        <span className="block text-[10px] font-bold text-slate-400 uppercase mt-0.5">Monthly Installment</span>
+                                                        <span className="font-black text-blue-900 text-lg">每月輕鬆供款</span>
+                                                        <span className="block text-[10px] font-bold text-blue-500 uppercase mt-0.5">Monthly Installment</span>
                                                     </div>
                                                     <span className="text-4xl font-black text-red-600 font-mono tracking-tighter drop-shadow-sm">
                                                         ${calcResult.monthlyInstallment?.toLocaleString()}
                                                     </span>
                                                 </div>
-                                                <div className="flex justify-between items-center text-sm font-mono font-bold text-slate-500">
-                                                    <span className="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">總貸款額: ${calcResult.loanAmount?.toLocaleString()}</span>
-                                                    <span className="bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">總利息: ${calcResult.totalInterest?.toLocaleString()}</span>
+                                                <div className="flex justify-between items-center text-sm font-mono font-bold text-slate-600">
+                                                    <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">總貸款額: ${calcResult.loanAmount?.toLocaleString()}</span>
+                                                    <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">總利息: ${calcResult.totalInterest?.toLocaleString()}</span>
                                                 </div>
                                             </div>
                                         )}
 
                                         {/* ★ 機密區塊：回佣顯示 (僅限 BOSS 或擁有全權限者) ★ */}
                                         {(!calcResult.error && (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all')) && (
-                                            <div className="bg-black/40 backdrop-blur-md border border-yellow-500/50 p-5 rounded-xl mt-6 shadow-2xl">
-                                                <div className="flex justify-between items-center">
+                                            <div className="bg-slate-800 border border-slate-700 p-5 rounded-xl mt-6 shadow-lg relative overflow-hidden">
+                                                <Building2 size={100} className="absolute right-0 bottom-0 opacity-5 -translate-y-4 translate-x-4"/>
+                                                <div className="flex justify-between items-center relative z-10">
                                                     <div>
-                                                        <h4 className="text-sm font-black text-yellow-500 uppercase tracking-widest flex items-center drop-shadow-md">
+                                                        <h4 className="text-sm font-black text-yellow-500 uppercase tracking-widest flex items-center">
                                                             <Building2 size={16} className="mr-2"/> 內部機密 (佣金預估)
                                                         </h4>
-                                                        <p className="text-[10px] text-slate-400 mt-1 font-mono">基於 {financeMonths}個月 / 利率 {financeRate}% 計算 (回佣率: {calcResult.commissionRate}%)</p>
+                                                        <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                                                            {isUsedCar ? '二手車表' : '新車表'} | 利率 {financeRate.toFixed(2)}% | 回佣率: {calcResult.commissionRate}%
+                                                        </p>
                                                     </div>
-                                                    <div className="text-3xl font-black text-green-400 font-mono drop-shadow-md">
+                                                    <div className="text-3xl font-black text-green-400 font-mono">
                                                         ${calcResult.dealerCommission?.toLocaleString()}
                                                     </div>
                                                 </div>
