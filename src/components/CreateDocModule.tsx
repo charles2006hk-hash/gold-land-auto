@@ -605,7 +605,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     return (
         <div className="flex flex-col h-full bg-slate-100 md:bg-transparent overflow-hidden relative">
-            
+            {/* 👇👇👇 請把這段 Toast UI 加在這裡 👇👇👇 */}
+            {toastMsg && (
+                <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${toastMsg.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+                    {toastMsg.text}
+                </div>
+            )}
+            {/* 👆👆👆 加到這裡為止 👆👆👆 */}
             <div className="md:hidden bg-white p-2 border-b border-slate-200 flex gap-2 shrink-0">
                 <button onClick={() => setMobileStep('list')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='list' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}><Car size={14} className="mr-1"/> 1. 選車</button>
                 <button onClick={() => setMobileStep('edit')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='edit' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}><Edit size={14} className="mr-1"/> 2. 編輯</button>
