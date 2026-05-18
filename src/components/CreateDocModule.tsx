@@ -58,7 +58,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         contractPhotos: [] as string[],
         
         // ★★★ 新增：上會相關欄位 ★★★
-        isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: ''
+        isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -311,7 +311,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         
         setFormData(prev => ({...prev, financeAmount: String(loan)}));
         
-        const calc = calculateAutoLoan(price + extrasTotal, dep, Number(formData.financeMonths), Number(formData.financeRate));
+        // ★ 智能判斷：根據「手數 (Previous Owners)」大於 0 來判定為二手車
+        const isUsedCar = formData.previousOwners && Number(formData.previousOwners) > 0;
+        
+        // ★ 將 isUsedCar 和 formData.financeType 傳入計數引擎
+        const calc = calculateAutoLoan(
+            price + extrasTotal, 
+            dep, 
+            Number(formData.financeMonths), 
+            Number(formData.financeRate),
+            true, // 預設使用 Digital AIP (+2% 佣金)
+            isUsedCar, 
+            formData.financeType as 'HP' | 'Lease'
+        );
         
         if(!calc.error) {
             setFormData(prev => ({
@@ -894,7 +906,16 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </div>
 
                                 {formData.isFinance && (
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 pt-3 border-t border-cyan-200">
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-3 pt-3 border-t border-cyan-200">
+                                        {/* ★ 新增：合約模式 (HP / Lease) */}
+                                        <div>
+                                            <label className="text-[9px] font-bold text-cyan-600 mb-1 block">合約模式 (Type)</label>
+                                            <select name="financeType" value={formData.financeType} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded bg-white outline-none cursor-pointer text-cyan-900 font-bold">
+                                                <option value="HP">HP (租購)</option>
+                                                <option value="Lease">Lease (租賃)</option>
+                                            </select>
+                                        </div>
+
                                         <div>
                                             <label className="text-[9px] font-bold text-cyan-600 mb-1 block">上會銀行 (Bank)</label>
                                             <select name="financeBank" value={formData.financeBank} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded bg-white outline-none cursor-pointer text-cyan-900 font-bold">
@@ -925,23 +946,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             <input name="financeRate" type="number" step="0.01" value={formData.financeRate} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded outline-none font-mono text-cyan-900 font-bold" />
                                         </div>
                                         
-                                        <div className="col-span-2 bg-white p-2 rounded border border-cyan-200 flex flex-col justify-center mt-1 shadow-sm">
+                                        {/* 每月供款顯示 */}
+                                        <div className="col-span-2 md:col-span-2 bg-white p-2 rounded border border-cyan-200 flex flex-col justify-center mt-1 shadow-sm">
                                             <label className="text-[9px] font-bold text-cyan-600 mb-0.5">每月供款 (Monthly)</label>
                                             <div className="text-base font-black text-red-600 font-mono">
                                                 ${formatCurrency(Number(formData.financeMonthly))}
                                             </div>
                                         </div>
-                                        
-                                        {/* ★ 隱藏回佣欄位，僅限管理層查看 ★ */}
+
+                                        {/* ★ 隱藏回佣欄位，僅限管理層查看 (佔 3 格) ★ */}
                                         {isAdmin ? (
-                                            <div className="col-span-2 bg-slate-800 p-2 rounded border border-slate-700 flex flex-col justify-center mt-1 shadow-sm">
+                                            <div className="col-span-2 md:col-span-3 bg-slate-800 p-2 rounded border border-slate-700 flex flex-col justify-center mt-1 shadow-sm">
                                                 <label className="text-[9px] font-bold text-slate-400 mb-0.5">內部參考: 預計車行回佣 (Comm.)</label>
                                                 <div className="text-base font-black text-green-400 font-mono">
                                                     ${formatCurrency(Number(formData.financeCommission))}
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="col-span-2 flex items-center justify-center text-[10px] text-slate-400 italic">
+                                            <div className="col-span-2 md:col-span-3 flex items-center justify-center text-[10px] text-slate-400 italic mt-1">
                                                 (佣金資料已隱藏)
                                             </div>
                                         )}
