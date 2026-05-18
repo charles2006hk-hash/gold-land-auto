@@ -4223,15 +4223,23 @@ const DatabaseSelector = ({
                   const actionCars = sortedList.filter(c => {
                       if (c.status === 'Reserved') return true;
                       if (c.status === 'Sold') {
-                          const received = (c.payments || []).reduce((acc, p) => acc + (p.amount || 0), 0);
-                          const cbFees = (c.crossBorder?.tasks || []).reduce((sum, t) => sum + (t.fee || 0), 0);
+                          const received = (c.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
+                          const cbFees = (c.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (t.fee || 0), 0);
                           const salesAddonsTotal = ((c as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
                           const totalReceivable = (c.price || 0) + cbFees + salesAddonsTotal;
                           const balance = totalReceivable - received;
-                          const unpaidExps = (c.expenses || []).filter(e => e.status === 'Unpaid').length;
-                          const pendingCb = (c.crossBorder?.tasks || []).filter(t => !t.isPaid).length;
-                          // 只要還有欠款、未付成本、未完成的中港任務，就留在待處理區
-                          return balance > 0 || unpaidExps > 0 || pendingCb > 0;
+                          
+                          const unpaidExps = (c.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
+                          const pendingCb = (c.crossBorder?.tasks || []).filter((t:any) => !t.isPaid).length;
+                          
+                          // ★★★ 核心修復：計算進貨/收車的未付尾數 ★★★
+                          const acqPaid = (c.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                          const acqOffset = Number(c.acquisition?.offsetAmount || 0);
+                          const acqBalance = (c.costPrice || 0) - acqPaid - acqOffset;
+
+                          // 只要還有欠款(客欠我)、未付成本雜費(我欠車房)、未付車價(我欠行家)、未完成的中港任務，就留在待處理區
+                          // 使用 acqBalance > 1 來避免浮點數誤差
+                          return balance > 0 || unpaidExps > 0 || pendingCb > 0 || acqBalance > 1;
                       }
                       return false;
                   });
@@ -4408,19 +4416,35 @@ const DatabaseSelector = ({
                                     <div className="flex flex-col gap-1 items-end min-w-0 ml-auto">
                                         {hasValidEta && (
                                             <div className="flex flex-wrap justify-end items-center gap-1">
-                                                {received > 0 && (
-                                                    <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
-                                                        已付
-                                                    </span>
-                                                )}
-                                                <span className={`text-[8px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold ${
-                                                    isArrived 
-                                                    ? 'text-green-600 bg-green-50 border-green-200' 
-                                                    : 'text-indigo-600 bg-indigo-50 border-indigo-200'
-                                                }`}>
-                                                    <Ship size={8} className="mr-0.5 opacity-80"/>{isArrived ? '已到港' : `剩${daysToArrive}天`}
+                                            {/* 一般維修雜費未付 */}
+                                            {unpaidExps > 0 && (
+                                                <span className="text-[8px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
+                                                    未付雜費
                                                 </span>
-                                            </div>
+                                            )}
+                                            
+                                            {/* ★★★ 新增：車價尾數未找標籤 ★★★ */}
+                                            {(() => {
+                                                const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                                                const acqOffset = Number(car.acquisition?.offsetAmount || 0);
+                                                const acqBalance = (car.costPrice || 0) - acqPaid - acqOffset;
+                                                if (acqBalance > 1) {
+                                                    return (
+                                                        <span className="text-[8px] text-white bg-red-600 border border-red-700 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap shadow-sm">
+                                                            車價尾數未清
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+
+                                            {/* 客戶欠款待收 */}
+                                            {balance > 0 && (
+                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-mono font-bold">
+                                                    <span className="mr-0.5 opacity-80 text-[8px]">待收</span>{formatCurrency(balance)}
+                                                </span>
+                                            )}
+                                        </div>
                                         )}
 
                                         <div className="flex flex-wrap justify-end items-center gap-1">
