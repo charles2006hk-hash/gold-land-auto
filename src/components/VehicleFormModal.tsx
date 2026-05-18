@@ -113,7 +113,7 @@ const VehicleFormModal = ({
     
     // ★★★ 新增：計數機的狀態參數 ★★★
     const [financeMonths, setFinanceMonths] = useState(48);
-    const [financeRate, setFinanceRate] = useState(3.5);
+    const [financeType, setFinanceType] = useState<'HP' | 'Lease'>('HP'); // ★ 新增上會類別
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
 
@@ -1550,7 +1550,7 @@ const VehicleFormModal = ({
                                 
                                 // ★ 智能判斷：如果狀態是二手或寄賣，就用二手車佣金表
                                 const isUsedCar = v.purchaseType === 'Used' || v.purchaseType === 'Consignment';
-                                const calcResult = calculateAutoLoan(currentPrice, currentPaid, financeMonths, financeRate, true, isUsedCar);
+                                const calcResult = calculateAutoLoan(currentPrice, currentPaid, financeMonths, financeRate, true, isUsedCar, financeType);
 
                                 return (
                                     <div className="space-y-5 relative z-10">
@@ -1566,10 +1566,18 @@ const VehicleFormModal = ({
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4">
+                                        {/* 期數、平息與模式選擇 */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">上會模式 (Type)</label>
+                                                <div className="flex bg-slate-100 p-1 rounded-lg border shadow-inner">
+                                                    <button type="button" onClick={() => setFinanceType('HP')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${financeType === 'HP' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>HP (租購)</button>
+                                                    <button type="button" onClick={() => setFinanceType('Lease')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${financeType === 'Lease' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>Lease (租賃)</button>
+                                                </div>
+                                            </div>
                                             <div>
                                                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">期數 (Months)</label>
-                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-3 outline-none text-sm font-bold font-mono cursor-pointer text-slate-800 focus:ring-2 ring-blue-100 shadow-sm">
+                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 outline-none text-sm font-bold font-mono text-slate-800 focus:ring-2 ring-blue-100 shadow-sm">
                                                     <option value="24">24 個月</option>
                                                     <option value="36">36 個月</option>
                                                     <option value="48">48 個月</option>
@@ -1578,7 +1586,7 @@ const VehicleFormModal = ({
                                             </div>
                                             <div>
                                                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">平息 (Flat Rate %)</label>
-                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-3 outline-none text-sm font-bold font-mono text-slate-800 focus:ring-2 ring-blue-100 shadow-sm" />
+                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 outline-none text-sm font-bold font-mono text-slate-800 focus:ring-2 ring-blue-100 shadow-sm" />
                                             </div>
                                         </div>
 
