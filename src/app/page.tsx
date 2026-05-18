@@ -2270,12 +2270,12 @@ type SettingsManagerProps = {
 // ★★★ 10. Settings Manager (v18.0: 終極修復 Error 310 Hook 崩潰) ★★★
 // ------------------------------------------------------------------
 
-// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 對客分享版) ---
-const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
+// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
+const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     
-    // ★ 需求 3: 加上可自訂編輯的備註
+    // 自訂編輯的備註 (純淨版預設不顯示)
     const [customRemark, setCustomRemark] = useState('');
 
     // 自動讀取該車輛的照片
@@ -2302,7 +2302,9 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
             <div className="bg-white w-full max-w-sm md:max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
                 {/* Header Actions */}
                 <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden flex-none">
-                    <span className="text-xs font-bold">預覽模式 (可截圖或列印)</span>
+                    <span className="text-xs font-bold">
+                        {cleanMode ? '✨ 預覽車輛規格 (純淨版)' : '💰 預覽對客推介單 (完整版)'}
+                    </span>
                     <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
                 </div>
 
@@ -2317,54 +2319,58 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
                         </div>
                     </div>
 
-                    {/* Car Title (★ 需求 4: 隱藏車牌文字，只顯示年份廠牌) */}
+                    {/* Car Title */}
                     <div className="mb-4 flex justify-between items-end">
-                        <div>
+                        <div className={cleanMode ? "w-full text-center border-b border-slate-100 pb-2" : ""}>
                             <h3 className="text-2xl font-black text-slate-800 leading-tight">{vehicle.make} {vehicle.model}</h3>
                             <p className="text-sm text-slate-500 font-mono mt-1">製造年份: {vehicle.year}</p>
                         </div>
-                        {/* 顯示價格 */}
-                        <div className="text-right pb-1">
-                            <span className="text-lg font-black text-yellow-600">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price)}</span>
-                        </div>
+                        {/* ★★★ 核心邏輯：如果非純淨版才顯示價格 ★★★ */}
+                        {!cleanMode && (
+                            <div className="text-right pb-1">
+                                <span className="text-lg font-black text-yellow-600">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price)}</span>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Key Specs Grid (★ 需求 5: 加入牌費到期日) */}
+                    {/* Key Specs Grid */}
                     <div className="grid grid-cols-3 gap-2 mb-4">
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">外觀/內飾 (Color)</span>
-                            <span className="font-bold text-slate-800 text-[10px] truncate" title={`${vehicle.colorExt || '-'} / ${vehicle.colorInt || vehicle.colorInterior || '-'}`}>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">外觀/內飾</span>
+                            <span className="font-bold text-slate-800 text-[10px] truncate">
                                 {vehicle.colorExt || '-'} / {vehicle.colorInt || (vehicle as any).colorInterior || '-'}
                             </span>
                         </div>
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數 (Owners)</span>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數</span>
                             <span className="font-bold text-slate-800 text-xs">{vehicle.previousOwners || '0'} 手</span>
                         </div>
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積 (Engine)</span>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積</span>
                             <span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</span>
                         </div>
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數 (Mileage)</span>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數</span>
                             <span className="font-bold text-slate-800 text-xs">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-'}</span>
                         </div>
-                        <div className="bg-yellow-50 p-2 rounded border border-yellow-200 col-span-2 flex flex-col justify-center">
-                            <span className="block text-[9px] text-yellow-600 font-bold uppercase mb-0.5">牌費到期日 (License Expiry)</span>
-                            <span className="font-bold text-yellow-900 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 col-span-2 flex flex-col justify-center">
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">牌費到期日</span>
+                            <span className="font-bold text-slate-800 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span>
                         </div>
                     </div>
 
-                    {/* ★ 需求 3: 可自訂編輯的備註區 */}
-                    <div className="mb-6 relative group">
-                        <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註 (點擊編輯，列印或截圖時自動隱藏外框)</span>
-                        <textarea
-                            value={customRemark}
-                            onChange={(e) => setCustomRemark(e.target.value)}
-                            placeholder="在這裡輸入車輛亮點、改裝項目或給客戶的話..."
-                            className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:border-none print:bg-transparent print:p-0 min-h-[60px] leading-relaxed"
-                        />
-                    </div>
+                    {/* ★ 需求 3: 只有完整版才顯示自訂備註區 */}
+                    {!cleanMode && (
+                        <div className="mb-6 relative group">
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註 (列印或截圖時自動隱藏外框)</span>
+                            <textarea
+                                value={customRemark}
+                                onChange={(e) => setCustomRemark(e.target.value)}
+                                placeholder="在這裡輸入車輛亮點或給客戶的話..."
+                                className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:border-none print:bg-transparent print:p-0 min-h-[60px] leading-relaxed"
+                            />
+                        </div>
+                    )}
 
                     {/* Photos Grid */}
                     <div className="grid grid-cols-2 gap-2 mb-4">
@@ -2378,7 +2384,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
                         )}
                     </div>
 
-                    {/* Contact Footer (★ 需求 2: 移除了地址和指派人，變得極簡專業) */}
+                    {/* Contact Footer */}
                     <div className="text-center border-t border-slate-100 pt-4 mt-4">
                         <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
                         <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
@@ -2387,12 +2393,9 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose }: any) => {
 
                 {/* Footer Action */}
                 <div className="p-4 bg-slate-100 border-t print:hidden flex-none">
-                    <button onClick={() => window.print()} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
-                        <Printer size={16} className="mr-2"/> 列印 / 輸出 PDF
+                    <button onClick={() => window.print()} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
+                        📸 {cleanMode ? '截圖純淨規格' : '截圖完整報價單'}
                     </button>
-                    <p className="text-[10px] text-center text-slate-500 mt-3 leading-tight">
-                        💡 提示：iPhone 可直接截圖發送 WhatsApp。<br/>如需遮擋圖片中的車牌，請先在「智能圖庫」中使用遮罩工具。
-                    </p>
                 </div>
             </div>
         </div>
@@ -2566,6 +2569,7 @@ export default function GoldLandAutoDMS() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null); 
   const [shareVehicle, setShareVehicle] = useState<Vehicle | null>(null); // ★ 新增：控制分享彈窗
+  const [shareCleanMode, setShareCleanMode] = useState(false); // ★ 新增：控制彈窗是否為純淨版 (隱藏價格)
 
   // ★★★ 新增：將資料庫編輯狀態提升到這裡，讓 Dashboard 也能控制 ★★★
   const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
@@ -3877,6 +3881,17 @@ const DatabaseSelector = ({
            
 
       <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
+        {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
+        {shareVehicle && (
+            <VehicleShareModal 
+                vehicle={shareVehicle} 
+                db={db} 
+                staffId={staffId} 
+                appId={appId} 
+                cleanMode={shareCleanMode} 
+                onClose={() => setShareVehicle(null)} 
+            />
+        )}
         <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land Auto</span><div className="w-7"></div></div>
 
         {isPreviewMode && (
@@ -4013,8 +4028,6 @@ const DatabaseSelector = ({
           {/* Dashboard Tab (v16.2: 修復滾動穿透與表格列高問題) */}
           {activeTab === 'dashboard' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
-                
-                {shareVehicle && <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} onClose={()=>setShareVehicle(null)} />}
 
                 {/* 儀表板頂部：標題、快訊、鈴鐺 */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -4331,7 +4344,7 @@ const DatabaseSelector = ({
                             <div className="ml-2.5 flex-1 min-w-0 flex flex-col justify-between py-0.5 relative">
                                 
                                 <button 
-                                    onClick={(e) => { e.stopPropagation(); setShareVehicle(car); }} 
+                                    onClick={(e) => { e.stopPropagation(); setShareCleanMode(false); setShareVehicle(car); }} 
                                     className="absolute -top-1 -right-1 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
                                     title="產生對客推介單"
                                 >
@@ -4645,7 +4658,7 @@ const DatabaseSelector = ({
                                         })() : <span className="text-gray-300">-</span>}
                                     </div>
                                     <div className="flex gap-2">
-                                        <button onClick={(e) => { e.stopPropagation(); setShareVehicle(car); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><Share2 size={16}/></button>
+                                        <button onClick={(e) => { e.stopPropagation(); setShareCleanMode(true); setShareVehicle(car); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><Share2 size={16}/></button>
                                         <button onClick={(e) => { e.stopPropagation(); deleteVehicle(car.id); }} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={16}/></button>
                                     </div>
                                 </div>
