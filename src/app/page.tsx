@@ -4414,67 +4414,57 @@ const DatabaseSelector = ({
                                     </div>
                                     
                                     <div className="flex flex-col gap-1 items-end min-w-0 ml-auto">
-                                        {hasValidEta && (
+                                        
+                                        {/* 第一排：物流 與 已收狀態 */}
+                                        {(hasValidEta || received > 0) && (
                                             <div className="flex flex-wrap justify-end items-center gap-1">
-                                            {/* 一般維修雜費未付 */}
-                                            {unpaidExps > 0 && (
-                                                <span className="text-[8px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
-                                                    未付雜費
-                                                </span>
-                                            )}
-                                            
-                                            {/* ★★★ 新增：車價尾數未找標籤 ★★★ */}
-                                            {(() => {
-                                                const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-                                                const acqOffset = Number(car.acquisition?.offsetAmount || 0);
-                                                const acqBalance = (car.costPrice || 0) - acqPaid - acqOffset;
-                                                if (acqBalance > 1) {
-                                                    return (
-                                                        <span className="text-[8px] text-white bg-red-600 border border-red-700 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap shadow-sm">
-                                                            車價尾數未清
-                                                        </span>
-                                                    );
-                                                }
-                                                return null;
-                                            })()}
-
-                                            {/* 客戶欠款待收 */}
-                                            {balance > 0 && (
-                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-mono font-bold">
-                                                    <span className="mr-0.5 opacity-80 text-[8px]">待收</span>{formatCurrency(balance)}
-                                                </span>
-                                            )}
-                                        </div>
+                                                {received > 0 && balance > 0 && (
+                                                    <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
+                                                        有訂 / 部份已付
+                                                    </span>
+                                                )}
+                                                {hasValidEta && (
+                                                    <span className={`text-[8px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold ${
+                                                        isArrived 
+                                                        ? 'text-green-600 bg-green-50 border-green-200' 
+                                                        : 'text-indigo-600 bg-indigo-50 border-indigo-200'
+                                                    }`}>
+                                                        <Ship size={8} className="mr-0.5 opacity-80"/>{isArrived ? '已到港' : `剩${daysToArrive}天`}
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
 
+                                        {/* 第二排：所有未清尾數統整 (絕對不會重複) */}
                                         <div className="flex flex-wrap justify-end items-center gap-1">
                                             
-                                            {/* 1. 車價尾數未找 (欠供應商/舊車主) */}
+                                            {/* 1. 欠行家/供應商車價 (紅色) */}
                                             {(() => {
                                                 const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
                                                 const acqOffset = Number(car.acquisition?.offsetAmount || 0);
                                                 const acqBalance = (car.costPrice || 0) - acqPaid - acqOffset;
                                                 if (acqBalance > 1) {
                                                     return (
-                                                        <span className="text-[9px] text-white bg-red-600 border border-red-700 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
-                                                            欠車價 {formatCurrency(acqBalance)}
+                                                        <span className="text-[9px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
+                                                            欠車價 <span className="font-mono ml-1">{formatCurrency(acqBalance)}</span>
                                                         </span>
                                                     );
                                                 }
                                                 return null;
                                             })()}
 
-                                            {/* 2. 一般維修雜費未付 (欠車房) */}
+                                            {/* 2. 欠車房雜費 (橘色) */}
                                             {unpaidExps > 0 && (
-                                                <span className="text-[9px] text-red-500 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
+                                                <span className="text-[9px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
                                                     未付成本
                                                 </span>
                                             )}
                                             
-                                            {/* 3. 客戶欠款待收 (客欠我們) */}
+                                            {/* 3. 客戶欠款待收 (藍色) */}
                                             {balance > 0 && (
-                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-mono font-bold">
-                                                    <span className="mr-0.5 opacity-80 text-[8px] font-sans">待收</span>{formatCurrency(balance)}
+                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
+                                                    <span className="mr-1 opacity-80 text-[8px] font-sans">待收</span>
+                                                    <span className="font-mono">{formatCurrency(balance)}</span>
                                                 </span>
                                             )}
                                         </div>
