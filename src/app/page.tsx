@@ -2303,29 +2303,35 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                 {/* Header Actions */}
                 <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden flex-none">
                     <span className="text-xs font-bold">
-                        {cleanMode ? '✨ 預覽車輛規格 (純淨版)' : '💰 預覽對客推介單 (完整版)'}
+                        {cleanMode ? '✨ 預覽車輛規格 (純淨無公司版)' : '💰 預覽對客推介單 (完整版)'}
                     </span>
                     <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
                 </div>
 
                 {/* Content Area (白色區域，適合截圖/列印) */}
                 <div className="flex-1 overflow-y-auto p-6 bg-white" id="share-content">
-                    {/* Logo & Header */}
-                    <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
-                        <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
-                        <div>
-                            <h1 className="text-xl font-black text-slate-900 leading-none tracking-wide">{COMPANY_INFO.name_en}</h1>
-                            <h2 className="text-sm font-bold text-slate-600 mt-1 tracking-widest">{COMPANY_INFO.name_ch}</h2>
+                    
+                    {/* ★★★ 核心邏輯修改：只有在「非純淨版」才顯示公司 Logo 抬頭 ★★★ */}
+                    {!cleanMode ? (
+                        <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
+                            <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
+                            <div>
+                                <h1 className="text-xl font-black text-slate-900 leading-none tracking-wide">{COMPANY_INFO.name_en}</h1>
+                                <h2 className="text-sm font-bold text-slate-600 mt-1 tracking-widest">{COMPANY_INFO.name_ch}</h2>
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        // 純淨版頂部留白，保持乾淨
+                        <div className="pt-2"></div>
+                    )}
 
                     {/* Car Title */}
                     <div className="mb-4 flex justify-between items-end">
-                        <div className={cleanMode ? "w-full text-center border-b border-slate-100 pb-2" : ""}>
+                        <div className={cleanMode ? "w-full text-center border-b border-slate-100 pb-3" : ""}>
                             <h3 className="text-2xl font-black text-slate-800 leading-tight">{vehicle.make} {vehicle.model}</h3>
                             <p className="text-sm text-slate-500 font-mono mt-1">製造年份: {vehicle.year}</p>
                         </div>
-                        {/* ★★★ 核心邏輯：如果非純淨版才顯示價格 ★★★ */}
+                        {/* 只有非純淨版才顯示價格 */}
                         {!cleanMode && (
                             <div className="text-right pb-1">
                                 <span className="text-lg font-black text-yellow-600">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price)}</span>
@@ -2359,10 +2365,10 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         </div>
                     </div>
 
-                    {/* ★ 需求 3: 只有完整版才顯示自訂備註區 */}
+                    {/* 只有完整版才顯示自訂備註區 */}
                     {!cleanMode && (
                         <div className="mb-6 relative group">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註 (列印或截圖時自動隱藏外框)</span>
+                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註</span>
                             <textarea
                                 value={customRemark}
                                 onChange={(e) => setCustomRemark(e.target.value)}
@@ -2384,11 +2390,13 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         )}
                     </div>
 
-                    {/* Contact Footer */}
-                    <div className="text-center border-t border-slate-100 pt-4 mt-4">
-                        <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
-                        <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
-                    </div>
+                    {/* ★★★ 核心邏輯修改：只有在「非純淨版」才顯示聯絡人頁尾 ★★★ */}
+                    {!cleanMode && (
+                        <div className="text-center border-t border-slate-100 pt-4 mt-4 animate-fade-in">
+                            <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
+                            <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer Action */}
