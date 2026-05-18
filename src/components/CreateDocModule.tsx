@@ -312,7 +312,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setFormData(prev => ({...prev, financeAmount: String(loan)}));
         
         // ★ 智能判斷：根據「手數 (Previous Owners)」大於 0 來判定為二手車
-        const isUsedCar = formData.previousOwners && Number(formData.previousOwners) > 0;
+        const isUsedCar = Number(formData.previousOwners || 0) > 0;
         
         // ★ 將 isUsedCar 和 formData.financeType 傳入計數引擎
         const calc = calculateAutoLoan(
