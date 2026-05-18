@@ -261,6 +261,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [previewItem, setPreviewItem] = useState<any | null>(null);
 
+    // ★ 新增：狀態過濾
+    const [statusFilter, setStatusFilter] = useState('All');
+
     // 相片畫廊與放大狀態
     const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0);
     const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
@@ -268,6 +271,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     // 表單狀態
     const [editingId, setEditingId] = useState<string | null>(null);
     const [orderStatus, setOrderStatus] = useState('QUOTING'); 
+    
+    // ★ 新增：報價單日期 (可修改)
+    const [quoteDate, setQuoteDate] = useState(new Date().toISOString().split('T')[0]);
+
     const [region, setRegion] = useState('JP');
     const [carPrice, setCarPrice] = useState('');
     const [prpPrice, setPrpPrice] = useState('');
@@ -384,11 +391,15 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         });
     }, [db, appId, hasModuleAccess]);
 
+    // ★ 修改：加入狀態過濾邏輯
     const filteredHistory = history.filter(h => {
         if (!canViewAll) {
             if (h.createdBy !== staffId && !(h.assignedTo || []).includes(staffId)) {
                 return false; 
             }
+        }
+        if (statusFilter !== 'All' && h.status !== statusFilter) {
+            return false;
         }
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
@@ -544,8 +555,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         const recordCreator = existingRecord?.createdBy || staffId;
         const recordAssignedTo = existingRecord?.assignedTo || [];
 
+        // ★ 修改：儲存 quoteDate
         const rawRecord = {
-            ts: Date.now(), date: new Date().toLocaleDateString('zh-HK'), region,
+            ts: Date.now(), 
+            date: quoteDate, // 使用可選取的報價時間
+            region,
             details: { ...carInfo, transportType: transport.type, orderDate: transport.orderDate, departureDate: transport.departureDate, shippingDuration: transport.duration },
             vals: { carPrice: parseNum(carPrice), prp: parseNum(prpPrice), rate: currentRate },
             fees: { origin: originFees, hk_misc: hkMiscFees, hk_license: hkLicenseFees, finalInsurance: finalIns },
@@ -577,6 +591,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
     const handleAddNew = () => {
         setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice(''); setOrderRate('');
+        // ★ 初始化時間
+        setQuoteDate(new Date().toISOString().split('T')[0]);
         setCarInfo({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
         setOrderPhotos([]); setTransport({ type: 'SEA', orderDate: '', departureDate: '', duration: '' });
         setOriginFees(REGION_CONFIGS['JP'].origin); setHkMiscFees(REGION_CONFIGS['JP'].hk_misc); setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
@@ -585,6 +601,22 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
     const handleEdit = (item: any) => {
         setEditingId(item.id); setRegion(item.region || 'JP'); setOrderStatus(item.status || 'QUOTING');
+        
+        // ★ 解析並設定日期
+        let parsedDate = new Date().toISOString().split('T')[0];
+        if (item.date) {
+            if (item.date.includes('/')) {
+                const parts = item.date.split('/');
+                if (parts.length === 3) {
+                    if (parts[0].length === 4) parsedDate = `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+                    else parsedDate = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+                }
+            } else if (item.date.includes('-')) {
+                parsedDate = item.date;
+            }
+        }
+        setQuoteDate(parsedDate);
+
         setCarPrice(formatNum(item.vals?.carPrice)); setPrpPrice(formatNum(item.vals?.prp));
         setOrderRate(item.vals?.rate?.toString() || ''); 
         setCarInfo({
@@ -707,14 +739,25 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                         {view === 'dashboard' ? (
                             <div className="flex w-full h-full">
                                 {/* 左側列表 */}
-                                <div className={`w-full md:w-80 lg:w-96 flex-none bg-white border-r border-slate-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10 ${selectedId && 'hidden md:flex'}`}>
+                                <div className={`w-full md:w-80 lg:w-[400px] flex-none bg-white border-r border-slate-200 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10 ${selectedId && 'hidden md:flex'}`}>
+                                    
+                                    {/* ★ 修改：加入狀態過濾選單 */}
                                     <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/50">
                                         <button onClick={handleAddNew} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-black text-sm flex justify-center items-center gap-2 hover:bg-blue-700 active:scale-95 transition shadow-sm"><Plus size={16}/> 新增報價單</button>
-                                        <div className="relative">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                            <input className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋型號或車身號碼..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                <input className="w-full pl-9 pr-2 py-2 bg-white rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none font-bold text-xs transition-all shadow-sm" placeholder="搜尋車身/型號..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                            </div>
+                                            <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="w-[110px] bg-white border border-slate-200 rounded-xl px-2 text-xs font-bold text-slate-600 outline-none focus:border-blue-500 shadow-sm cursor-pointer">
+                                                <option value="All">全部狀態</option>
+                                                <option value="QUOTING">報價中</option>
+                                                <option value="IN_PROGRESS">進行中</option>
+                                                <option value="DELIVERED">已交貨</option>
+                                            </select>
                                         </div>
                                     </div>
+                                    
                                     <div className="flex-1 overflow-y-auto">
                                         {filteredHistory.map(item => {
                                             const st = STATUS_OPTIONS[item.status || 'QUOTING'];
@@ -735,10 +778,32 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <div className="font-black text-slate-800 text-sm truncate">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
-                                                    <div className="flex justify-between items-end mt-2.5">
+                                                    <div className="font-black text-slate-800 text-sm truncate mb-2">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
+                                                    
+                                                    {/* ★ 新增：卡片顯示核心規格 */}
+                                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-500 font-medium bg-white p-2 rounded-lg border border-slate-100 mb-2 shadow-sm">
+                                                        <div><span className="text-slate-400">HK年:</span> <span className="font-bold text-slate-700">{item.details?.year || item.carInfo?.year || '-'}</span></div>
+                                                        {item.region === 'JP' && (
+                                                            <div><span className="text-slate-400">JP年:</span> <span className="font-bold text-purple-600">{
+                                                                (item.details?.year || item.carInfo?.year) ? (() => {
+                                                                    const y = parseInt(item.details?.year || item.carInfo?.year);
+                                                                    return y >= 2019 ? `令和${y-2018}` : (y >= 1989 ? `平成${y-1988}` : '-');
+                                                                })() : '-'
+                                                            }</span></div>
+                                                        )}
+                                                        <div className="col-span-2 flex items-center gap-1 overflow-hidden truncate">
+                                                            <span className="text-slate-400 flex-shrink-0">內外:</span>
+                                                            <div className="w-2.5 h-2.5 rounded-full border border-slate-300 shadow-inner flex-shrink-0" style={{backgroundColor: getColorHex(item.details?.exteriorColor || item.carInfo?.exteriorColor)}}></div> <span className="text-slate-300">/</span>
+                                                            <div className="w-2.5 h-2.5 rounded-full border border-slate-300 shadow-inner flex-shrink-0" style={{backgroundColor: getColorHex(item.details?.interiorColor || item.carInfo?.interiorColor)}}></div>
+                                                            <span className="font-bold text-slate-700 truncate">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'} / {item.details?.interiorColor || item.carInfo?.interiorColor || '-'}</span>
+                                                        </div>
+                                                        <div><span className="text-slate-400">波箱:</span> <span className="font-bold text-slate-700">{item.details?.transmission || item.carInfo?.transmission || '-'}</span></div>
+                                                        <div><span className="text-slate-400">容積:</span> <span className="font-bold text-slate-700">{item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></div>
+                                                    </div>
+
+                                                    <div className="flex justify-between items-end mt-1">
                                                         <div className="flex items-center gap-1.5">
-                                                            <span className="text-[10px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{item.region}</span>
+                                                            <span className="text-[10px] text-blue-700 font-black bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded">{item.region}</span>
                                                             {item.photos?.length > 0 && (
                                                                 <span className="flex items-center gap-1 text-[10px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="相片數量"><ImageIcon size={10} className="text-slate-400"/> {item.photos.length}</span>
                                                             )}
@@ -905,7 +970,16 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                             <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
                                                 <DollarSign className="w-5 h-5 text-blue-600" />
                                                 <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">核心價格與狀態</h3>
-                                                <div className="ml-auto">
+                                                
+                                                {/* ★ 修改：加入手動修改日期的欄位 */}
+                                                <div className="ml-auto flex items-center gap-2">
+                                                    <input 
+                                                        type="date" 
+                                                        value={quoteDate} 
+                                                        onChange={e => setQuoteDate(e.target.value)} 
+                                                        className="bg-white border border-slate-200 text-xs font-bold px-2 py-1 rounded outline-none text-blue-700 cursor-pointer shadow-sm" 
+                                                        title="報價/建檔日期" 
+                                                    />
                                                     <select value={orderStatus} onChange={e=>setOrderStatus(e.target.value)} className="bg-slate-100 border border-slate-200 text-xs font-bold px-2 py-1 rounded outline-none text-slate-700 cursor-pointer">
                                                         {Object.values(STATUS_OPTIONS).map((s:any) => <option key={s.id} value={s.id}>{s.label}</option>)}
                                                     </select>
