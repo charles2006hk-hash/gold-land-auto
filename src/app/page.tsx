@@ -4448,14 +4448,33 @@ const DatabaseSelector = ({
                                         )}
 
                                         <div className="flex flex-wrap justify-end items-center gap-1">
+                                            
+                                            {/* 1. 車價尾數未找 (欠供應商/舊車主) */}
+                                            {(() => {
+                                                const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                                                const acqOffset = Number(car.acquisition?.offsetAmount || 0);
+                                                const acqBalance = (car.costPrice || 0) - acqPaid - acqOffset;
+                                                if (acqBalance > 1) {
+                                                    return (
+                                                        <span className="text-[9px] text-white bg-red-600 border border-red-700 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
+                                                            欠車價 {formatCurrency(acqBalance)}
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
+
+                                            {/* 2. 一般維修雜費未付 (欠車房) */}
                                             {unpaidExps > 0 && (
-                                                <span className="text-[8px] text-red-500 bg-red-50 border border-red-100 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
+                                                <span className="text-[9px] text-red-500 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
                                                     未付成本
                                                 </span>
                                             )}
+                                            
+                                            {/* 3. 客戶欠款待收 (客欠我們) */}
                                             {balance > 0 && (
-                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-mono font-bold">
-                                                    <span className="mr-0.5 opacity-80 text-[8px]">待收</span>{formatCurrency(balance)}
+                                                <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-mono font-bold">
+                                                    <span className="mr-0.5 opacity-80 text-[8px] font-sans">待收</span>{formatCurrency(balance)}
                                                 </span>
                                             )}
                                         </div>
