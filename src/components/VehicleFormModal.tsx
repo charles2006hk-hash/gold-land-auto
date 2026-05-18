@@ -113,6 +113,7 @@ const VehicleFormModal = ({
     
     // ★★★ 新增：計數機的狀態參數 ★★★
     const [financeMonths, setFinanceMonths] = useState(48);
+    const [financeRate, setFinanceRate] = useState(3.5); // ★★★ 就是漏了這一行！ ★★★
     const [financeType, setFinanceType] = useState<'HP' | 'Lease'>('HP'); // ★ 新增上會類別
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
