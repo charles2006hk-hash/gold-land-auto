@@ -1119,7 +1119,7 @@ const VehicleFormModal = ({
                                                     })()}
                                                 </span>
                                                 {/* 隱藏的 Input 為了給 saveVehicle 讀取 */}
-                                                <input type="hidden" name="costPrice" value={Math.round(((Number(costStr.replace(/,/g, '')) || 0) + totalExpenses) * 100) / 100} />
+                                                <input type="hidden" name="costPrice" value={Number(costStr.replace(/,/g, '')) || 0} />
                                             </div>
                                         </div>
                                     </div>
@@ -1151,7 +1151,7 @@ const VehicleFormModal = ({
                                                     return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(finalTotal);
                                                 })()}
                                             </span>
-                                            <input type="hidden" name="costPrice" value={Math.round(((Number(costStr.replace(/,/g, '')) || 0) + totalExpenses) * 100) / 100} />
+                                            <input type="hidden" name="costPrice" value={Number(costStr.replace(/,/g, '')) || 0} />
                                         </div>
                                     </div>
                                     
