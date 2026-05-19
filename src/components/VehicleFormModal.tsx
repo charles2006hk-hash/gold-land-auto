@@ -320,6 +320,12 @@ const VehicleFormModal = ({
         const amt = Number(newAcqPayment.amount.replace(/,/g, ''));
         if (amt > 0) {
             setAcqPayments([...acqPayments, { id: Date.now().toString(), ...newAcqPayment, amount: amt }]);
+            
+            // ★ 智能記憶：如果輸入了新的收款人/備註，自動存入系統費用公司名單 (下次就能選)
+            if (newAcqPayment.note && !(settings.expenseCompanies || []).includes(newAcqPayment.note)) {
+                updateSettings('expenseCompanies', [...(settings.expenseCompanies || []), newAcqPayment.note]);
+            }
+
             setNewAcqPayment({ ...newAcqPayment, amount: '', note: '' });
         }
     };
@@ -1193,8 +1199,12 @@ const VehicleFormModal = ({
                                     <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
                                         <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option>
                                     </select>
-                                    <input type="text" placeholder="付款備註..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white min-w-0"/>
-                                    
+                                    <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
+                                        <input list="acq_vendor_pay_list" placeholder="收款人 / 付款備註 (可選或自訂)..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white min-w-0"/>
+                                        <datalist id="acq_vendor_pay_list">
+                                            {(settings.expenseCompanies || []).map((c: string) => <option key={c} value={c}>{c}</option>)}
+                                        </datalist>
+                                    </div>
                                     <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                         <input type="text" placeholder="$ 金額" value={newAcqPayment.amount} onChange={e => setNewAcqPayment({...newAcqPayment, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-300 rounded-lg outline-none bg-white text-right font-mono font-black text-red-600 shadow-inner min-w-0"/>
                                         <button type="button" onClick={handleAddAcqPayment} className="w-full sm:w-auto bg-red-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-red-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增付款</button>
