@@ -14,6 +14,9 @@ export default function MarketIntelligence({ dbEntries, inventory, staffId, curr
     const [showMarketIntelligence, setShowMarketIntelligence] = useState(false);
     const [marketSearchQuery, setMarketSearchQuery] = useState('');
 
+    // ★ 定義管理員權限
+    const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
+
     return (
         <div className="flex flex-col items-end flex-none w-full mb-4">
             <button 
@@ -51,12 +54,15 @@ export default function MarketIntelligence({ dbEntries, inventory, staffId, curr
                             </span>
                         </h2>
                         
-                        <button 
-                            onClick={() => window.open('/api/sync-market-data', '_blank')}
-                            className="text-xs bg-blue-600/50 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors border border-blue-500/50 flex items-center shadow whitespace-nowrap"
-                        >
-                            <RefreshCw size={12} className="mr-1.5"/> 同步最新明細
-                        </button>
+                        {/* ★★★ 修改：只有管理員才顯示「同步最新明細」按鈕 ★★★ */}
+                        {isAdmin && (
+                            <button 
+                                onClick={() => window.open('/api/sync-market-data', '_blank')}
+                                className="text-xs bg-blue-600/50 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg transition-colors border border-blue-500/50 flex items-center shadow whitespace-nowrap"
+                            >
+                                <RefreshCw size={12} className="mr-1.5"/> 同步最新明細
+                            </button>
+                        )}
                     </div>
 
                     {/* ★ 全域搜尋框 */}
@@ -125,14 +131,9 @@ export default function MarketIntelligence({ dbEntries, inventory, staffId, curr
                             
                             <div className="space-y-3 flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600">
                                 {(() => {
-                                    // 1. 判定權限：管理員可以看到全公司數據
-                                    const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
-                                    
-                                    // 2. 過濾售出車輛：管理員看全部，普通員工只看自己 managedBy 的車
                                     const soldCars = inventory.filter((v:any) => {
                                         const basicFilter = v.status === 'Sold' && v.stockInDate && v.stockOutDate;
                                         if (!basicFilter) return false;
-                                        
                                         if (isAdmin) return true; // 老闆/管理員放行全公司
                                         return v.managedBy === staffId; // 普通員工只看自己的
                                     });
@@ -151,7 +152,6 @@ export default function MarketIntelligence({ dbEntries, inventory, staffId, curr
                                         modelStats[key].totalDays += days;
                                     });
 
-                                    // 3. 搜尋過濾邏輯
                                     const turnoverList = Object.entries(modelStats)
                                         .filter(([key, data]) => {
                                             if (data.count < 1) return false;
