@@ -1761,12 +1761,23 @@ const CrossBorderView = ({
                                                         <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td><td className="p-2 font-bold text-slate-700">{task.item}</td><td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
                                                         <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}><div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>{isPaid ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')} {isExpanded ? <ChevronUp size={10}/> : <ChevronDown size={10}/>}</div></td>
                                                         <td className="p-2 text-center flex justify-center gap-1.5 items-center">
-                                                            {/* ★★★ 智能自動開單系統：點擊即帶著客戶及項目金額，跳轉生成發票 ★★★ */}
+                                                            // ★★★ 智能自動開單系統：點擊即帶著客戶、兩地車牌及項目金額，跳轉生成發票 ★★★
                                                             <button 
                                                                 type="button"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     if (!onJumpToDoc) { alert("開單系統連動未就緒"); return; }
+                                                                    
+                                                                    // 1. 智能組合香港車牌與中港車牌（例如: "AB1234 / 粵Z8888港"）
+                                                                    const hkPlate = activeCar.regMark || '';
+                                                                    const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
+                                                                    const combinedPlates = mainlandPlate ? `${hkPlate} / ${mainlandPlate}` : hkPlate;
+                                                            
+                                                                    // 2. 智能串接備註，把中港牌特別註明在發票備註第一行
+                                                                    const taskNote = task.note || '';
+                                                                    const combinedRemarks = mainlandPlate 
+                                                                        ? `【中港車牌：${mainlandPlate}】\n${taskNote}`
+                                                                        : taskNote;
                                                                     
                                                                     // 構建連動發票的完整數據包
                                                                     const invoiceData = {
@@ -1780,19 +1791,27 @@ const CrossBorderView = ({
                                                                             customerPhone: activeCar.customerPhone || '',
                                                                             customerId: activeCar.customerID || '',
                                                                             customerAddress: activeCar.customerAddress || '',
-                                                                            regMark: activeCar.regMark || '',
+                                                                            
+                                                                            // 💡 核心優化點 1：將發票上的車牌位置直接顯示雙車牌號碼
+                                                                            regMark: combinedPlates, 
+                                                                            
                                                                             make: activeCar.make || '', model: activeCar.model || '',
                                                                             chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
                                                                             price: '0', // 專屬車務代辦發票，車價預設為 0
                                                                             docDate: new Date().toISOString().split('T')[0],
                                                                             deliveryDate: new Date().toISOString().split('T')[0],
-                                                                            remarks: task.note || ''
+                                                                            
+                                                                            // 💡 核心優化點 2：發票的備註明細也自動打上中港牌提醒
+                                                                            remarks: combinedRemarks 
                                                                         },
                                                                         checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
-                                                                        // 將中港項目的名稱和合併後的總金額直接塞入發票 Add-ons 項目，保持千分位與金額即時響應
+                                                                        // 將中港項目的名稱和合併後的總金額直接塞入發票 Add-ons 項目，包含中港牌號碼
                                                                         docItems: [{
                                                                             id: task.id,
-                                                                            desc: `[中港業務代辦] ${task.item}`,
+                                                                            // 💡 核心優化點 3：連項目的名稱也清晰打上中港牌，方便財務對賬
+                                                                            desc: mainlandPlate 
+                                                                                ? `[中港業務代辦] ${task.item} (${mainlandPlate})`
+                                                                                : `[中港業務代辦] ${task.item}`,
                                                                             amount: task.fee,
                                                                             isSelected: true
                                                                         }],
