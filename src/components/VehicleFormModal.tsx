@@ -316,7 +316,7 @@ const VehicleFormModal = ({
         }
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
-    / ★★★ 即時響應：扣減對數尾款 ★★★
+    // ★★★ 即時響應：扣減對數尾款 ★★★
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
     // 改為讀取即時輸入框的狀態 (acqOffsetStr)
     const acqOffsetAmount = acqType === 'Local' ? Number(acqOffsetStr.replace(/,/g, '')) : 0;
