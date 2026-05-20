@@ -1761,8 +1761,8 @@ const CrossBorderView = ({
                                                         <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td><td className="p-2 font-bold text-slate-700">{task.item}</td><td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
                                                         <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}><div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>{isPaid ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')} {isExpanded ? <ChevronUp size={10}/> : <ChevronDown size={10}/>}</div></td>
                                                         <td className="p-2 text-center flex justify-center gap-1.5 items-center">
-                                                            // ★★★ 智能自動開單系統：點擊即帶著客戶、兩地車牌及項目金額，跳轉生成發票 ★★★
-                                                            <button 
+                                                            {/* ★★★ 智能自動開單系統：點擊即帶著客戶、兩地車牌及項目金額，跳轉生成發票 ★★★ */}
+                                                            <button
                                                                 type="button"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -3063,6 +3063,12 @@ useEffect(() => {
                 if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') {
                     return true;
                 }
+
+                // ★ 放行「市場大數據」，確保所有員工的雷達圖都有數據
+                if (entry.docType === '市場大數據') {
+                    return true;
+                }
+
                 // 2. 普通員工 -> ★ 嚴格模式：只看負責人是自己的資料 ★
                 return entry.managedBy === staffId;
             });
