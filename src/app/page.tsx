@@ -3158,8 +3158,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             frtTax: getNum('acq_frtTax', isImport, (editingVehicle as any)?.acquisition?.frtTax),
             eta: getStr('acq_eta', isImport, (editingVehicle as any)?.acquisition?.eta),
             paymentStatus: formData.get('acq_paymentStatus') as string || 'Unpaid',
+            // ★ 新增儲存對數和代支關聯的單據 ID
             offsetAmount: getNum('acq_offsetAmount', isLocal, (editingVehicle as any)?.acquisition?.offsetAmount),
+            offsetDocId: getStr('acq_offsetDocId', isLocal, (editingVehicle as any)?.acquisition?.offsetDocId),
             advanceFee: getNum('acq_advanceFee', isLocal, (editingVehicle as any)?.acquisition?.advanceFee),
+            advanceDocId: getStr('acq_advanceDocId', isLocal, (editingVehicle as any)?.acquisition?.advanceDocId),
             payments: (editingVehicle as any)?.acqPayments || (editingVehicle as any)?.acquisition?.payments || []
         };
 
