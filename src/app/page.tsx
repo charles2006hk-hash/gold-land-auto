@@ -1420,7 +1420,7 @@ const BusinessProcessModule = ({
 // ------------------------------------------------------------------
 const CrossBorderView = ({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, deletePayment,
-    updateVehicle, primaryImages // 必須傳入此函數以支援文件交收
+    updateVehicle, primaryImages, onJumpToDoc
 }: any) => {
     
     // --- 1. 狀態管理 ---
@@ -1503,7 +1503,27 @@ const CrossBorderView = ({
     const handleAddBatchTasks = () => {
         if (!activeCar) return;
         if (pendingTasks.length === 0) { alert("請至少選擇一個項目"); return; }
-        pendingTasks.forEach(task => { const newTask: CrossBorderTask = { id: Date.now().toString() + Math.random().toString(36).substr(2, 5), date: newTaskDate, item: task.item, fee: Number(task.fee) || 0, days: task.days, institution: '公司', handler: '', currency: 'HKD', note: task.note, isPaid: false }; addCbTask(activeCar.id!, newTask); });
+        
+        // ★★★ 智能合併：將所有勾選的項目名稱用 ' + ' 串起，金額加總，只產生一個乾淨的項目！
+        const combinedItemName = pendingTasks.map(t => t.item).join(' + ');
+        const totalFee = pendingTasks.reduce((sum, t) => sum + t.fee, 0);
+        const combinedNote = pendingTasks.map(t => t.note).filter(Boolean).join('; ');
+        
+        const newCombinedTask: CrossBorderTask = { 
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 5), 
+            date: newTaskDate, 
+            item: combinedItemName, // 例如: "代辦驗車 + 申請禁區紙"
+            fee: totalFee,          // 自動加總後的總金額
+            days: pendingTasks[0]?.days || '7', 
+            institution: '公司', 
+            handler: '', 
+            currency: 'HKD', 
+            note: combinedNote, 
+            isPaid: false 
+        }; 
+        
+        // 呼叫原本的儲存函數，只塞入這一個合併後的項目
+        addCbTask(activeCar.id!, newCombinedTask); 
         setIsAddModalOpen(false);
     };
 
@@ -1740,9 +1760,58 @@ const CrossBorderView = ({
                                                     <tr className={`hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''}`}>
                                                         <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td><td className="p-2 font-bold text-slate-700">{task.item}</td><td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
                                                         <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}><div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>{isPaid ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')} {isExpanded ? <ChevronUp size={10}/> : <ChevronDown size={10}/>}</div></td>
-                                                        <td className="p-2 text-center flex justify-center gap-2"><button onClick={() => startEditing(task)} className="text-blue-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded"><Edit size={14}/></button><button onClick={() => deleteCbTask(activeCar.id!, task.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"><Trash2 size={14}/></button></td>
+                                                        <td className="p-2 text-center flex justify-center gap-1.5 items-center">
+                                                            {/* ★★★ 智能自動開單系統：點擊即帶著客戶及項目金額，跳轉生成發票 ★★★ */}
+                                                            <button 
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (!onJumpToDoc) { alert("開單系統連動未就緒"); return; }
+                                                                    
+                                                                    // 構建連動發票的完整數據包
+                                                                    const invoiceData = {
+                                                                        id: null,
+                                                                        type: 'invoice', // 開單類型強制指定為發票 (Invoice)
+                                                                        vehicleId: activeCar.id,
+                                                                        formData: {
+                                                                            companyNameEn: COMPANY_INFO.name_en, companyNameCh: COMPANY_INFO.name_ch,
+                                                                            companyAddress: COMPANY_INFO.address_ch, companyPhone: COMPANY_INFO.phone, companyEmail: COMPANY_INFO.email,
+                                                                            customerName: activeCar.customerName || '',
+                                                                            customerPhone: activeCar.customerPhone || '',
+                                                                            customerId: activeCar.customerID || '',
+                                                                            customerAddress: activeCar.customerAddress || '',
+                                                                            regMark: activeCar.regMark || '',
+                                                                            make: activeCar.make || '', model: activeCar.model || '',
+                                                                            chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
+                                                                            price: '0', // 專屬車務代辦發票，車價預設為 0
+                                                                            docDate: new Date().toISOString().split('T')[0],
+                                                                            deliveryDate: new Date().toISOString().split('T')[0],
+                                                                            remarks: task.note || ''
+                                                                        },
+                                                                        checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+                                                                        // 將中港項目的名稱和合併後的總金額直接塞入發票 Add-ons 項目，保持千分位與金額即時響應
+                                                                        docItems: [{
+                                                                            id: task.id,
+                                                                            desc: `[中港業務代辦] ${task.item}`,
+                                                                            amount: task.fee,
+                                                                            isSelected: true
+                                                                        }],
+                                                                        depositItems: [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }],
+                                                                        showTerms: false
+                                                                    };
+                                                                    
+                                                                    onJumpToDoc(invoiceData); // 跨模組安全閃跳
+                                                                }}
+                                                                className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded hover:bg-blue-100 font-bold tracking-tight flex items-center shadow-sm"
+                                                                title="連動開單系統生成發票"
+                                                            >
+                                                                🧾 發票
+                                                            </button>
+                                                            <button type="button" onClick={() => startEditing(task)} className="text-blue-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded"><Edit size={14}/></button>
+                                                            <button type="button" onClick={() => deleteCbTask(activeCar.id!, task.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                                        </td>
                                                     </tr>
-                                                    {isExpanded && (<tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner"><td colSpan={5} className="p-3 pl-8"><div className="flex gap-6 items-start"><div className="w-1/3 min-w-[200px] bg-white p-3 rounded border shadow-sm"><h5 className="text-xs font-bold text-gray-500 mb-2">新增收款</h5><div className="flex flex-col gap-2"><input type="number" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} placeholder={`輸入金額 (餘額: ${remaining})`} className="border p-1.5 text-xs rounded w-full"/><select value={newPayMethod} onChange={e => setNewPayMethod(e.target.value)} className="border p-1.5 text-xs rounded w-full"><option value="Cash">現金 (Cash)</option><option value="Bank Transfer">銀行轉帳</option><option value="Cheque">支票</option><option value="WeChat/Alipay">微信/支付寶</option></select><button onClick={() => handleAddPartPayment(task)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold hover:bg-blue-700 mt-1">確認收款</button></div></div><div className="flex-1"><h5 className="text-xs font-bold text-gray-500 mb-2">收款紀錄 ({taskPayments.length})</h5>{taskPayments.length === 0 ? (<p className="text-xs text-gray-400 italic">尚無收款紀錄</p>) : (<table className="w-full text-xs text-left border-collapse"><thead><tr className="border-b text-gray-400"><th>日期</th><th>金額</th><th>方式</th><th>操作</th></tr></thead><tbody>{taskPayments.map((p: any) => (<tr key={p.id} className="border-b last:border-0 h-8"><td className="font-mono text-gray-600">{p.date}</td><td className="font-bold text-green-600">{formatCurrency(p.amount)}</td><td>{p.method}</td><td><button onClick={() => deletePayment(activeCar.id!, p.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></td></tr>))}</tbody></table>)}</div></div></td></tr>)}
+                                                    {isExpanded && (<tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner"><td colSpan={5} className="p-3 pl-8"><div className="flex gap-6 items-start"><div className="w-1/3 min-w-[200px] bg-white p-3 rounded border shadow-sm"><h5 className="text-xs font-bold text-gray-500 mb-2">新增收款</h5><div className="flex flex-col gap-2"><input type="number" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} placeholder={`輸入金額 (餘額: ${remaining})`} className="border p-1.5 text-xs rounded w-full"/><select value={newPayMethod} onChange={e => setNewPayMethod(e.target.value)} className="border p-1.5 text-xs rounded w-full">     <option value="Cash">現金 (Cash)</option>     <option value="Bank Transfer">銀行轉帳</option>     <option value="Cheque">支票</option>     <option value="WeChat/Alipay">微信/支付寶</option>     <option value="Trade-in">對數 (Trade-in)</option> {/* ★★★ 局部收款增加對數選項 */} </select><button onClick={() => handleAddPartPayment(task)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold hover:bg-blue-700 mt-1">確認收款</button></div></div><div className="flex-1"><h5 className="text-xs font-bold text-gray-500 mb-2">收款紀錄 ({taskPayments.length})</h5>{taskPayments.length === 0 ? (<p className="text-xs text-gray-400 italic">尚無收款紀錄</p>) : (<table className="w-full text-xs text-left border-collapse"><thead><tr className="border-b text-gray-400"><th>日期</th><th>金額</th><th>方式</th><th>操作</th></tr></thead><tbody>{taskPayments.map((p: any) => (<tr key={p.id} className="border-b last:border-0 h-8"><td className="font-mono text-gray-600">{p.date}</td><td className="font-bold text-green-600">{formatCurrency(p.amount)}</td><td>{p.method}</td><td><button onClick={() => deletePayment(activeCar.id!, p.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></td></tr>))}</tbody></table>)}</div></div></td></tr>)}
                                                 </React.Fragment>
                                             );
                                         })}
@@ -3984,6 +4053,7 @@ const DatabaseSelector = ({
                     setEditingVehicle={setEditingVehicle}
                     updateVehicle={updateVehicle}
                     primaryImages={primaryImages}
+                    onJumpToDoc={handleJumpToDoc} // ★★★ 新增這行，賦予中港模組跨頁開單的能力
                     // ★★★ 修正 1: 加入類型標註 (vid: string, task: CrossBorderTask) ★★★
                     addCbTask={(vid: string, task: CrossBorderTask) => {
                         const v = inventory.find(i => i.id === vid);
