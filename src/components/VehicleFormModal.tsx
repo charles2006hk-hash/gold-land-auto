@@ -128,6 +128,10 @@ const VehicleFormModal = ({
     const [acqA1Price, setAcqA1Price] = useState(formatNumberInput(String((v as any).acquisition?.a1Price || '')));
     const [acqFrtTax, setAcqFrtTax] = useState(formatNumberInput(String((v as any).acquisition?.frtTax || '')));
     const [acqCostExclTax, setAcqCostExclTax] = useState('0'); 
+    const [acqOffsetStr, setAcqOffsetStr] = useState(formatNumberInput(String((v as any).acquisition?.offsetAmount || '')));
+    const [acqAdvanceStr, setAcqAdvanceStr] = useState(formatNumberInput(String((v as any).acquisition?.advanceFee || '')));
+    const [acqOffsetDocId, setAcqOffsetDocId] = useState((v as any).acquisition?.offsetDocId || '');
+    const [acqAdvanceDocId, setAcqAdvanceDocId] = useState((v as any).acquisition?.advanceDocId || '');
     
     const [acqPayments, setAcqPayments] = useState<any[]>((v as any).acquisition?.payments || []);
     const [newAcqPayment, setNewAcqPayment] = useState({ date: new Date().toISOString().split('T')[0], method: 'Transfer', amount: '', note: '' });
@@ -312,10 +316,11 @@ const VehicleFormModal = ({
         }
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
+    / ★★★ 即時響應：扣減對數尾款 ★★★
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const acqOffsetAmount = acqType === 'Local' ? Number(String((v as any).acquisition?.offsetAmount || '').replace(/,/g, '')) : 0;
+    // 改為讀取即時輸入框的狀態 (acqOffsetStr)
+    const acqOffsetAmount = acqType === 'Local' ? Number(acqOffsetStr.replace(/,/g, '')) : 0;
     const acqBalance = Number(costStr.replace(/,/g, '')) - totalAcqPaid - acqOffsetAmount;
-
     const handleAddAcqPayment = () => {
         const amt = Number(newAcqPayment.amount.replace(/,/g, ''));
         if (amt > 0) {
@@ -1161,8 +1166,73 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                     
-                                    <div className="w-full min-w-0"><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Offset Amount (對數 HKD)</label><input name="acq_offsetAmount" defaultValue={formatNumberInput(String((v as any).acquisition?.offsetAmount||''))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right text-blue-700 font-bold shadow-sm min-w-0" placeholder="$0"/></div>
-                                    <div className="w-full min-w-0"><label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Advance Fee (代支 HKD)</label><input name="acq_advanceFee" defaultValue={formatNumberInput(String((v as any).acquisition?.advanceFee||''))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right shadow-sm min-w-0" placeholder="$0" title="例如代支留牌費等"/></div>
+                                    {/* ★★★ 升級：對數與代支連動系統 ★★★ */}
+                                    <div className="w-full min-w-0">
+                                        <div className="flex justify-between items-end mb-1">
+                                            <label className="block text-xs md:text-[10px] text-red-500 font-bold uppercase">Offset Amount (對數 HKD)</label>
+                                            <select 
+                                                value={acqOffsetDocId}
+                                                onChange={(e) => {
+                                                    const docId = e.target.value;
+                                                    setAcqOffsetDocId(docId);
+                                                    if (docId) {
+                                                        const selectedDoc = allSalesDocs?.find((d:any) => d.id === docId);
+                                                        if (selectedDoc) {
+                                                            const basePrice = Number(selectedDoc.formData?.price) || 0;
+                                                            const extrasTotal = (selectedDoc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
+                                                            // 自動帶入金額並加上千分位
+                                                            setAcqOffsetStr(formatNumberInput(String(basePrice + extrasTotal)));
+                                                        }
+                                                    } else {
+                                                        setAcqOffsetStr('');
+                                                    }
+                                                }}
+                                                className="text-[9px] bg-red-50 text-red-700 border border-red-200 rounded outline-none max-w-[130px] truncate py-0.5 px-1 cursor-pointer hover:bg-red-100"
+                                            >
+                                                <option value="">🔗 選擇關聯單據...</option>
+                                                {allSalesDocs?.map((d:any) => (
+                                                    <option key={d.id} value={d.id}>{d.summary || d.id}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {/* 隱藏欄位供 saveVehicle 讀取連動 ID */}
+                                        <input type="hidden" name="acq_offsetDocId" value={acqOffsetDocId} />
+                                        <input name="acq_offsetAmount" value={acqOffsetStr} onChange={e => setAcqOffsetStr(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right text-blue-700 font-bold shadow-sm min-w-0" placeholder="$0"/>
+                                    </div>
+                                    
+                                    <div className="w-full min-w-0">
+                                        <div className="flex justify-between items-end mb-1">
+                                            <label className="block text-xs md:text-[10px] text-red-500 font-bold uppercase">Advance Fee (代支 HKD)</label>
+                                            <select 
+                                                value={acqAdvanceDocId}
+                                                onChange={(e) => {
+                                                    const docId = e.target.value;
+                                                    setAcqAdvanceDocId(docId);
+                                                    if (docId) {
+                                                        const selectedDoc = allSalesDocs?.find((d:any) => d.id === docId);
+                                                        if (selectedDoc) {
+                                                            const basePrice = Number(selectedDoc.formData?.price) || 0;
+                                                            const extrasTotal = (selectedDoc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
+                                                            // 自動帶入金額並加上千分位
+                                                            setAcqAdvanceStr(formatNumberInput(String(basePrice + extrasTotal)));
+                                                        }
+                                                    } else {
+                                                        setAcqAdvanceStr('');
+                                                    }
+                                                }}
+                                                className="text-[9px] bg-red-50 text-red-700 border border-red-200 rounded outline-none max-w-[130px] truncate py-0.5 px-1 cursor-pointer hover:bg-red-100"
+                                            >
+                                                <option value="">🔗 選擇關聯單據...</option>
+                                                {allSalesDocs?.map((d:any) => (
+                                                    <option key={d.id} value={d.id}>{d.summary || d.id}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {/* 隱藏欄位供 saveVehicle 讀取連動 ID */}
+                                        <input type="hidden" name="acq_advanceDocId" value={acqAdvanceDocId} />
+                                        <input name="acq_advanceFee" value={acqAdvanceStr} onChange={e => setAcqAdvanceStr(formatNumberInput(e.target.value))} className="w-full bg-white border border-red-200 p-3 md:p-2.5 rounded-lg md:rounded text-base md:text-sm outline-none font-mono text-right shadow-sm min-w-0" placeholder="$0" title="例如代支留牌費等"/>
+                                    </div>
+                                    {/* ★★★ 結束：對數與代支連動系統 ★★★ */}
                                 </div>
                             )}
                             
