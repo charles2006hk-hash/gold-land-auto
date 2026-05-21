@@ -168,7 +168,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         
         // ★★★ 智能重抓對象 (當切換單據類型時，自動重新綁定收車或售車對象) ★★★
         if (selectedCarId && selectedCarId !== 'BLANK') {
-            const car = inventory.find(v => v.id === selectedCarId);
+            const car = inventory.find((v: any) => v.id === selectedCarId);
             if (car) {
                 const isPurchase = selectedDocType === 'purchase_contract';
                 setFormData(prev => ({
