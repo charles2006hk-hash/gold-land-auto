@@ -659,6 +659,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
         const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''} ${entry.chassisNo || ''} ${entry.engineNo || ''}`;
         return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
+    }).sort((a, b) => {
+        // ★★★ 智能時間排序：優先看最後更新時間，沒有的話看建立時間 ★★★
+        // 先嘗試抓取 seconds，如果沒有可能是字串或其他格式，這時當作 0
+        const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+        const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+        return timeB - timeA; // 降序 (最新的在最上面)
     });
 
     const scanForDuplicates = () => {
