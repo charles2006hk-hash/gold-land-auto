@@ -515,7 +515,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 {isQuotation ? (
                                     <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                                 ) : (
-                                    <p>I, <b>{formData.customerName || '___________'}</b>, agree to purchase the vehicle at HKD <b>{formatCurrency(balance + deposit)}</b> on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities transfer at this time. 本人同意交易，此時間點前後之交通違例及法律責任由相應方負責。</p>
+                                    <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                    本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                 )}
                             </div>
                         )}
