@@ -3122,47 +3122,71 @@ useEffect(() => {
   // --- CRUD Actions ---
 
 // ★★★ 防死鎖版的同步函數 ★★★
+    // ★★★ 靜默智能覆蓋引擎 (Smart Upsert) ★★★
     const syncToDatabase = async (data: any, category: string) => {
         if (!db || !appId || !staffId) return;
-        
-        // 1. 強制收起虛擬鍵盤，避免 iOS 鎖死
-        if (document.activeElement instanceof HTMLElement) {
-            document.activeElement.blur();
-        }
 
         try {
+            // 自動將 '客戶'、'司機' 映射為標準 'Person' 分類，並打上標籤
+            let stdCategory = category;
+            let roleTag = '';
+            if (category === '客戶') { stdCategory = 'Person'; roleTag = '客戶'; }
+            if (category === '司機') { stdCategory = 'Person'; roleTag = '司機'; }
+            
             const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-            // 檢查是否已存在
-            const q = query(dbRef, where('name', '==', data.name), where('category', '==', category));
+            
+            // 1. 決定智能比對條件 (優先電話 -> 再來身份證 -> 最後姓名)
+            let q;
+            if (data.phone) {
+                q = query(dbRef, where('phone', '==', data.phone), where('category', '==', stdCategory));
+            } else if (data.idNumber) {
+                q = query(dbRef, where('idNumber', '==', data.idNumber), where('category', '==', stdCategory));
+            } else if (data.chassisNo) {
+                q = query(dbRef, where('chassisNo', '==', data.chassisNo), where('category', '==', stdCategory));
+            } else {
+                if (!data.name) return; // 完全沒名字就不存
+                q = query(dbRef, where('name', '==', data.name), where('category', '==', stdCategory));
+            }
+
             const snapshot = await getDocs(q);
             
             if (snapshot.empty) {
-                // 不存在，新增資料
+                // 不存在 -> 直接新增 (靜默，完全不彈窗打擾業務)
                 await addDoc(dbRef, {
                     ...data,
-                    category,
+                    category: stdCategory,
+                    tags: roleTag ? [roleTag] : [],
                     managedBy: staffId,
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp()
                 });
-                
-                // ★ 關鍵修復：延遲 150 毫秒彈出，讓 UI 有時間冷卻
-                setTimeout(() => alert(`✅ 已成功連動並新增至「${category}」資料庫！`), 150);
             } else {
-                // 已存在，更新資料
+                // 已存在 -> 智能覆蓋 (只更新有填寫的值，不洗掉原本的舊資料)
                 const docId = snapshot.docs[0].id;
+                const existingData = snapshot.docs[0].data();
+                
+                const mergedData: any = {};
+                Object.keys(data).forEach(key => {
+                    // 如果新資料有填，且不為空字串，就覆寫更新
+                    if (data[key] !== undefined && data[key] !== '') {
+                        mergedData[key] = data[key];
+                    }
+                });
+
+                // 智能合併標籤 (如果原本是客，現在變司機，就兩個 Tag 都保留)
+                let newTags = existingData.tags || [];
+                if (roleTag && !newTags.includes(roleTag)) {
+                    newTags = [...newTags, roleTag];
+                    mergedData.tags = newTags;
+                }
+
                 await updateDoc(doc(dbRef, docId), {
-                    ...data,
+                    ...mergedData,
                     updatedAt: serverTimestamp()
                 });
-                
-                // ★ 關鍵修復：延遲 150 毫秒彈出
-                setTimeout(() => alert(`✅ 已成功同步更新「${category}」資料庫的現有資料！`), 150);
             }
         } catch (e) {
-            console.error("Sync error", e);
-            // ★ 關鍵修復：延遲 150 毫秒彈出
-            setTimeout(() => alert('❌ 同步至資料庫失敗，請檢查網路'), 150);
+            console.error("Smart Sync error", e);
         }
     };
 
@@ -3419,13 +3443,19 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                 alert('✅ 新車輛已成功入庫！');
             }
 
+            // 餵給智能引擎最完整的資料
             if (vData.customerName) {
-                await syncToDatabase({ name: vData.customerName, phone: vData.customerPhone }, '客戶');
+                await syncToDatabase({ 
+                    name: vData.customerName, 
+                    phone: vData.customerPhone,
+                    idNumber: vData.customerID,
+                    address: vData.customerAddress
+                }, '客戶');
             }
             if (crossBorderData.isEnabled) {
-                if (crossBorderData.driver1) await syncToDatabase({ name: crossBorderData.driver1, plate: crossBorderData.mainlandPlate, quota: crossBorderData.quotaNumber }, '司機');
-                if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 }, '司機');
-                if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 }, '司機');
+                if (crossBorderData.driver1) await syncToDatabase({ name: crossBorderData.driver1, relatedPlateNo: crossBorderData.mainlandPlate, quotaNo: crossBorderData.quotaNumber }, '司機');
+                if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2, relatedPlateNo: crossBorderData.mainlandPlate }, '司機');
+                if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3, relatedPlateNo: crossBorderData.mainlandPlate }, '司機');
             }
 
             setEditingVehicle(null);
