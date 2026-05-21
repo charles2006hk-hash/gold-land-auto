@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where, getDocs } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
-import { calculateAutoLoan } from '@/utils/LoanCalculator'; // ★ 匯入計數引擎
+import { calculateAutoLoan } from '@/utils/LoanCalculator'; 
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
@@ -29,14 +29,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [carPhotos, setCarPhotos] = useState<string[]>([]);
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
 
-    // 👇👇👇 請把這段加在這裡 👇👇👇
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
     const showToast = (text: string, type: 'success' | 'error' = 'success') => {
         setToastMsg({text, type});
         setTimeout(() => setToastMsg(null), 3000); 
     };
-    // ★ 權限判斷
+
     const isAdmin = staffId === 'BOSS' || currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all');
 
     const [formData, setFormData] = useState({
@@ -56,8 +55,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         orderType: 'None', overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: '',
         overseasTotalFee: '', localTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         contractPhotos: [] as string[],
-        
-        // ★★★ 新增：上會相關欄位 ★★★
         isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
     });
 
@@ -168,6 +165,22 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (selectedDocType === 'sales_contract' || selectedDocType === 'quotation') {
             setFormData((prev: any) => ({ ...prev, remarks: prev.remarks || DEFAULT_REMARKS }));
         }
+        
+        // ★★★ 智能重抓對象 (當切換單據類型時，自動重新綁定收車或售車對象) ★★★
+        if (selectedCarId && selectedCarId !== 'BLANK') {
+            const car = inventory.find(v => v.id === selectedCarId);
+            if (car) {
+                const isPurchase = selectedDocType === 'purchase_contract';
+                setFormData(prev => ({
+                    ...prev,
+                    customerName: isPurchase ? (car.acquisition?.vendor || '') : (car.customerName || ''),
+                    customerPhone: isPurchase ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
+                    customerId: isPurchase ? (car.acquisition?.vendorID || '') : (car.customerID || ''),
+                    customerAddress: isPurchase ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
+                    price: isPurchase ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0')
+                }));
+            }
+        }
     }, [selectedDocType]);
 
     const startNewDoc = () => { setDocId(null); handleSelectBlank(); setViewMode('edit'); };
@@ -229,6 +242,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const handleSelectCar = (car: any) => {
         setSelectedCarId(car.id);
+        
+        // ★★★ 智能進銷分流機制 (Acquisition vs Sales) ★★★
+        const isPurchase = selectedDocType === 'purchase_contract';
+        
         setFormData((prev: any) => ({
             ...prev, regMark: car.regMark || '', make: car.make || '', model: car.model || '',
             chassisNo: car.chassisNo || '', engineNo: car.engineNo || '', year: car.year || '',
@@ -236,33 +253,48 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             transmission: car.transmission || 'Automatic', engineSize: car.engineSize ? car.engineSize.toString() : '',
             mileage: car.mileage ? car.mileage.toString() : '', seat: car.seating ? car.seating.toString() : '',
             previousOwners: car.previousOwners !== undefined ? car.previousOwners.toString() : '',
-            price: car.price ? car.price.toString() : '', customerName: car.customerName || '', customerPhone: car.customerPhone || '',
-            customerId: car.customerID || '', customerAddress: car.customerAddress || '',
+            
+            // ★ 分流抓取：如果是收車合約抓成本與供應商，否則抓售價與買家
+            price: isPurchase ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'), 
+            customerName: isPurchase ? (car.acquisition?.vendor || '') : (car.customerName || ''), 
+            customerPhone: isPurchase ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
+            customerId: isPurchase ? (car.acquisition?.vendorID || '') : (car.customerID || ''), 
+            customerAddress: isPurchase ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
+            
             docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
             etaFormat: 'date', etaDays: '', etaDate: car.eta || car.acquisition?.eta || '', orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None', contractPhotos: [] 
         }));
 
         const autoPayments: any[] = [];
-        if (car.payments && car.payments.length > 0) {
-            car.payments.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 }); });
-        } else { autoPayments.push({ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }); }
+        // ★ 分流抓取收款紀錄
+        const paymentsToUse = isPurchase ? (car.acquisition?.payments || []) : (car.payments || []);
+        
+        if (paymentsToUse.length > 0) {
+            paymentsToUse.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type || 'Payment'} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 }); });
+        } else { 
+            autoPayments.push({ id: 'dep_1', label: isPurchase ? 'Deposit Paid (已付訂金)' : 'Deposit (訂金)', amount: 0 }); 
+        }
         
         setDepositItems(autoPayments); setShowTerms(true);
         const items: any[] = [];
-        if (car.crossBorder?.tasks) car.crossBorder.tasks.forEach((t: any, i: number) => { if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true }); });
-        if (car.salesAddons && car.salesAddons.length > 0) car.salesAddons.forEach((addon: any, i: number) => { if (addon.amount > 0) items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false }); });
-        if (car.maintenanceRecords && car.maintenanceRecords.length > 0) {
-            const unpaidMaint = car.maintenanceRecords.filter((m:any) => m.charge > 0 && m.chargeStatus !== 'Paid');
-            const groupedByDate: Record<string, { amount: number, items: string[] }> = {};
-            unpaidMaint.forEach((m: any) => {
-                if (!groupedByDate[m.date]) groupedByDate[m.date] = { amount: 0, items: [] };
-                groupedByDate[m.date].amount += m.charge; groupedByDate[m.date].items.push(m.item);
-            });
-            Object.entries(groupedByDate).forEach(([date, data], i) => {
-                const summary = data.items.length > 2 ? `${data.items.slice(0,2).join('、')} 等${data.items.length}項` : data.items.join('、');
-                items.push({ id: `maint_batch_${date}`, desc: `[${date} 維修保養] ${summary}`, amount: data.amount, isSelected: true });
-            });
+        
+        // ★ 只有賣車合約才帶入這些額外附加費
+        if (!isPurchase) {
+            if (car.crossBorder?.tasks) car.crossBorder.tasks.forEach((t: any, i: number) => { if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true }); });
+            if (car.salesAddons && car.salesAddons.length > 0) car.salesAddons.forEach((addon: any, i: number) => { if (addon.amount > 0) items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false }); });
+            if (car.maintenanceRecords && car.maintenanceRecords.length > 0) {
+                const unpaidMaint = car.maintenanceRecords.filter((m:any) => m.charge > 0 && m.chargeStatus !== 'Paid');
+                const groupedByDate: Record<string, { amount: number, items: string[] }> = {};
+                unpaidMaint.forEach((m: any) => {
+                    if (!groupedByDate[m.date]) groupedByDate[m.date] = { amount: 0, items: [] };
+                    groupedByDate[m.date].amount += m.charge; groupedByDate[m.date].items.push(m.item);
+                });
+                Object.entries(groupedByDate).forEach(([date, data], i) => {
+                    const summary = data.items.length > 2 ? `${data.items.slice(0,2).join('、')} 等${data.items.length}項` : data.items.join('、');
+                    items.push({ id: `maint_batch_${date}`, desc: `[${date} 維修保養] ${summary}`, amount: data.amount, isSelected: true });
+                });
+            }
         }
         setDocItems(items); setMobileStep('edit');
     };
@@ -295,13 +327,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         openPrintPreview(selectedDocType, dummyVehicle);
     };
 
-    // ★★★ 自動計算上會 ★★★
     const handleCalculateLoan = () => {
         const price = Number(formData.price) || 0;
         const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + i.amount, 0);
         const dep = depositItems.reduce((sum, item) => sum + item.amount, 0);
         
-        // 總貸款額 = 車價 + 附加項目 - 已付訂金
         const loan = (price + extrasTotal) - dep;
         
         if (loan < 80000) { 
@@ -311,16 +341,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         
         setFormData(prev => ({...prev, financeAmount: String(loan)}));
         
-        // ★ 智能判斷：根據「手數 (Previous Owners)」大於 0 來判定為二手車
         const isUsedCar = Number(formData.previousOwners || 0) > 0;
         
-        // ★ 將 isUsedCar 和 formData.financeType 傳入計數引擎
         const calc = calculateAutoLoan(
             price + extrasTotal, 
             dep, 
             Number(formData.financeMonths), 
             Number(formData.financeRate),
-            true, // 預設使用 Digital AIP (+2% 佣金)
+            true, 
             isUsedCar, 
             formData.financeType as 'HP' | 'Lease'
         );
@@ -340,14 +368,20 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const LivePreview = () => {
         const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
         const isQuotation = selectedDocType === 'quotation';
+        
+        // ★★★ 核心邏輯重構：精準計算實時總價與尾數 ★★★
         const price = Number(formData.price) || 0;
-        const deposit = depositItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + i.amount, 0);
+        const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0);
+        
         const ovFee = Number(formData.overseasTotalFee) || 0;
         const hkFee = Number(formData.localTotalFee) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+        
+        // 基礎價格 (車價 或 海外總費用)
         const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
-        const balance = basePrice + extrasTotal - deposit;
+        // 結餘 = (基礎車價 + 附加費) - 已付訂金
+        const balance = (basePrice + extrasTotal) - deposit;
 
         const titleMap: any = { 'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' }, 'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' }, 'consignment_contract': { en: 'VEHICLE CONSIGNMENT AGREEMENT', ch: '汽車寄賣合約' }, 'quotation': { en: 'QUOTATION', ch: '報價單' }, 'invoice': { en: 'INVOICE', ch: '發票' }, 'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' } };
         const t = titleMap[selectedDocType] || titleMap['sales_contract'];
@@ -358,10 +392,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
         return (
             <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
-                {/* ★ 外層容器：相對定位、隱藏溢出、固定 297mm 比例 */}
                 <div className="bg-white shadow-2xl origin-top relative overflow-hidden" style={{ width: '210mm', height: '297mm', transform: 'scale(0.8)', marginBottom: '-40%' }}>
-                    
-                    {/* ★ 內容主體：給定 pb-[38mm] 讓出空間給絕對定位的簽名 */}
                     <div className="p-8 font-sans text-slate-900 h-full pb-[38mm]">
                         <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
                             <div className="flex items-center gap-3">
@@ -496,7 +527,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         )}
                     </div>
 
-                    {/* ★ 絕對定位到底部 (透明層) */}
                     <div className="absolute bottom-8 left-8 right-8 bg-transparent pointer-events-none">
                         <div className="grid grid-cols-2 gap-12 w-full">
                             <div className="relative pt-1 border-t border-slate-800 text-center">
@@ -617,13 +647,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     return (
         <div className="flex flex-col h-full bg-slate-100 md:bg-transparent overflow-hidden relative">
-            {/* 👇👇👇 請把這段 Toast UI 加在這裡 👇👇👇 */}
             {toastMsg && (
                 <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${toastMsg.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
                     {toastMsg.text}
                 </div>
             )}
-            {/* 👆👆👆 加到這裡為止 👆👆👆 */}
             <div className="md:hidden bg-white p-2 border-b border-slate-200 flex gap-2 shrink-0">
                 <button onClick={() => setMobileStep('list')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='list' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}><Car size={14} className="mr-1"/> 1. 選車</button>
                 <button onClick={() => setMobileStep('edit')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center transition-colors ${mobileStep==='edit' ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}><Edit size={14} className="mr-1"/> 2. 編輯</button>
@@ -673,7 +701,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                         <div className="space-y-3">
                             <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100">
-                                <div className="text-[10px] font-bold text-blue-600 mb-2 uppercase tracking-wider">客戶資料 (Client)</div>
+                                <div className="text-[10px] font-bold text-blue-600 mb-2 uppercase tracking-wider">{selectedDocType === 'purchase_contract' ? '前手 / 收車對象 (Vendor)' : '客戶資料 (Client)'}</div>
                                 <input name="customerName" value={formData.customerName} onChange={handleChange} placeholder="姓名 / 公司名稱" className="w-full text-sm border-b mb-2 bg-transparent font-bold outline-none focus:border-blue-400"/>
                                 <div className="flex gap-3"><input name="customerPhone" value={formData.customerPhone} onChange={handleChange} placeholder="電話" className="flex-1 text-xs border-b bg-transparent outline-none focus:border-blue-400 font-mono"/><input name="customerId" value={formData.customerId} onChange={handleChange} placeholder="身份證/BR" className="flex-1 text-xs border-b bg-transparent outline-none focus:border-blue-400 font-mono"/></div>
                                 <input name="customerAddress" value={formData.customerAddress} onChange={handleChange} placeholder="地址" className="w-full text-xs border-b mt-2 bg-transparent outline-none focus:border-blue-400"/>
@@ -859,6 +887,22 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </label>
                                     </div>
                                 </div>
+                                
+                                {/* ★★★ 基礎車價欄位 (智能顯示 收車本金 還是 售價) ★★★ */}
+                                <div className="bg-white p-2 rounded-lg border border-yellow-300 shadow-inner flex items-center mb-3">
+                                    <span className="text-xs font-bold text-yellow-800 w-24">
+                                        {selectedDocType === 'purchase_contract' ? '收車本金' : '車輛售價'}
+                                    </span>
+                                    <span className="text-yellow-600 font-mono font-bold mr-1">$</span>
+                                    <input 
+                                        name="price" 
+                                        type="number" 
+                                        value={formData.price} 
+                                        onChange={handleChange} 
+                                        className="flex-1 bg-transparent text-right font-mono font-black text-lg outline-none text-slate-800" 
+                                        placeholder="0"
+                                    />
+                                </div>
 
                                 <div className="space-y-2 mb-3">
                                     {depositItems.map((item: any, idx: number) => (
@@ -954,7 +998,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             </div>
                                         </div>
 
-                                        {/* ★ 隱藏回佣欄位，僅限管理層查看 (佔 3 格) ★ */}
+                                        {/* ★ 機密區塊：回佣顯示 (僅限 BOSS 或擁有全權限者) ★ */}
                                         {isAdmin ? (
                                             <div className="col-span-2 md:col-span-3 bg-slate-800 p-2 rounded border border-slate-700 flex flex-col justify-center mt-1 shadow-sm">
                                                 <label className="text-[9px] font-bold text-slate-400 mb-0.5">內部參考: 預計車行回佣 (Comm.)</label>
@@ -973,7 +1017,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                             <div className="p-3 bg-green-50/50 rounded-xl border border-green-100">
                                 <div className="text-[10px] font-bold text-green-700 mb-3 flex justify-between uppercase tracking-wider">
-                                    <span>額外收費項目 (Add-ons)</span><span className="text-green-500/70">請勾選納入單據</span>
+                                    <span>額外收費/附加項目 (Add-ons)</span><span className="text-green-500/70">請勾選納入單據</span>
                                 </div>
                                 <div className="space-y-2 mb-3">
                                     {docItems.map((item: any) => (
