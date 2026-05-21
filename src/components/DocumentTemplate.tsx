@@ -48,14 +48,18 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const companyCh = COMPANY_INFO?.name_ch || '金田汽車';
     const curCustomer = { name: activeVehicle.customerName || '', phone: activeVehicle.customerPhone || '', hkid: activeVehicle.customerID || '', address: activeVehicle.customerAddress || '' };
 
+    // ★★★ 核心邏輯重構：精準計算實時總價與尾數 ★★★
     const price = Number(activeVehicle.price) || 0;
     const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
     const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
     const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+    
     const basePrice = ((activeVehicle as any).orderType === 'Overseas') ? orderFeesTotal : price;
-    const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-    const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-    const balance = basePrice + extrasTotal - totalPaid;
+    const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+    const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+    
+    // 尾款 = (車價 + 附加費) - 訂金
+    const balance = (basePrice + extrasTotal) - totalPaid;
     
     const showStampAndSig = (activeVehicle as any).showStampAndSig !== false;
     const soldDate = (activeVehicle as any).soldDate || '___________'; 
@@ -177,7 +181,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <td className="border p-1.5 bg-slate-50 font-bold">Engine Cap.</td><td className="border p-1.5">{activeVehicle.engineSize ? `${activeVehicle.engineSize} ${activeVehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</td>
                                     </tr>
                                     <tr>
-                                        <td className="border p-1.5 bg-slate-50 font-bold">Transmission</td><td className="border p-1.5">{activeVehicle.transmission === 'Manual' ? 'Manual (手)' : (activeVehicle.transmission === 'Automatic' ? 'Auto (自)' : '-')}</td>
+                                        <td className="border p-1.5 bg-slate-50 font-bold">Transmission</td><td className="border p-1.5">{activeVehicle.transmission === 'Manual' ? 'Manual (手波)' : (activeVehicle.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td>
                                         <td className="border p-1.5 bg-slate-50 font-bold">Seat / Prev.</td><td className="border p-1.5">{activeVehicle.seat || activeVehicle.seating || '-'} 座 / {activeVehicle.previousOwners || '0'} 手</td>
                                     </tr>
                                 </tbody>
