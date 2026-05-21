@@ -237,7 +237,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             {isQuotation ? (
                                 <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                             ) : (
-                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to {(isPurchase||isConsignment)?(isConsignment?'consign':'sell'):'purchase'} the vehicle to/from <b>{companyEn}</b> at HKD <b>{formatCurrency(balance + totalPaid)}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time. 本人同意交易，此時間點前後之交通違例及法律責任由相應方負責。</p>
+                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(balance + totalPaid)}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + totalPaid)}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                             )}
                         </div>
                     )}
