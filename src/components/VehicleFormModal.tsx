@@ -386,7 +386,6 @@ const VehicleFormModal = ({
         if (vrdData.priceA1 !== undefined && vrdData.priceA1 !== null) setPriceA1Str(formatNumberInput(vrdData.priceA1.toString()));
         if (vrdData.priceTax !== undefined && vrdData.priceTax !== null) setPriceTaxStr(formatNumberInput(vrdData.priceTax.toString()));
 
-        // ★ 強制更新 DOM 上的座位數和手數
         if (vrdData.seating) {
             const seatInput = document.querySelector('input[name="seating"]') as HTMLInputElement;
             if (seatInput) seatInput.value = vrdData.seating.toString();
@@ -404,29 +403,59 @@ const VehicleFormModal = ({
             setSelectedMake(matchedMake);
         }
         
-        let alertMessage = "✅ VRD 導入成功";
-        let finalCName = '';
-        let finalCPhone = '';
-        let finalCID = vrdData.registeredOwnerId || '';
-        let finalCAddress = '';
+        let alertMessage = "✅ VRD 基礎車輛數據導入成功";
+        
+        // -------------------------------------------------------------
+        // ★★★ 核心優化：進銷分流智能車主連動 (防垃圾數據) ★★★
+        // -------------------------------------------------------------
+        const ownerName = vrdData.registeredOwnerName || vrdData.owner || '';
+        
+        // 嘗試在全公司客戶資料庫中比對這個人
+        const matchedClient = ownerName ? clients.find((c: any) => c.name === ownerName) : null;
+        const cName = ownerName;
+        const cPhone = matchedClient ? (matchedClient.phone || '') : '';
+        const cID = matchedClient ? (matchedClient.idNumber || matchedClient.hkid || '') : (vrdData.registeredOwnerId || '');
+        const cAddress = matchedClient ? (matchedClient.address || '') : '';
 
-        const ownerName = vrdData.registeredOwnerName || vrdData.owner;
+        // 判斷當前是「收車舊牌簿」還是「過戶新牌簿」
+        const isCarSold = currentStatus === 'Sold' || currentStatus === 'Reserved';
+
         if (ownerName) {
-            const exist = clients.find((c: any) => c.name === ownerName);
-            if (exist) {
-                finalCName = exist.name;
-                finalCPhone = exist.phone || '';
-                finalCID = exist.idNumber || exist.hkid || finalCID;
-                finalCAddress = exist.address || '';
-                setVrdOwnerRaw(''); 
-                alertMessage = `✅ 自動配對客戶：${exist.name}`;
-            } else { 
-                setVrdOwnerRaw(ownerName); 
-                finalCName = ownerName;
-                alertMessage = `⚠️ 系統無客戶檔案，已暫填姓名。`; 
+            if (!isCarSold) {
+                // 💡 情況 A: 車輛還在庫 (In Stock)，此 VRD 車主為【舊車主/前手】 -> 連動到進貨資料
+                setAcqVendor(ownerName); // 實時更新進貨分頁的 Vendor 輸入框狀態
+                
+                setEditingVehicle((prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        acquisition: {
+                            ...prev.acquisition,
+                            vendor: ownerName,
+                            vendorPhone: cPhone,
+                            vendorID: cID,
+                            vendorAddress: cAddress
+                        }
+                    };
+                });
+                alertMessage = `📥 【收車進貨連動】已將 VRD 登記車主 [${ownerName}] 載入為「前手/舊車主」資料。`;
+            } else {
+                // 💡 情況 B: 車輛已售出 (Sold/Reserved)，此 VRD 車主為【新車主/買家】 -> 連動到銷售資料
+                setEditingVehicle((prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        customerName: cName,
+                        customerPhone: cPhone,
+                        customerID: cID,
+                        customerAddress: cAddress
+                    };
+                });
+                alertMessage = `💰 【銷售過戶連動】已將新過戶 VRD 車主 [${ownerName}] 載入為「本車買家」合約資料。`;
             }
-        } 
+        }
 
+        // 更新其餘 VRD 欄位
         setEditingVehicle((prev: any) => {
             if (!prev) return prev;
             return {
@@ -440,14 +469,11 @@ const VehicleFormModal = ({
                 engineSize: vrdData.engineSize || prev.engineSize,
                 priceA1: vrdData.priceA1 || prev.priceA1,
                 priceTax: vrdData.priceTax || prev.priceTax,
-                seating: vrdData.seating || prev.seating, // ★ 新增：連動座位數
+                seating: vrdData.seating || prev.seating, 
                 colorExt: vrdData.vehicleColor || vrdData.color || prev.colorExt,
                 previousOwners: vrdData.prevOwners !== undefined ? vrdData.prevOwners.toString() : prev.previousOwners,
                 registeredOwnerDate: vrdData.registeredOwnerDate || prev.registeredOwnerDate,
-                customerName: finalCName || prev.customerName,
-                customerPhone: finalCPhone || prev.customerPhone,
-                customerID: finalCID || prev.customerID,
-                customerAddress: finalCAddress || prev.customerAddress
+                licenseExpiry: vrdData.licenseExpiry || prev.licenseExpiry
             };
         });
 
@@ -456,7 +482,6 @@ const VehicleFormModal = ({
         setShowVrdOverlay(false);
         setTimeout(() => alert(alertMessage), 150);
     };
-
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         
