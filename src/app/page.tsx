@@ -3073,6 +3073,13 @@ useEffect(() => {
                 return entry.managedBy === staffId;
             });
 
+            // ★★★ 核心新增：使用 updatedAt (最後更新時間) 降序排序 (最新修改的排最上面) ★★★
+            filteredDbList.sort((a, b) => {
+                const timeA = a.updatedAt?.seconds || 0;
+                const timeB = b.updatedAt?.seconds || 0;
+                return timeB - timeA;
+            });
+         
             setDbEntries(filteredDbList); // ★ 改存過濾後的清單
         }, (err) => console.error("Db sync error", err));
 
