@@ -680,22 +680,73 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         else { setDupeGroups(duplicates); setShowDupeModal(true); }
     };
 
+    // ★★★ 智能合併防重複引擎 (Smart Merge) ★★★
     const resolveDuplicate = async (keepId: string, group: DatabaseEntry[]) => {
-        if (!confirm("確定保留選中的資料，並刪除其他重複項？")) return;
+        if (!confirm("確定執行「智能合併」？\n系統會將其他紀錄的圖片、標籤及空缺資料吸收進這筆，並安全移除重複項。")) return;
         if (!db) return;
-        const deleteIds = group.filter(e => e.id !== keepId).map(e => e.id);
+
         try {
+            const keepEntry = group.find(e => e.id === keepId)!;
+            const otherEntries = group.filter(e => e.id !== keepId);
+            const deleteIds = otherEntries.map(e => e.id);
+
+            // 1. 複製主體資料準備合併
+            const mergedData: any = { ...keepEntry };
+
+            // 2. 執行吸星大法：吸收其他檔案的精華
+            otherEntries.forEach(other => {
+                // 補齊基本空欄位 (如果主體沒填，舊的檔案有填，就吸過來)
+                Object.keys(other).forEach(key => {
+                    const val = mergedData[key];
+                    if ((val === undefined || val === '' || val === null || val === 0) && other[key as keyof DatabaseEntry]) {
+                        mergedData[key] = other[key as keyof DatabaseEntry];
+                    }
+                });
+
+                // 智能合併陣列 (不重複疊加)
+                if (other.tags) mergedData.tags = Array.from(new Set([...(mergedData.tags || []), ...other.tags]));
+                if (other.roles) mergedData.roles = Array.from(new Set([...(mergedData.roles || []), ...other.roles]));
+                
+                // 完美合併附件圖片
+                if (other.attachments && other.attachments.length > 0) {
+                    mergedData.attachments = [...(mergedData.attachments || []), ...other.attachments];
+                }
+
+                // 備註歷史保留
+                if (other.description) {
+                    mergedData.description = (mergedData.description ? mergedData.description + '\n' : '') + `[合併自舊紀錄]: ${other.description}`;
+                }
+            });
+
+            // 清理前端 ID 並更新時間
+            delete mergedData.id;
+            mergedData.updatedAt = serverTimestamp();
+
+            // 3. 執行 Firestore 批次更新與刪除
             const batch = writeBatch(db);
+            
+            // 寫入加強後的主體檔案
+            const keepRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', keepId);
+            batch.update(keepRef, mergedData);
+
+            // 刪除已經被吸乾的舊檔案
             deleteIds.forEach(id => {
                 const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', id);
                 batch.delete(ref);
             });
+
             await batch.commit();
+
+            // 4. 更新畫面狀態
             const newGroups = dupeGroups.map(g => g.filter(e => !deleteIds.includes(e.id))).filter(g => g.length > 1);
             setDupeGroups(newGroups);
             if (newGroups.length === 0) setShowDupeModal(false);
-            showToast("✅ 已成功刪除重複項目");
-        } catch (e) { showToast("處理失敗", "error"); }
+            
+            showToast("✨ 智能合併成功！資料已完美整合並清理。");
+        } catch (e) { 
+            console.error(e);
+            showToast("合併失敗，請檢查權限", "error"); 
+        }
     };
 
    return (
@@ -1165,10 +1216,63 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                 ) : (<div className="flex-1 flex flex-col items-center justify-center text-slate-400"><Database size={48} className="mb-4"/><p>請選擇或新增資料</p></div>)}
             </div>
             {showDupeModal && (
-                <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-                        <div className="p-4 border-b flex justify-between items-center bg-amber-50 rounded-t-xl"><h3 className="font-bold text-amber-800 flex items-center"><AlertTriangle className="mr-2"/> 發現重複資料 ({dupeGroups.length} 組)</h3><button onClick={() => setShowDupeModal(false)}><X/></button></div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-6">{dupeGroups.map((group, idx) => (<div key={idx} className="border rounded-lg p-3 bg-slate-50"><h4 className="font-bold mb-2 text-slate-700">名稱: {group[0].name}</h4><div className="space-y-2">{group.map(item => (<div key={item.id} className="flex justify-between items-center bg-white p-2 rounded border"><div className="text-xs"><div><span className="font-bold">ID:</span> {item.id}</div><div><span className="font-bold">建立:</span> {item.createdAt?.toDate?.().toLocaleDateString() || 'N/A'}</div></div><button onClick={() => resolveDuplicate(item.id, group)} className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700">保留此筆 (刪除其他)</button></div>))}</div></div>))}</div>
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center bg-amber-50">
+                            <h3 className="font-bold text-amber-800 flex items-center">
+                                <Zap className="mr-2 text-amber-500 fill-amber-500"/> 
+                                智能合併重複資料 ({dupeGroups.length} 組)
+                            </h3>
+                            <button onClick={() => setShowDupeModal(false)} className="hover:bg-amber-200 p-1 rounded-full transition-colors"><X/></button>
+                        </div>
+                        
+                        <div className="bg-amber-100/50 px-4 py-2 text-xs text-amber-800 border-b border-amber-100 font-bold">
+                            💡 請選擇一筆「最完整」或「最新」的資料點擊合併，系統會自動把其他筆的【圖片、標籤、缺少的欄位】吸過來補齊，並移除多餘的空殼。
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50">
+                            {dupeGroups.map((group, idx) => (
+                                <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
+                                    <h4 className="font-black text-lg mb-3 text-slate-800 flex items-center">
+                                        <UserIcon size={18} className="mr-2 text-slate-400"/> 
+                                        名稱: {group[0].name} 
+                                        <span className="ml-3 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">發現 {group.length} 筆重複</span>
+                                    </h4>
+                                    
+                                    <div className="space-y-3">
+                                        {group.map(item => {
+                                            const timeDisplay = item.updatedAt?.seconds 
+                                                ? new Date(item.updatedAt.seconds * 1000).toLocaleDateString() 
+                                                : (item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleDateString() : '無');
+                                            
+                                            return (
+                                                <div key={item.id} className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-50 p-3 rounded-lg border border-slate-200 hover:border-indigo-300 transition-colors gap-4">
+                                                    
+                                                    <div className="text-xs space-y-1.5 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200">{item.category}</span> 
+                                                            {item.roles?.map((r:string) => <span key={r} className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200">{r}</span>)}
+                                                            {item.attachments?.length > 0 && <span className="text-purple-600 font-bold flex items-center"><ImageIcon size={12} className="mr-1"/> 圖片x{item.attachments.length}</span>}
+                                                        </div>
+                                                        
+                                                        <div className="grid grid-cols-2 gap-2 mt-1">
+                                                            <div className="truncate"><span className="font-bold text-gray-400">電話:</span> <span className="text-gray-700 font-mono">{item.phone || '-'}</span></div>
+                                                            <div className="truncate"><span className="font-bold text-gray-400">證件:</span> <span className="text-gray-700 font-mono">{item.idNumber || '-'}</span></div>
+                                                            <div className="truncate"><span className="font-bold text-gray-400">車牌:</span> <span className="text-gray-700 font-mono font-bold bg-yellow-100 px-1 rounded">{item.plateNoHK || item.plateNoCN || '-'}</span></div>
+                                                            <div className="truncate"><span className="font-bold text-gray-400">更新:</span> <span className="text-gray-700">{timeDisplay}</span></div>
+                                                        </div>
+                                                    </div>
+
+                                                    <button onClick={() => resolveDuplicate(item.id, group)} className="px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 flex items-center shrink-0 w-full md:w-auto justify-center transition-transform active:scale-95">
+                                                        <Zap size={14} className="mr-1.5 fill-white"/> 保留並吸收其他筆
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             )}
