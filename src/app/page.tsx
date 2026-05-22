@@ -1465,7 +1465,15 @@ const CrossBorderView = ({
     };
 
     const cbVehicles = inventory.filter((v:any) => { const cb = v.crossBorder; if (!cb) return false; return cb.isEnabled || !!cb.mainlandPlate || !!cb.quotaNumber || (cb.tasks && cb.tasks.length > 0); });
-    const filteredVehicles = cbVehicles.filter((v:any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm));
+    
+    // ★★★ 核心修改：加入時間排序，確保最新更新的中港車輛置頂 ★★★
+    const filteredVehicles = cbVehicles.filter((v:any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm))
+    .sort((a: any, b: any) => {
+        const timeA = a.updatedAt?.seconds || (typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() / 1000 : 0) || a.createdAt?.seconds || 0;
+        const timeB = b.updatedAt?.seconds || (typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() / 1000 : 0) || b.createdAt?.seconds || 0;
+        return timeB - timeA; // 降序 (最新的在最上面)
+    });
+
     const activeCar = inventory.find((v: any) => v.id === activeCbVehicleId) || filteredVehicles[0];
 
     // 提醒邏輯 (已升級支援開關)
