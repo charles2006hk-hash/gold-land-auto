@@ -65,6 +65,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [newItemAmount, setNewItemAmount] = useState('');
     const [depositItems, setDepositItems] = useState<any[]>([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
     const [showTerms, setShowTerms] = useState(true);
+    const [showAttachments, setShowAttachments] = useState(true);
     const [showStampAndSig, setShowStampAndSig] = useState(true); 
 
     const [filterType, setFilterType] = useState<string>('All');
@@ -197,6 +198,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setDocItems(doc.docItems || []);
         setDepositItems(doc.depositItems || [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
         setShowTerms(doc.showTerms !== false); 
+        setShowAttachments(doc.showAttachments !== false); // ★ 讀取附件開關
         
         if (doc.formData?.regMark) {
             const invCar = inventory.find((v: any) => v.regMark === doc.formData.regMark);
@@ -214,7 +216,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const saveDocRecord = async () => {
         if (!db || !staffId) return null;
         const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
-        const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId };
+        const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, showAttachments, updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId };
 
         try {
             let currentId = docId;
@@ -301,6 +303,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
+        setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true); // ★ 空白單據預設開啟
         setFormData((prev: any) => ({ 
             ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
@@ -322,7 +325,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const dummyVehicle: any = {
             id: finalId || docId || 'DRAFT', ...formData, photos: formData.contractPhotos || [], price: Number(formData.price), deposit: depositItems.reduce((sum: number, item: any) => sum + item.amount, 0),
             customerID: formData.customerId, soldDate: formData.deliveryDate, handoverTime: formData.handoverTime, checklist: checklist, selectedItems: docItems.filter((i: any) => i.isSelected),
-            depositItems: depositItems, showTerms: showTerms, companyNameEn: formData.companyNameEn, companyNameCh: formData.companyNameCh, companyEmail: formData.companyEmail, companyPhone: formData.companyPhone, paymentMethod: formData.paymentMethod 
+            depositItems: depositItems, showTerms: showTerms, showAttachments: showAttachments, companyNameEn: formData.companyNameEn, companyNameCh: formData.companyNameCh, companyEmail: formData.companyEmail, companyPhone: formData.companyPhone, paymentMethod: formData.paymentMethod 
         };
         openPrintPreview(selectedDocType, dummyVehicle);
     };
@@ -1047,7 +1050,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             </div>
 
                             <div className="p-3 bg-white rounded border border-slate-300">
-                                <div className="text-[10px] font-bold text-slate-600 mb-2">隨車附件</div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="text-[10px] font-bold text-slate-600">隨車附件</div>
+                                    <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800">
+                                        <input type="checkbox" checked={showAttachments} onChange={e => setShowAttachments(e.target.checked)} className="mr-1.5 accent-blue-600"/>
+                                        在合約中印出
+                                    </label>
+                                </div>
                                 <div className="grid grid-cols-2 gap-2 mb-2">
                                     <label className="flex items-center text-xs cursor-pointer"><input type="checkbox" checked={checklist.vrd} onChange={e=>setChecklist((prev: any)=>({...prev, vrd: e.target.checked}))} className="mr-1 accent-slate-600"/> 牌薄</label>
                                     <label className="flex items-center text-xs cursor-pointer"><input type="checkbox" checked={checklist.keys} onChange={e=>setChecklist((prev: any)=>({...prev, keys: e.target.checked}))} className="mr-1 accent-slate-600"/> 後備匙</label>
