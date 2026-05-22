@@ -33,7 +33,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
 
     const itemsToRender = (activeVehicle as any).selectedItems || [];
     const depositItems = (activeVehicle as any).depositItems || []; 
-    const showTerms = (activeVehicle as any).showTerms !== false;   
+    const showTerms = (activeVehicle as any).showTerms !== false;
+    const showAttachments = (activeVehicle as any).showAttachments !== false; // ★ 讀取開關
     const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
     
@@ -230,7 +231,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                         </table>
                     </div>
 
-                    {!isQuotation && <AttachmentsSection />}
+                    {!isQuotation && showAttachments && <AttachmentsSection />}
                     
                     {showTerms && (
                         <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
