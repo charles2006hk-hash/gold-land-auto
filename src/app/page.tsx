@@ -2449,7 +2449,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 // ------------------------------------------------------------------
 // ★★★ 終極跨平台無痕列印引擎 (徹底解決 iOS Safari 白紙/當機問題) ★★★
 // ------------------------------------------------------------------
-export const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
+const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const isMobile = window.innerWidth < 768;
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
     
