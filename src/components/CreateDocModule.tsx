@@ -394,26 +394,28 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
+            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar relative">
                 <style>{`
-                    /* ★ 完美排版引擎：利用 zoom 取代 transform: scale 解決邊距走位問題 */
-                    .preview-zoom { zoom: 0.42; }
-                    @media (min-width: 400px) { .preview-zoom { zoom: 0.48; } }
-                    @media (min-width: 768px) { .preview-zoom { zoom: 0.65; } }
-                    @media (min-width: 1024px) { .preview-zoom { zoom: 0.75; } }
-                    
-                    /* 針對 Firefox 的備用方案 */
-                    @supports (-moz-appearance:none) {
-                        .preview-zoom { transform: scale(0.42); transform-origin: top center; margin-bottom: -172mm; }
-                        @media (min-width: 400px) { .preview-zoom { transform: scale(0.48); margin-bottom: -154mm; } }
-                        @media (min-width: 768px) { .preview-zoom { transform: scale(0.65); margin-bottom: -103mm; } }
-                        @media (min-width: 1024px) { .preview-zoom { transform: scale(0.75); margin-bottom: -74mm; } }
+                    /* ★ 終極無損縮放引擎：計算真實的縮放比例，並消除空白高度 */
+                    .preview-container {
+                        transform-origin: top center;
+                        background: white;
+                        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+                        width: 210mm;
+                        height: 297mm;
+                        position: relative;
+                        flex-shrink: 0;
+                        /* 預設手機比例 */
+                        transform: scale(0.42);
+                        margin-bottom: -172mm;
                     }
+                    @media (min-width: 400px) { .preview-container { transform: scale(0.48); margin-bottom: -154mm; } }
+                    @media (min-width: 768px) { .preview-container { transform: scale(0.65); margin-bottom: -103mm; } }
+                    @media (min-width: 1024px) { .preview-container { transform: scale(0.75); margin-bottom: -74mm; } }
                 `}</style>
-                <div 
-                    className="bg-white shadow-2xl relative overflow-hidden shrink-0 preview-zoom" 
-                    style={{ width: '210mm', height: '297mm' }}
-                >
+                
+                {/* 只需要一層 Container 就能完美縮放與置中 */}
+                <div className="preview-container">
                     <div className="p-8 font-sans text-slate-900 h-full pb-[38mm]">
                         <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
                             <div className="flex items-center gap-3">
@@ -569,7 +571,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 </div>
             </div>
         );
-    };
 
     if (viewMode === 'list') {
         return (
