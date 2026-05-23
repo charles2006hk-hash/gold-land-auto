@@ -401,9 +401,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
+            // ★ 核心修復：移除 flex justify-center 與 items-start，這是導致左側被切斷的元兇
+            <div className="w-full h-full bg-slate-200 overflow-auto pt-4 pb-12 custom-scrollbar">
                 <style>{`
-                    /* ★ 黃金微縮排版引擎：全面調降縮放比例，防止任何桌面解析度下溢出 */
+                    /* ★ 黃金微縮排版引擎 */
                     :root { --p-scale: 0.35; }
                     @media (min-width: 400px) { :root { --p-scale: 0.38; } }
                     @media (min-width: 640px) { :root { --p-scale: 0.45; } }
@@ -416,9 +417,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         width: calc(794px * var(--p-scale));
                         height: calc(1123px * var(--p-scale));
                         position: relative;
-                        margin: 0 auto;
+                        margin: 0 auto; /* ★ 改用傳統 Margin Auto 完美置中，不管螢幕多小都不會切斷邊界 */
                         flex-shrink: 0;
-                        max-w-full;
                     }
                     .preview-inner {
                         width: 794px;
