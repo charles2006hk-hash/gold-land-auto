@@ -480,7 +480,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         <div className="mb-3">
                                             <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
                                                 {formData.contractPhotos.map((url: string, idx: number) => (
-                                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt=\"car-thumb\" /></div>
+                                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
                                                 ))}
                                             </div>
                                         </div>
