@@ -2447,15 +2447,23 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (全內聯 CSS + Base 導航，完美修復 iOS) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (全內聯 CSS + 強制邊界鎖定) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const isMobile = window.innerWidth < 768;
     
-    // ★ 核心修復 1：直接抓取網頁上所有的 CSS 檔案與樣式，原封不動塞入，避開跨域阻擋
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
-    
-    // ★ 核心修復 2：加入 Base 標籤，讓 Blob 裡面的相對路徑 (例如 /logo.png 或外部 CSS) 都能成功載入！
+    let extractedCss = '';
+    try {
+        Array.from(document.styleSheets).forEach((sheet) => {
+            try {
+                const rules = sheet.cssRules || sheet.rules;
+                if (rules) Array.from(rules).forEach((rule) => { extractedCss += rule.cssText + '\n'; });
+            } catch (e) {}
+        });
+    } catch (err) {}
+
+    if (!extractedCss) extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+
     const baseTag = `<base href="${window.location.origin}/">`;
 
     const fullHtml = `
@@ -2466,32 +2474,40 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
             ${baseTag}
-            ${styles}
+            <style>${extractedCss}</style>
             <style>
-                @page { margin: 0; size: A4 portrait; }
-                /* ★ 核心修復 3：強制背景全白，滿版寬度，消除 iOS 右側灰色大區塊 */
+                /* ★ 徹底關閉瀏覽器預設的網址、頁碼與邊界 */
+                @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
+                
                 html, body { 
                     margin: 0 !important; 
                     padding: 0 !important; 
                     background: white !important; 
-                    width: 100% !important;
+                    width: 794px !important;
+                    height: 1123px !important;
+                    overflow: hidden !important;
                     -webkit-print-color-adjust: exact !important; 
                     print-color-adjust: exact !important; 
                 }
                 .print-container { 
-                    width: 100% !important; 
-                    margin: 0 auto; 
+                    width: 794px !important; 
+                    height: 1123px !important;
+                    margin: 0 !important; 
                     padding: 0 !important;
                     background: white !important; 
+                    position: relative !important;
+                    overflow: hidden !important;
                 }
-                /* 強制覆蓋原本系統的 794px 限制，讓 iOS 印表機自動滿版撐開 A4 */
+                /* 強制把內容區塊鎖定在 A4 範圍內，保證印章不被擠出去 */
                 #print-root {
-                    width: 100% !important;
-                    max-width: 100% !important;
+                    width: 794px !important;
+                    height: 1123px !important;
+                    max-width: none !important;
                     min-height: 0 !important;
                     box-shadow: none !important;
                     border: none !important;
                     margin: 0 !important;
+                    transform: none !important;
                 }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
@@ -2502,11 +2518,8 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                 ${htmlContent}
             </div>
             <script>
-                // 確保圖片與字體完全算好後，自動喚醒列印或轉存 PDF 選單
                 window.onload = function() {
-                    setTimeout(function() {
-                        window.print();
-                    }, 800);
+                    setTimeout(function() { window.print(); }, 800);
                 };
             </script>
         </body>
@@ -2514,12 +2527,10 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     `;
 
     if (isMobile) {
-        // ★ iOS 打包成 Blob 彈出
         const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
     } else {
-        // 電腦版維持 Iframe 隱藏列印
         let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
         if (!iframe) {
             iframe = document.createElement('iframe');
@@ -2533,11 +2544,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             document.body.appendChild(iframe);
         }
         const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
-        if (iframeDoc) {
-            iframeDoc.open();
-            iframeDoc.write(fullHtml);
-            iframeDoc.close();
-        }
+        if (iframeDoc) { iframeDoc.open(); iframeDoc.write(fullHtml); iframeDoc.close(); }
     }
 };
 // --- 主應用程式 ---
