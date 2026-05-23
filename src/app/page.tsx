@@ -2722,7 +2722,6 @@ export default function GoldLandAutoDMS() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
-  cconst printAreaRef = useRef<HTMLDivElement>(null);
   
   // ★★★ 終極修復 iOS 手機列印空白問題 ★★★
   const handlePrint = () => {
