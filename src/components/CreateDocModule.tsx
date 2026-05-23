@@ -401,30 +401,30 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            // ★ 核心修復：移除 flex justify-center 與 items-start，這是導致左側被切斷的元兇
-            <div className="w-full h-full bg-slate-200 overflow-auto pt-4 pb-12 custom-scrollbar">
+            // ★ 加入 overflow-x-hidden 徹底關閉左右滾動
+            <div className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex flex-col items-center">
                 <style>{`
-                    /* ★ 黃金微縮排版引擎 */
+                    /* ★ 終極微縮排版：針對三欄式介面，大幅調降桌面版的縮放比例，保證 100% 完整顯示 */
                     :root { --p-scale: 0.35; }
                     @media (min-width: 400px) { :root { --p-scale: 0.38; } }
-                    @media (min-width: 640px) { :root { --p-scale: 0.45; } }
-                    @media (min-width: 768px) { :root { --p-scale: 0.52; } }
-                    @media (min-width: 1024px) { :root { --p-scale: 0.60; } }
-                    @media (min-width: 1280px) { :root { --p-scale: 0.68; } }
-                    @media (min-width: 1536px) { :root { --p-scale: 0.75; } }
+                    @media (min-width: 640px) { :root { --p-scale: 0.42; } }
+                    @media (min-width: 768px) { :root { --p-scale: 0.40; } } /* 平板雙欄 */
+                    @media (min-width: 1024px) { :root { --p-scale: 0.46; } } /* 桌面三欄 */
+                    @media (min-width: 1280px) { :root { --p-scale: 0.52; } }
+                    @media (min-width: 1536px) { :root { --p-scale: 0.60; } }
                     
                     .preview-outer {
                         width: calc(794px * var(--p-scale));
                         height: calc(1123px * var(--p-scale));
                         position: relative;
-                        margin: 0 auto; /* ★ 改用傳統 Margin Auto 完美置中，不管螢幕多小都不會切斷邊界 */
+                        margin: 0 auto;
                         flex-shrink: 0;
                     }
                     .preview-inner {
                         width: 794px;
                         height: 1123px;
                         transform: scale(var(--p-scale));
-                        transform-origin: top left;
+                        transform-origin: top center;
                         position: absolute;
                         top: 0;
                         left: 0;
