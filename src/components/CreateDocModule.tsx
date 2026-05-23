@@ -403,7 +403,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         return (
             <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
                 <style>{`
-                    /* ★ A4 絕對公釐鎖定：確保內外層寬度 100% 吻合 */
                     :root { --p-scale: 0.42; }
                     @media (min-width: 640px) { :root { --p-scale: 0.55; } }
                     @media (min-width: 768px) { :root { --p-scale: 0.65; } }
@@ -411,15 +410,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     @media (min-width: 1280px) { :root { --p-scale: 0.85; } }
                     
                     .preview-outer {
-                        width: calc(210mm * var(--p-scale));
-                        height: calc(297mm * var(--p-scale));
+                        width: calc(794px * var(--p-scale));
+                        height: calc(1123px * var(--p-scale));
                         position: relative;
                         margin: 0 auto;
                         flex-shrink: 0;
                     }
                     .preview-inner {
-                        width: 210mm;
-                        height: 297mm;
+                        width: 794px;
+                        height: 1123px;
                         transform: scale(var(--p-scale));
                         transform-origin: top left;
                         position: absolute;
@@ -434,16 +433,22 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                 <div className="preview-outer">
                     <div className="preview-inner">
-                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border w-[210mm] max-w-[210mm] mx-auto">
-                            <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 gap-4 overflow-hidden">
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
-                                    <div><h1 className="text-lg font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1><h2 className="text-base font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2><div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div></div>
+                        {/* ★ 移除 w-[210mm]，改用 w-full，避免物理衝突 */}
+                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border w-full h-full">
+                            {/* ★ 加入 min-w-0 與 truncate 魔法，防止文字把外框撐破 */}
+                            <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 overflow-hidden gap-2">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain flex-shrink-0" onError={(e) => e.currentTarget.style.display='none'} />
+                                    <div className="min-w-0">
+                                        <h1 className="text-lg font-black text-slate-900 tracking-wide uppercase truncate">{formData.companyNameEn}</h1>
+                                        <h2 className="text-base font-bold text-slate-700 tracking-widest truncate">{formData.companyNameCh}</h2>
+                                        <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif truncate"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div>
+                                    </div>
                                 </div>
-                                <div className="text-right shrink-0">
-                                    {/* ★ 縮小標題字體 (text-[15px]) 並減少字距 (tracking-wider)，防止把 A4 紙撐破！ */}
-                                    <div className="text-[15px] font-black text-slate-800 uppercase tracking-wider border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
-                                    <div className="text-[11px] font-bold text-slate-600 tracking-[0.2em] text-center">{t.ch}</div>
+                                <div className="text-right flex-shrink-0 pl-2">
+                                    {/* ★ 將 text-[15px] 縮小為 text-sm，tracking-wider 縮為 normal */}
+                                    <div className="text-sm font-black text-slate-800 uppercase tracking-normal border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
+                                    <div className="text-[11px] font-bold text-slate-600 tracking-widest text-center">{t.ch}</div>
                                     <div className="mt-1 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
                                     <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
                                 </div>
