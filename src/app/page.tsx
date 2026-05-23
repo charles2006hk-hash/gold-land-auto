@@ -2722,7 +2722,53 @@ export default function GoldLandAutoDMS() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
-  const handlePrint = () => { window.print(); };
+  cconst printAreaRef = useRef<HTMLDivElement>(null);
+  
+  // ★★★ 終極修復 iOS 手機列印空白問題 ★★★
+  const handlePrint = () => {
+      const isMobile = window.innerWidth < 768;
+      
+      if (isMobile) {
+          // 手機版：提取乾淨的 HTML 在新視窗列印，避開 iOS 所有排版地雷
+          const printRoot = document.getElementById('print-root');
+          if (printRoot) {
+              const printWindow = window.open('', '_blank');
+              if (printWindow) {
+                  // 複製所有的 CSS 樣式
+                  const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
+                  printWindow.document.write(`
+                      <!DOCTYPE html>
+                      <html>
+                      <head>
+                          <title>列印單據</title>
+                          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                          ${styles}
+                          <style>
+                              @page { size: A4 portrait; margin: 0; }
+                              body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                              /* 強制還原靜態排版，防止變成截圖或白紙 */
+                              #print-root { position: static !important; width: 100% !important; min-height: 100% !important; margin: 0 auto !important; padding: 10mm 12mm !important; box-shadow: none !important; transform: none !important; zoom: 1 !important; left: auto !important; top: auto !important; }
+                              @media print { body * { visibility: visible !important; } }
+                          </style>
+                      </head>
+                      <body>
+                          ${printRoot.outerHTML}
+                          <script>
+                              // 等待圖片與字體載入後自動喚醒列印/PDF選項
+                              setTimeout(() => { window.print(); }, 800);
+                          </script>
+                      </body>
+                      </html>
+                  `);
+                  printWindow.document.close();
+                  return;
+              }
+          }
+      }
+      
+      // 桌面版維持原生列印
+      window.print();
+  };
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
 
