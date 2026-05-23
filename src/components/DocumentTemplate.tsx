@@ -86,18 +86,19 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     );
 
     const HeaderSection = () => (
-        <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
-            <div className="flex items-center gap-3">
-                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
+        <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 gap-4 overflow-hidden">
+            <div className="flex items-center gap-3 shrink-0">
+                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
                 <div>
-                    <h1 className="text-xl font-black text-slate-900 tracking-wide uppercase leading-none">{companyEn}</h1>
-                    <h2 className="text-lg font-bold text-slate-700 tracking-widest leading-tight mt-1">{companyCh}</h2>
+                    <h1 className="text-lg font-black text-slate-900 tracking-wide uppercase leading-none">{companyEn}</h1>
+                    <h2 className="text-base font-bold text-slate-700 tracking-widest leading-tight mt-1">{companyCh}</h2>
                     <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif"><p>{COMPANY_INFO?.address_ch || ''}</p><p>Tel: {COMPANY_INFO?.phone || ''} | Email: {COMPANY_INFO?.email || ''}</p></div>
                 </div>
             </div>
-            <div className="text-right">
-                <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{docTitleEn}</div>
-                <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{docTitleCh}</div>
+            <div className="text-right shrink-0">
+                {/* ★ 同樣縮小字體與字距，完美適應 A4 寬度 */}
+                <div className="text-[15px] font-black text-slate-800 uppercase tracking-wider border-b-2 border-slate-800 inline-block mb-1">{docTitleEn}</div>
+                <div className="text-[11px] font-bold text-slate-600 tracking-[0.2em] text-center">{docTitleCh}</div>
                 <div className="mt-1 text-[10px] font-mono">NO: {activeType.slice(0,3).toUpperCase()}-{today.replace(/\//g,'')}-{displayId}</div>
                 <div className="text-[10px] font-mono font-bold text-blue-800 uppercase">DATE: {today}</div>
             </div>
@@ -141,7 +142,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         const etaDisplay = (activeVehicle as any).etaFormat === 'days' ? `${(activeVehicle as any).etaDays || '___'} Days (天)` : ((activeVehicle as any).etaDate || 'TBC (待定)');
 
         return (
-            <div id="print-root" className="w-[794px] mx-auto bg-white min-h-[1123px] text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
+            <div id="print-root" className="w-[210mm] max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
                 <PrintStyle />
                 
                 {/* 內容區：給予底部 pb-[35mm] 讓出空間給絕對定位的簽名 */}
@@ -256,7 +257,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     }
 
     return (
-        <div id="print-root" className="w-[794px] mx-auto bg-white min-h-[1123px] text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
+        <div id="print-root" className="w-[210mm] max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
             <PrintStyle />
             
             <div className="p-8 print:p-0 pb-[38mm] print:pb-[38mm] h-full">
