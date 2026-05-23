@@ -2447,34 +2447,16 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (全內聯 CSS 注入，完美支援 iOS Safari) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (全內聯 CSS + Base 導航，完美修復 iOS) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const isMobile = window.innerWidth < 768;
     
-    // ★★★ 終極修復核心：遍歷系統所有的 StyleSheets，把所有 CSS 規則抽取成純文字內聯，100% 避開路徑隔離問題 ★★★
-    let extractedCss = '';
-    try {
-        Array.from(document.styleSheets).forEach((sheet) => {
-            try {
-                const rules = sheet.cssRules || sheet.rules;
-                if (rules) {
-                    Array.from(rules).forEach((rule) => {
-                        extractedCss += rule.cssText + '\n';
-                    });
-                }
-            } catch (e) {
-                // 忽略跨域阻擋的樣式表 (如果有)，繼續下一組
-            }
-        });
-    } catch (err) {
-        console.warn("CSS 提取失敗，降級使用 innerHTML 備用方案");
-    }
-
-    // 備用方案：如果上面遍歷失敗，直接抓取現有 style 標籤的內容
-    if (!extractedCss) {
-        extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
-    }
+    // ★ 核心修復 1：直接抓取網頁上所有的 CSS 檔案與樣式，原封不動塞入，避開跨域阻擋
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
+    
+    // ★ 核心修復 2：加入 Base 標籤，讓 Blob 裡面的相對路徑 (例如 /logo.png 或外部 CSS) 都能成功載入！
+    const baseTag = `<base href="${window.location.origin}/">`;
 
     const fullHtml = `
         <!DOCTYPE html>
@@ -2483,14 +2465,34 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
-            <style>
-                /* 注入完整的全域 DMS 系統樣式與 Tailwind 樣式 */
-                ${extractedCss}
-            </style>
+            ${baseTag}
+            ${styles}
             <style>
                 @page { margin: 0; size: A4 portrait; }
-                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                .print-container { width: 794px; min-height: 1123px; margin: 0 auto; box-sizing: border-box; background: white; overflow: hidden; position: relative; }
+                /* ★ 核心修復 3：強制背景全白，滿版寬度，消除 iOS 右側灰色大區塊 */
+                html, body { 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    background: white !important; 
+                    width: 100% !important;
+                    -webkit-print-color-adjust: exact !important; 
+                    print-color-adjust: exact !important; 
+                }
+                .print-container { 
+                    width: 100% !important; 
+                    margin: 0 auto; 
+                    padding: 0 !important;
+                    background: white !important; 
+                }
+                /* 強制覆蓋原本系統的 794px 限制，讓 iOS 印表機自動滿版撐開 A4 */
+                #print-root {
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    min-height: 0 !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    margin: 0 !important;
+                }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
             </style>
@@ -2512,12 +2514,12 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     `;
 
     if (isMobile) {
-        // ★ iOS 完美解法：打包成完整帶有內聯 CSS 的 Blob，開新分頁絕不當機且排版完美！
+        // ★ iOS 打包成 Blob 彈出
         const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
     } else {
-        // 電腦版維持乾淨無痕的隱藏 Iframe 原生列印
+        // 電腦版維持 Iframe 隱藏列印
         let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
         if (!iframe) {
             iframe = document.createElement('iframe');
