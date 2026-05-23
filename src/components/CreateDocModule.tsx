@@ -394,10 +394,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            <div className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden flex justify-center items-start pt-4 pb-12 custom-scrollbar">
-                {/* ★ 響應式完美縮放引擎：手機縮至45%(防止左右被裁切)，電腦縮至70%，並強制置中 */}
+            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
+                <style>{`
+                    /* ★ 完美排版引擎：利用 zoom 取代 transform: scale 解決邊距走位問題 */
+                    .preview-zoom { zoom: 0.42; }
+                    @media (min-width: 400px) { .preview-zoom { zoom: 0.48; } }
+                    @media (min-width: 768px) { .preview-zoom { zoom: 0.65; } }
+                    @media (min-width: 1024px) { .preview-zoom { zoom: 0.75; } }
+                    
+                    /* 針對 Firefox 的備用方案 */
+                    @supports (-moz-appearance:none) {
+                        .preview-zoom { transform: scale(0.42); transform-origin: top center; margin-bottom: -172mm; }
+                        @media (min-width: 400px) { .preview-zoom { transform: scale(0.48); margin-bottom: -154mm; } }
+                        @media (min-width: 768px) { .preview-zoom { transform: scale(0.65); margin-bottom: -103mm; } }
+                        @media (min-width: 1024px) { .preview-zoom { transform: scale(0.75); margin-bottom: -74mm; } }
+                    }
+                `}</style>
                 <div 
-                    className="bg-white shadow-2xl relative overflow-hidden shrink-0 origin-top transform scale-[0.45] sm:scale-[0.5] md:scale-[0.7] -mb-[163mm] sm:-mb-[148mm] md:-mb-[89mm] transition-transform mx-auto" 
+                    className="bg-white shadow-2xl relative overflow-hidden shrink-0 preview-zoom" 
                     style={{ width: '210mm', height: '297mm' }}
                 >
                     <div className="p-8 font-sans text-slate-900 h-full pb-[38mm]">
