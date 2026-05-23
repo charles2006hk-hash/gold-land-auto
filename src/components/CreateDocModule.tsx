@@ -571,7 +571,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 </div>
             </div>
         );
-
+    };
     if (viewMode === 'list') {
         return (
             <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
