@@ -648,6 +648,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 })}
                             </tbody>
                         </table>
+                      </div>
                     )}
                 </div>
             </div>
