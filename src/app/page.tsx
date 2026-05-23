@@ -2447,12 +2447,15 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (徹底解決 iOS Safari 白紙/當機問題) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (徹底解決 iOS Safari 白紙/當機/無格式問題) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const isMobile = window.innerWidth < 768;
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
     
+    // ★ 魔法修復：這行能讓 Blob 新分頁正確抓取到原本網站的 CSS 與圖片！
+    const baseTag = `<base href="${window.location.origin}">`; 
+
     const fullHtml = `
         <!DOCTYPE html>
         <html>
@@ -2460,12 +2463,12 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
+            ${baseTag}
             ${styles}
             <style>
                 @page { margin: 0; size: A4 portrait; }
                 body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .print-container { width: 794px; min-height: 1123px; margin: 0 auto; box-sizing: border-box; background: white; overflow: hidden; position: relative; }
-                /* 強制取消所有隱藏限制，讓 iOS Safari 100% 讀取到畫面 */
+                .print-container { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 8mm; box-sizing: border-box; background: white; overflow: hidden; position: relative; }
                 body * { visibility: visible !important; display: block; }
                 script { display: none !important; }
             </style>
@@ -2474,18 +2477,16 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             <div class="print-container">
                 ${htmlContent}
             </div>
-            ${!isMobile ? '<script>window.onload = () => { setTimeout(() => { window.print(); }, 800); };</script>' : ''}
+            ${!isMobile ? '<script>window.onload = () => { setTimeout(() => { window.print(); }, 800); };</script>' : '<script>window.onload = () => { setTimeout(() => { window.print(); }, 1500); };</script>'}
         </body>
         </html>
     `;
 
     if (isMobile) {
-        // ★ iOS 終極防當解法：打包成 Blob 在新分頁打開，讓用戶用系統原生 Share -> Print，完美避開記憶體崩潰
         const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
     } else {
-        // 電腦版：使用隱藏 Iframe 無痕列印，畫面完全不會閃爍
         let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
         if (!iframe) {
             iframe = document.createElement('iframe');
@@ -2506,7 +2507,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
         }
     }
 };
-
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
