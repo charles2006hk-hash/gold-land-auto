@@ -368,210 +368,193 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
     };
 
-    const LivePreview = () => {
-        const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
-        const isQuotation = selectedDocType === 'quotation';
-        
-        // ★★★ 核心邏輯重構：精準計算實時總價與尾數 ★★★
-        const price = Number(formData.price) || 0;
-        const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0);
-        
-        const ovFee = Number(formData.overseasTotalFee) || 0;
-        const hkFee = Number(formData.localTotalFee) || 0;
-        const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
-        
-        // 基礎價格 (車價 或 海外總費用)
-        const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
-        // 結餘 = (基礎車價 + 附加費) - 已付訂金
-        const balance = (basePrice + extrasTotal) - deposit;
-
-        const titleMap: any = { 'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' }, 'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' }, 'consignment_contract': { en: 'VEHICLE CONSIGNMENT AGREEMENT', ch: '汽車寄賣合約' }, 'quotation': { en: 'QUOTATION', ch: '報價單' }, 'invoice': { en: 'INVOICE', ch: '發票' }, 'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' } };
-        const t = titleMap[selectedDocType] || titleMap['sales_contract'];
-        const displayDate = formData.docDate ? new Date(formData.docDate).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
-        const hasOrderDetails = (isQuotation || selectedDocType === 'sales_contract') && formData.orderType && formData.orderType !== 'None';
-        const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
-        const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
-
-        return (
-            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar relative">
+    return (
+            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
                 <style>{`
-                    /* ★ 終極無損縮放引擎：計算真實的縮放比例，並消除空白高度 */
-                    .preview-container {
-                        transform-origin: top center;
-                        background: white;
-                        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-                        width: 210mm;
-                        height: 297mm;
+                    /* ★ 終極數學縮放引擎：A4 絕對像素鎖定，徹底解決邊界被切斷 */
+                    :root { --p-scale: 0.42; }
+                    @media (min-width: 640px) { :root { --p-scale: 0.55; } }
+                    @media (min-width: 768px) { :root { --p-scale: 0.65; } }
+                    @media (min-width: 1024px) { :root { --p-scale: 0.75; } }
+                    @media (min-width: 1280px) { :root { --p-scale: 0.85; } }
+                    
+                    .preview-outer {
+                        width: calc(794px * var(--p-scale));
+                        height: calc(1123px * var(--p-scale));
                         position: relative;
+                        margin: 0 auto;
                         flex-shrink: 0;
-                        /* 預設手機比例 */
-                        transform: scale(0.42);
-                        margin-bottom: -172mm;
                     }
-                    @media (min-width: 400px) { .preview-container { transform: scale(0.48); margin-bottom: -154mm; } }
-                    @media (min-width: 768px) { .preview-container { transform: scale(0.65); margin-bottom: -103mm; } }
-                    @media (min-width: 1024px) { .preview-container { transform: scale(0.75); margin-bottom: -74mm; } }
+                    .preview-inner {
+                        width: 794px;
+                        height: 1123px;
+                        transform: scale(var(--p-scale));
+                        transform-origin: top left;
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        background: white;
+                        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+                        overflow: hidden;
+                    }
                 `}</style>
-                
-                {/* 只需要一層 Container 就能完美縮放與置中 */}
-                <div className="preview-container">
-                    <div className="p-8 font-sans text-slate-900 h-full pb-[38mm]">
-                        <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
-                            <div className="flex items-center gap-3">
-                                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
-                                <div><h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1><h2 className="text-lg font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2><div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div></div>
-                            </div>
-                            <div className="text-right">
-                                <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
-                                <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
-                                <div className="mt-1 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
-                                <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
-                            </div>
-                        </div>
 
-                        {(!isBill) ? (
-                            <>
-                                <div className="grid grid-cols-3 gap-3 mb-3">
-                                    <div className="col-span-1">
-                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part A: Customer</div>
-                                        <div className="border border-slate-300 p-2 text-[10px] min-h-[64px] flex flex-col justify-center space-y-1"><p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> {formData.customerName || '(Client)'}</p><p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {formData.customerPhone}</p><p className="truncate"><span className="text-slate-500 font-bold">ID:</span> {formData.customerId}</p></div>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part B: Vehicle Details</div>
-                                        <table className="w-full text-[10px] border-collapse border border-slate-300 min-h-[64px]">
-                                            <tbody>
-                                                <tr><td className="border p-1.5 bg-slate-50 font-bold w-[16%]">Reg. No.</td><td className="border p-1.5 font-mono font-bold w-[34%] text-[11px]">{formData.regMark || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[16%]">Make/Model</td><td className="border p-1.5 w-[34%] text-[11px] font-bold">{formData.make} {formData.model}</td></tr>
-                                                <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No.</td><td className="border p-1.5 font-mono">{formData.chassisNo || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine No.</td><td className="border p-1.5 font-mono">{formData.engineNo || 'TBC'}</td></tr>
-                                                <tr><td className="border p-1.5 bg-slate-50 font-bold">Year</td><td className="border p-1.5">{formData.year}</td><td className="border p-1.5 bg-slate-50 font-bold">Color (Ext/Int)</td><td className="border p-1.5">{formData.color || '-'} / {formData.colorInterior || '-'}</td></tr>
-                                                <tr><td className="border p-1.5 bg-slate-50 font-bold">Mileage</td><td className="border p-1.5">{formData.mileage ? `${Number(formData.mileage).toLocaleString()} km` : '-'}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine Cap.</td><td className="border p-1.5">{formData.engineSize ? `${formData.engineSize} cc` : '-'}</td></tr>
-                                                <tr><td className="border p-1.5 bg-slate-50 font-bold">Transmission</td><td className="border p-1.5">{formData.transmission === 'Manual' ? 'Manual (手波)' : (formData.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td><td className="border p-1.5 bg-slate-50 font-bold">Seat / Prev.</td><td className="border p-1.5">{formData.seat || '-'} 座 / {formData.previousOwners || '0'} 手</td></tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                <div className="preview-outer">
+                    <div className="preview-inner">
+                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative">
+                            <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
+                                <div className="flex items-center gap-3">
+                                    <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
+                                    <div><h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1><h2 className="text-lg font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2><div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div></div>
                                 </div>
+                                <div className="text-right">
+                                    <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
+                                    <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
+                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
+                                    <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
+                                </div>
+                            </div>
 
-                                {formData.contractPhotos.length > 0 && (
-                                    <div className="mb-3">
-                                        <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
-                                            {formData.contractPhotos.map((url: string, idx: number) => (
-                                                <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
-                                            ))}
+                            {(!isBill) ? (
+                                <>
+                                    <div className="grid grid-cols-3 gap-3 mb-3">
+                                        <div className="col-span-1">
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part A: Customer</div>
+                                            <div className="border border-slate-300 p-2 text-[10px] min-h-[64px] flex flex-col justify-center space-y-1"><p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> {formData.customerName || '(Client)'}</p><p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {formData.customerPhone}</p><p className="truncate"><span className="text-slate-500 font-bold">ID:</span> {formData.customerId}</p></div>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part B: Vehicle Details</div>
+                                            <table className="w-full text-[10px] border-collapse border border-slate-300 min-h-[64px]">
+                                                <tbody>
+                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold w-[16%]">Reg. No.</td><td className="border p-1.5 font-mono font-bold w-[34%] text-[11px]">{formData.regMark || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[16%]">Make/Model</td><td className="border p-1.5 w-[34%] text-[11px] font-bold">{formData.make} {formData.model}</td></tr>
+                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No.</td><td className="border p-1.5 font-mono">{formData.chassisNo || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine No.</td><td className="border p-1.5 font-mono">{formData.engineNo || 'TBC'}</td></tr>
+                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Year</td><td className="border p-1.5">{formData.year}</td><td className="border p-1.5 bg-slate-50 font-bold">Color (Ext/Int)</td><td className="border p-1.5">{formData.color || '-'} / {formData.colorInterior || '-'}</td></tr>
+                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Mileage</td><td className="border p-1.5">{formData.mileage ? `${Number(formData.mileage).toLocaleString()} km` : '-'}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine Cap.</td><td className="border p-1.5">{formData.engineSize ? `${formData.engineSize} cc` : '-'}</td></tr>
+                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Transmission</td><td className="border p-1.5">{formData.transmission === 'Manual' ? 'Manual (手波)' : (formData.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td><td className="border p-1.5 bg-slate-50 font-bold">Seat / Prev.</td><td className="border p-1.5">{formData.seat || '-'} 座 / {formData.previousOwners || '0'} 手</td></tr>
+                                                </tbody>
+                                            </table>
                                         </div>
                                     </div>
-                                )}
 
-                                {hasOrderDetails && (
+                                    {formData.contractPhotos.length > 0 && (
+                                        <div className="mb-3">
+                                            <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
+                                                {formData.contractPhotos.map((url: string, idx: number) => (
+                                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {hasOrderDetails && (
+                                        <div className="mb-3">
+                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part C: Order & Shipping Details (訂購與運輸明細)</div>
+                                            <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                                <tbody>
+                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Order Type (類別)</td><td className="border p-1.5 w-[30%]">{formData.orderType === 'Overseas' ? `Overseas 境外訂購 (${formData.overseasCountry})` : 'Local 本地訂購'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td><td className="border p-1.5 font-bold text-blue-700">{etaDisplay}</td></tr>
+                                                    {formData.orderType === 'Overseas' && (
+                                                        <>
+                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Overseas Charges (預估當地費用)</td></tr>
+                                                            <tr><td colSpan={3} className="border p-1.5 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {overseasOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(ovFee)}</td></tr>
+                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Local Charges (預估到港本地費用)</td></tr>
+                                                            <tr><td colSpan={3} className="border p-1.5 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {localOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(hkFee)}</td></tr>
+                                                        </>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+
                                     <div className="mb-3">
-                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part C: Order & Shipping Details (訂購與運輸明細)</div>
+                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">{partPaymentLabel}</div>
                                         <table className="w-full text-[10px] border-collapse border border-slate-300">
                                             <tbody>
-                                                <tr><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Order Type (類別)</td><td className="border p-1.5 w-[30%]">{formData.orderType === 'Overseas' ? `Overseas 境外訂購 (${formData.overseasCountry})` : 'Local 本地訂購'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td><td className="border p-1.5 font-bold text-blue-700">{etaDisplay}</td></tr>
-                                                {formData.orderType === 'Overseas' && (
-                                                    <>
-                                                        <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Overseas Charges (預估當地費用)</td></tr>
-                                                        <tr><td colSpan={3} className="border p-1.5 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {overseasOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(ovFee)}</td></tr>
-                                                        <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Local Charges (預估到港本地費用)</td></tr>
-                                                        <tr><td colSpan={3} className="border p-1.5 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {localOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(hkFee)}</td></tr>
-                                                    </>
+                                                <tr><td className="border p-1.5 font-bold w-1/2">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(basePrice)}</td></tr>
+                                                {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
+                                                    <tr key={i} className="border-b"><td className="border p-1.5 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1.5 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                ))}
+                                                {depositItems.map((item: any, idx: number) => (
+                                                    <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1.5 font-bold pl-4">Less: {item.label}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(item.amount)}</td></tr>
+                                                ))}
+                                                <tr className="bg-red-50/50 font-black"><td className="border p-1.5 uppercase text-[11px]">Balance Due (總結餘/尾數)</td><td className="border p-1.5 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr>
+                                                
+                                                {formData.isFinance && (
+                                                    <tr className="bg-cyan-50/30 text-[10px]">
+                                                        <td colSpan={2} className="border p-1.5 text-cyan-800">
+                                                            <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
+                                                        </td>
+                                                    </tr>
                                                 )}
                                             </tbody>
                                         </table>
                                     </div>
-                                )}
+                                </>
+                            ) : (
+                                <table className="w-full text-[10px] border-collapse mb-6">
+                                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
+                                    <tbody>
+                                        <tr className="border-b"><td className="p-2 font-bold text-purple-800">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
+                                        {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
+                                            <tr key={i} className="border-b"><td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                        ))}
+                                        {depositItems.map((item: any, idx: number) => (
+                                            <tr key={`dep-${idx}`} className="border-b"><td className="p-2 font-bold text-slate-600">Less: {item.label}{selectedDocType === 'receipt' && idx === depositItems.length - 1 && <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>}</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">{formatCurrency(item.amount)}</td></tr>
+                                        ))}
+                                        {formData.isFinance && (
+                                            <tr className="bg-cyan-50/30 text-[10px]">
+                                                <td colSpan={2} className="p-2 text-cyan-800">
+                                                    <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr></tfoot>
+                                </table>
+                            )}
 
-                                <div className="mb-3">
-                                    <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">{partPaymentLabel}</div>
-                                    <table className="w-full text-[10px] border-collapse border border-slate-300">
-                                        <tbody>
-                                            <tr><td className="border p-1.5 font-bold w-1/2">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(basePrice)}</td></tr>
-                                            {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                <tr key={i} className="border-b"><td className="border p-1.5 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1.5 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
-                                            ))}
-                                            {depositItems.map((item: any, idx: number) => (
-                                                <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1.5 font-bold pl-4">Less: {item.label}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(item.amount)}</td></tr>
-                                            ))}
-                                            <tr className="bg-red-50/50 font-black"><td className="border p-1.5 uppercase text-[11px]">Balance Due (總結餘/尾數)</td><td className="border p-1.5 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr>
-                                            
-                                            {/* ★★★ 動態渲染上會資訊 ★★★ */}
-                                            {formData.isFinance && (
-                                                <tr className="bg-cyan-50/30 text-[10px]">
-                                                    <td colSpan={2} className="border p-1.5 text-cyan-800">
-                                                        <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </>
-                        ) : (
-                            <table className="w-full text-[10px] border-collapse mb-6">
-                                <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
-                                <tbody>
-                                    <tr className="border-b"><td className="p-2 font-bold text-purple-800">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
-                                    {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                        <tr key={i} className="border-b"><td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
-                                    ))}
-                                    {depositItems.map((item: any, idx: number) => (
-                                        <tr key={`dep-${idx}`} className="border-b"><td className="p-2 font-bold text-slate-600">Less: {item.label}{selectedDocType === 'receipt' && idx === depositItems.length - 1 && <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>}</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">{formatCurrency(item.amount)}</td></tr>
-                                    ))}
-                                    {/* ★★★ 動態渲染上會資訊 (發票/收據版) ★★★ */}
-                                    {formData.isFinance && (
-                                        <tr className="bg-cyan-50/30 text-[10px]">
-                                            <td colSpan={2} className="p-2 text-cyan-800">
-                                                <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
-                                            </td>
-                                        </tr>
+                            {selectedDocType === 'receipt' && (
+                                <div className="mb-6 p-2 border border-slate-300 bg-slate-50 rounded"><span className="text-[10px] font-bold">Payment Method:</span> <span className="text-sm font-mono ml-2">{formData.paymentMethod}</span></div>
+                            )}
+
+                            {!isBill && showTerms && (
+                                <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
+                                    {isQuotation ? (
+                                        <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
+                                    ) : (
+                                        <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                        本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                     )}
-                                </tbody>
-                                <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr></tfoot>
-                            </table>
-                        )}
+                                </div>
+                            )}
 
-                        {selectedDocType === 'receipt' && (
-                            <div className="mb-6 p-2 border border-slate-300 bg-slate-50 rounded"><span className="text-[10px] font-bold">Payment Method:</span> <span className="text-sm font-mono ml-2">{formData.paymentMethod}</span></div>
-                        )}
+                            {formData.remarks && (
+                                <div className="mb-3 border border-dashed border-slate-300 p-2 text-[10px] font-mono leading-relaxed bg-slate-50">
+                                    <span className="font-bold text-slate-500">Remarks:</span><p className="mt-1 whitespace-pre-wrap">{formData.remarks}</p>
+                                </div>
+                            )}
+                        </div>
 
-                        {!isBill && showTerms && (
-                            <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
-                                {isQuotation ? (
-                                    <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
-                                ) : (
-                                    <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
-                                    本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
-                                )}
-                            </div>
-                        )}
-
-                        {formData.remarks && (
-                            <div className="mb-3 border border-dashed border-slate-300 p-2 text-[10px] font-mono leading-relaxed bg-slate-50">
-                                <span className="font-bold text-slate-500">Remarks:</span><p className="mt-1 whitespace-pre-wrap">{formData.remarks}</p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="absolute bottom-8 left-8 right-8 bg-transparent pointer-events-none">
-                        <div className="grid grid-cols-2 gap-12 w-full">
-                            <div className="relative pt-1 border-t border-slate-800 text-center">
-                                {showStampAndSig && (
-                                    <>
-                                        <div className="absolute bottom-full translate-y-3 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh} /></div>
-                                        <div className="absolute bottom-full translate-y-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
-                                    </>
-                                )}
-                                <p className="font-bold text-[10px] uppercase mt-1 leading-none">For {formData.companyNameEn}</p>
-                            </div>
-                            <div className="pt-1 border-t border-slate-800 text-center">
-                                <p className="font-bold text-[10px] uppercase mt-1 leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : (isBill ? "Received By" : "Customer Signature")}</p>
+                        <div className="absolute bottom-8 left-8 right-8 bg-transparent pointer-events-none">
+                            <div className="grid grid-cols-2 gap-12 w-full">
+                                <div className="relative pt-1 border-t border-slate-800 text-center">
+                                    {showStampAndSig && (
+                                        <>
+                                            <div className="absolute bottom-full translate-y-3 left-1/2 -translate-x-1/2 opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh} /></div>
+                                            <div className="absolute bottom-full translate-y-2 left-1/2 -translate-x-1/2"><SignatureImg /></div>
+                                        </>
+                                    )}
+                                    <p className="font-bold text-[10px] uppercase mt-1 leading-none">For {formData.companyNameEn}</p>
+                                </div>
+                                <div className="pt-1 border-t border-slate-800 text-center">
+                                    <p className="font-bold text-[10px] uppercase mt-1 leading-none">{isQuotation ? "Client Confirmation (客戶確認)" : (isBill ? "Received By" : "Customer Signature")}</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
+                    </div>
                 </div>
             </div>
         );
-    };
     if (viewMode === 'list') {
         return (
             <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
