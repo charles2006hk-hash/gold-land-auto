@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where, getDocs } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
