@@ -368,10 +368,42 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
     };
 
-    return (
+    // ★★★ 確保這裡緊接在 handleCalculateLoan 的 }; 下方 ★★★
+
+    const LivePreview = () => {
+        const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
+        const isQuotation = selectedDocType === 'quotation';
+        
+        // ★ 核心邏輯：精準計算實時總價與尾數
+        const price = Number(formData.price) || 0;
+        const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0);
+        
+        const ovFee = Number(formData.overseasTotalFee) || 0;
+        const hkFee = Number(formData.localTotalFee) || 0;
+        const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
+        
+        const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
+        const balance = (basePrice + extrasTotal) - deposit;
+
+        const titleMap: any = { 
+            'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' }, 
+            'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' }, 
+            'consignment_contract': { en: 'VEHICLE CONSIGNMENT AGREEMENT', ch: '汽車寄賣合約' }, 
+            'quotation': { en: 'QUOTATION', ch: '報價單' }, 
+            'invoice': { en: 'INVOICE', ch: '發票' }, 
+            'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' } 
+        };
+        const t = titleMap[selectedDocType] || titleMap['sales_contract'];
+        const displayDate = formData.docDate ? new Date(formData.docDate).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB');
+        const hasOrderDetails = (isQuotation || selectedDocType === 'sales_contract') && formData.orderType && formData.orderType !== 'None';
+        const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
+        const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
+
+        return (
             <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
                 <style>{`
-                    /* ★ 終極數學縮放引擎：A4 絕對像素鎖定，徹底解決邊界被切斷 */
+                    /* ★ 終極數學縮放引擎：A4 絕對像素鎖定 (794x1123)，徹底解決邊界被切斷 */
                     :root { --p-scale: 0.42; }
                     @media (min-width: 640px) { :root { --p-scale: 0.55; } }
                     @media (min-width: 768px) { :root { --p-scale: 0.65; } }
@@ -401,7 +433,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                 <div className="preview-outer">
                     <div className="preview-inner">
-                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative">
+                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border">
                             <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
                                 <div className="flex items-center gap-3">
                                     <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
@@ -550,11 +582,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </div>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
         );
+    };
+
+    // ★★★ 確保 if (viewMode === 'list') { 緊接在上面 LivePreview 的 }; 之後 ★★★
     if (viewMode === 'list') {
         return (
             <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
