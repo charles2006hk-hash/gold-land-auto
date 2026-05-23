@@ -403,11 +403,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         return (
             <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
                 <style>{`
-                    :root { --p-scale: 0.42; }
-                    @media (min-width: 640px) { :root { --p-scale: 0.55; } }
-                    @media (min-width: 768px) { :root { --p-scale: 0.65; } }
-                    @media (min-width: 1024px) { :root { --p-scale: 0.75; } }
-                    @media (min-width: 1280px) { :root { --p-scale: 0.85; } }
+                    /* ★ 黃金微縮排版引擎：全面調降縮放比例，防止任何桌面解析度下溢出 */
+                    :root { --p-scale: 0.35; }
+                    @media (min-width: 400px) { :root { --p-scale: 0.38; } }
+                    @media (min-width: 640px) { :root { --p-scale: 0.45; } }
+                    @media (min-width: 768px) { :root { --p-scale: 0.52; } }
+                    @media (min-width: 1024px) { :root { --p-scale: 0.60; } }
+                    @media (min-width: 1280px) { :root { --p-scale: 0.68; } }
+                    @media (min-width: 1536px) { :root { --p-scale: 0.75; } }
                     
                     .preview-outer {
                         width: calc(794px * var(--p-scale));
@@ -415,6 +418,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         position: relative;
                         margin: 0 auto;
                         flex-shrink: 0;
+                        max-w-full;
                     }
                     .preview-inner {
                         width: 794px;
@@ -433,27 +437,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                 <div className="preview-outer">
                     <div className="preview-inner">
-                        {/* ★ 移除 w-[210mm]，改用 w-full，避免物理衝突 */}
                         <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border w-full h-full">
-                            {/* ★ 加入 min-w-0 與 truncate 魔法，防止文字把外框撐破 */}
                             <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 overflow-hidden gap-2">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain flex-shrink-0" onError={(e) => e.currentTarget.style.display='none'} />
                                     <div className="min-w-0">
-                                        <h1 className="text-lg font-black text-slate-900 tracking-wide uppercase truncate">{formData.companyNameEn}</h1>
-                                        <h2 className="text-base font-bold text-slate-700 tracking-widest truncate">{formData.companyNameCh}</h2>
-                                        <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif truncate"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div>
+                                        <h1 className="text-base font-black text-slate-900 tracking-wide uppercase truncate">{formData.companyNameEn}</h1>
+                                        <h2 className="text-sm font-bold text-slate-700 tracking-widest truncate">{formData.companyNameCh}</h2>
+                                        <div className="text-[9px] text-slate-500 mt-0.5 leading-tight font-serif truncate"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div>
                                     </div>
                                 </div>
                                 <div className="text-right flex-shrink-0 pl-2">
-                                    {/* ★ 將 text-[15px] 縮小為 text-sm，tracking-wider 縮為 normal */}
-                                    <div className="text-sm font-black text-slate-800 uppercase tracking-normal border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
-                                    <div className="text-[11px] font-bold text-slate-600 tracking-widest text-center">{t.ch}</div>
-                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
-                                    <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
+                                    <div className="text-xs font-black text-slate-800 uppercase tracking-normal border-b-2 border-slate-800 inline-block mb-0.5">{t.en}</div>
+                                    <div className="text-[10px] font-bold text-slate-600 tracking-wider text-center">{t.ch}</div>
+                                    <div className="mt-0.5 text-[9px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
+                                    <div className="text-[9px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
                                 </div>
                             </div>
-                            
+
                             {(!isBill) ? (
                                 <>
                                     <div className="grid grid-cols-3 gap-3 mb-3">
@@ -479,7 +480,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         <div className="mb-3">
                                             <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
                                                 {formData.contractPhotos.map((url: string, idx: number) => (
-                                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt=\"car-thumb\" /></div>
                                                 ))}
                                             </div>
                                         </div>
