@@ -893,40 +893,49 @@ const TDTaskPackModal = ({ vehicle, onClose }: any) => {
         }
     };
 
+    // ★★★ 運輸署打包單：升級為無痕列印法 (解決 iOS 卡死問題) ★★★
     const handlePrintPack = () => {
         const config = taskConfigs[taskType];
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            alert('請允許瀏覽器彈出視窗以進行列印');
-            return;
-        }
 
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>運輸署辦理打包單 - ${vehicle.regMark}</title>
-                <style>
+        // 1. 建立一個專屬的隱藏列印容器
+        const printContainer = document.createElement('div');
+        printContainer.id = 'print-pack-container';
+
+        // 2. 寫入內容與專屬樣式 (避開新開視窗)
+        printContainer.innerHTML = `
+            <style>
+                /* 列印時隱藏系統背景，只顯示這張單 */
+                @media print {
+                    body > *:not(#print-pack-container) { display: none !important; }
+                    body { background: white !important; margin: 0 !important; padding: 0 !important; }
                     @page { size: A4; margin: 20mm; }
-                    body { font-family: "Helvetica Neue", "Microsoft JhengHei", sans-serif; color: #333; line-height: 1.6; }
-                    .header { border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
-                    .header h1 { margin: 0; color: #1e3a8a; font-size: 24px; }
-                    .header .meta { text-align: right; font-size: 12px; color: #666; }
-                    .section { margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
-                    .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 10px; margin-top: 0; }
-                    table { border-collapse: collapse; width: 100%; font-size: 14px; }
-                    th, td { padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
-                    th { width: 30%; color: #64748b; font-weight: normal; }
-                    td { font-weight: bold; color: #0f172a; }
-                    .checklist { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-                    .checklist li { margin-bottom: 12px; display: flex; align-items: flex-start; }
-                    .checkbox { width: 16px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 12px; margin-top: 2px; flex-shrink: 0; }
-                    .footer { margin-top: 40px; font-size: 12px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-                    .sign-box { margin-top: 30px; display: flex; justify-content: space-between; }
-                    .sign-line { border-bottom: 1px solid #333; width: 200px; margin-top: 40px; text-align: center; padding-bottom: 5px; }
-                </style>
-            </head>
-            <body>
+                    #print-pack-container { display: block !important; width: 100%; }
+
+                    /* 打包單專屬排版 */
+                    .pack-wrapper { font-family: "Helvetica Neue", "Microsoft JhengHei", sans-serif; color: #333; line-height: 1.6; }
+                    .pack-wrapper .header { border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+                    .pack-wrapper .header h1 { margin: 0; color: #1e3a8a; font-size: 24px; }
+                    .pack-wrapper .header .meta { text-align: right; font-size: 12px; color: #666; }
+                    .pack-wrapper .section { margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
+                    .pack-wrapper .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 10px; margin-top: 0; }
+                    .pack-wrapper table { border-collapse: collapse; width: 100%; font-size: 14px; }
+                    .pack-wrapper th, .pack-wrapper td { padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+                    .pack-wrapper th { width: 30%; color: #64748b; font-weight: normal; }
+                    .pack-wrapper td { font-weight: bold; color: #0f172a; }
+                    .pack-wrapper .checklist { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+                    .pack-wrapper .checklist li { margin-bottom: 12px; display: flex; align-items: flex-start; }
+                    .pack-wrapper .checkbox { width: 16px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 12px; margin-top: 2px; flex-shrink: 0; }
+                    .pack-wrapper .footer { margin-top: 40px; font-size: 12px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+                    .pack-wrapper .sign-box { margin-top: 30px; display: flex; justify-content: space-between; }
+                    .pack-wrapper .sign-line { border-bottom: 1px solid #333; width: 200px; margin-top: 40px; text-align: center; padding-bottom: 5px; }
+                }
+                /* 在螢幕上平常是隱藏的 */
+                @media screen {
+                    #print-pack-container { display: none; }
+                }
+            </style>
+
+            <div class="pack-wrapper">
                 <div class="header">
                     <div>
                         <h1>${config.title}</h1>
@@ -975,14 +984,19 @@ const TDTaskPackModal = ({ vehicle, onClose }: any) => {
                 <div class="footer">
                     Gold Land Auto DMS - 自動生成之辦理清單 (內部文件)
                 </div>
+            </div>
+        `;
 
-                <script>
-                    window.onload = function() { window.print(); }
-                </script>
-            </body>
-            </html>
-        `);
-        printWindow.document.close();
+        // 3. 注入畫面中
+        document.body.appendChild(printContainer);
+
+        // 4. 延遲觸發原生列印，印完立刻自動銷毀，不留痕跡！
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                printContainer.remove();
+            }, 500);
+        }, 300);
     };
 
     return (
@@ -2190,75 +2204,87 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
     const expiredCount = alerts.filter(a => a.days < 0).length;
     const warningCount = alerts.length - expiredCount;
 
-    // --- 2. 列印功能 ---
+   // --- 2. 列印功能 (升級為無痕 DOM 替換法，解決 iOS 崩潰) ---
     const handlePrint = () => {
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(`
-                <html>
-                    <head>
-                        <title>Alert Report - Gold Land Auto</title>
-                        <style>
-                            body { font-family: "Helvetica Neue", Arial, sans-serif; padding: 40px; color: #333; }
-                            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-                            h1 { margin: 0 0 5px 0; font-size: 24px; }
-                            p { margin: 0; color: #666; font-size: 12px; }
-                            table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
-                            th, td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; }
-                            th { background-color: #f8f9fa; font-weight: bold; color: #555; }
-                            .section-title { font-size: 14px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #1e40af; padding-left: 8px; }
-                            .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
-                            .tag-general { background: #e0f2fe; color: #0369a1; }
-                            .tag-cb { background: #f3e8ff; color: #7e22ce; }
-                            .danger { color: #dc2626; font-weight: bold; }
-                            .warning { color: #d97706; font-weight: bold; }
-                            .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #999; }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="header">
-                            <h1>Gold Land Auto Limited</h1>
-                            <p>EXPIRY REMINDER REPORT (到期事項監控報表)</p>
-                            <p>Generated: ${new Date().toLocaleString()}</p>
-                        </div>
+        const printContainer = document.createElement('div');
+        printContainer.id = 'print-alert-container';
 
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th width="15%">類別 (Type)</th>
-                                    <th width="20%">車牌 (Plate)</th>
-                                    <th width="30%">到期項目 (Item)</th>
-                                    <th width="20%">到期日 (Date)</th>
-                                    <th width="15%" style="text-align:right">狀態 (Status)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${alerts.map(it => `
-                                    <tr>
-                                        <td><span class="tag ${it.type === 'General' ? 'tag-general' : 'tag-cb'}">${it.type === 'General' ? '車輛文件' : '中港業務'}</span></td>
-                                        <td style="font-family:monospace; font-weight:bold;">${it.regMark}</td>
-                                        <td>${it.item}</td>
-                                        <td style="font-family:monospace;">${it.date}</td>
-                                        <td style="text-align:right" class="${it.days < 0 ? 'danger' : 'warning'}">
-                                            ${it.days < 0 ? `已過期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                        
-                        <div style="margin-top: 20px; font-size: 12px;">
-                            <strong>Summary:</strong> 
-                            <span style="color:#dc2626; margin-right:15px;">Expired: ${expiredCount}</span>
-                            <span style="color:#d97706;">Expiring Soon: ${warningCount}</span>
-                        </div>
-                        <div class="footer">Confidential System Report</div>
-                        <script>window.onload = function() { window.print(); window.close(); }</script>
-                    </body>
-                </html>
-            `);
-            printWindow.document.close();
-        }
+        printContainer.innerHTML = `
+            <style>
+                @media print {
+                    body > *:not(#print-alert-container) { display: none !important; }
+                    body { background: white !important; margin: 0 !important; padding: 0 !important; }
+                    @page { size: A4 portrait; margin: 15mm; }
+                    #print-alert-container { display: block !important; width: 100%; }
+
+                    .alert-wrapper { font-family: "Helvetica Neue", Arial, sans-serif; color: #333; }
+                    .alert-wrapper .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+                    .alert-wrapper h1 { margin: 0 0 5px 0; font-size: 24px; }
+                    .alert-wrapper p { margin: 0; color: #666; font-size: 12px; }
+                    .alert-wrapper table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
+                    .alert-wrapper th, .alert-wrapper td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; }
+                    .alert-wrapper th { background-color: #f8f9fa; font-weight: bold; color: #555; }
+                    .alert-wrapper .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+                    .alert-wrapper .tag-general { background: #e0f2fe; color: #0369a1; }
+                    .alert-wrapper .tag-cb { background: #f3e8ff; color: #7e22ce; }
+                    .alert-wrapper .danger { color: #dc2626; font-weight: bold; }
+                    .alert-wrapper .warning { color: #d97706; font-weight: bold; }
+                    .alert-wrapper .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #999; }
+                }
+                @media screen {
+                    #print-alert-container { display: none; }
+                }
+            </style>
+
+            <div class="alert-wrapper">
+                <div class="header">
+                    <h1>Gold Land Auto Limited</h1>
+                    <p>EXPIRY REMINDER REPORT (到期事項監控報表)</p>
+                    <p>Generated: ${new Date().toLocaleString()}</p>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="15%">類別 (Type)</th>
+                            <th width="20%">車牌 (Plate)</th>
+                            <th width="30%">到期項目 (Item)</th>
+                            <th width="20%">到期日 (Date)</th>
+                            <th width="15%" style="text-align:right">狀態 (Status)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${alerts.map(it => `
+                            <tr>
+                                <td><span class="tag ${it.type === 'General' ? 'tag-general' : 'tag-cb'}">${it.type === 'General' ? '車輛文件' : '中港業務'}</span></td>
+                                <td style="font-family:monospace; font-weight:bold;">${it.regMark}</td>
+                                <td>${it.item}</td>
+                                <td style="font-family:monospace;">${it.date}</td>
+                                <td style="text-align:right" class="${it.days < 0 ? 'danger' : 'warning'}">
+                                    ${it.days < 0 ? `已過期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 20px; font-size: 12px;">
+                    <strong>Summary:</strong> 
+                    <span style="color:#dc2626; margin-right:15px;">Expired: ${expiredCount}</span>
+                    <span style="color:#d97706;">Expiring Soon: ${warningCount}</span>
+                </div>
+                <div class="footer">Confidential System Report</div>
+            </div>
+        `;
+
+        document.body.appendChild(printContainer);
+
+        setTimeout(() => {
+            window.print();
+            setTimeout(() => {
+                printContainer.remove();
+            }, 500);
+        }, 300);
     };
 
     return (
