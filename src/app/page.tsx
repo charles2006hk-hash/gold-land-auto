@@ -893,110 +893,61 @@ const TDTaskPackModal = ({ vehicle, onClose }: any) => {
         }
     };
 
-    // ★★★ 運輸署打包單：升級為無痕列印法 (解決 iOS 卡死問題) ★★★
-    const handlePrintPack = () => {
+   const handlePrintPack = () => {
         const config = taskConfigs[taskType];
-
-        // 1. 建立一個專屬的隱藏列印容器
-        const printContainer = document.createElement('div');
-        printContainer.id = 'print-pack-container';
-
-        // 2. 寫入內容與專屬樣式 (避開新開視窗)
-        printContainer.innerHTML = `
-            <style>
-                /* 列印時隱藏系統背景，只顯示這張單 */
-                @media print {
-                    body > *:not(#print-pack-container) { display: none !important; }
-                    body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    @page { size: A4; margin: 20mm; }
-                    #print-pack-container { display: block !important; width: 100%; }
-
-                    /* 打包單專屬排版 */
-                    .pack-wrapper { font-family: "Helvetica Neue", "Microsoft JhengHei", sans-serif; color: #333; line-height: 1.6; }
-                    .pack-wrapper .header { border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
-                    .pack-wrapper .header h1 { margin: 0; color: #1e3a8a; font-size: 24px; }
-                    .pack-wrapper .header .meta { text-align: right; font-size: 12px; color: #666; }
-                    .pack-wrapper .section { margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
-                    .pack-wrapper .section-title { font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 10px; margin-top: 0; }
-                    .pack-wrapper table { border-collapse: collapse; width: 100%; font-size: 14px; }
-                    .pack-wrapper th, .pack-wrapper td { padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; }
-                    .pack-wrapper th { width: 30%; color: #64748b; font-weight: normal; }
-                    .pack-wrapper td { font-weight: bold; color: #0f172a; }
-                    .pack-wrapper .checklist { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-                    .pack-wrapper .checklist li { margin-bottom: 12px; display: flex; align-items: flex-start; }
-                    .pack-wrapper .checkbox { width: 16px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 12px; margin-top: 2px; flex-shrink: 0; }
-                    .pack-wrapper .footer { margin-top: 40px; font-size: 12px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-                    .pack-wrapper .sign-box { margin-top: 30px; display: flex; justify-content: space-between; }
-                    .pack-wrapper .sign-line { border-bottom: 1px solid #333; width: 200px; margin-top: 40px; text-align: center; padding-bottom: 5px; }
-                }
-                /* 在螢幕上平常是隱藏的 */
-                @media screen {
-                    #print-pack-container { display: none; }
-                }
-            </style>
-
-            <div class="pack-wrapper">
-                <div class="header">
+        const htmlContent = `
+            <div style="padding: 20mm; font-family: 'Helvetica Neue', 'Microsoft JhengHei', sans-serif; line-height: 1.6;">
+                <div style="border-bottom: 3px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end;">
                     <div>
-                        <h1>${config.title}</h1>
+                        <h1 style="margin: 0; color: #1e3a8a; font-size: 24px;">${config.title}</h1>
                         <p style="margin: 5px 0 0 0; font-weight: bold; font-size: 18px;">車牌號碼: ${vehicle.regMark || '未出牌'}</p>
                     </div>
-                    <div class="meta">
+                    <div style="text-align: right; font-size: 12px; color: #666;">
                         列印日期: ${new Date().toLocaleDateString('zh-HK')}<br/>
                         系統編號: ${vehicle.id ? vehicle.id.substring(0, 8).toUpperCase() : 'N/A'}
                     </div>
                 </div>
 
-                <div class="section">
-                    <h3 class="section-title">車輛與車主預填資料 (Vehicle & Owner Info)</h3>
-                    <table>
-                        <tr><th>廠牌及型號 (Make & Model)</th><td>${vehicle.make || '-'} ${vehicle.model || '-'}</td></tr>
-                        <tr><th>製造年份 (Year of Mfg)</th><td>${vehicle.year || '-'}</td></tr>
-                        <tr><th>底盤號碼 (Chassis No.)</th><td style="font-family: monospace;">${vehicle.chassisNo || '-'}</td></tr>
-                        <tr><th>引擎號碼 (Engine No.)</th><td style="font-family: monospace;">${vehicle.engineNo || '-'}</td></tr>
-                        <tr><th>登記車主 (Registered Owner)</th><td>${vehicle.registeredOwnerName || vehicle.customerName || '-'}</td></tr>
-                        <tr><th>身份證/公司編號 (ID/CI No.)</th><td>${vehicle.registeredOwnerId || vehicle.customerID || '-'}</td></tr>
-                        <tr><th>車主地址 (Address)</th><td>${vehicle.customerAddress || '-'}</td></tr>
+                <div style="margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px;">
+                    <h3 style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 10px; margin-top: 0;">車輛與車主預填資料 (Vehicle & Owner Info)</h3>
+                    <table style="border-collapse: collapse; width: 100%; font-size: 14px;">
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; width: 30%; color: #64748b; font-weight: normal;">廠牌及型號 (Make & Model)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a;">${vehicle.make || '-'} ${vehicle.model || '-'}</td></tr>
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; color: #64748b; font-weight: normal;">製造年份 (Year of Mfg)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a;">${vehicle.year || '-'}</td></tr>
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; color: #64748b; font-weight: normal;">底盤號碼 (Chassis No.)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a; font-family: monospace;">${vehicle.chassisNo || '-'}</td></tr>
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; color: #64748b; font-weight: normal;">引擎號碼 (Engine No.)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a; font-family: monospace;">${vehicle.engineNo || '-'}</td></tr>
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; color: #64748b; font-weight: normal;">登記車主 (Registered Owner)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a;">${vehicle.registeredOwnerName || vehicle.customerName || '-'}</td></tr>
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; color: #64748b; font-weight: normal;">身份證/公司編號 (ID/CI No.)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a;">${vehicle.registeredOwnerId || vehicle.customerID || '-'}</td></tr>
+                        <tr><th style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; color: #64748b; font-weight: normal;">車主地址 (Address)</th><td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: left; font-weight: bold; color: #0f172a;">${vehicle.customerAddress || '-'}</td></tr>
                     </table>
                 </div>
 
-                <div class="section">
-                    <h3 class="section-title">必須攜帶文件清單 (Required Documents Checklist)</h3>
-                    <ul class="checklist">
-                        ${config.docs.map((doc: string) => `<li><div class="checkbox"></div><span>${doc}</span></li>`).join('')}
+                <div style="margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px;">
+                    <h3 style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #1e40af; border-left: 4px solid #3b82f6; padding-left: 10px; margin-top: 0;">必須攜帶文件清單 (Required Documents Checklist)</h3>
+                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 14px;">
+                        ${config.docs.map((doc: string) => `<li style="margin-bottom: 12px; display: flex; align-items: flex-start;"><div style="width: 16px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 12px; margin-top: 2px; flex-shrink: 0;"></div><span>${doc}</span></li>`).join('')}
                     </ul>
                     <div style="margin-top: 15px; padding: 10px; background-color: #f8fafc; border-radius: 4px; font-size: 12px; border-left: 3px solid #f59e0b;">
                         <strong>政府規費預算:</strong> ${config.fee} (請備妥足夠現金或支票)
                     </div>
                 </div>
 
-                <div class="sign-box">
+                <div style="margin-top: 30px; display: flex; justify-content: space-between;">
                     <div>
-                        <div class="sign-line"></div>
+                        <div style="border-bottom: 1px solid #333; width: 200px; margin-top: 40px; text-align: center; padding-bottom: 5px;"></div>
                         <div>負責同事簽收 (Handled By)</div>
                     </div>
                     <div>
-                        <div class="sign-line"></div>
+                        <div style="border-bottom: 1px solid #333; width: 200px; margin-top: 40px; text-align: center; padding-bottom: 5px;"></div>
                         <div>日期 (Date)</div>
                     </div>
                 </div>
 
-                <div class="footer">
+                <div style="margin-top: 40px; font-size: 12px; text-align: center; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px;">
                     Gold Land Auto DMS - 自動生成之辦理清單 (內部文件)
                 </div>
             </div>
         `;
-
-        // 3. 注入畫面中
-        document.body.appendChild(printContainer);
-
-        // 4. 延遲觸發原生列印，印完立刻自動銷毀，不留痕跡！
-        setTimeout(() => {
-            window.print();
-            setTimeout(() => {
-                printContainer.remove();
-            }, 500);
-        }, 300);
+        triggerSmartPrint(htmlContent, `TD_Pack_${vehicle.regMark}`);
     };
 
     return (
@@ -2204,63 +2155,35 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
     const expiredCount = alerts.filter(a => a.days < 0).length;
     const warningCount = alerts.length - expiredCount;
 
-   // --- 2. 列印功能 (升級為無痕 DOM 替換法，解決 iOS 崩潰) ---
-    const handlePrint = () => {
-        const printContainer = document.createElement('div');
-        printContainer.id = 'print-alert-container';
-
-        printContainer.innerHTML = `
-            <style>
-                @media print {
-                    body > *:not(#print-alert-container) { display: none !important; }
-                    body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    @page { size: A4 portrait; margin: 15mm; }
-                    #print-alert-container { display: block !important; width: 100%; }
-
-                    .alert-wrapper { font-family: "Helvetica Neue", Arial, sans-serif; color: #333; }
-                    .alert-wrapper .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
-                    .alert-wrapper h1 { margin: 0 0 5px 0; font-size: 24px; }
-                    .alert-wrapper p { margin: 0; color: #666; font-size: 12px; }
-                    .alert-wrapper table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; }
-                    .alert-wrapper th, .alert-wrapper td { border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; }
-                    .alert-wrapper th { background-color: #f8f9fa; font-weight: bold; color: #555; }
-                    .alert-wrapper .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
-                    .alert-wrapper .tag-general { background: #e0f2fe; color: #0369a1; }
-                    .alert-wrapper .tag-cb { background: #f3e8ff; color: #7e22ce; }
-                    .alert-wrapper .danger { color: #dc2626; font-weight: bold; }
-                    .alert-wrapper .warning { color: #d97706; font-weight: bold; }
-                    .alert-wrapper .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #999; }
-                }
-                @media screen {
-                    #print-alert-container { display: none; }
-                }
-            </style>
-
-            <div class="alert-wrapper">
-                <div class="header">
-                    <h1>Gold Land Auto Limited</h1>
-                    <p>EXPIRY REMINDER REPORT (到期事項監控報表)</p>
-                    <p>Generated: ${new Date().toLocaleString()}</p>
+   const handlePrint = () => {
+        const htmlContent = `
+            <div style="padding: 40px; font-family: 'Helvetica Neue', Arial, sans-serif; color: #333;">
+                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px;">
+                    <h1 style="margin: 0 0 5px 0; font-size: 24px;">Gold Land Auto Limited</h1>
+                    <p style="margin: 0; color: #666; font-size: 12px;">EXPIRY REMINDER REPORT (到期事項監控報表)</p>
+                    <p style="margin: 0; color: #666; font-size: 12px;">Generated: ${new Date().toLocaleString()}</p>
                 </div>
 
-                <table>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px;">
                     <thead>
                         <tr>
-                            <th width="15%">類別 (Type)</th>
-                            <th width="20%">車牌 (Plate)</th>
-                            <th width="30%">到期項目 (Item)</th>
-                            <th width="20%">到期日 (Date)</th>
-                            <th width="15%" style="text-align:right">狀態 (Status)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 15%;">類別 (Type)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">車牌 (Plate)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 30%;">到期項目 (Item)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">到期日 (Date)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: right; background-color: #f8f9fa; font-weight: bold; color: #555; width: 15%;">狀態 (Status)</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${alerts.map(it => `
                             <tr>
-                                <td><span class="tag ${it.type === 'General' ? 'tag-general' : 'tag-cb'}">${it.type === 'General' ? '車輛文件' : '中港業務'}</span></td>
-                                <td style="font-family:monospace; font-weight:bold;">${it.regMark}</td>
-                                <td>${it.item}</td>
-                                <td style="font-family:monospace;">${it.date}</td>
-                                <td style="text-align:right" class="${it.days < 0 ? 'danger' : 'warning'}">
+                                <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left;">
+                                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; ${it.type === 'General' ? 'background: #e0f2fe; color: #0369a1;' : 'background: #f3e8ff; color: #7e22ce;'}">${it.type === 'General' ? '車輛文件' : '中港業務'}</span>
+                                </td>
+                                <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; font-family:monospace; font-weight:bold;">${it.regMark}</td>
+                                <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left;">${it.item}</td>
+                                <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; font-family:monospace;">${it.date}</td>
+                                <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: right; font-weight: bold; color: ${it.days < 0 ? '#dc2626' : '#d97706'};">
                                     ${it.days < 0 ? `已過期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
                                 </td>
                             </tr>
@@ -2273,20 +2196,11 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                     <span style="color:#dc2626; margin-right:15px;">Expired: ${expiredCount}</span>
                     <span style="color:#d97706;">Expiring Soon: ${warningCount}</span>
                 </div>
-                <div class="footer">Confidential System Report</div>
+                <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #999;">Confidential System Report</div>
             </div>
         `;
-
-        document.body.appendChild(printContainer);
-
-        setTimeout(() => {
-            window.print();
-            setTimeout(() => {
-                printContainer.remove();
-            }, 500);
-        }, 300);
+        triggerSmartPrint(htmlContent, 'Alert_Report');
     };
-
     return (
         <>
             {/* 1. Header Button (鈴鐺) */}
@@ -2532,7 +2446,66 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
     );
 };
 
+// ------------------------------------------------------------------
+// ★★★ 終極跨平台無痕列印引擎 (徹底解決 iOS Safari 白紙/當機問題) ★★★
+// ------------------------------------------------------------------
+export const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
+    const isMobile = window.innerWidth < 768;
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
+    
+    const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${title}</title>
+            ${styles}
+            <style>
+                @page { margin: 0; size: A4 portrait; }
+                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .print-container { width: 794px; min-height: 1123px; margin: 0 auto; box-sizing: border-box; background: white; overflow: hidden; position: relative; }
+                /* 強制取消所有隱藏限制，讓 iOS Safari 100% 讀取到畫面 */
+                body * { visibility: visible !important; display: block; }
+                script { display: none !important; }
+            </style>
+        </head>
+        <body>
+            <div class="print-container">
+                ${htmlContent}
+            </div>
+            ${!isMobile ? '<script>window.onload = () => { setTimeout(() => { window.print(); }, 800); };</script>' : ''}
+        </body>
+        </html>
+    `;
 
+    if (isMobile) {
+        // ★ iOS 終極防當解法：打包成 Blob 在新分頁打開，讓用戶用系統原生 Share -> Print，完美避開記憶體崩潰
+        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    } else {
+        // 電腦版：使用隱藏 Iframe 無痕列印，畫面完全不會閃爍
+        let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'smart-print-iframe';
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+        }
+        const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+        if (iframeDoc) {
+            iframeDoc.open();
+            iframeDoc.write(fullHtml);
+            iframeDoc.close();
+        }
+    }
+};
 
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
@@ -2749,50 +2722,12 @@ export default function GoldLandAutoDMS() {
 
   const printAreaRef = useRef<HTMLDivElement>(null);
   
-  // ★★★ 終極修復 iOS 手機列印空白問題 ★★★
+  // ★ 套用智能列印引擎
   const handlePrint = () => {
-      const isMobile = window.innerWidth < 768;
-      
-      if (isMobile) {
-          // 手機版：提取乾淨的 HTML 在新視窗列印，避開 iOS 所有排版地雷
-          const printRoot = document.getElementById('print-root');
-          if (printRoot) {
-              const printWindow = window.open('', '_blank');
-              if (printWindow) {
-                  // 複製所有的 CSS 樣式
-                  const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
-                  printWindow.document.write(`
-                      <!DOCTYPE html>
-                      <html>
-                      <head>
-                          <title>列印單據</title>
-                          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                          ${styles}
-                          <style>
-                              @page { size: A4 portrait; margin: 0; }
-                              body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                              /* 強制還原靜態排版，防止變成截圖或白紙 */
-                              #print-root { position: static !important; width: 100% !important; min-height: 100% !important; margin: 0 auto !important; padding: 10mm 12mm !important; box-shadow: none !important; transform: none !important; zoom: 1 !important; left: auto !important; top: auto !important; }
-                              @media print { body * { visibility: visible !important; } }
-                          </style>
-                      </head>
-                      <body>
-                          ${printRoot.outerHTML}
-                          <script>
-                              // 等待圖片與字體載入後自動喚醒列印/PDF選項
-                              setTimeout(() => { window.print(); }, 800);
-                          </script>
-                      </body>
-                      </html>
-                  `);
-                  printWindow.document.close();
-                  return;
-              }
-          }
+      const printRoot = document.getElementById('print-root');
+      if (printRoot) {
+          triggerSmartPrint(printRoot.outerHTML, 'Vehicle_Document');
       }
-      
-      // 桌面版維持原生列印
-      window.print();
   };
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
