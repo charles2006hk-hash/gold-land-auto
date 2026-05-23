@@ -394,10 +394,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
-                {/* ★ 響應式完美縮放引擎：手機縮至50%(扣減148mm空白)，電腦縮至70%(扣減89mm空白) */}
+            <div className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden flex justify-center items-start pt-4 pb-12 custom-scrollbar">
+                {/* ★ 響應式完美縮放引擎：手機縮至45%(防止左右被裁切)，電腦縮至70%，並強制置中 */}
                 <div 
-                    className="bg-white shadow-2xl relative overflow-hidden shrink-0 origin-top transform scale-[0.5] md:scale-[0.7] -mb-[148mm] md:-mb-[89mm] transition-transform" 
+                    className="bg-white shadow-2xl relative overflow-hidden shrink-0 origin-top transform scale-[0.45] sm:scale-[0.5] md:scale-[0.7] -mb-[163mm] sm:-mb-[148mm] md:-mb-[89mm] transition-transform mx-auto" 
                     style={{ width: '210mm', height: '297mm' }}
                 >
                     <div className="p-8 font-sans text-slate-900 h-full pb-[38mm]">
