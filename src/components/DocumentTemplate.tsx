@@ -78,12 +78,10 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const PrintStyle = () => (
         <style>{`
             @media print {
-                @page { margin: 5mm; size: A4; }
-                body { margin: 0; padding: 0; background: white; }
-                body * { visibility: hidden; }
-                #print-root, #print-root * { visibility: visible; }
-                #print-root { position: absolute; left: 0; top: 0; width: 100%; height: 287mm; margin: 0; padding: 0; overflow: hidden; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                @page { margin: 0; size: A4 portrait; }
+                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                /* 移除絕對定位，徹底解決 iOS 手機列印吐白紙的問題 */
+                #print-root { position: static !important; width: 100% !important; height: auto !important; margin: 0 !important; padding: 8mm !important; overflow: visible !important; box-shadow: none !important; }
             }
             .no-break { break-inside: avoid; page-break-inside: avoid; }
         `}</style>
@@ -145,7 +143,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         const etaDisplay = (activeVehicle as any).etaFormat === 'days' ? `${(activeVehicle as any).etaDays || '___'} Days (天)` : ((activeVehicle as any).etaDate || 'TBC (待定)');
 
         return (
-            <div id="print-root" className="max-w-[210mm] mx-auto bg-white h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:h-[287mm] overflow-hidden">
+            <div id="print-root" className="max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto overflow-hidden box-border">
                 <PrintStyle />
                 
                 {/* 內容區：給予底部 pb-[35mm] 讓出空間給絕對定位的簽名 */}
@@ -260,7 +258,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     }
 
     return (
-        <div id="print-root" className="max-w-[210mm] mx-auto bg-white h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:h-[287mm] overflow-hidden">
+        <div id="print-root" className="max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto overflow-hidden box-border">
             <PrintStyle />
             
             <div className="p-8 print:p-0 pb-[38mm] print:pb-[38mm] h-full">
