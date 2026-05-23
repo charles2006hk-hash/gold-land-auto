@@ -79,9 +79,35 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         <style>{`
             @media print {
                 @page { margin: 0; size: A4 portrait; }
-                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                /* 移除絕對定位，徹底解決 iOS 手機列印吐白紙的問題 */
-                #print-root { position: static !important; width: 100% !important; height: auto !important; margin: 0 !important; padding: 8mm !important; overflow: visible !important; box-shadow: none !important; }
+                /* ★ 徹底打破 iOS Safari 的外層限制，防止變成截圖或白紙 */
+                html, body, #__next, main { 
+                    height: auto !important; 
+                    min-height: 0 !important;
+                    overflow: visible !important; 
+                    position: static !important; 
+                    background: white !important;
+                }
+                /* 隱藏網頁上不需要的元素 */
+                body * { visibility: hidden; }
+                
+                /* 釋放列印區塊，強制置頂滿版 */
+                #print-root, #print-root * { visibility: visible; }
+                #print-root { 
+                    position: absolute !important; 
+                    left: 0 !important; 
+                    top: 0 !important; 
+                    width: 210mm !important; 
+                    min-height: 297mm !important; 
+                    height: auto !important;
+                    margin: 0 !important; 
+                    padding: 10mm !important; 
+                    overflow: visible !important; 
+                    box-shadow: none !important; 
+                    border: none !important;
+                    background: white !important;
+                    z-index: 99999 !important;
+                }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
             .no-break { break-inside: avoid; page-break-inside: avoid; }
         `}</style>
@@ -143,7 +169,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         const etaDisplay = (activeVehicle as any).etaFormat === 'days' ? `${(activeVehicle as any).etaDays || '___'} Days (天)` : ((activeVehicle as any).etaDate || 'TBC (待定)');
 
         return (
-            <div id="print-root" className="max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:w-full print:max-w-none print:min-h-0 print:h-auto overflow-hidden box-border">
+            <div id="print-root" className="max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg print:shadow-none print:overflow-visible overflow-hidden box-border">
                 <PrintStyle />
                 
                 {/* 內容區：給予底部 pb-[35mm] 讓出空間給絕對定位的簽名 */}
