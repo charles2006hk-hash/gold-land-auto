@@ -394,8 +394,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            <div className="w-full h-full bg-gray-300 overflow-hidden flex justify-center pt-4 relative">
-                <div className="bg-white shadow-2xl origin-top relative overflow-hidden" style={{ width: '210mm', height: '297mm', transform: 'scale(0.8)', marginBottom: '-40%' }}>
+            <div className="w-full h-full bg-slate-200 overflow-auto flex justify-center items-start pt-4 pb-12 custom-scrollbar">
+                {/* ★ 響應式完美縮放引擎：手機縮至50%(扣減148mm空白)，電腦縮至70%(扣減89mm空白) */}
+                <div 
+                    className="bg-white shadow-2xl relative overflow-hidden shrink-0 origin-top transform scale-[0.5] md:scale-[0.7] -mb-[148mm] md:-mb-[89mm] transition-transform" 
+                    style={{ width: '210mm', height: '297mm' }}
+                >
                     <div className="p-8 font-sans text-slate-900 h-full pb-[38mm]">
                         <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
                             <div className="flex items-center gap-3">
@@ -596,18 +600,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-slate-50/50">
+                <div className="flex-1 overflow-y-auto bg-slate-50/50 p-0 md:p-2">
                     {filteredDocHistory.length === 0 ? <div className="text-center text-slate-400 py-10">找不到符合過濾條件的紀錄</div> : (
-                        <table className="w-full text-sm text-left border-collapse bg-white shadow-sm">
-                            <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
-                                <tr>
-                                    <th className="p-3 w-28">單據日期</th>
-                                    <th className="p-3 w-32">單據類型</th>
-                                    <th className="p-3">摘要內容</th>
-                                    <th className="p-3 text-right w-32">總金額</th>
-                                    <th className="p-3 text-right w-24">操作</th>
-                                </tr>
-                            </thead>
+                        <div className="w-full overflow-x-auto rounded-lg"> {/* ★ 包上一層 overflow-x-auto */}
+                            <table className="w-full min-w-[800px] text-sm text-left border-collapse bg-white shadow-sm"> {/* ★ 加上 min-w-[800px] */}
+                                <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
+                                    <tr>
+                                        <th className="p-3 w-28">單據日期</th>
+                                        <th className="p-3 w-32">單據類型</th>
+                                        <th className="p-3">摘要內容</th>
+                                        <th className="p-3 text-right w-32">總金額</th>
+                                        <th className="p-3 text-right w-24">操作</th>
+                                    </tr>
+                                </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredDocHistory.map((doc: any) => {
                                     const typeMap: Record<string, string> = {
