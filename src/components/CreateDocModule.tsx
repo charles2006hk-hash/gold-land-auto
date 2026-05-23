@@ -401,30 +401,27 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
         return (
-            // ★ 加入 overflow-x-hidden 徹底關閉左右滾動
-            <div className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex flex-col items-center">
+            // ★ 1. 移除 flex 限制，恢復 overflow-auto，讓畫面可以自由左右滑動而不被切斷
+            <div className="w-full h-full bg-slate-200 overflow-auto pt-4 pb-12 custom-scrollbar">
                 <style>{`
-                    /* ★ 終極微縮排版：針對三欄式介面，大幅調降桌面版的縮放比例，保證 100% 完整顯示 */
-                    :root { --p-scale: 0.35; }
-                    @media (min-width: 400px) { :root { --p-scale: 0.38; } }
-                    @media (min-width: 640px) { :root { --p-scale: 0.42; } }
-                    @media (min-width: 768px) { :root { --p-scale: 0.40; } } /* 平板雙欄 */
-                    @media (min-width: 1024px) { :root { --p-scale: 0.46; } } /* 桌面三欄 */
-                    @media (min-width: 1280px) { :root { --p-scale: 0.52; } }
-                    @media (min-width: 1536px) { :root { --p-scale: 0.60; } }
+                    /* ★ 2. 恢復舒適的縮放比例 */
+                    :root { --p-scale: 0.42; }
+                    @media (min-width: 640px) { :root { --p-scale: 0.55; } }
+                    @media (min-width: 768px) { :root { --p-scale: 0.55; } }
+                    @media (min-width: 1024px) { :root { --p-scale: 0.65; } }
+                    @media (min-width: 1280px) { :root { --p-scale: 0.75; } }
                     
                     .preview-outer {
                         width: calc(794px * var(--p-scale));
                         height: calc(1123px * var(--p-scale));
                         position: relative;
-                        margin: 0 auto;
-                        flex-shrink: 0;
+                        margin: 0 auto; /* 傳統置中，不切斷邊界 */
                     }
                     .preview-inner {
                         width: 794px;
                         height: 1123px;
                         transform: scale(var(--p-scale));
-                        transform-origin: top center;
+                        transform-origin: top left; /* ★ 3. 兇手在此：必須是 top left 才不會往右偏移撐破！ */
                         position: absolute;
                         top: 0;
                         left: 0;
@@ -437,16 +434,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                 <div className="preview-outer">
                     <div className="preview-inner">
-                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border w-full h-full">
-                            <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 overflow-hidden gap-2">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain flex-shrink-0" onError={(e) => e.currentTarget.style.display='none'} />
-                                    <div className="min-w-0">
-                                        <h1 className="text-base font-black text-slate-900 tracking-wide uppercase truncate">{formData.companyNameEn}</h1>
-                                        <h2 className="text-sm font-bold text-slate-700 tracking-widest truncate">{formData.companyNameCh}</h2>
-                                        <div className="text-[9px] text-slate-500 mt-0.5 leading-tight font-serif truncate"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div>
-                                    </div>
+                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border">
+                            <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
+                                <div className="flex items-center gap-3">
+                                    <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'} />
+                                    <div><h1 className="text-xl font-black text-slate-900 tracking-wide uppercase">{formData.companyNameEn}</h1><h2 className="text-lg font-bold text-slate-700 tracking-widest">{formData.companyNameCh}</h2><div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div></div>
                                 </div>
+                                <div className="text-right">
+                                    <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
+                                    <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
+                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
+                                    <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
+                                </div>
+                            </div>
                                 <div className="text-right flex-shrink-0 pl-2">
                                     <div className="text-xs font-black text-slate-800 uppercase tracking-normal border-b-2 border-slate-800 inline-block mb-0.5">{t.en}</div>
                                     <div className="text-[10px] font-bold text-slate-600 tracking-wider text-center">{t.ch}</div>
