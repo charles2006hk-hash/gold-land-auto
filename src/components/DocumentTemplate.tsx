@@ -34,7 +34,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const itemsToRender = (activeVehicle as any).selectedItems || [];
     const depositItems = (activeVehicle as any).depositItems || []; 
     const showTerms = (activeVehicle as any).showTerms !== false;
-    const showAttachments = (activeVehicle as any).showAttachments !== false; // ★ 讀取開關
+    const showAttachments = (activeVehicle as any).showAttachments !== false;
     const checklist = (activeVehicle as any).checklist || { vrd: false, keys: false, tools: false, manual: false, other: '' };
     const displayId = (activeVehicle.id || 'DRAFT').slice(0, 6).toUpperCase();
     
@@ -49,7 +49,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const companyCh = COMPANY_INFO?.name_ch || '金田汽車';
     const curCustomer = { name: activeVehicle.customerName || '', phone: activeVehicle.customerPhone || '', hkid: activeVehicle.customerID || '', address: activeVehicle.customerAddress || '' };
 
-    // ★★★ 核心邏輯重構：精準計算實時總價與尾數 ★★★
     const price = Number(activeVehicle.price) || 0;
     const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
     const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
@@ -59,7 +58,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
     const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
     
-    // 尾款 = (車價 + 附加費) - 訂金
     const balance = (basePrice + extrasTotal) - totalPaid;
     
     const showStampAndSig = (activeVehicle as any).showStampAndSig !== false;
@@ -75,30 +73,53 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     else if (activeType === 'invoice') { docTitleEn = "INVOICE"; docTitleCh = "發票"; } 
     else if (activeType === 'receipt') { docTitleEn = "OFFICIAL RECEIPT"; docTitleCh = "正式收據"; }
 
+    // ★ 終極列印樣式解鎖：徹底打破 iOS Safari 的外層限制
     const PrintStyle = () => (
-        <style>{`
+        <style dangerouslySetInnerHTML={{ __html: `
             @media print {
                 @page { margin: 0; size: A4 portrait; }
-                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                html, body, #__next, main { 
+                    height: auto !important; 
+                    min-height: 100% !important;
+                    overflow: visible !important; 
+                    position: static !important; 
+                    background: white !important;
+                }
+                body * { visibility: hidden; }
+                #print-root, #print-root * { visibility: visible; }
+                #print-root { 
+                    position: absolute !important; 
+                    top: 0 !important; 
+                    left: 0 !important; 
+                    width: 794px !important; 
+                    min-height: 1123px !important;
+                    margin: 0 auto !important; 
+                    padding: 0 !important; 
+                    overflow: hidden !important; 
+                    background: white !important;
+                    box-shadow: none !important; 
+                    border: none !important;
+                }
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
             .no-break { break-inside: avoid; page-break-inside: avoid; }
-        `}</style>
+        `}} />
     );
 
+    // ★ 加入 min-w-0 與 truncate 防止標題撐破，字體稍微調細以適應 A4
     const HeaderSection = () => (
         <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 gap-4 overflow-hidden">
-            <div className="flex items-center gap-3 shrink-0">
-                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
-                <div>
-                    <h1 className="text-lg font-black text-slate-900 tracking-wide uppercase leading-none">{companyEn}</h1>
-                    <h2 className="text-base font-bold text-slate-700 tracking-widest leading-tight mt-1">{companyCh}</h2>
-                    <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif"><p>{COMPANY_INFO?.address_ch || ''}</p><p>Tel: {COMPANY_INFO?.phone || ''} | Email: {COMPANY_INFO?.email || ''}</p></div>
+            <div className="flex items-center gap-3 shrink-0 min-w-0">
+                <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-14 h-14 object-contain flex-shrink-0" onError={(e) => { e.currentTarget.style.display='none'; }} />
+                <div className="min-w-0">
+                    <h1 className="text-lg font-black text-slate-900 tracking-wide uppercase leading-none truncate">{companyEn}</h1>
+                    <h2 className="text-base font-bold text-slate-700 tracking-widest leading-tight mt-1 truncate">{companyCh}</h2>
+                    <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif truncate"><p>{COMPANY_INFO?.address_ch || ''}</p><p>Tel: {COMPANY_INFO?.phone || ''} | Email: {COMPANY_INFO?.email || ''}</p></div>
                 </div>
             </div>
-            <div className="text-right shrink-0">
-                {/* ★ 同樣縮小字體與字距，完美適應 A4 寬度 */}
-                <div className="text-[15px] font-black text-slate-800 uppercase tracking-wider border-b-2 border-slate-800 inline-block mb-1">{docTitleEn}</div>
-                <div className="text-[11px] font-bold text-slate-600 tracking-[0.2em] text-center">{docTitleCh}</div>
+            <div className="text-right flex-shrink-0 pl-2">
+                <div className="text-sm font-black text-slate-800 uppercase tracking-normal border-b-2 border-slate-800 inline-block mb-1">{docTitleEn}</div>
+                <div className="text-[11px] font-bold text-slate-600 tracking-widest text-center">{docTitleCh}</div>
                 <div className="mt-1 text-[10px] font-mono">NO: {activeType.slice(0,3).toUpperCase()}-{today.replace(/\//g,'')}-{displayId}</div>
                 <div className="text-[10px] font-mono font-bold text-blue-800 uppercase">DATE: {today}</div>
             </div>
@@ -142,11 +163,12 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         const etaDisplay = (activeVehicle as any).etaFormat === 'days' ? `${(activeVehicle as any).etaDays || '___'} Days (天)` : ((activeVehicle as any).etaDate || 'TBC (待定)');
 
         return (
-            <div id="print-root" className="w-[210mm] max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
+            // ★ 外殼：絕對鎖定 794x1123
+            <div id="print-root" className="w-[794px] h-[1123px] mx-auto bg-white text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
                 <PrintStyle />
                 
-                {/* 內容區：給予底部 pb-[35mm] 讓出空間給絕對定位的簽名 */}
-                <div className="p-8 print:p-0 pb-[38mm] print:pb-[38mm] h-full">
+                {/* ★ 內層：加大底端內距 (pb-45mm) 防擠壓 */}
+                <div className="p-8 print:p-0 pb-[45mm] print:pb-[45mm] h-full box-border">
                     <HeaderSection />
                     
                     <div className="grid grid-cols-3 gap-3 mb-3">
@@ -248,8 +270,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     )}
                 </div>
                 
-                {/* ★ 透明圖層絕對定位 */}
-                <div className="absolute bottom-6 left-8 right-8 print:bottom-2 print:left-4 print:right-4 bg-transparent pointer-events-none">
+                {/* ★ 印章防切斷：位置提升至 bottom-10 / print:bottom-12，並強制套用 z-50 避免被遮擋 */}
+                <div className="absolute bottom-10 left-10 right-10 print:bottom-12 print:left-10 print:right-10 bg-transparent pointer-events-none z-50">
                     <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
                 </div>
             </div>
@@ -257,10 +279,12 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     }
 
     return (
-        <div id="print-root" className="w-[210mm] max-w-[210mm] mx-auto bg-white min-h-[297mm] text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
+        // ★ 外殼：絕對鎖定 794x1123
+        <div id="print-root" className="w-[794px] h-[1123px] mx-auto bg-white text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
             <PrintStyle />
             
-            <div className="p-8 print:p-0 pb-[38mm] print:pb-[38mm] h-full">
+            {/* ★ 內層：加大底端內距 (pb-45mm) 防擠壓 */}
+            <div className="p-8 print:p-0 pb-[45mm] print:pb-[45mm] h-full box-border">
                 <HeaderSection />
                 <div className="flex justify-between mb-6 border p-3 rounded bg-slate-50">
                     <div className="text-[10px]"><p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p><p className="text-sm font-bold">{curCustomer.name}</p><p>{curCustomer.address}</p><p className="font-mono">{curCustomer.phone}</p></div>
@@ -283,7 +307,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 <div className="text-[9px] text-slate-500 mt-6"><p className="font-bold">Terms:</p><p>1. Cheques should be crossed and made payable to "{companyEn}".</p><p>2. Official receipt will only be issued upon clearance of cheque.</p></div>
             </div>
 
-            <div className="absolute bottom-8 left-8 right-8 print:bottom-4 print:left-4 print:right-4 bg-transparent pointer-events-none">
+            {/* ★ 印章防切斷：位置提升至 bottom-10 / print:bottom-12，並強制套用 z-50 避免被遮擋 */}
+            <div className="absolute bottom-10 left-10 right-10 print:bottom-12 print:left-10 print:right-10 bg-transparent pointer-events-none z-50">
                 <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight="Received By" />
             </div>
         </div>
