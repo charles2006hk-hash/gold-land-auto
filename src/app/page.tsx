@@ -2447,14 +2447,34 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (徹底解決 iOS Safari 白紙/當機/無格式問題) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (全內聯 CSS 注入，完美支援 iOS Safari) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const isMobile = window.innerWidth < 768;
-    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(s => s.outerHTML).join('\n');
     
-    // ★ 魔法修復：這行能讓 Blob 新分頁正確抓取到原本網站的 CSS 與圖片！
-    const baseTag = `<base href="${window.location.origin}">`; 
+    // ★★★ 終極修復核心：遍歷系統所有的 StyleSheets，把所有 CSS 規則抽取成純文字內聯，100% 避開路徑隔離問題 ★★★
+    let extractedCss = '';
+    try {
+        Array.from(document.styleSheets).forEach((sheet) => {
+            try {
+                const rules = sheet.cssRules || sheet.rules;
+                if (rules) {
+                    Array.from(rules).forEach((rule) => {
+                        extractedCss += rule.cssText + '\n';
+                    });
+                }
+            } catch (e) {
+                // 忽略跨域阻擋的樣式表 (如果有)，繼續下一組
+            }
+        });
+    } catch (err) {
+        console.warn("CSS 提取失敗，降級使用 innerHTML 備用方案");
+    }
+
+    // 備用方案：如果上面遍歷失敗，直接抓取現有 style 標籤的內容
+    if (!extractedCss) {
+        extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+    }
 
     const fullHtml = `
         <!DOCTYPE html>
@@ -2463,13 +2483,15 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
-            ${baseTag}
-            ${styles}
+            <style>
+                /* 注入完整的全域 DMS 系統樣式與 Tailwind 樣式 */
+                ${extractedCss}
+            </style>
             <style>
                 @page { margin: 0; size: A4 portrait; }
-                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .print-container { width: 210mm; min-height: 297mm; margin: 0 auto; padding: 8mm; box-sizing: border-box; background: white; overflow: hidden; position: relative; }
-                body * { visibility: visible !important; display: block; }
+                body { margin: 0; padding: 0; background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                .print-container { width: 794px; min-height: 1123px; margin: 0 auto; box-sizing: border-box; background: white; overflow: hidden; position: relative; }
+                body * { visibility: visible !important; }
                 script { display: none !important; }
             </style>
         </head>
@@ -2477,16 +2499,25 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             <div class="print-container">
                 ${htmlContent}
             </div>
-            ${!isMobile ? '<script>window.onload = () => { setTimeout(() => { window.print(); }, 800); };</script>' : '<script>window.onload = () => { setTimeout(() => { window.print(); }, 1500); };</script>'}
+            <script>
+                // 確保圖片與字體完全算好後，自動喚醒列印或轉存 PDF 選單
+                window.onload = function() {
+                    setTimeout(function() {
+                        window.print();
+                    }, 800);
+                };
+            </script>
         </body>
         </html>
     `;
 
     if (isMobile) {
+        // ★ iOS 完美解法：打包成完整帶有內聯 CSS 的 Blob，開新分頁絕不當機且排版完美！
         const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
     } else {
+        // 電腦版維持乾淨無痕的隱藏 Iframe 原生列印
         let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
         if (!iframe) {
             iframe = document.createElement('iframe');
