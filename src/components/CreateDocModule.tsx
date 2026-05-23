@@ -400,40 +400,51 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
-        return (
-            // ★ 完美左右滑動版：移除 flex 限制，恢復 overflow-auto 與 margin: 0 auto 置中
-            <div className="w-full h-full bg-slate-200 overflow-auto pt-4 pb-12 custom-scrollbar">
-                <style>{`
-                    :root { --p-scale: 0.42; }
-                    @media (min-width: 640px) { :root { --p-scale: 0.55; } }
-                    @media (min-width: 768px) { :root { --p-scale: 0.55; } }
-                    @media (min-width: 1024px) { :root { --p-scale: 0.65; } }
-                    @media (min-width: 1280px) { :root { --p-scale: 0.75; } }
-                    
-                    .preview-outer {
-                        width: calc(794px * var(--p-scale));
-                        height: calc(1123px * var(--p-scale));
-                        position: relative;
-                        margin: 0 auto;
-                        flex-shrink: 0;
-                    }
-                    .preview-inner {
-                        width: 794px;
-                        height: 1123px;
-                        transform: scale(var(--p-scale));
-                        transform-origin: top left;
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        background: white;
-                        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-                        overflow: hidden;
-                        box-sizing: border-box;
-                    }
-                `}</style>
+        // ★★★ 新增：動態自適應寬度監聽器 ★★★
+        const [containerWidth, setContainerWidth] = useState(380); // 預設安全寬度
+        const containerRef = useRef<HTMLDivElement>(null);
 
-                <div className="preview-outer">
-                    <div className="preview-inner">
+        useEffect(() => {
+            if (!containerRef.current) return;
+            // 監聽右側預覽外框的真實寬度
+            const resizeObserver = new ResizeObserver((entries) => {
+                for (let entry of entries) {
+                    // 扣掉左右內距 padding 32px
+                    const width = entry.contentRect.width - 32;
+                    if (width > 10) setContainerWidth(width);
+                }
+            });
+            resizeObserver.observe(containerRef.current);
+            return () => resizeObserver.disconnect();
+        }, []);
+
+        // 動態計算完美縮放比例 (A4 標準像素寬度為 794px)
+        const dynamicScale = Math.min(containerWidth / 794, 1); // 最高不大於原尺寸 1
+
+        return (
+            // ★ 外層容器：flex 完美置中，並徹底關閉左右滾動條
+            <div 
+                ref={containerRef}
+                className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start"
+            >
+                {/* ★ 智慧外殼：根據動態比例精準算出高度佔位，防止底部灰色區塊穿幫 */}
+                <div 
+                    className="relative flex-shrink-0 transition-all duration-200" 
+                    style={{ 
+                        width: `${794 * dynamicScale}px`, 
+                        height: `${1123 * dynamicScale}px` 
+                    }}
+                >
+                    {/* ★ 智慧內框：使用計算出來的 dynamicScale 進行絕對像素無損縮放 */}
+                    <div 
+                        className="bg-white shadow-2xl overflow-hidden box-border absolute top-0 left-0"
+                        style={{ 
+                            width: '794px', 
+                            height: '1123px',
+                            transform: `scale(${dynamicScale})`,
+                            transformOrigin: 'top left'
+                        }}
+                    >
                         <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border">
                             <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
                                 <div className="flex items-center gap-3 min-w-0">
