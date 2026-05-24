@@ -2306,15 +2306,96 @@ type SettingsManagerProps = {
 // ★★★ 10. Settings Manager (v18.0: 終極修復 Error 310 Hook 崩潰) ★★★
 // ------------------------------------------------------------------
 
+// ------------------------------------------------------------------
+// ★★★ 終極跨平台卡片列印引擎 (專為車輛分享卡片設計) ★★★
+// ------------------------------------------------------------------
+const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
+    const isMobile = window.innerWidth < 768;
+    let extractedCss = '';
+    try {
+        Array.from(document.styleSheets).forEach((sheet) => {
+            try {
+                const rules = sheet.cssRules || sheet.rules;
+                if (rules) Array.from(rules).forEach((rule) => { extractedCss += rule.cssText + '\n'; });
+            } catch (e) {}
+        });
+    } catch (err) {}
+
+    if (!extractedCss) extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+    const baseTag = `<base href="${window.location.origin}/">`;
+
+    const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${title}</title>
+            ${baseTag}
+            <style>${extractedCss}</style>
+            <style>
+                @page { margin: 0; size: auto; }
+                html, body { 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    background: white !important; 
+                    -webkit-print-color-adjust: exact !important; 
+                    print-color-adjust: exact !important; 
+                }
+                /* 限制最大寬度，讓手機截圖印出來的比例如同一張精美宣傳單 */
+                .print-wrapper { 
+                    width: 100%; 
+                    max-width: 600px; 
+                    margin: 0 auto; 
+                    background: white; 
+                    padding: 20px; 
+                    box-sizing: border-box; 
+                }
+                body * { visibility: visible !important; }
+                script { display: none !important; }
+            </style>
+        </head>
+        <body>
+            <div class="print-wrapper">
+                ${htmlContent}
+            </div>
+            <script>
+                window.onload = function() {
+                    setTimeout(function() { window.print(); }, 800);
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    if (isMobile) {
+        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    } else {
+        let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'smart-print-iframe';
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+        }
+        const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+        if (iframeDoc) { iframeDoc.open(); iframeDoc.write(fullHtml); iframeDoc.close(); }
+    }
+};
+
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
-    
-    // 自訂編輯的備註 (純淨版預設不顯示)
     const [customRemark, setCustomRemark] = useState('');
 
-    // 自動讀取該車輛的照片
     useEffect(() => {
         if (!db || !vehicle.id) return;
         const q = query(
@@ -2325,7 +2406,6 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         const unsub = onSnapshot(q, (snap) => {
             const list: any[] = [];
             snap.forEach(d => list.push(d.data()));
-            // 簡單排序：封面優先，然後取前 6 張
             list.sort((a,b) => (b.isPrimary?1:0) - (a.isPrimary?1:0));
             setPhotos(list.map(i => i.url).slice(0, 6)); 
             setLoading(false);
@@ -2333,21 +2413,23 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         return () => unsub();
     }, [vehicle.id]);
 
+    // ★ 呼叫獨立列印引擎，徹底隔絕背景雜物
+    const handlePrint = () => {
+        const content = document.getElementById('share-content');
+        if (content) {
+            triggerCardPrint(content.outerHTML, `Vehicle_${vehicle.regMark || 'Details'}`);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white w-full max-w-sm md:max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                {/* Header Actions */}
                 <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden flex-none">
-                    <span className="text-xs font-bold">
-                        {cleanMode ? '✨ 預覽車輛規格 (純淨無公司版)' : '💰 預覽對客推介單 (完整版)'}
-                    </span>
+                    <span className="text-xs font-bold">{cleanMode ? '✨ 預覽車輛規格 (純淨無公司版)' : '💰 預覽對客推介單 (完整版)'}</span>
                     <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
                 </div>
 
-                {/* Content Area (白色區域，適合截圖/列印) */}
                 <div className="flex-1 overflow-y-auto p-6 bg-white" id="share-content">
-                    
-                    {/* 只有在「非純淨版」才顯示公司 Logo 抬頭 */}
                     {!cleanMode ? (
                         <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
                             <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
@@ -2356,17 +2438,13 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                                 <h2 className="text-sm font-bold text-slate-600 mt-1 tracking-widest">{COMPANY_INFO.name_ch}</h2>
                             </div>
                         </div>
-                    ) : (
-                        <div className="pt-2"></div>
-                    )}
+                    ) : (<div className="pt-2"></div>)}
 
-                    {/* Car Title */}
                     <div className="mb-4 flex justify-between items-end">
                         <div className={cleanMode ? "w-full text-center border-b border-slate-100 pb-3" : ""}>
                             <h3 className="text-2xl font-black text-slate-800 leading-tight">{vehicle.make} {vehicle.model}</h3>
                             <p className="text-sm text-slate-500 font-mono mt-1">製造年份: {vehicle.year}</p>
                         </div>
-                        {/* 只有非純淨版才顯示價格 */}
                         {!cleanMode && (
                             <div className="text-right pb-1">
                                 <span className="text-lg font-black text-yellow-600">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price)}</span>
@@ -2374,98 +2452,43 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         )}
                     </div>
 
-                    {/* Key Specs Grid */}
                     <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">外觀/內飾</span>
-                            <span className="font-bold text-slate-800 text-[10px] truncate">
-                                {vehicle.colorExt || '-'} / {vehicle.colorInt || (vehicle as any).colorInterior || '-'}
-                            </span>
-                        </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數</span>
-                            <span className="font-bold text-slate-800 text-xs">{vehicle.previousOwners || '0'} 手</span>
-                        </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積</span>
-                            <span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</span>
-                        </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數</span>
-                            <span className="font-bold text-slate-800 text-xs">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-'}</span>
-                        </div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 col-span-2 flex flex-col justify-center">
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">牌費到期日</span>
-                            <span className="font-bold text-slate-800 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span>
-                        </div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">外觀/內飾</span><span className="font-bold text-slate-800 text-[10px] truncate">{vehicle.colorExt || '-'} / {vehicle.colorInt || (vehicle as any).colorInterior || '-'}</span></div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數</span><span className="font-bold text-slate-800 text-xs">{vehicle.previousOwners || '0'} 手</span></div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積</span><span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</span></div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數</span><span className="font-bold text-slate-800 text-xs">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-'}</span></div>
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 col-span-2 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">牌費到期日</span><span className="font-bold text-slate-800 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span></div>
                     </div>
 
-                    {/* 只有完整版才顯示自訂備註區 */}
                     {!cleanMode && (
                         <div className="mb-6 relative group">
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註</span>
-                            <textarea
-                                value={customRemark}
-                                onChange={(e) => setCustomRemark(e.target.value)}
-                                placeholder="在這裡輸入車輛亮點或給客戶的話..."
-                                className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:border-none print:bg-transparent print:p-0 min-h-[60px] leading-relaxed"
-                            />
+                            <textarea value={customRemark} onChange={(e) => setCustomRemark(e.target.value)} placeholder="在這裡輸入車輛亮點或給客戶的話..." className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:border-none print:bg-transparent print:p-0 min-h-[60px] leading-relaxed"/>
                         </div>
                     )}
 
-                    {/* Photos Grid */}
                     <div className="grid grid-cols-2 gap-2 mb-4">
                         {loading ? <div className="col-span-2 text-center text-xs py-10">載入圖片中...</div> : 
                          photos.length > 0 ? photos.map((url, i) => (
-                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 bg-gray-100 aspect-video ${i===0 ? 'col-span-2' : ''}`}>
-                                <img src={url} className="w-full h-full object-cover"/>
-                            </div>
-                        )) : (
-                            <div className="col-span-2 text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>
-                        )}
+                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 bg-gray-100 aspect-video ${i===0 ? 'col-span-2' : ''}`}><img src={url} className="w-full h-full object-cover"/></div>
+                        )) : (<div className="col-span-2 text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>)}
                     </div>
 
-                    {/* 只有在「非純淨版」才顯示聯絡人頁尾 */}
                     {!cleanMode && (
-                        <div className="text-center border-t border-slate-100 pt-4 mt-4 animate-fade-in">
+                        <div className="text-center border-t border-slate-100 pt-4 mt-4">
                             <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
                             <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
                         </div>
                     )}
                 </div>
 
-                {/* Footer Action */}
                 <div className="p-4 bg-slate-100 border-t print:hidden flex-none">
-                    <button onClick={() => window.print()} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
+                    {/* ★ 改用 handlePrint 呼叫我們自己的卡片列印引擎 */}
+                    <button onClick={handlePrint} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
                         📸 {cleanMode ? '截圖純淨規格' : '截圖完整報價單'}
                     </button>
                 </div>
             </div>
-
-            {/* ★★★ 列印隔離魔法：徹底隱藏背景的所有其他 UI ★★★ */}
-            <style dangerouslySetInnerHTML={{ __html: `
-                @media print {
-                    @page { margin: 0; size: auto; }
-                    /* 1. 隱藏主系統背景與所有其他元素 */
-                    body * { visibility: hidden !important; }
-                    
-                    /* 2. 顯示白色卡片內部所有內容 */
-                    #share-content, #share-content * { visibility: visible !important; }
-                    
-                    /* 3. 強制讓這張卡片展開至滿版，防止切斷 */
-                    #share-content { 
-                        position: absolute !important; 
-                        left: 0 !important; 
-                        top: 0 !important; 
-                        width: 100% !important; 
-                        height: auto !important; 
-                        margin: 0 !important; 
-                        padding: 15px !important; 
-                        box-sizing: border-box !important;
-                        background: white !important;
-                    }
-                }
-            `}} />
         </div>
     );
 };
@@ -3028,6 +3051,11 @@ export default function GoldLandAutoDMS() {
         setLink('manifest', '/manifest.json'); // ★ 新增這行，連結 PWA 描述檔
 
         // Web App Meta
+        // ★ 開通 iPhone 動態島延伸與安全區域 (viewport-fit=cover)
+        setMeta('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=0'); 
+        setMeta('theme-color', '#f8fafc'); // 將 Safari 狀態列底色設為白灰色，融入背景
+        setMeta('apple-mobile-web-app-status-bar-style', 'default'); 
+        
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
         setMeta('apple-mobile-web-app-capable', 'yes');
@@ -4100,7 +4128,9 @@ const DatabaseSelector = ({
           onOpenChangePwd={() => setIsChangePwdOpen(true)} />
            
 
-      <main className="flex-1 w-full min-w-0 md:ml-0 p-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-screen overflow-hidden">
+      {/* ★ 修改：加入 pt-0 與 h-[100dvh] 讓畫面完美貼合螢幕上下緣 */}
+      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-[100dvh] overflow-hidden">
+        
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
             <VehicleShareModal 
@@ -4112,7 +4142,13 @@ const DatabaseSelector = ({
                 onClose={() => setShareVehicle(null)} 
             />
         )}
-        <div className="md:hidden flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm print:hidden flex-none"><button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700"><Menu size={28} /></button><span className="font-bold text-lg text-slate-800">Gold Land Auto</span><div className="w-7"></div></div>
+        
+        {/* ★ 手機版頂部 Header (透過 CSS env() 延伸至 Dynamic Island 安全區域) */}
+        <div className="md:hidden flex items-center justify-between bg-white px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] rounded-b-2xl shadow-sm print:hidden flex-none -mx-4 mb-4 z-20">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
+            <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
+            <div className="w-9"></div> {/* 不可見的佔位符，讓標題完美居中 */}
+        </div>
 
         {isPreviewMode && (
           <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-center z-50 shadow-xl print:hidden gap-3">
