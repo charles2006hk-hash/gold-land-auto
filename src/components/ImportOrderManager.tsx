@@ -170,7 +170,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
         const start = new Date(orderDate).getTime();
         const depart = new Date(departureDate).getTime();
         const arrive = depart + (durationDays * 24 * 60 * 60 * 1000);
-        const license = arrive + (14 * 24 * 60 * 60 * 1000); 
+        // ★ 改為 21 天計算
+        const license = arrive + (21 * 24 * 60 * 60 * 1000); 
         const totalDays = Math.ceil((license - start) / (1000 * 60 * 60 * 24));
         
         estTotalDays = `${totalDays} 天 (Days)`;
@@ -187,8 +188,10 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X/></button>
                     </div>
                 </div>
-                <div id="print-area" className="flex-1 overflow-y-auto p-10 text-slate-900 bg-white">
-                    <div className="flex justify-between items-start border-b-4 border-slate-800 pb-6 mb-8">
+                
+                {/* ★ flex flex-col 保證內容能自動排版，mt-auto 把簽名推到底 */}
+                <div id="print-area" className="flex-1 overflow-y-auto p-10 text-slate-900 bg-white flex flex-col">
+                    <div className="flex justify-between items-start border-b-4 border-slate-800 pb-6 mb-8 shrink-0 break-inside-avoid">
                         <div>
                             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Gold Land Auto</h1>
                             <h2 className="text-xl font-bold tracking-widest mt-1">金田汽車</h2>
@@ -200,14 +203,18 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             <p className="text-xs font-mono text-slate-500">Ref: QT-{item.id.slice(0,8).toUpperCase()}</p>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-8 mb-8">
+                    
+                    <div className="grid grid-cols-2 gap-8 mb-8 shrink-0 break-inside-avoid">
                         <div>
-                            <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800">Vehicle Specification</h3>
+                            <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800 inline-block">Vehicle Specification</h3>
                             <div className="space-y-1 text-sm">
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Model:</span> <span className="font-black text-lg">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || 'TBC'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year || '-'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'}</span></p>
+                                {/* ★ 新增：座位、排量、咪數 */}
+                                <p><span className="text-slate-500 w-24 inline-block">Seats / CC:</span> <span className="font-bold">{item.details?.seats || item.carInfo?.seats || '-'} 座 / {item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Mileage:</span> <span className="font-bold">{item.details?.mileage || item.carInfo?.mileage ? `${Number(item.details?.mileage || item.carInfo?.mileage).toLocaleString()} km` : '-'}</span></p>
                             </div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
@@ -218,10 +225,12 @@ const QuotationPreview = ({ item, onClose }: any) => {
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
                             </div>
+                            {/* ★ 改為 21 天 */}
                             <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 21 days for HK customs & licensing.</p>
                         </div>
                     </div>
-                    <table className="w-full text-sm mb-8 break-inside-avoid">
+                    
+                    <table className="w-full text-sm mb-8 shrink-0 break-inside-avoid">
                         <thead className="bg-slate-800 text-white">
                             <tr><th className="p-3 text-left uppercase tracking-widest text-[10px]">Description</th><th className="p-3 text-right uppercase tracking-widest text-[10px]">Amount</th></tr>
                         </thead>
@@ -233,11 +242,11 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </tbody>
                     </table>
 
-                    {/* ★ 更新：改為與開單系統完全一樣的橫排精緻小圖 (最多 5 張) */}
+                    {/* ★ 更新：改為開單系統的標準橫排精緻小圖 (最多 5 張) */}
                     {item.photos && item.photos.length > 0 && (
-                        <div className="mb-10 break-inside-avoid">
+                        <div className="mb-6 shrink-0 break-inside-avoid">
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-3 border-l-4 border-slate-800 inline-block">Vehicle Photos (車況圖片)</h3>
-                            <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center flex-wrap">
+                            <div className="bg-slate-50 border border-slate-200 rounded p-2 flex gap-2 justify-center items-center flex-wrap">
                                 {item.photos.slice(0, 5).map((url: string, idx: number) => (
                                     <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0">
                                         <img src={url} className="w-full h-full object-cover" alt="Vehicle Photo" />
@@ -247,20 +256,26 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     )}
 
-                    {/* 底部簽名區 (自動推到最底，防切斷) */}
-                    <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20 break-inside-avoid">
+                    {/* ★ 條款 (改為 21 天) */}
+                    <div className="text-[9px] text-slate-400 leading-relaxed mb-6 shrink-0 break-inside-avoid">
+                        <p>* This quotation is valid for 21 days. Prices are subject to local tax and exchange rate fluctuations.</p>
+                        <p>* 本報價單有效期為發出日起計 21 天。預估費用或因當地稅率及匯率變動而作適度調整。</p>
+                    </div>
+
+                    <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20 shrink-0 break-inside-avoid">
                         <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p></div>
                         <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">Customer Confirmation</p></div>
                     </div>
                 </div>
             </div>
+            
             <style jsx global>{`
                 @media print {
                     @page { size: A4 portrait; margin: 10mm; }
                     body * { visibility: hidden; }
                     #print-area, #print-area * { visibility: visible; }
                     
-                    /* ★ 核心修復：解除 absolute 鎖定，改用 relative 允許跨頁向下延伸 */
+                    /* ★ 解除 absolute 鎖定，改用 relative 允許跨頁向下延伸 */
                     #print-area { 
                         position: relative !important; 
                         left: 0; 
@@ -273,8 +288,6 @@ const QuotationPreview = ({ item, onClose }: any) => {
                     }
                     
                     .print\\:hidden { display: none !important; }
-                    
-                    /* ★ 防止特定區塊被切成兩半 (防爆頁) */
                     .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
                 }
             `}</style>
