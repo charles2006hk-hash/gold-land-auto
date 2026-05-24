@@ -1074,22 +1074,24 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 </div>
                                             </div>
                                             <div className="space-y-4">
+                                                
                                                 {/* 車輛詳情資料（補上座位、排量、咪數） */}
                                                 <div className="grid grid-cols-2 gap-4 mb-6 text-sm bg-slate-900 text-white p-4 rounded-xl">
                                                     <div>
                                                         <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Vehicle Spec</p>
-                                                        <p className="text-lg font-black">{item.make} {item.model}</p>
-                                                        <p className="text-xs text-slate-400">Year: {item.year || '-'}</p>
+                                                        <p className="text-lg font-black">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</p>
+                                                        <p className="text-xs text-slate-400">Year: {item.details?.year || item.carInfo?.year || '-'}</p>
                                                         {/* ★ 新增左側規格 */}
                                                         <p className="text-xs text-slate-300 mt-1">
-                                                            {item.seating ? `${item.seating} 座` : '- 座'} | {item.engineSize ? `${item.engineSize} cc` : '- cc'}
+                                                            {item.details?.seats || item.carInfo?.seats ? `${item.details?.seats || item.carInfo?.seats} 座` : '- 座'} | {item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc ? `${item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc} cc` : '- cc'}
                                                         </p>
                                                     </div>
                                                     <div className="text-right font-mono text-xs flex flex-col justify-end">
-                                                        <p>Chassis: {item.chassisNo || 'TBC'}</p>
-                                                        <p>Engine: {item.engineNo || 'TBC'}</p>
+                                                        <p>Chassis: {item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</p>
+                                                        {/* 海外管家可能沒有記錄 EngineNo，但保留欄位 */}
+                                                        <p>Engine: {item.details?.engineNo || 'TBC'}</p>
                                                         {/* ★ 新增右側咪數 */}
-                                                        <p className="text-blue-400 font-bold mt-1">Mileage: {item.mileage ? `${Number(item.mileage).toLocaleString()} km` : '- km'}</p>
+                                                        <p className="text-blue-400 font-bold mt-1">Mileage: {item.details?.mileage || item.carInfo?.mileage ? `${Number(item.details?.mileage || item.carInfo?.mileage).toLocaleString()} km` : '- km'}</p>
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-4 gap-3">
