@@ -218,7 +218,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
                             </div>
-                            <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 14 days for HK customs & licensing.</p>
+                            <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 21 days for HK customs & licensing.</p>
                         </div>
                     </div>
                     <table className="w-full text-sm mb-8 break-inside-avoid">
@@ -1074,11 +1074,23 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                 </div>
                                             </div>
                                             <div className="space-y-4">
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <InputField label="品牌" value={carInfo.make} onChange={(v:any)=>setCarInfo({...carInfo, make:v})} list="makes_list" />
-                                                    <datalist id="makes_list">{settings?.makes?.map((m:any) => <option key={m} value={m}/>)}</datalist>
-                                                    <InputField label="型號" value={carInfo.model} onChange={(v:any)=>setCarInfo({...carInfo, model:v})} list="models_list" />
-                                                    <datalist id="models_list">{(settings?.models?.[carInfo.make] || []).map((m:any) => <option key={m} value={m}/>)}</datalist>
+                                                {/* 車輛詳情資料（補上座位、排量、咪數） */}
+                                                <div className="grid grid-cols-2 gap-4 mb-6 text-sm bg-slate-900 text-white p-4 rounded-xl">
+                                                    <div>
+                                                        <p className="text-slate-400 text-[10px] uppercase font-bold tracking-widest">Vehicle Spec</p>
+                                                        <p className="text-lg font-black">{item.make} {item.model}</p>
+                                                        <p className="text-xs text-slate-400">Year: {item.year || '-'}</p>
+                                                        {/* ★ 新增左側規格 */}
+                                                        <p className="text-xs text-slate-300 mt-1">
+                                                            {item.seating ? `${item.seating} 座` : '- 座'} | {item.engineSize ? `${item.engineSize} cc` : '- cc'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right font-mono text-xs flex flex-col justify-end">
+                                                        <p>Chassis: {item.chassisNo || 'TBC'}</p>
+                                                        <p>Engine: {item.engineNo || 'TBC'}</p>
+                                                        {/* ★ 新增右側咪數 */}
+                                                        <p className="text-blue-400 font-bold mt-1">Mileage: {item.mileage ? `${Number(item.mileage).toLocaleString()} km` : '- km'}</p>
+                                                    </div>
                                                 </div>
                                                 <div className="grid grid-cols-4 gap-3">
                                                     <InputField label="年份" value={carInfo.year} onChange={(v:any)=>setCarInfo({...carInfo, year:v})} type="number" />
