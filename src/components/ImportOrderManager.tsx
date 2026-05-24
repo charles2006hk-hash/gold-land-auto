@@ -221,7 +221,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 14 days for HK customs & licensing.</p>
                         </div>
                     </div>
-                    <table className="w-full text-sm mb-10">
+                    <table className="w-full text-sm mb-8 break-inside-avoid">
                         <thead className="bg-slate-800 text-white">
                             <tr><th className="p-3 text-left uppercase tracking-widest text-[10px]">Description</th><th className="p-3 text-right uppercase tracking-widest text-[10px]">Amount</th></tr>
                         </thead>
@@ -229,10 +229,26 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             <tr><td className="p-3 font-bold">車輛到港成本 (含海外雜費及船運)</td><td className="p-3 text-right font-mono">{fmt(item.results?.landedCost)}</td></tr>
                             <tr><td className="p-3">政府首次登記稅 (FRT)</td><td className="p-3 text-right font-mono">{fmt(item.results?.frtTax)}</td></tr>
                             <tr><td className="p-3">出牌、保險及其他本地雜費</td><td className="p-3 text-right font-mono">{fmt(item.results?.totalCost - item.results?.landedCost)}</td></tr>
-                            <tr className="bg-slate-50"><td className="p-4 font-black text-lg">Final Quotation (總報價)</td><td className="p-4 text-right font-black text-2xl text-blue-700">{fmt(item.results?.finalPrice)}</td></tr>
+                            <tr className="bg-slate-50 border-t-2 border-slate-800"><td className="p-4 font-black text-lg">Final Quotation (總報價)</td><td className="p-4 text-right font-black text-2xl text-blue-700">{fmt(item.results?.finalPrice)}</td></tr>
                         </tbody>
                     </table>
-                    <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20">
+
+                    {/* ★ 新增：車況圖相片畫廊 (如果訂單內有上傳圖片) */}
+                    {item.photos && item.photos.length > 0 && (
+                        <div className="mb-10 break-inside-avoid">
+                            <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-3 border-l-4 border-slate-800 inline-block">Vehicle Photos (車況圖片)</h3>
+                            <div className="grid grid-cols-3 gap-3">
+                                {item.photos.map((url: string, i: number) => (
+                                    <div key={i} className={`rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-[4/3] ${i === 0 ? 'col-span-3 aspect-[21/9]' : ''}`}>
+                                        <img src={url} className="w-full h-full object-cover" alt="Vehicle Photo" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 底部簽名區 (改用 mt-auto 自動推到最底，並加入 break-inside-avoid 防切斷) */}
+                    <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20 break-inside-avoid">
                         <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p></div>
                         <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">Customer Confirmation</p></div>
                     </div>
@@ -240,10 +256,26 @@ const QuotationPreview = ({ item, onClose }: any) => {
             </div>
             <style jsx global>{`
                 @media print {
+                    @page { size: A4 portrait; margin: 10mm; }
                     body * { visibility: hidden; }
                     #print-area, #print-area * { visibility: visible; }
-                    #print-area { position: fixed; left: 0; top: 0; width: 100%; height: 100%; margin: 0; padding: 15mm; }
+                    
+                    /* ★ 核心修復：解除 absolute 鎖定，改用 relative 允許跨頁向下延伸 */
+                    #print-area { 
+                        position: relative !important; 
+                        left: 0; 
+                        top: 0; 
+                        width: 100% !important; 
+                        height: auto !important; 
+                        margin: 0; 
+                        padding: 0; 
+                        overflow: visible !important;
+                    }
+                    
                     .print\\:hidden { display: none !important; }
+                    
+                    /* ★ 防止特定區塊被切成兩半 (防爆頁) */
+                    .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
                 }
             `}</style>
         </div>
