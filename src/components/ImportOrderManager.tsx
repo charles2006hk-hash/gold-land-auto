@@ -211,7 +211,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                                 <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Seats / CC:</span> <span className="font-bold">{item.details?.seats || item.carInfo?.seats || '-'} 座 / {item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Mileage:</span> <span className="font-bold">{item.details?.mileage || item.carInfo?.mileage ? `${Number(item.details?.mileage || item.carInfo?.mileage).toLocaleString()} km` : '-'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Mileage:</span> <span className="font-bold">{formatNum(item.details?.mileage || item.carInfo?.mileage) ? `${formatNum(item.details?.mileage || item.carInfo?.mileage)} km` : '-'}</span></p>
                             </div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
