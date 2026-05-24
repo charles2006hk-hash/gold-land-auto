@@ -233,13 +233,13 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </tbody>
                     </table>
 
-                    {/* ★ 新增：車況圖相片畫廊 (如果訂單內有上傳圖片) */}
+                    {/* ★ 更新：改為與開單系統完全一樣的橫排精緻小圖 (最多 5 張) */}
                     {item.photos && item.photos.length > 0 && (
                         <div className="mb-10 break-inside-avoid">
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-3 border-l-4 border-slate-800 inline-block">Vehicle Photos (車況圖片)</h3>
-                            <div className="grid grid-cols-3 gap-3">
-                                {item.photos.map((url: string, i: number) => (
-                                    <div key={i} className={`rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-[4/3] ${i === 0 ? 'col-span-3 aspect-[21/9]' : ''}`}>
+                            <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center flex-wrap">
+                                {item.photos.slice(0, 5).map((url: string, idx: number) => (
+                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0">
                                         <img src={url} className="w-full h-full object-cover" alt="Vehicle Photo" />
                                     </div>
                                 ))}
@@ -247,7 +247,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     )}
 
-                    {/* 底部簽名區 (改用 mt-auto 自動推到最底，並加入 break-inside-avoid 防切斷) */}
+                    {/* 底部簽名區 (自動推到最底，防切斷) */}
                     <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20 break-inside-avoid">
                         <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p></div>
                         <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">Customer Confirmation</p></div>
