@@ -2347,7 +2347,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                 {/* Content Area (白色區域，適合截圖/列印) */}
                 <div className="flex-1 overflow-y-auto p-6 bg-white" id="share-content">
                     
-                    {/* ★★★ 核心邏輯修改：只有在「非純淨版」才顯示公司 Logo 抬頭 ★★★ */}
+                    {/* 只有在「非純淨版」才顯示公司 Logo 抬頭 */}
                     {!cleanMode ? (
                         <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
                             <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
@@ -2357,7 +2357,6 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                             </div>
                         </div>
                     ) : (
-                        // 純淨版頂部留白，保持乾淨
                         <div className="pt-2"></div>
                     )}
 
@@ -2426,7 +2425,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         )}
                     </div>
 
-                    {/* ★★★ 核心邏輯修改：只有在「非純淨版」才顯示聯絡人頁尾 ★★★ */}
+                    {/* 只有在「非純淨版」才顯示聯絡人頁尾 */}
                     {!cleanMode && (
                         <div className="text-center border-t border-slate-100 pt-4 mt-4 animate-fade-in">
                             <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
@@ -2442,6 +2441,31 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                     </button>
                 </div>
             </div>
+
+            {/* ★★★ 列印隔離魔法：徹底隱藏背景的所有其他 UI ★★★ */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                @media print {
+                    @page { margin: 0; size: auto; }
+                    /* 1. 隱藏主系統背景與所有其他元素 */
+                    body * { visibility: hidden !important; }
+                    
+                    /* 2. 顯示白色卡片內部所有內容 */
+                    #share-content, #share-content * { visibility: visible !important; }
+                    
+                    /* 3. 強制讓這張卡片展開至滿版，防止切斷 */
+                    #share-content { 
+                        position: absolute !important; 
+                        left: 0 !important; 
+                        top: 0 !important; 
+                        width: 100% !important; 
+                        height: auto !important; 
+                        margin: 0 !important; 
+                        padding: 15px !important; 
+                        box-sizing: border-box !important;
+                        background: white !important;
+                    }
+                }
+            `}} />
         </div>
     );
 };
