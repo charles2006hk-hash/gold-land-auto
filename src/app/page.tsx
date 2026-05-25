@@ -2390,6 +2390,94 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     }
 };
 
+// ------------------------------------------------------------------
+// ★★★ 終極跨平台卡片列印引擎 (專為車輛分享卡片設計，允許無限向下延伸) ★★★
+// ------------------------------------------------------------------
+const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
+    const isMobile = window.innerWidth < 768;
+    let extractedCss = '';
+    try {
+        Array.from(document.styleSheets).forEach((sheet) => {
+            try {
+                const rules = sheet.cssRules || sheet.rules;
+                if (rules) Array.from(rules).forEach((rule) => { extractedCss += rule.cssText + '\n'; });
+            } catch (e) {}
+        });
+    } catch (err) {}
+
+    if (!extractedCss) extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
+    const baseTag = `<base href="${window.location.origin}/">`;
+
+    const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${title}</title>
+            ${baseTag}
+            <style>${extractedCss}</style>
+            <style>
+                /* 解除 A4 鎖定，允許自由跨頁 */
+                @page { margin: 10mm; size: auto; }
+                html, body { 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    background: white !important; 
+                    height: auto !important;
+                    overflow: visible !important;
+                    -webkit-print-color-adjust: exact !important; 
+                    print-color-adjust: exact !important; 
+                }
+                .print-wrapper { 
+                    width: 100%; 
+                    max-width: 800px; 
+                    margin: 0 auto; 
+                    background: white; 
+                    padding: 0; 
+                    height: auto !important;
+                    overflow: visible !important;
+                }
+                body * { visibility: visible !important; }
+                script { display: none !important; }
+                .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+            </style>
+        </head>
+        <body>
+            <div class="print-wrapper">
+                ${htmlContent}
+            </div>
+            <script>
+                window.onload = function() {
+                    setTimeout(function() { window.print(); }, 800);
+                };
+            </script>
+        </body>
+        </html>
+    `;
+
+    if (isMobile) {
+        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+    } else {
+        let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
+        if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'smart-print-iframe';
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+        }
+        const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+        if (iframeDoc) { iframeDoc.open(); iframeDoc.write(fullHtml); iframeDoc.close(); }
+    }
+};
+
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
@@ -2413,7 +2501,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         return () => unsub();
     }, [vehicle.id]);
 
-    // ★ 呼叫獨立列印引擎，徹底隔絕背景雜物
+    // ★ 呼叫獨立 Blob 列印引擎，允許無限跨頁
     const handlePrint = () => {
         const content = document.getElementById('share-content');
         if (content) {
@@ -2460,22 +2548,40 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         <div className="bg-slate-50 p-2 rounded border border-slate-100 col-span-2 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">牌費到期日</span><span className="font-bold text-slate-800 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span></div>
                     </div>
 
+                    {/* ★ 核心修改 1：銷售備註選擇性列印 */}
                     {!cleanMode && (
-                        <div className="mb-6 relative group">
+                        <div className={`mb-6 relative group ${!customRemark.trim() ? 'print:hidden' : ''}`}>
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註</span>
-                            <textarea value={customRemark} onChange={(e) => setCustomRemark(e.target.value)} placeholder="在這裡輸入車輛亮點或給客戶的話..." className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:border-none print:bg-transparent print:p-0 min-h-[60px] leading-relaxed"/>
+                            
+                            {/* 網頁編輯用 (列印時隱藏) */}
+                            <textarea 
+                                value={customRemark} 
+                                onChange={(e) => setCustomRemark(e.target.value)} 
+                                placeholder="在這裡輸入車輛亮點或給客戶的話..." 
+                                className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:hidden min-h-[60px] leading-relaxed"
+                            />
+                            
+                            {/* 列印專用純文字 (網頁上隱藏，列印時才顯示) */}
+                            {customRemark.trim() && (
+                                <div className="hidden print:block text-sm text-slate-800 bg-blue-50/30 p-3 rounded-lg border border-blue-100 whitespace-pre-wrap leading-relaxed">
+                                    {customRemark}
+                                </div>
+                            )}
                         </div>
                     )}
 
+                    {/* ★ 核心修改 2：加上 break-inside-avoid 避免圖片被切半 */}
                     <div className="grid grid-cols-2 gap-2 mb-4">
                         {loading ? <div className="col-span-2 text-center text-xs py-10">載入圖片中...</div> : 
-                         photos.length > 0 ? photos.map((url, i) => (
-                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 bg-gray-100 aspect-video ${i===0 ? 'col-span-2' : ''}`}><img src={url} className="w-full h-full object-cover"/></div>
+                        photos.length > 0 ? photos.map((url, i) => (
+                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 bg-gray-100 aspect-video break-inside-avoid ${i===0 ? 'col-span-2' : ''}`}>
+                                <img src={url} className="w-full h-full object-cover"/>
+                            </div>
                         )) : (<div className="col-span-2 text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>)}
                     </div>
 
                     {!cleanMode && (
-                        <div className="text-center border-t border-slate-100 pt-4 mt-4">
+                        <div className="text-center border-t border-slate-100 pt-4 mt-4 break-inside-avoid">
                             <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
                             <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
                         </div>
@@ -2483,9 +2589,8 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                 </div>
 
                 <div className="p-4 bg-slate-100 border-t print:hidden flex-none">
-                    {/* ★ 改用 handlePrint 呼叫我們自己的卡片列印引擎 */}
                     <button onClick={handlePrint} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
-                        📸 {cleanMode ? '截圖純淨規格' : '截圖完整報價單'}
+                        📸 {cleanMode ? '列印純淨規格' : '列印完整推介單'}
                     </button>
                 </div>
             </div>
