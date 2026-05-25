@@ -552,8 +552,8 @@ const VehicleFormModal = ({
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden w-full">
         <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[100vw] overflow-hidden md:max-w-[98vw] xl:max-w-[1500px] h-full md:h-[92vh] flex flex-col border-0 md:border border-slate-600 relative">
           
-          {/* Header */}
-          <div className="bg-slate-900 text-white p-4 flex justify-between items-center flex-none shadow-md z-20 safe-area-top w-full">
+            {/* Header */}
+          <div className="bg-slate-900 text-white px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] flex justify-between items-center flex-none shadow-md z-20 w-full">
             <div className="flex items-center gap-3">
                 <button type="button" onClick={handleClose} className="md:hidden p-2 -ml-2 mr-1 text-slate-300 hover:text-white"><ChevronLeft size={28} /></button>
                 {isNew ? (
