@@ -2484,14 +2484,27 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                         </div>
                     )}
 
-                    {/* ★ 核心修改 2：加上 break-inside-avoid 避免圖片被切半 */}
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                        {loading ? <div className="col-span-2 text-center text-xs py-10">載入圖片中...</div> : 
-                        photos.length > 0 ? photos.map((url, i) => (
-                            <div key={i} className={`rounded-lg overflow-hidden border border-slate-100 bg-gray-100 aspect-video break-inside-avoid ${i===0 ? 'col-span-2' : ''}`}>
-                                <img src={url} className="w-full h-full object-cover"/>
+                    {/* ★ 核心修改 2：排版優化，改為「上 1 大圖 + 下排最多 5 小圖」，絕對保證 1 頁印完 */}
+                    <div className="mb-4">
+                        {loading ? <div className="text-center text-xs py-10">載入圖片中...</div> : 
+                        photos.length > 0 ? (
+                            <div className="flex flex-col gap-2 break-inside-avoid">
+                                {/* 第一張大圖 (高度稍微壓縮，完美對齊 A4 比例) */}
+                                <div className="rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[16/7] md:aspect-[21/9]">
+                                    <img src={photos[0]} className="w-full h-full object-cover"/>
+                                </div>
+                                {/* 後續小圖並排 (最多 5 張，自動均分寬度縮小) */}
+                                {photos.length > 1 && (
+                                    <div className="flex gap-2">
+                                        {photos.slice(1, 6).map((url, i) => (
+                                            <div key={i} className="flex-1 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[4/3]">
+                                                <img src={url} className="w-full h-full object-cover"/>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        )) : (<div className="col-span-2 text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>)}
+                        ) : (<div className="text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>)}
                     </div>
 
                     {!cleanMode && (
