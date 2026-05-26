@@ -255,6 +255,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const filteredInventory = inventory.filter((v: any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.make || '').toUpperCase().includes(searchTerm.toUpperCase()));
 
     const handleSelectCar = (car: any) => {
+        // ★ 防呆安全鎖：如果正在編輯舊單據，禁止點擊左側車輛以免洗掉數據！
+        if (docId) {
+            alert("🔒 安全鎖已啟動！\n您正在編輯歷史單據，為防止資料遺失，左側車輛切換已鎖定。\n\n如需開新單據，請先點擊右上角的「+ 開新單據」。");
+            return;
+        }
         setSelectedCarId(car.id);
         
         // ★★★ 智能進銷分流機制 (Acquisition vs Sales) ★★★
@@ -470,7 +475,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 <div className="text-right flex-shrink-0 pl-2">
                                     <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
                                     <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
-                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? docId.slice(0,6).toUpperCase() : 'PREVIEW-DRAFT'}</div>
+                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? `${selectedDocType === 'sales_contract' ? 'SAL' : selectedDocType === 'invoice' ? 'INV' : selectedDocType === 'quotation' ? 'QUO' : 'DOC'}-${displayDate.replace(/\//g, '')}-${docId.slice(0,6).toUpperCase()}` : 'PREVIEW-DRAFT'}</div>
                                     <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
                                 </div>
                             </div>
