@@ -147,11 +147,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
    useEffect(() => {
         if (!db || !appId) return;
         
-        // 🛑 核心修復：移除 orderBy('updatedAt')，讓所有（包含舊的）單據都能先被抓下來
+        // 🛑 核心修復：徹底移除 orderBy('updatedAt', 'desc')，先把所有單據（包含異常的）無條件抓下來！
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'));
         
         const unsubscribe = onSnapshot(q, (snapshot: any) => {
             const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));   
+            
             const secureDocs = list.filter((doc: any) => {
                 if (isAdmin) return true; 
                 if (doc.createdBy === staffId) return true;
@@ -160,7 +161,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 return false;
             });
 
-            // ★ 改為前端智能排序，就算舊單據沒有 updatedAt，系統也會改用 createdAt 甚至預設值墊底，保證絕不消失
+            // ★ 前端智能排序：不管單據有沒有時間戳，都會乖乖用預設值排好，絕對不會搞失蹤！
             secureDocs.sort((a: any, b: any) => {
                 const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
                 const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
@@ -171,7 +172,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             setDocHistory(secureDocs);  
         });
         return () => unsubscribe();
-    }, [db, appId, inventory, staffId, currentUser]);
+    }, [db, appId, inventory, staffId, currentUser, isAdmin]);
 
     useEffect(() => {
         if (selectedDocType === 'sales_contract' || selectedDocType === 'quotation') {
