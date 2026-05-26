@@ -144,9 +144,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
     }, [externalRequest]);
 
-    useEffect(() => {
+   useEffect(() => {
         if (!db || !appId) return;
-        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
+        
+        // 🛑 核心修復：移除 orderBy('updatedAt')，讓所有（包含舊的）單據都能先被抓下來
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'));
+        
         const unsubscribe = onSnapshot(q, (snapshot: any) => {
             const list = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));   
             const secureDocs = list.filter((doc: any) => {
@@ -156,11 +159,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 if (relatedCar && relatedCar.managedBy === staffId) return true;
                 return false;
             });
+
+            // ★ 改為前端智能排序，就算舊單據沒有 updatedAt，系統也會改用 createdAt 甚至預設值墊底，保證絕不消失
+            secureDocs.sort((a: any, b: any) => {
+                const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+                const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+                return timeB - timeA; // 新的排在上面
+            });
+
             setSavedDocs(secureDocs);
             setDocHistory(secureDocs);  
         });
         return () => unsubscribe();
-    }, [db, appId, inventory, staffId, currentUser]); 
+    }, [db, appId, inventory, staffId, currentUser]);
 
     useEffect(() => {
         if (selectedDocType === 'sales_contract' || selectedDocType === 'quotation') {
