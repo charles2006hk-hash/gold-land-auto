@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { 
   X, Briefcase, Search, Check, Copy, ExternalLink, 
   FileCheck, ImageIcon, Camera, Save, Loader2, GitMerge, 
-  ArrowRight, Clipboard, Printer, Globe
+  ArrowRight, Clipboard, Printer, Globe, Plus
 } from 'lucide-react';
 import { WORKFLOW_TEMPLATES } from '@/config/constants';
 import { compressImage } from '@/utils/imageHelpers';
