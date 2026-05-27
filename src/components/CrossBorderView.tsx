@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileText, Plus, Check, ChevronUp, ChevronDown, 
   Trash2, Edit, X, ArrowRight, ImageIcon, Loader2, 
-  DownloadCloud, Upload, DollarSign, Car, ChevronLeft,
+  DownloadCloud, Upload, DollarSign, Car, ChevronLeft, ChevronRight,
   AlertTriangle, Clock, Building2
 } from 'lucide-react';
 import { Vehicle, CrossBorderTask, Payment, SystemSettings } from '@/types';
