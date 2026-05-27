@@ -222,7 +222,7 @@ export default function BusinessProcessModule({ db, staffId, appId, inventory, u
 
     const getFieldValue = (field: string) => {
         if (!editingVehicle) return '';
-        return (editingVehicle as any)[field] || editingVehicle.crossBorder?.[field as keyof any] || (editingVehicle.crossBorder as any)?.[`cb_${field}`] || '';
+        return (editingVehicle as any)[field] || (editingVehicle.crossBorder as any)?.[field] || (editingVehicle.crossBorder as any)?.[`cb_${field}`] || '';
     };
 
     const activeCases = inventory.filter(v => v.activeWorkflow);
