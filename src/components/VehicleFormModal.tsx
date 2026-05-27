@@ -316,11 +316,20 @@ const VehicleFormModal = ({
         }
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
-    // ★★★ 即時響應：扣減對數尾款 ★★★
+    // ★★★ 即時響應：扣減對數尾款 (已升級為包含所有維修成本的總收支計算) ★★★
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-    // 改為讀取即時輸入框的狀態 (acqOffsetStr)
     const acqOffsetAmount = acqType === 'Local' ? Number(acqOffsetStr.replace(/,/g, '')) : 0;
-    const acqBalance = Number(costStr.replace(/,/g, '')) - totalAcqPaid - acqOffsetAmount;
+    
+    // 1. 計算買車本金與已找數的維修雜費
+    const baseCost = Number(costStr.replace(/,/g, '')) || 0;
+    const totalExpensesPaid = (v.expenses || []).filter((e:any) => e.status === 'Paid').reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+    
+    // 2. 總成本 = 買車本金 + 維修雜費
+    const totalCostAll = baseCost + totalExpenses;
+    // 3. 總已付 = 買車已付 + 對數抵銷 + 維修雜費已付
+    const totalPaidAll = totalAcqPaid + acqOffsetAmount + totalExpensesPaid;
+    // 4. 總欠款
+    const acqBalance = totalCostAll - totalPaidAll;
     const handleAddAcqPayment = () => {
         const amt = Number(newAcqPayment.amount.replace(/,/g, ''));
         if (amt > 0) {
@@ -1266,8 +1275,12 @@ const VehicleFormModal = ({
                                 <h4 className="font-bold text-base md:text-xs text-red-800 mb-4 md:mb-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                                     <span>付款紀錄 (Acquisition Payments)</span>
                                     <div className="flex gap-3 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-red-100">
-                                        <span className="text-slate-600 font-mono text-sm md:text-xs font-bold">已付: {formatCurrency(totalAcqPaid)}</span>
-                                        <span className="text-red-600 font-black font-mono text-sm md:text-xs">未付尾數: {formatCurrency(acqBalance)}</span>
+                                        <span className="text-slate-600 font-mono text-sm md:text-xs font-bold" title={`車價已付: ${formatCurrency(totalAcqPaid)} + 雜費已付: ${formatCurrency(totalExpensesPaid)}`}>
+                                            總已付: {formatCurrency(totalPaidAll)}
+                                        </span>
+                                        <span className={`font-black font-mono text-sm md:text-xs ${acqBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                            總欠款尾數: {formatCurrency(acqBalance)}
+                                        </span>
                                     </div>
                                 </h4>
                                 
