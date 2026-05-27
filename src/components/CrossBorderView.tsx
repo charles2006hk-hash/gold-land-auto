@@ -251,7 +251,7 @@ export default function CrossBorderView({
 
     const handleAddPartPayment = (task: CrossBorderTask) => { 
         const amount = Number(newPayAmount); if (!activeCar || amount <= 0) return; 
-        addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: amount, type: 'Service Fee', method: newPayMethod, relatedTaskId: task.id, note: `Payment for: ${task.item}` }); 
+        addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: amount, type: 'Service Fee', method: newPayMethod as any, relatedTaskId: task.id, note: `Payment for: ${task.item}` }); 
         setNewPayAmount(''); 
     };
 
