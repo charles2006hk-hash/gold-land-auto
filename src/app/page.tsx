@@ -2819,12 +2819,18 @@ const deleteVehicle = async (id: string) => {
       });
 
       // 3. 應付未付 B：【新增】進貨與收車的「未付尾數」
-      const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-      const acqOffset = Number(car.acquisition?.offsetAmount || 0);
-      const acqBalance = (car.costPrice || 0) - acqPaid - acqOffset;
-      if (acqBalance > 0) {
-          totalPayable += acqBalance; // 將進貨欠款加入首頁的紅色「未付費用」總額
-      }
+                  // ★ 核心修復：從總成本中扣除雜費，得出真實的買車本金
+                  const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+                  const baseAcqCost = (car.costPrice || 0) - totalExpenses;
+                  
+                  const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                  const acqOffset = Number(car.acquisition?.offsetAmount || 0);
+                  
+                  // 買車本金的真實欠款
+                  const acqBalance = baseAcqCost - acqPaid - acqOffset;
+                  if (acqBalance > 0) {
+                      totalPayable += acqBalance; // 將進貨欠款加入首頁的紅色「未付費用」總額
+                  }
 
       // 4. 應收尾數邏輯 (已售 OR 已訂)
       if (car.status === 'Sold' || car.status === 'Reserved') {
@@ -3643,9 +3649,13 @@ const DatabaseSelector = ({
                                             
                                             {/* 1. 欠行家/供應商車價 (紅色) */}
                                             {(() => {
+                                                const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+                                                const baseAcqCost = (car.costPrice || 0) - totalExpenses;
+                                                
                                                 const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
                                                 const acqOffset = Number(car.acquisition?.offsetAmount || 0);
-                                                const acqBalance = (car.costPrice || 0) - acqPaid - acqOffset;
+                                                
+                                                const acqBalance = baseAcqCost - acqPaid - acqOffset;
                                                 if (acqBalance > 1) {
                                                     return (
                                                         <span className="text-[9px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
