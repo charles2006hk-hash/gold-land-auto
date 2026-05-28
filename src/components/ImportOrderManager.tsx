@@ -177,6 +177,12 @@ const QuotationPreview = ({ item, onClose }: any) => {
         estHKLicenseDate = new Date(license).toLocaleDateString('en-GB'); 
     }
 
+    // ★ 新增：計算新的報價單行項目金額
+    const licenseFee = parseNum(item.fees?.hk_license?.fee);
+    const insuranceFee = parseNum(item.fees?.finalInsurance);
+    const row3Amount = licenseFee + insuranceFee + 1000;
+    const row1Amount = (item.results?.finalPrice || 0) - row3Amount;
+
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
             <div className="bg-white w-full max-w-[210mm] h-[90vh] md:h-[297mm] md:max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl scale-95 md:scale-100 origin-center transition-transform">
@@ -231,9 +237,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             <tr><th className="p-3 text-left uppercase tracking-widest text-[10px]">Description</th><th className="p-3 text-right uppercase tracking-widest text-[10px]">Amount</th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            <tr><td className="p-3 font-bold">車輛到港成本 (含海外雜費及船運)</td><td className="p-3 text-right font-mono">{fmt(item.results?.landedCost)}</td></tr>
-                            <tr><td className="p-3">政府首次登記稅 (FRT)</td><td className="p-3 text-right font-mono">{fmt(item.results?.frtTax)}</td></tr>
-                            <tr><td className="p-3">出牌、保險及其他本地雜費</td><td className="p-3 text-right font-mono">{fmt(item.results?.totalCost - item.results?.landedCost)}</td></tr>
+                            <tr><td className="p-3 font-bold">車價（包到港，連船運及雜費）</td><td className="p-3 text-right font-mono">{fmt(row1Amount)}</td></tr>
+                            <tr><td className="p-3">車輛牌費、保險（預計）、文件費用</td><td className="p-3 text-right font-mono">{fmt(row3Amount)}</td></tr>
                             <tr className="bg-slate-50 border-t-2 border-slate-800"><td className="p-4 font-black text-lg">Final Quotation (總報價)</td><td className="p-4 text-right font-black text-2xl text-blue-700">{fmt(item.results?.finalPrice)}</td></tr>
                         </tbody>
                     </table>
@@ -1106,14 +1111,37 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                     {/* 中欄：雜費 */}
                                     <div className={`w-full md:w-[40%] h-full overflow-y-auto p-4 md:p-6 space-y-8 bg-slate-50/50 pb-32 md:pb-6 md:border-r border-slate-200 ${mobileTab!=='fees'?'hidden md:block':''}`}>
                                         <div>
-                                            <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4"><ShieldCheck className="w-5 h-5 text-indigo-500" /><h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3></div>
-                                            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 shadow-sm">
-                                                <div className="flex justify-between items-center mb-3"><div className="flex bg-white rounded p-0.5 border border-indigo-200"><button onClick={()=>setInsType('3rd')} className={`px-4 py-1 text-xs font-bold rounded ${insType==='3rd'?'bg-indigo-600 text-white':'text-indigo-400'}`}>三保</button><button onClick={()=>setInsType('comp')} className={`px-4 py-1 text-xs font-bold rounded ${insType==='comp'?'bg-indigo-600 text-white':'text-indigo-400'}`}>全保</button></div><span className="text-[10px] font-bold text-indigo-800 bg-indigo-100 px-3 py-1 rounded-lg">NCD: {insNCD}%</span></div>
-                                                <input type="range" min="0" max="60" step="10" value={insNCD} onChange={e=>setInsNCD(Number(e.target.value))} className="w-full accent-indigo-600 mb-4"/>
-                                                <div className="flex justify-between items-center pt-3 border-t border-indigo-100"><span className="text-sm font-bold text-indigo-700">AI 預估保費</span><span className="text-2xl font-black font-mono text-indigo-700">{fmt(estIns)}</span></div>
+                                            <div className="flex items-center gap-2 border-b-2 border-slate-200 pb-2 mb-4">
+                                                <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                                                <h3 className="font-black text-slate-800 text-sm tracking-widest uppercase">出牌與智能保險</h3>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-6 mb-4"><InputField label="牌費" value={formatNum(hkLicenseFees.fee)} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, fee: v})} /><InputField label="實際保費" value={formatNum(hkLicenseFees.insurance || estIns.toString())} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, insurance: v})} /></div>
-                                            <div className="flex justify-between items-center text-sm font-bold text-red-600 bg-red-50 p-3 rounded-lg border border-red-100"><span>首次登記稅 (FRT)</span><span className="font-mono">{fmt(frtTax)}</span></div>
+                                            
+                                            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 mb-6 shadow-sm">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <div className="flex bg-white rounded p-0.5 border border-indigo-200">
+                                                        <button onClick={()=>setInsType('3rd')} className={`px-4 py-1 text-xs font-bold rounded ${insType==='3rd'?'bg-indigo-600 text-white':'text-indigo-400'}`}>三保</button>
+                                                        <button onClick={()=>setInsType('comp')} className={`px-4 py-1 text-xs font-bold rounded ${insType==='comp'?'bg-indigo-600 text-white':'text-indigo-400'}`}>全保</button>
+                                                    </div>
+                                                    {/* ★ 1. 已正名為 NCB */}
+                                                    <span className="text-[10px] font-bold text-indigo-800 bg-indigo-100 px-3 py-1 rounded-lg">NCB: {insNCD}%</span>
+                                                </div>
+                                                
+                                                {/* ★ 2. 允許滑桿拉動 (保持 onChange 觸發) */}
+                                                <input type="range" min="0" max="60" step="10" value={insNCD} onChange={e=>setInsNCD(Number(e.target.value))} className="w-full accent-indigo-600 mb-4 cursor-pointer"/>
+                                                
+                                                <div className="flex justify-between items-center pt-3 border-t border-indigo-100">
+                                                    <span className="text-sm font-bold text-indigo-700">AI 預估保費</span>
+                                                    <span className="text-2xl font-black font-mono text-indigo-700">{fmt(estIns)}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-6 mb-4">
+                                                <InputField label="牌費" value={formatNum(hkLicenseFees.fee)} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, fee: v})} />
+                                                {/* ★ 3. 實際保費允許修改，但刪空時會變成 0，不會當機 */}
+                                                <InputField label="實際保費" value={formatNum(hkLicenseFees.insurance !== undefined ? hkLicenseFees.insurance : estIns.toString())} onChange={(v:any)=>setHkLicenseFees({...hkLicenseFees, insurance: v === '' ? '0' : v})} />
+                                            </div>
+                                            
+                                            {/* ★ 4. (已刪除) 這裡原本有一行 首次登記稅 (FRT)，已經按照您的需求徹底移除了！ */}
                                         </div>
 
                                         <div>
