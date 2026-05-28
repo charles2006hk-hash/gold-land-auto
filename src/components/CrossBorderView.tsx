@@ -237,12 +237,29 @@ export default function CrossBorderView({
     const handleAddBatchTasks = () => {
         if (!activeCar) return;
         if (pendingTasks.length === 0) { alert("請至少選擇一個項目"); return; }
-        const combinedItemName = pendingTasks.map(t => t.item).join(' + ');
-        const totalFee = pendingTasks.reduce((sum, t) => sum + t.fee, 0);
-        const combinedNote = pendingTasks.map(t => t.note).filter(Boolean).join('; ');
         
-        const newCombinedTask: CrossBorderTask = { id: Date.now().toString() + Math.random().toString(36).substr(2, 5), date: newTaskDate, item: combinedItemName, fee: totalFee, days: pendingTasks[0]?.days || '7', institution: '公司', handler: '', currency: 'HKD', note: combinedNote, isPaid: false }; 
-        addCbTask(activeCar.id!, newCombinedTask); 
+        // ★ 核心修復：將每個勾選的項目獨立建立，不再合併成一行
+        const newTasks = pendingTasks.map((t, idx) => ({
+            id: Date.now().toString() + idx + Math.random().toString(36).substr(2, 5), 
+            date: newTaskDate, 
+            item: t.item, 
+            fee: t.fee, 
+            days: t.days || '7', 
+            institution: '公司', 
+            handler: '', 
+            currency: 'HKD', 
+            note: t.note || '', 
+            isPaid: false 
+        }));
+        
+        const existingTasks = activeCar.crossBorder?.tasks || [];
+        const updatedTasks = [...existingTasks, ...newTasks];
+
+        // 透過 updateVehicle 一次性寫入所有獨立項目
+        updateVehicle(activeCar.id!, { 
+            crossBorder: { ...activeCar.crossBorder, tasks: updatedTasks } 
+        });
+        
         setIsAddModalOpen(false);
     };
 
@@ -396,7 +413,61 @@ export default function CrossBorderView({
                             )}
 
                             <div className="flex-1 overflow-y-auto p-4 bg-white">
-                                <div className="flex justify-between items-end mb-2"><h4 className="font-bold text-slate-700 text-sm">收費項目 ({activeCar.crossBorder?.tasks?.length || 0})</h4><button onClick={openAddModal} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 flex items-center font-bold shadow-sm transition-transform active:scale-95"><Plus size={14} className="mr-1"/> 新增項目</button></div>
+                                <div className="flex justify-between items-end mb-2">
+                                    <h4 className="font-bold text-slate-700 text-sm">收費項目 ({activeCar.crossBorder?.tasks?.length || 0})</h4>
+                                    <div className="flex gap-2">
+                                        {/* ★ 新增：一鍵將所有項目合併開單 (細項完美列出) */}
+                                        {(activeCar.crossBorder?.tasks || []).length > 0 && (
+                                            <button 
+                                                onClick={() => {
+                                                    if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                    const hkPlate = activeCar.regMark || '';
+                                                    const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
+                                                    const combinedPlates = mainlandPlate ? `${hkPlate} / ${mainlandPlate}` : hkPlate;
+                                                    
+                                                    // 收集所有獨立項目成為發票細項
+                                                    const docItems = (activeCar.crossBorder?.tasks || []).map((t: any) => ({
+                                                        id: t.id,
+                                                        desc: mainlandPlate ? `[中港代辦] ${t.item} (${mainlandPlate})` : `[中港代辦] ${t.item}`,
+                                                        amount: t.fee, 
+                                                        isSelected: true
+                                                    }));
+
+                                                    const invoiceData = {
+                                                        id: null,
+                                                        type: 'invoice',
+                                                        vehicleId: activeCar.id,
+                                                        formData: {
+                                                            companyNameEn: "GOLD LAND AUTO", companyNameCh: "金田汽車",
+                                                            customerName: activeCar.customerName || '',
+                                                            customerPhone: activeCar.customerPhone || '',
+                                                            customerId: activeCar.customerID || '',
+                                                            customerAddress: activeCar.customerAddress || '',
+                                                            regMark: combinedPlates, 
+                                                            make: activeCar.make || '', model: activeCar.model || '',
+                                                            chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
+                                                            price: '0', 
+                                                            docDate: new Date().toISOString().split('T')[0],
+                                                            deliveryDate: new Date().toISOString().split('T')[0],
+                                                            remarks: mainlandPlate ? `【中港車牌：${mainlandPlate}】\n合併代辦業務收費` : '合併代辦業務收費'
+                                                        },
+                                                        checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+                                                        docItems: docItems,
+                                                        depositItems: [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }],
+                                                        showTerms: false
+                                                    };
+                                                    onJumpToDoc(invoiceData);
+                                                }}
+                                                className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded hover:bg-indigo-100 flex items-center font-bold shadow-sm transition-transform active:scale-95"
+                                            >
+                                                🧾 項目合併開單
+                                            </button>
+                                        )}
+                                        <button onClick={openAddModal} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 flex items-center font-bold shadow-sm transition-transform active:scale-95">
+                                            <Plus size={14} className="mr-1"/> 新增項目
+                                        </button>
+                                    </div>
+                                </div>
                                 <table className="w-full text-sm border-collapse">
                                     <thead className="bg-slate-50 font-bold text-xs sticky top-0"><tr><th className="p-2 text-left">日期</th><th className="p-2 text-left">項目</th><th className="p-2 text-right">費用</th><th className="p-2 text-center">收款狀態</th><th className="p-2 text-center">操作</th></tr></thead>
                                     <tbody className="divide-y">
