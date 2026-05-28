@@ -5,7 +5,7 @@ import {
   List, Save, Ship, Car, 
   DollarSign, Trash2, ArrowRight, ArrowLeft, 
   ShieldCheck, Globe, CheckCircle, Search, Plus,
-  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar, RefreshCw, UserPlus
+  Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar, RefreshCw, UserPlus, Copy
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
@@ -706,6 +706,28 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         await updateDoc(doc(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`, item.id), { isLocked: !item.isLocked });
     };
 
+    // ★ 新增：一鍵複製車輛卡片
+    const handleDuplicate = async (item: any) => {
+        if (confirm("確定複製此報價單建立新的一筆？\n(新單據日期將設為今日，狀態重置為報價中)")) {
+            try {
+                // 剔除原本的 id, 鎖定狀態和匯入狀態
+                const { id, isLocked, isImported, ...copyData } = item;
+                
+                const newDoc = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/import_orders`), {
+                    ...copyData,
+                    date: new Date().toISOString().split('T')[0], // 日期自動更新為今日
+                    status: 'QUOTING', // 狀態重置為報價中
+                    timestamp: serverTimestamp()
+                });
+                
+                setSelectedId(newDoc.id); // 自動選中新複製的卡片
+                alert("✅ 複製成功！");
+            } catch (e) {
+                alert("❌ 複製失敗");
+            }
+        }
+    };
+
     const handleAssignUser = async (item: any, userEmail: string) => {
         const currentAssigned = item.assignedTo || [];
         const newAssigned = currentAssigned.includes(userEmail) 
@@ -800,6 +822,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                             <span className="text-[9px] text-slate-400 font-bold">{item.date}</span>
                                                         </div>
                                                         <div className="flex items-center gap-2">
+                                                            <button onClick={(e) => { e.stopPropagation(); handleDuplicate(item); }} className="text-slate-300 hover:text-blue-500 transition-colors" title="複製此報價單">
+                                                                <Copy size={14}/>
+                                                            </button>
                                                             <button onClick={(e) => { e.stopPropagation(); toggleLock(item); }} className={`transition-colors ${item.isLocked ? 'text-yellow-500 hover:text-yellow-600' : 'text-slate-300 hover:text-yellow-500'}`} title={item.isLocked ? "解鎖" : "鎖定"}>
                                                                 {item.isLocked ? <Lock size={14}/> : <Unlock size={14}/>}
                                                             </button>
