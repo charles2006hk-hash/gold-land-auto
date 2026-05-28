@@ -7,10 +7,10 @@ import {
     Link as LinkIcon, Share2, Car, Globe, ShieldCheck
 } from 'lucide-react';
 
-// --- 預設 AI 整理的業務 SOP 知識庫 ---
+// --- AI 深度整理：金田汽車業務 SOP 知識庫 ---
 const PROCEDURES = [
     {
-        category: "本地車輛業務",
+        category: "香港車輛業務",
         icon: Car,
         items: [
             {
@@ -33,84 +33,57 @@ const PROCEDURES = [
                     "運輸署即時發出印有新車主資料的新牌簿。"
                 ],
                 forms: [{ name: "TD25 - 車輛過戶通知書", url: "https://www.td.gov.hk/filemanager/common/td25_e-fillable_chi.pdf" }],
-                links: [{ name: "運輸署 - 牌照事務處預約", url: "https://www.gov.hk/tc/apps/tdabsbooking.htm" }]
-            },
-            {
-                id: "td320",
-                title: "保留車輛登記號碼 (套牌/留牌)",
-                description: "將舊車的車牌號碼保留，以供日後套用於另一部車",
-                docs: [
-                    "留牌表格 (TD320) - 車主填妥並簽署",
-                    "車輛登記文件 (牌簿 VRD) 正本",
-                    "車輛牌照 (行車證) 正本",
-                    "車主身份證正本",
-                    "三個月內之地址證明正本"
-                ],
-                steps: [
-                    "車主填妥並簽署 TD320 表格。",
-                    "前往運輸署牌照事務處辦理，必須交回原有的牌簿與行車證。",
-                    "繳交留牌費用 $560。",
-                    "運輸署會發出「保留車輛登記號碼憑證」(留牌紙)。",
-                    "運輸署會為原車輛編配一個新的普通車牌，並發出新牌簿及行車證。",
-                    "車主需通知保險公司更新保單上的車牌號碼，並重新製作實體車牌掛上。"
-                ],
-                forms: [{ name: "TD320 - 保留車輛登記號碼", url: "https://www.td.gov.hk/filemanager/common/td320_e-fillable_chi.pdf" }],
-                links: [{ name: "運輸署 - 留牌指南", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/vehicle_licences/how_to_apply_for_registering_and_licensing_a_vehic/index.html" }]
+                links: [{ name: "運輸署網上預約過戶", url: "https://www.gov.hk/tc/apps/tdabsbooking.htm" }]
             },
             {
                 id: "td558",
-                title: "續領車輛牌照 (續牌費)",
+                title: "車輛例牌 (續領行車證)",
                 description: "為車輛延續行車證 (可續4個月或1年)",
                 docs: [
                     "續領牌照表格 (TD558)",
                     "車輛登記文件 (牌簿 VRD) 正本",
-                    "有效的汽車保險單 (Cover Note / Policy) (必須涵蓋新牌照的首天)",
+                    "有效的汽車保險單 (Cover Note) (必須涵蓋新牌照首天)",
                     "三個月內之地址證明",
-                    "車主身份證副本",
-                    "驗車紙正本 (適用於車齡達 6 年或以上的私家車及所有商用車)"
+                    "驗車紙正本 (適用於車齡達 6 年或以上私家車/商用車)"
                 ],
                 steps: [
                     "如車輛需驗車，請先預約驗車中心並獲取合格驗車紙 (COR)。",
-                    "確保汽車保險有效。",
-                    "填妥 TD558 表格。",
-                    "透過郵寄、投遞箱或親身前往運輸署辦理。",
-                    "繳交相應的牌照費用 (視乎引擎汽缸容量)。",
+                    "確保汽車保險有效並覆蓋續牌期。",
+                    "填妥 TD558 表格並由車主簽署。",
+                    "透過郵寄、投遞箱或親身前往運輸署辦理，繳交相應牌照費用。",
                     "獲取新行車證，並張貼於車頭擋風玻璃左面。"
                 ],
                 forms: [{ name: "TD558 - 續領車輛牌照", url: "https://www.td.gov.hk/filemanager/common/td558_e-fillable_chi.pdf" }],
-                links: [{ name: "運輸署 - 網上續領牌照", url: "https://www.gov.hk/tc/residents/transport/vehicle/renewvlicence.htm" }]
-            }
-        ]
-    },
-    {
-        category: "中港跨境業務",
-        icon: Globe,
-        items: [
-            {
-                id: "cb_extend",
-                title: "中港牌批文延期",
-                description: "辦理粵港澳機動車輛往來批文延期手續",
-                docs: [
-                    "批文卡原件及複印件",
-                    "香港商業登記證 (BR) 複印件",
-                    "香港車輛登記文件 (牌簿) 複印件",
-                    "內地交強險憑證",
-                    "公司印章 (公章)"
-                ],
-                steps: [
-                    "確保內地交強險及香港保險在有效期內。",
-                    "登入廣東省公安廳政務服務網，提交延期申請。",
-                    "上傳所需文件的彩色掃描件。",
-                    "等待審批結果 (通常約需 3-5 個工作日)。",
-                    "審批通過後，攜帶批文卡原件前往中旅社或指定窗口辦理刷卡延期。"
-                ],
-                forms: [],
-                links: [{ name: "廣東省公安廳交通管理局", url: "http://gdgajj.gd.gov.cn/" }]
+                links: [{ name: "網上續領車輛牌照", url: "https://www.gov.hk/tc/residents/transport/vehicle/renewvlicence.htm" }]
             },
             {
-                id: "cb_closedroad",
-                title: "申請 / 續領禁區紙 (封閉道路通行許可證)",
-                description: "中港車輛進出香港邊境禁區必備證件",
+                id: "td320",
+                title: "車輛套牌 / 留牌",
+                description: "保留舊車牌號碼，或將幸運車牌套用於另一部車",
+                docs: [
+                    "留牌表格 (TD320) 或 套牌表格 (TD319)",
+                    "車輛登記文件 (牌簿 VRD) 正本",
+                    "車輛牌照 (行車證) 正本",
+                    "車主身份證正本及三個月內地址證明正本"
+                ],
+                steps: [
+                    "車主填妥並簽署 TD320(留牌) 或 TD319(套牌) 表格。",
+                    "前往運輸署辦理，交回原有牌簿與行車證。",
+                    "繳交留牌/套牌手續費 (通常為 $560)。",
+                    "運輸署發出「保留車輛登記號碼憑證」(留牌紙) 或印有新號碼的牌簿。",
+                    "通知保險公司更新保單上的車牌號碼。",
+                    "前往車牌舖製作實體車牌並掛上車輛。"
+                ],
+                forms: [
+                    { name: "TD320 - 保留車輛登記號碼", url: "https://www.td.gov.hk/filemanager/common/td320_e-fillable_chi.pdf" },
+                    { name: "TD319 - 轉移車輛登記號碼", url: "https://www.td.gov.hk/filemanager/common/td319_e-fillable_chi.pdf" }
+                ],
+                links: []
+            },
+            {
+                id: "hk_crp",
+                title: "香港禁區紙辦理 (TD547)",
+                description: "申請或續領封閉道路通行許可證 (常規中港車必備)",
                 docs: [
                     "申請表格 (TD547)",
                     "廣東省公安廳發出的有效批文正本及副本",
@@ -119,13 +92,164 @@ const PROCEDURES = [
                     "車主/公司身份證明文件副本"
                 ],
                 steps: [
-                    "取得廣東省公安廳的有效批文後，填妥 TD547 表格。",
-                    "準備好所有副本文件，親身或郵寄至過境服務分組辦理。",
-                    "繳交費用 (新申請 / 續期視乎口岸及期限，通常為每年 $540 或 $3,150)。",
-                    "領取禁區紙，必須張貼於車輛擋風玻璃上。"
+                    "確認廣東省公安廳批文仍然有效。",
+                    "填妥 TD547 表格並準備好所有文件副本。",
+                    "親身或郵寄至過境服務分組 (中環林士街停車場) 辦理。",
+                    "繳交費用 (視乎口岸及期限，新申請通常 $540，續領可能不同)。",
+                    "領取禁區紙正本，必須張貼於車輛擋風玻璃上。"
                 ],
                 forms: [{ name: "TD547 - 封閉道路通行許可證", url: "https://www.td.gov.hk/filemanager/common/td547_e-fillable_chi.pdf" }],
-                links: [{ name: "運輸署 - 過境車輛", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/closed_road_permit_for_cross_boundary_vehicles/index.html" }]
+                links: [{ name: "運輸署 - 過境車輛申請指南", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/closed_road_permit_for_cross_boundary_vehicles/index.html" }]
+            },
+            {
+                id: "chunming_ins",
+                title: "俊銘保險 (各種表格下載)",
+                description: "下載俊銘保險經紀的相關投保及理賠表格",
+                docs: [
+                    "車主身份證 / 公司 BR 副本",
+                    "車輛牌簿 (VRD) 副本",
+                    "司機駕駛執照副本 (如需記名)"
+                ],
+                steps: [
+                    "根據客戶需求，選擇下載相應的投保書或理賠表格。",
+                    "請客戶清晰填寫表格並在指定位置簽署 (如屬公司需蓋公司印)。",
+                    "連同牌簿、身份證等所需文件，電郵或 WhatsApp 發送給俊銘保險專員。",
+                    "等待報價及確認保單 (Cover Note)。"
+                ],
+                forms: [
+                    { name: "汽車保險投保書 (通用)", url: "#" },
+                    { name: "交通意外理賠申請表", url: "#" }
+                ],
+                links: [{ name: "俊銘保險官方網站", url: "https://www.chunming.com.hk/" }]
+            }
+        ]
+    },
+    {
+        category: "港車北上專區",
+        icon: Globe,
+        items: [
+            {
+                id: "northbound_app",
+                title: "港車北上申請流程",
+                description: "從抽籤到獲取電子牌證的完整申請 SOP",
+                docs: [
+                    "香港身份證 及 港澳居民來往內地通行證 (回鄉證)",
+                    "香港車輛登記文件 (牌簿 VRD)",
+                    "司機的香港駕駛執照 及 內地駕駛證",
+                    "符合規定的「等效先認」跨境汽車保險單"
+                ],
+                steps: [
+                    "於「港車北上」指定網站登記電腦抽籤。",
+                    "中籤後，在獲分配的指定時間內透過網上系統遞交正式申請。",
+                    "申請獲初步審批後，聯絡保險公司購買「等效先認」內地交強險/商業險。",
+                    "安排車輛前往香港的指定驗車中心 (如中檢) 進行車輛查驗 (如適用)。",
+                    "內地交警及海關完成審批後，獲發「電子牌證」。",
+                    "獲批後即可於「指定日子預約系統」預約出行日期。"
+                ],
+                forms: [],
+                links: [
+                    { name: "「港車北上」官方資訊網站", url: "https://www.hzmbqfs.gov.hk/tc/" },
+                    { name: "港車北上網上申請/抽籤平台", url: "https://www.hzmbqfs.gov.hk/tc/application/" }
+                ]
+            },
+            {
+                id: "northbound_zhuhai",
+                title: "港車北上珠海網站 (預約通關)",
+                description: "廣東省交管局及珠海免稅通關系統相關操作",
+                docs: ["已獲批的電子牌證號碼", "註冊時的手機號碼/賬號密碼"],
+                steps: [
+                    "成功申請港車北上後，必須在出發前進行預約。",
+                    "登入「港車北上指定日子預約系統」或廣東省公安廳平台。",
+                    "選擇預計經港珠澳大橋前往珠海的日期。",
+                    "確認預約後，系統會發出預約確認通知。",
+                    "到達口岸時，系統會自動識別車牌及電子標籤，實現免簽注快速通關。"
+                ],
+                forms: [],
+                links: [{ name: "廣東省政務服務網 (港車北上專區)", url: "https://macao-zhuhai.dsat.gov.mo/" }]
+            },
+            {
+                id: "northbound_cancel",
+                title: "港車北上註銷手續",
+                description: "如何申請註銷港車北上資格 (例如車輛需賣出或報廢)",
+                docs: [
+                    "原申請人的身份證明文件",
+                    "車輛牌簿",
+                    "註銷原因證明 (如賣車收據、報廢證明等)"
+                ],
+                steps: [
+                    "登入「港車北上」內地政務系統的個人中心。",
+                    "選擇「車輛註銷/退出」業務板塊。",
+                    "填寫註銷原因，並上傳相關證明文件 (如已過戶的牌簿副本)。",
+                    "提交申請後，等待內地交警部門審批 (約需數個工作日)。",
+                    "註銷成功後，該車輛的電子牌證即時失效，新車主才可重新入籤申請。"
+                ],
+                forms: [],
+                links: []
+            },
+            {
+                id: "zhuhai_police",
+                title: "珠海交警聯絡 (違章處理)",
+                description: "處理內地交通違規、扣分及車輛事故聯絡",
+                docs: ["香港駕駛執照", "內地機動車駕駛證", "違章通知書或短訊"],
+                steps: [
+                    "如在內地發生輕微交通事故，請立即拍照並將車輛移至安全位置，隨後透過微信「交管12123」App 處理。",
+                    "如需報警，請在內地撥打 122 (交通事故) 或 110 (報警求助)。",
+                    "查詢違章紀錄：關注微信公眾號「珠海交警」或登入「交管12123」App。",
+                    "處理罰單：大部分違章可透過「交管12123」App 綁定內地銀行卡線上繳費扣分。",
+                    "若需親身處理，需帶齊駕駛證前往珠海市交警支隊各業務大廳辦理。"
+                ],
+                forms: [],
+                links: [
+                    { name: "廣東省公安廳交通管理局", url: "http://gdgajj.gd.gov.cn/" }
+                ]
+            }
+        ]
+    },
+    {
+        category: "中港常規指標業務",
+        icon: ShieldCheck,
+        items: [
+            {
+                id: "ccic_yuenlong",
+                title: "元朗中檢驗車預約",
+                description: "中港車輛年審 - 中國檢驗有限公司 (元朗) 預約及辦理",
+                docs: [
+                    "廣東省公安廳發出的《批准通知書》(批文卡) 正本及副本",
+                    "香港車輛登記文件 (牌簿) 正本及副本",
+                    "車輛彩色照片 (左前方45度角，可見車牌)",
+                    "公司蓋章 (如有)"
+                ],
+                steps: [
+                    "登入中國檢驗有限公司 (CCIC) 網站，選擇「汽車檢驗網上預約」。",
+                    "輸入中港車牌號碼、底盤號碼等資料，選擇前往元朗中心的日期及時段。",
+                    "列印或截圖保留預約確認信。",
+                    "按預約時間駛往元朗工業邨福宏街5號中檢汽車檢驗中心。",
+                    "現場繳交驗車費，進行上線檢測及拓印引擎/底盤號碼。",
+                    "檢驗合格後，領取最新的《機動車安全技術檢驗合格證明》。"
+                ],
+                forms: [],
+                links: [{ name: "中檢公司 - 汽車檢驗網上預約", url: "http://www.cictc.com/tc/booking.html" }]
+            },
+            {
+                id: "gd_police_portal",
+                title: "廣東省公安廳平台查詢 (批文管理)",
+                description: "查詢及辦理中港牌批文延期、換車、更換司機等業務",
+                docs: [
+                    "批文卡號碼",
+                    "公司法人/登記人手機號碼 (接收驗證碼)"
+                ],
+                steps: [
+                    "登入「廣東省公安廳交通管理局政務服務網」。",
+                    "使用企業賬號或手機驗證碼登入系統。",
+                    "進入「粵港澳機動車業務」板塊。",
+                    "您可在此進行：批文有效期查詢、提交批文延期申請、變更司機資料、變更車輛資料 (換車) 等線上預審手續。",
+                    "預審通過後，根據系統指示打印回執，前往指定實體窗口 (如中旅社) 辦理刷卡或換證手續。"
+                ],
+                forms: [],
+                links: [
+                    { name: "廣東省公安廳政務服務網", url: "http://gdgajj.gd.gov.cn/" },
+                    { name: "業務辦理進度查詢", url: "http://gdgajj.gd.gov.cn/wsbl/bljd/index.html" }
+                ]
             }
         ]
     }
