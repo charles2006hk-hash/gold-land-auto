@@ -676,9 +676,15 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                 <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors" title={isSidebarCollapsed ? "展開選單" : "縮起選單"}>{isSidebarCollapsed ? null : <ChevronLeft size={16} />}</button>
             </div>
 
-            {/* 導航列表 (使用 visibleMenuItems 渲染) - 加入無痕隱形捲軸與底部漸層 */}
+            {/* 導航列表 (使用 visibleMenuItems 渲染) - 加入終極無痕隱形捲軸與底部漸層 */}
             <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
-                <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-hide pb-10">
+                {/* ★ 終極魔法：直接注入原生 CSS 強制殺掉捲軸 */}
+                <style>{`
+                    .sidebar-no-scroll::-webkit-scrollbar { display: none; }
+                    .sidebar-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+                `}</style>
+                
+                <nav className="sidebar-no-scroll flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden pb-10">
                   {visibleMenuItems.map(item => (
                      <button 
                         key={item.id} 
