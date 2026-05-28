@@ -676,22 +676,26 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                 <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded transition-colors" title={isSidebarCollapsed ? "展開選單" : "縮起選單"}>{isSidebarCollapsed ? null : <ChevronLeft size={16} />}</button>
             </div>
 
-            {/* 導航列表 (使用 visibleMenuItems 渲染) */}
-            <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-              {visibleMenuItems.map(item => (
-                 <button 
-                    key={item.id} 
-                    onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                    className={`flex items-center w-full p-2.5 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
-                    title={isSidebarCollapsed ? item.label : ''}
-                 >
-                    <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
-                    {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
-                    
-                    {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
-                 </button>
-              ))}
-            </nav>
+            {/* 導航列表 (使用 visibleMenuItems 渲染) - 加入無痕隱形捲軸與底部漸層 */}
+            <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+                <nav className="flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-hide pb-10">
+                  {visibleMenuItems.map(item => (
+                     <button 
+                        key={item.id} 
+                        onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
+                        className={`flex items-center w-full p-2.5 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
+                        title={isSidebarCollapsed ? item.label : ''}
+                     >
+                        <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                        {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
+                        
+                        {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
+                     </button>
+                  ))}
+                </nav>
+                {/* 底部優雅的漸層遮罩 (暗示可以往下滑，pointer-events-none 確保不阻擋點擊) */}
+                <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none z-10"></div>
+            </div>
             
             {!isSidebarCollapsed && <InfoWidget />}
             
