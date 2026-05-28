@@ -178,6 +178,10 @@ export default function CrossBorderView({
     const [newPayAmount, setNewPayAmount] = useState('');
     const [newPayMethod, setNewPayMethod] = useState('Cash');
     const [reportModalData, setReportModalData] = useState<{ title: string, type: 'expired' | 'soon', items: any[] } | null>(null);
+    
+    // ★ 新增：控制「項目合併開單選取彈窗」的狀態
+    const [isCombineModalOpen, setIsCombineModalOpen] = useState(false);
+    const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
 
     useEffect(() => { if (activeCbVehicleId && window.innerWidth < 768) setIsMobileDetail(true); }, [activeCbVehicleId]);
     const handleBackToList = () => { setIsMobileDetail(false); setActiveCbVehicleId(null); };
@@ -416,49 +420,38 @@ export default function CrossBorderView({
                                 <div className="flex justify-between items-end mb-2">
                                     <h4 className="font-bold text-slate-700 text-sm">收費項目 ({activeCar.crossBorder?.tasks?.length || 0})</h4>
                                     <div className="flex gap-2">
-                                        {/* ★ 新增：一鍵將所有項目合併開單 (細項完美列出) */}
+                                        {/* ★ 進階升級：點擊後自動觸發智能日期篩選並打開勾選彈窗 */}
                                         {(activeCar.crossBorder?.tasks || []).length > 0 && (
                                             <button 
+                                                type="button"
                                                 onClick={() => {
-                                                    if (!onJumpToDoc) return alert("開單系統連動未就緒");
-                                                    const hkPlate = activeCar.regMark || '';
-                                                    const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
-                                                    const combinedPlates = mainlandPlate ? `${hkPlate} / ${mainlandPlate}` : hkPlate;
-                                                    
-                                                    // 收集所有獨立項目成為發票細項
-                                                    const docItems = (activeCar.crossBorder?.tasks || []).map((t: any) => ({
-                                                        id: t.id,
-                                                        desc: mainlandPlate ? `[中港代辦] ${t.item} (${mainlandPlate})` : `[中港代辦] ${t.item}`,
-                                                        amount: t.fee, 
-                                                        isSelected: true
-                                                    }));
+                                                    const tasks = activeCar.crossBorder?.tasks || [];
+                                                    if (tasks.length === 0) return;
 
-                                                    const invoiceData = {
-                                                        id: null,
-                                                        type: 'invoice',
-                                                        vehicleId: activeCar.id,
-                                                        formData: {
-                                                            companyNameEn: "GOLD LAND AUTO", companyNameCh: "金田汽車",
-                                                            customerName: activeCar.customerName || '',
-                                                            customerPhone: activeCar.customerPhone || '',
-                                                            customerId: activeCar.customerID || '',
-                                                            customerAddress: activeCar.customerAddress || '',
-                                                            regMark: combinedPlates, 
-                                                            make: activeCar.make || '', model: activeCar.model || '',
-                                                            chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
-                                                            price: '0', 
-                                                            docDate: new Date().toISOString().split('T')[0],
-                                                            deliveryDate: new Date().toISOString().split('T')[0],
-                                                            remarks: mainlandPlate ? `【中港車牌：${mainlandPlate}】\n合併代辦業務收費` : '合併代辦業務收費'
-                                                        },
-                                                        checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
-                                                        docItems: docItems,
-                                                        depositItems: [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }],
-                                                        showTerms: false
-                                                    };
-                                                    onJumpToDoc(invoiceData);
+                                                    // 🧠 智慧大腦：統計哪個日期的項目最多，作為預設日期
+                                                    const dateCounts: Record<string, number> = {};
+                                                    tasks.forEach((t: any) => {
+                                                        if (t.date) dateCounts[t.date] = (dateCounts[t.date] || 0) + 1;
+                                                    });
+                                                    
+                                                    let maxCount = 0;
+                                                    let defaultDate = '';
+                                                    Object.entries(dateCounts).forEach(([date, count]) => {
+                                                        if (count > maxCount) {
+                                                            maxCount = count;
+                                                            defaultDate = date;
+                                                        }
+                                                    });
+
+                                                    // 自動把這個「同日期」的所有項目 ID 塞進預設勾選陣列
+                                                    const autoSelectedIds = tasks
+                                                        .filter((t: any) => t.date === defaultDate)
+                                                        .map((t: any) => t.id);
+
+                                                    setSelectedTaskIds(autoSelectedIds);
+                                                    setIsCombineModalOpen(true);
                                                 }}
-                                                className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded hover:bg-indigo-100 flex items-center font-bold shadow-sm transition-transform active:scale-95"
+                                                className="text-xs bg-indigo-600 text-white border border-indigo-700 px-3 py-1.5 rounded hover:bg-indigo-700 flex items-center font-bold shadow-sm transition-transform active:scale-95 animate-pulse"
                                             >
                                                 🧾 項目合併開單
                                             </button>
@@ -551,6 +544,113 @@ export default function CrossBorderView({
                     ) : ( <div className="flex-1 flex flex-col items-center justify-center text-slate-300"><p>請選擇車輛以管理中港業務</p></div> )}
                 </div>
             </div>
+
+            {/* ★★★ 全新高階功能：合併開單項目精細選取彈窗 ★★★ */}
+            {isCombineModalOpen && activeCar && (
+                <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh] overflow-hidden">
+                        
+                        {/* 彈窗標頭 */}
+                        <div className="p-4 bg-gradient-to-r from-indigo-700 to-slate-950 text-white flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="font-bold text-sm flex items-center gap-1.5">🧾 選擇本次開單項目明細</h3>
+                                <p className="text-[10px] text-indigo-200 mt-0.5">{activeCar.regMark} · 已自動預選同日期最集中之項目</p>
+                            </div>
+                            <button onClick={() => setIsCombineModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full text-white"><X size={16}/></button>
+                        </div>
+
+                        {/* 項目清單勾選區 */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
+                            {(activeCar.crossBorder?.tasks || []).map((task: any) => {
+                                const isChecked = selectedTaskIds.includes(task.id);
+                                return (
+                                    <div 
+                                        key={task.id}
+                                        onClick={() => {
+                                            setSelectedTaskIds(prev => 
+                                                prev.includes(task.id) ? prev.filter(id => id !== task.id) : [...prev, task.id]
+                                            );
+                                        }}
+                                        className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all active:scale-99 ${isChecked ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {/* 核心選擇框 Checkbox */}
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-none transition-colors ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}>
+                                                {isChecked && <Check size={10} className="text-white font-black" />}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-bold text-slate-800">{task.item}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{task.date} {task.note && `· ${task.note}`}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
+                                            {formatCurrency(task.fee)}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* 底部按鈕區 */}
+                        <div className="p-4 bg-white border-t border-slate-200 shrink-0 flex justify-between items-center">
+                            <div className="text-xs text-slate-500 font-medium">
+                                已選取 <span className="font-mono font-bold text-indigo-600">{selectedTaskIds.length}</span> 項
+                            </div>
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setIsCombineModalOpen(false)} className="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold">
+                                    取消
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => {
+                                        if (selectedTaskIds.length === 0) return alert("請至少勾選一個項目開單！");
+                                        if (!onJumpToDoc) return alert("開單系統連動未就緒");
+
+                                        const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
+                                        const combinedPlates = mainlandPlate ? `${activeCar.regMark} / ${mainlandPlate}` : activeCar.regMark || '';
+                                        
+                                        // 🔍 只過濾出被勾選的項目送去發票
+                                        const finalInvoiceItems = (activeCar.crossBorder?.tasks || [])
+                                            .filter((t: any) => selectedTaskIds.includes(t.id))
+                                            .map((t: any) => ({
+                                                id: t.id,
+                                                desc: mainlandPlate ? `[中港代辦] ${t.item} (${mainlandPlate})` : `[中港代辦] ${t.item}`,
+                                                amount: t.fee, 
+                                                isSelected: true
+                                            }));
+
+                                        const invoiceData = {
+                                            id: null,
+                                            type: 'invoice',
+                                            vehicleId: activeCar.id,
+                                            formData: {
+                                                companyNameEn: "GOLD LAND AUTO", companyNameCh: "金田汽車",
+                                                customerName: activeCar.customerName || '', customerPhone: activeCar.customerPhone || '', customerId: activeCar.customerID || '', customerAddress: activeCar.customerAddress || '',
+                                                regMark: combinedPlates, 
+                                                make: activeCar.make || '', model: activeCar.model || '', chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
+                                                price: '0', 
+                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
+                                                remarks: mainlandPlate ? `【中港車牌：${mainlandPlate}】\n精選代辦業務收費` : '精選代辦業務收費'
+                                            },
+                                            checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+                                            docItems: finalInvoiceItems,
+                                            depositItems: [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }], showTerms: false
+                                        };
+
+                                        setIsCombineModalOpen(false);
+                                        onJumpToDoc(invoiceData); // 漂亮跳轉！
+                                    }}
+                                    className="px-6 py-2 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-200 transition-transform active:scale-95"
+                                >
+                                    產生精選發票草稿 ↗
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }
