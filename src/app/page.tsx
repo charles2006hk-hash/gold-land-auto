@@ -3743,7 +3743,7 @@ const DatabaseSelector = ({
                                   {/* 標題與懸浮搜尋列 (手機點擊覆蓋 / 桌面 Hover 顯示) */}
                                   <div className="flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10 md:group cursor-pointer hover:bg-slate-50 transition-colors relative">
                                       <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide flex-none">
-                                          <Layout size={16} className="mr-1.5 text-green-500"/> 在庫待售
+                                          <Layout size={16} className="mr-1.5 text-green-500" /> 在庫待售
                                       </h3>
                                       
                                       {/* ★ 手機點擊展開覆蓋，桌面 Hover 顯示的魔法搜尋框 */}
@@ -3757,7 +3757,7 @@ const DatabaseSelector = ({
                                                   placeholder="搜尋車牌、廠型..." 
                                                   className={`w-full h-8 pl-8 pr-6 rounded-full text-xs outline-none focus:ring-1 focus:ring-green-100 transition-all cursor-pointer focus:cursor-text relative z-0 border md:bg-white md:border-slate-200 md:text-slate-700 md:placeholder-slate-400 md:shadow-sm md:group-hover:opacity-100 md:focus-within:opacity-100 ${dashSearchInStock ? 'md:opacity-100 bg-white border-green-400 text-slate-700 placeholder-slate-400 shadow-sm' : 'md:opacity-0 bg-transparent border-transparent text-transparent placeholder-transparent focus:bg-white focus:border-green-400 focus:text-slate-700 focus:placeholder-slate-400 focus:shadow-sm'}`}
                                               />
-                                              {dashSearchInStock && <button onClick={(e) => { e.preventDefault(); setDashSearchInStock(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12}/></button>}
+                                              {dashSearchInStock && <button onClick={(e) => { e.preventDefault(); setDashSearchInStock(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12} /></button>}
                                           </div>
                                       </div>
 
@@ -3768,7 +3768,11 @@ const DatabaseSelector = ({
                                   
                                   <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
                                       {filteredInStockCars.map(car => renderDashboardCard(car))}
-                                      {filteredInStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">{dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}</div>}
+                                      {filteredInStockCars.length === 0 && (
+                                          <div className="text-center py-10 text-slate-400 text-xs">
+                                              {dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}
+                                          </div>
+                                      )}
                                   </div>
                               </div>
 
@@ -3777,7 +3781,7 @@ const DatabaseSelector = ({
                                   {/* 標題與懸浮搜尋列 (手機點擊覆蓋 / 桌面 Hover 顯示) */}
                                   <div className="flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10 md:group cursor-pointer hover:bg-slate-50 transition-colors relative">
                                       <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide flex-none">
-                                          <FileCheck size={16} className="mr-1.5 text-amber-500"/> 已訂與待結清
+                                          <FileCheck size={16} className="mr-1.5 text-amber-500" /> 已訂與待結清
                                       </h3>
                                       
                                       {/* ★ 手機點擊展開覆蓋，桌面 Hover 顯示的魔法搜尋框 */}
@@ -3791,7 +3795,7 @@ const DatabaseSelector = ({
                                                   placeholder="搜尋車牌、廠型..." 
                                                   className={`w-full h-8 pl-8 pr-6 rounded-full text-xs outline-none focus:ring-1 focus:ring-amber-100 transition-all cursor-pointer focus:cursor-text relative z-0 border md:bg-white md:border-slate-200 md:text-slate-700 md:placeholder-slate-400 md:shadow-sm md:group-hover:opacity-100 md:focus-within:opacity-100 ${dashSearchAction ? 'md:opacity-100 bg-white border-amber-400 text-slate-700 placeholder-slate-400 shadow-sm' : 'md:opacity-0 bg-transparent border-transparent text-transparent placeholder-transparent focus:bg-white focus:border-amber-400 focus:text-slate-700 focus:placeholder-slate-400 focus:shadow-sm'}`}
                                               />
-                                              {dashSearchAction && <button onClick={(e) => { e.preventDefault(); setDashSearchAction(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12}/></button>}
+                                              {dashSearchAction && <button onClick={(e) => { e.preventDefault(); setDashSearchAction(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12} /></button>}
                                           </div>
                                       </div>
 
@@ -3802,22 +3806,18 @@ const DatabaseSelector = ({
                                   
                                   <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
                                       {filteredActionCars.map(car => renderDashboardCard(car))}
-                                      {filteredActionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">{dashSearchAction ? '找不到符合的車輛' : <><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</>}</div>}
-                                  </div>
-                              </div>
-
-                                      <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider flex-none relative z-10">
-                                          {filteredActionCars.length} 台
-                                      </div>
-                                  </div>
-
-                                      <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider flex-none">
-                                          {filteredActionCars.length} 台
-                                      </div>
-                                  </div>
-                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
-                                      {filteredActionCars.map(car => renderDashboardCard(car))}
-                                      {filteredActionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">{dashSearchAction ? '找不到符合的車輛' : <><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</>}</div>}
+                                      {filteredActionCars.length === 0 && (
+                                          <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">
+                                              {dashSearchAction ? (
+                                                  <span className="mt-2">找不到符合的車輛</span>
+                                              ) : (
+                                                  <>
+                                                      <CheckCircle size={32} className="mb-2 text-green-400 opacity-50" />
+                                                      <span className="mt-2">所有交易皆已完美結清</span>
+                                                  </>
+                                              )}
+                                          </div>
+                                      )}
                                   </div>
                               </div>
 
