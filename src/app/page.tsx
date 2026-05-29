@@ -3765,6 +3765,7 @@ const DatabaseSelector = ({
                                           {filteredInStockCars.length} 台
                                       </div>
                                   </div>
+                                  
                                   <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
                                       {filteredInStockCars.map(car => renderDashboardCard(car))}
                                       {filteredInStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">{dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}</div>}
@@ -3793,6 +3794,17 @@ const DatabaseSelector = ({
                                               {dashSearchAction && <button onClick={(e) => { e.preventDefault(); setDashSearchAction(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12}/></button>}
                                           </div>
                                       </div>
+
+                                      <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider flex-none relative z-10">
+                                          {filteredActionCars.length} 台
+                                      </div>
+                                  </div>
+                                  
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
+                                      {filteredActionCars.map(car => renderDashboardCard(car))}
+                                      {filteredActionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">{dashSearchAction ? '找不到符合的車輛' : <><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</>}</div>}
+                                  </div>
+                              </div>
 
                                       <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider flex-none relative z-10">
                                           {filteredActionCars.length} 台
