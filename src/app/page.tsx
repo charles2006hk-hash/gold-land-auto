@@ -1570,6 +1570,8 @@ export default function GoldLandAutoDMS() {
   const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
   const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock'); // ★ 新增：手機版儀表板分頁狀態
+  const [dashSearchInStock, setDashSearchInStock] = useState('');
+  const [dashSearchAction, setDashSearchAction] = useState('');
   // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
   const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -3463,6 +3465,21 @@ const DatabaseSelector = ({
                       return false;
                   });
 
+                  // ★★★ 新增：為儀表板兩個區塊加上即時搜尋過濾器 ★★★
+                  const filteredInStockCars = inStockCars.filter(car => 
+                      !dashSearchInStock || 
+                      (car.regMark || '').toLowerCase().includes(dashSearchInStock.toLowerCase()) ||
+                      (car.make || '').toLowerCase().includes(dashSearchInStock.toLowerCase()) ||
+                      (car.model || '').toLowerCase().includes(dashSearchInStock.toLowerCase())
+                  );
+
+                  const filteredActionCars = actionCars.filter(car => 
+                      !dashSearchAction || 
+                      (car.regMark || '').toLowerCase().includes(dashSearchAction.toLowerCase()) ||
+                      (car.make || '').toLowerCase().includes(dashSearchAction.toLowerCase()) ||
+                      (car.model || '').toLowerCase().includes(dashSearchAction.toLowerCase())
+                  );
+             
                   // 計算庫存天數
                   const getInventoryAging = (car: any) => {
                       if (!car.stockInDate) return null;
@@ -3723,35 +3740,67 @@ const DatabaseSelector = ({
                               
                               {/* 左側看板：在庫優先 */}
                               <div className={`flex-1 flex-col bg-transparent md:bg-white md:rounded-2xl border-0 md:border border-slate-200/60 md:shadow-sm overflow-hidden min-h-0 relative ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-                                  {/* 桌面版：極幼細邊框 + 右上角醒目數量 */}
-                                  <div className="hidden md:flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10">
-                                      <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide">
+                                  {/* 標題與懸浮搜尋列 (無縫滑入不改變佈局) */}
+                                  <div className="hidden md:flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10 group cursor-pointer hover:bg-slate-50 transition-colors">
+                                      <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide flex-none">
                                           <Layout size={16} className="mr-1.5 text-green-500"/> 在庫待售
                                       </h3>
-                                      <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider">
-                                          {inStockCars.length} 台
+                                      
+                                      {/* ★ 隱形搜尋框 (Hover/Focus時顯示) */}
+                                      <div className="flex-1 mx-4 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300">
+                                          <div className="relative max-w-[200px] mx-auto">
+                                              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                              <input 
+                                                  type="text" 
+                                                  value={dashSearchInStock}
+                                                  onChange={(e) => setDashSearchInStock(e.target.value)}
+                                                  placeholder="搜尋車牌、廠型..." 
+                                                  className="w-full pl-8 pr-6 py-1 bg-white border border-slate-200 rounded-full text-xs outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100 shadow-sm"
+                                              />
+                                              {dashSearchInStock && <button onClick={() => setDashSearchInStock('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={12}/></button>}
+                                          </div>
+                                      </div>
+
+                                      <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider flex-none">
+                                          {filteredInStockCars.length} 台
                                       </div>
                                   </div>
                                   <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
-                                      {inStockCars.map(car => renderDashboardCard(car))}
-                                      {inStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">目前無在庫車輛</div>}
+                                      {filteredInStockCars.map(car => renderDashboardCard(car))}
+                                      {filteredInStockCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs">{dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}</div>}
                                   </div>
                               </div>
 
                               {/* 右側看板：已訂 / 待跟進 */}
                               <div className={`flex-1 flex-col bg-transparent md:bg-white md:rounded-2xl border-0 md:border border-slate-200/60 md:shadow-sm overflow-hidden min-h-0 relative ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-                                  {/* 桌面版：極幼細邊框 + 右上角醒目數量 */}
-                                  <div className="hidden md:flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10">
-                                      <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide">
+                                  {/* 標題與懸浮搜尋列 (無縫滑入不改變佈局) */}
+                                  <div className="hidden md:flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10 group cursor-pointer hover:bg-slate-50 transition-colors">
+                                      <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide flex-none">
                                           <FileCheck size={16} className="mr-1.5 text-amber-500"/> 已訂與待結清
                                       </h3>
-                                      <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider">
-                                          {actionCars.length} 台
+                                      
+                                      {/* ★ 隱形搜尋框 (Hover/Focus時顯示) */}
+                                      <div className="flex-1 mx-4 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300">
+                                          <div className="relative max-w-[200px] mx-auto">
+                                              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                              <input 
+                                                  type="text" 
+                                                  value={dashSearchAction}
+                                                  onChange={(e) => setDashSearchAction(e.target.value)}
+                                                  placeholder="搜尋車牌、廠型..." 
+                                                  className="w-full pl-8 pr-6 py-1 bg-white border border-slate-200 rounded-full text-xs outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-100 shadow-sm"
+                                              />
+                                              {dashSearchAction && <button onClick={() => setDashSearchAction('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={12}/></button>}
+                                          </div>
+                                      </div>
+
+                                      <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-0.5 rounded-full shadow-sm text-xs font-black font-mono tracking-wider flex-none">
+                                          {filteredActionCars.length} 台
                                       </div>
                                   </div>
                                   <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
-                                      {actionCars.map(car => renderDashboardCard(car))}
-                                      {actionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center"><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</div>}
+                                      {filteredActionCars.map(car => renderDashboardCard(car))}
+                                      {filteredActionCars.length === 0 && <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">{dashSearchAction ? '找不到符合的車輛' : <><CheckCircle size={32} className="mb-2 text-green-400 opacity-50"/>所有交易皆已完美結清</>}</div>}
                                   </div>
                               </div>
 
