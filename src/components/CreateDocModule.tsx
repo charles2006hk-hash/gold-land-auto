@@ -18,7 +18,7 @@ const localOptions = [
     {k:'chk_hk_reg', l:'出牌文件'}, {k:'chk_hk_ins', l:'保險'}, {k:'chk_hk_misc', l:'雜費'}
 ];
 
-export default function CreateDocModule({ inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO, currentUser }: any) { 
+export default function CreateDocModule({ inventory, openPrintPreview, db, staffId, appId, externalRequest, setExternalRequest, COMPANY_INFO, currentUser, allSalesDocs }: any) { 
     const [viewMode, setViewMode] = useState<'list' | 'edit'>('list');
     const [docHistory, setDocHistory] = useState<any[]>([]);
     const [mobileStep, setMobileStep] = useState<'list' | 'edit' | 'preview'>('list');
@@ -227,6 +227,29 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const saveDocRecord = async () => {
         if (!db || !staffId) return null;
+
+        // ★★★ 新增：智能防重複開單機制 ★★★
+        // 只有在「新增單據」(沒有 docId) 時才做查重，編輯舊單就不擋了
+        if (!docId && allSalesDocs && allSalesDocs.length > 0) {
+            const isDuplicate = allSalesDocs.some((doc: any) => 
+                doc.formData?.regMark === formData.regMark &&       // 同車牌
+                doc.type === selectedDocType &&                     // 同種類型 (發票/收據等)
+                doc.formData?.docDate === formData.docDate          // 建立日期相同
+            );
+
+            if (isDuplicate) {
+                const proceed = window.confirm(
+                    "⚠️ 系統警告：重複單據偵測\n\n" +
+                    "系統發現今天已經為這台車（" + (formData.regMark || '無車牌') + "）開立過「相同類型」的單據了！\n" +
+                    "您確定要繼續儲存，重複多開一份嗎？"
+                );
+                if (!proceed) {
+                    return null; // 如果按「取消」，就立刻終止儲存與列印動作！
+                }
+            }
+        }
+        // ★★★ 查重結束 ★★★
+
         const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
         const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, showAttachments, updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId };
 
