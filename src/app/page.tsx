@@ -4041,7 +4041,8 @@ const DatabaseSelector = ({
                   externalRequest={externalDocRequest}
                   setExternalRequest={setExternalDocRequest}
                   COMPANY_INFO={COMPANY_INFO}
-                  currentUser={currentUser} // ★★★ 新增：傳遞使用者權限
+                  currentUser={currentUser} 
+                  allSalesDocs={allSalesDocs} // ★★★ 新增：傳入所有歷史單據，供智能防重複查驗使用
               />
           )}
           
