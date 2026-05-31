@@ -15,8 +15,9 @@ export default function BusinessProcessModule(props: any) {
     // --- 1. 車輛牌費動態試算引擎狀態 ---
     const [ownerType, setOwnerType] = useState<'hk' | 'cn' | 'overseas'>('hk'); 
     const [licenceType, setLicenceType] = useState<'petrol' | 'electric'>('petrol'); 
-    const [ccOrWeight, setCcOrWeight] = useState<string>('1500'); 
-    const [calculatedFee, setCalculatedFee] = useState<string>('3929'); 
+    // ★ 更新：電動車改為輸入 kW，汽油車為 cc
+    const [ccOrKw, setCcOrKw] = useState<string>('1500'); 
+    const [calculatedFee, setCalculatedFee] = useState<string>('5074'); 
     const [plateType, setPlateType] = useState<'traditional' | 'custom'>('traditional'); 
 
     // --- 2. 香港法律級：交通意外和解書線上填寫狀態 ---
@@ -29,28 +30,27 @@ export default function BusinessProcessModule(props: any) {
     const [settlementAmt, setSettlementAmt] = useState<string>('');
     const [settlementTerms, setSettlementTerms] = useState<string>('雙方同意以上和解金額已包括所有車輛損毀及醫療追討，此後互不追究。');
 
-    // --- 監聽並精確計算香港運輸署最新牌費 (含 $114 交通意外傷亡援助基金) ---
+    // --- ★ 核心修正：監聽並精確計算香港運輸署最新牌費 (已內含 $114 TAVA 基金) ---
     useEffect(() => {
-        const num = parseInt(ccOrWeight) || 0;
+        const num = parseInt(ccOrKw) || 0;
         let fee = 0;
         if (licenceType === 'petrol') {
-            // 傳統汽油私家車最新一年牌費公式
-            if (num <= 1500) fee = 3815 + 114;
-            else if (num <= 2500) fee = 5625 + 114;
-            else if (num <= 3500) fee = 7445 + 114;
-            else if (num <= 4500) fee = 9255 + 114;
-            else fee = 11075 + 114;
+            // 傳統汽油私家車最新一年牌費公式 (根據 2026 最新收費表)
+            if (num <= 1500) fee = 5074;
+            else if (num <= 2500) fee = 7498;
+            else if (num <= 3500) fee = 9929;
+            else if (num <= 4500) fee = 12360;
+            else fee = 14694;
         } else {
-            // 純電動私家車最新一年牌費公式: 首1000公斤 $574，之後每250公斤 $95
-            if (num <= 1000) fee = 574 + 114;
-            else {
-                const extraWeight = num - 1000;
-                const extraUnits = Math.ceil(extraWeight / 250);
-                fee = 574 + (extraUnits * 95) + 114;
-            }
+            // 純電動私家車最新一年牌費公式 (根據 2026/03/01 生效，按「額定功率 kW」計算)
+            if (num <= 75) fee = 1614;
+            else if (num <= 125) fee = 2114;
+            else if (num <= 175) fee = 2614;
+            else if (num <= 225) fee = 3114;
+            else fee = 5114;
         }
         setCalculatedFee(fee.toString());
-    }, [licenceType, ccOrWeight]);
+    }, [licenceType, ccOrKw]);
 
     // --- 業務 SOP 數據中心 ---
     const PROCEDURES = [
@@ -101,7 +101,7 @@ export default function BusinessProcessModule(props: any) {
                         "前往海關官方系統線上查詢或核對相似車款的核准臨時車價 (A價)。",
                         "安排車輛前往政府指定驗車中心進行環境保護署的廢氣與噪音檢測，拿到合格證。",
                         "購買汽車保險後，攜帶所有正本文件前往運輸署金鐘牌照事務處 (首次登記組) 遞交申請。",
-                        "繳交昂貴的首次登記稅、一年行車牌費、以及交通意外援助基金徵費 ($114)，獲配車牌號碼並發放首次登記牌簿。"
+                        "繳交昂貴的首次登記稅、一年行車牌費，獲配車牌號碼並發放首次登記牌簿。"
                     ],
                     forms: [{ name: "TD22 - 車輛首次登記申請書 (最新電子版)", url: "https://www.td.gov.hk/filemanager/common/td22_e-fillable_chi.pdf" }],
                     links: [
@@ -123,7 +123,7 @@ export default function BusinessProcessModule(props: any) {
                     ],
                     steps: [
                         "若車齡已達 6 年或以上，需提早 4 個月內預約政府指定汽車檢查中心進行年驗。",
-                        "使用下方工具輸入 CC 數或電動車重量，系統會採用最即時的運輸署數據自動計算出一年的總牌費金額。",
+                        "使用下方工具輸入 CC 數或電動車額定功率 (kW)，系統會採用最新數據自動計算出一年牌費。",
                         "填妥 TD558 表格，金額必須與試算完全相符。",
                         "透過運輸署網上預約系統預約親身辦理、或將文件投入運輸署投遞箱、亦可郵寄辦理。",
                         "成功繳費後獲取新行車證（行車貼紙），裁剪後張貼於車頭擋風玻璃左下角。"
@@ -373,8 +373,16 @@ export default function BusinessProcessModule(props: any) {
         });
     };
 
+    // ★ 核心修正：棄用原生 window.print()，改用強效 iframe 智能引擎，破解外層框架隱藏限制
     const handlePrintPDF = () => {
-        window.print();
+        const printContent = document.getElementById('business-process-print-root');
+        if (printContent && props.triggerSmartPrint) {
+            // 將欲列印的 HTML 與標題丟給 page.tsx 的獨立列印引擎
+            props.triggerSmartPrint(printContent.outerHTML, `指南_${currentItem.title}`);
+        } else {
+            // 退路機制
+            window.print();
+        }
     };
 
     const currentItem = PROCEDURES.find(c => c.category === activeCategory)?.items.find(i => i.id === expandedItem) 
@@ -383,35 +391,6 @@ export default function BusinessProcessModule(props: any) {
     return (
         <div className="flex flex-col md:flex-row h-full bg-slate-50 relative">
             
-            {/* ★★★ 終極強效置頂列印引擎 CSS (保證 PDF 永不空白) ★★★ */}
-            <style>{`
-                @media print {
-                    body > div, main, sidebar, header, .no-print, nav, aside, button { 
-                        display: none !important; 
-                        visibility: hidden !important; 
-                    }
-                    .super-print-root {
-                        display: block !important;
-                        visibility: visible !important;
-                        position: absolute !important;
-                        left: 0 !important;
-                        top: 0 !important;
-                        width: 100% !important;
-                        background: white !important;
-                        color: black !important;
-                        padding: 20px !important;
-                        z-index: 9999999 !important;
-                    }
-                    .super-print-root * {
-                        visibility: visible !important;
-                        color: black !important;
-                    }
-                    .print-grid { display: block !important; }
-                    .print-col { width: 100% !important; margin-bottom: 20px !important; page-break-inside: avoid !important; border: 1px solid #ccc !important; padding: 15px !important; }
-                    .law-contract { border: 2px solid black !important; padding: 30px !important; background: white !important; margin-top: 20px; }
-                }
-            `}</style>
-
             {/* 左側欄：分類選單 */}
             <div className="w-full md:w-64 bg-white border-r border-slate-200 flex-none overflow-y-auto no-print">
                 <div className="p-4 border-b border-slate-100 flex items-center gap-2">
@@ -456,20 +435,36 @@ export default function BusinessProcessModule(props: any) {
                     ))}
                 </div>
 
-                {/* 右邊大區塊：看版詳情與互動工具 */}
+                {/* 右邊大區塊：看板詳情與互動工具 */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
                     {currentItem && (
-                        <div className="max-w-3xl mx-auto space-y-5 super-print-root">
+                        // ★ 給予這個外殼 ID，讓 iframe 智能列印引擎可以整塊抽離
+                        <div id="business-process-print-root" className="max-w-3xl mx-auto space-y-5">
                             
+                            {/* ★ 內聯 CSS 確保獨立列印時格式維持完美 */}
+                            <style>{`
+                                .print-grid { display: grid; gap: 1.5rem; }
+                                @media (min-width: 768px) { .print-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+                                .law-contract { font-family: serif; color: #0f172a; }
+                                .no-print-area { display: block; }
+                                @media print {
+                                    .no-print-area { display: none !important; }
+                                    .print-grid { display: block !important; }
+                                    .print-col { width: 100% !important; margin-bottom: 20px !important; page-break-inside: avoid !important; border: 1px solid #ccc !important; padding: 15px !important; border-radius: 8px; }
+                                    .law-contract { border: 2px solid black !important; padding: 30px !important; background: white !important; margin-top: 0; }
+                                    body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                                }
+                            `}</style>
+
                             {/* 看板標頭 */}
                             <div className="border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
-                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print">{activeCategory}</span>
+                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print-area">{activeCategory}</span>
                                     <h3 className="font-black text-2xl text-slate-800 mt-1">{currentItem.title}</h3>
                                     <p className="text-sm text-slate-500 mt-1">{currentItem.description}</p>
                                 </div>
                                 
-                                <div className="flex gap-2 flex-none no-print">
+                                <div className="flex gap-2 flex-none no-print-area">
                                     <button 
                                         onClick={() => handleCopyToWhatsApp(currentItem)}
                                         className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm"
@@ -486,7 +481,7 @@ export default function BusinessProcessModule(props: any) {
                             </div>
 
                             {/* ★★★ 智能控制面板 (設定會自動實時更新下方指南或和解書文本) ★★★ */}
-                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 no-print space-y-3">
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 no-print-area space-y-3">
                                 <div className="flex items-center gap-2 text-xs font-black text-amber-800 uppercase tracking-wider">
                                     <Calculator size={14} /> 業務資料動態設定面板 (設定將自動注入文案與PDF中)
                                 </div>
@@ -503,22 +498,25 @@ export default function BusinessProcessModule(props: any) {
                                 )}
 
                                 {currentItem.id === 'td558' && (
-                                    <div className="space-y-2 text-sm text-slate-700">
+                                    <div className="space-y-3 text-sm text-slate-700">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span>選擇計費私家車種類：</span>
                                             <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
-                                                <button onClick={() => { setLicenceType('petrol'); setCcOrWeight('1500'); }} className={`px-2.5 py-1 text-xs font-bold rounded-md ${licenceType === 'petrol' ? 'bg-amber-600 text-white' : 'text-slate-600'}`}>汽油私家車</button>
-                                                <button onClick={() => { setLicenceType('electric'); setCcOrWeight('1500'); }} className={`px-2.5 py-1 text-xs font-bold rounded-md ${licenceType === 'electric' ? 'bg-amber-600 text-white' : 'text-slate-600'}`}>純電動私家車</button>
+                                                <button onClick={() => { setLicenceType('petrol'); setCcOrKw('1500'); }} className={`px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${licenceType === 'petrol' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>汽油私家車</button>
+                                                <button onClick={() => { setLicenceType('electric'); setCcOrKw('75'); }} className={`px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${licenceType === 'electric' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>純電動私家車</button>
                                             </div>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-4 pt-1">
-                                            <label className="flex items-center gap-1.5">
-                                                <span className="text-xs font-bold text-slate-500">{licenceType === 'petrol' ? '引擎汽缸容量 (cc):' : '車輛自重 (kg):'}</span>
-                                                <input type="number" value={ccOrWeight} onChange={e => setCcOrWeight(e.target.value)} className="w-24 px-2 py-1 border rounded font-bold text-center bg-white text-sm" />
+                                        <div className="flex flex-wrap items-center gap-4 bg-white p-3 rounded-lg border border-amber-100 shadow-sm">
+                                            <label className="flex items-center gap-2">
+                                                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                                                    {licenceType === 'petrol' ? '引擎容量 (cc)' : '額定功率 (kW)'}:
+                                                </span>
+                                                <input type="number" value={ccOrKw} onChange={e => setCcOrKw(e.target.value)} className="w-24 px-2 py-1 border border-slate-300 rounded font-bold text-center outline-none focus:border-amber-400 bg-slate-50 text-sm" />
                                             </label>
-                                            <div className="text-xs font-bold text-slate-600">
-                                                運輸署最新核算一年牌費費用 (含基金)：
-                                                <span className="text-base font-black text-red-600 ml-1 font-mono">${calculatedFee}</span>
+                                            <div className="flex items-center text-xs font-bold text-slate-600">
+                                                <ArrowRight size={14} className="text-amber-400 mx-2"/>
+                                                系統實時核算一年牌費 (已含 TAVA)：
+                                                <span className="text-lg font-black text-red-600 ml-2 font-mono">${calculatedFee}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -542,7 +540,7 @@ export default function BusinessProcessModule(props: any) {
                                 <div className="law-contract bg-white border-2 border-slate-800 p-6 md:p-10 font-serif text-slate-900 shadow-lg space-y-6 relative rounded-sm">
                                     <div className="text-center space-y-1">
                                         <h2 className="font-black text-2xl tracking-widest border-b-2 border-slate-900 pb-2">交 通 意 外 和 解 申 報 書</h2>
-                                        <p className="text-xs font-sans text-slate-500 pt-1 no-print">（本和解書嚴格依照香港法律合約規範設計，簽署後具備完全約束力）</p>
+                                        <p className="text-xs font-sans text-slate-500 pt-1 no-print-area">（本和解書嚴格依照香港法律合約規範設計，簽署後具備完全約束力）</p>
                                     </div>
 
                                     <p className="text-sm leading-relaxed indent-8">
@@ -551,14 +549,14 @@ export default function BusinessProcessModule(props: any) {
                                         在自願及公平原則下共同簽署作實：
                                     </p>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans no-print bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans no-print-area bg-slate-50 p-3 rounded-lg border border-slate-200">
                                         <div className="space-y-2">
-                                            <div className="font-bold text-blue-700 border-b pb-1">甲方資料 (賠償方/受讓方)</div>
+                                            <div className="font-bold text-blue-700 border-b pb-1">甲方資料 (賠償方/過錯方)</div>
                                             <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1" value={partyAName} onChange={e=>setPartyAName(e.target.value)} /></label>
                                             <label className="flex items-center gap-1">車牌：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1 font-mono uppercase" value={partyAPlate} onChange={e=>setPartyAPlate(e.target.value)} /></label>
                                         </div>
                                         <div className="space-y-2">
-                                            <div className="font-bold text-purple-700 border-b pb-1">乙方資料 (受款方/受讓方)</div>
+                                            <div className="font-bold text-purple-700 border-b pb-1">乙方資料 (受款方/受害方)</div>
                                             <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1" value={partyBName} onChange={e=>setPartyBName(e.target.value)} /></label>
                                             <label className="flex items-center gap-1">車牌：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1 font-mono uppercase" value={partyBPlate} onChange={e=>setPartyBPlate(e.target.value)} /></label>
                                         </div>
@@ -573,7 +571,7 @@ export default function BusinessProcessModule(props: any) {
                                         <div>
                                             2. 經雙方友好協商，甲方同意向乙方支付合共港幣 
                                             <input type="number" placeholder="金額" value={settlementAmt} onChange={e=>setSettlementAmt(e.target.value)} className="mx-1 border-b border-blue-400 text-center outline-none font-black text-red-600 w-24 print:border-0" /> 
-                                            元正（HK$ <span className="font-bold border-b min-w-[60px] inline-block text-center font-mono">{settlementAmt || '________'}</span>），作為本宗意外之全數及最終車輛損毀與相關賠償。
+                                            元正（HK$ <span className="font-bold border-b border-slate-500 min-w-[60px] inline-block text-center font-mono">{settlementAmt || '________'}</span>），作為本宗意外之全數及最終車輛損毀與相關賠償。
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             3. 條款與承諾：
@@ -599,8 +597,8 @@ export default function BusinessProcessModule(props: any) {
                                     </div>
                                 </div>
                             ) : (
-                                /* 標準雙欄指南排版 (已對應列印置頂優化) */
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print-grid">
+                                /* 標準雙欄指南排版 */
+                                <div className="print-grid">
                                     {/* 左欄：文件清單 */}
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 print-col shadow-sm">
                                         <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-base">
