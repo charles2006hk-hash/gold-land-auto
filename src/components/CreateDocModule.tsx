@@ -317,7 +317,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (paymentsToUse.length > 0) {
             paymentsToUse.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type || 'Payment'} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 }); });
         } else { 
-            autoPayments.push({ id: 'dep_1', label: isPurchase ? 'Deposit Paid (已付訂金)' : 'Deposit (訂金)', amount: 0 }); 
+            autoPayments.push({ id: 'dep_1', label: isAcq ? 'Deposit Paid (已付訂金)' : 'Deposit (訂金)', amount: 0 }); 
         }
         
         setDepositItems(autoPayments); setShowTerms(true);
