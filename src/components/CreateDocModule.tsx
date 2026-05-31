@@ -183,14 +183,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (selectedCarId && selectedCarId !== 'BLANK') {
             const car = inventory.find((v: any) => v.id === selectedCarId);
             if (car) {
-                const isPurchase = selectedDocType === 'purchase_contract';
+                // ★ 修正：將「收車」與「寄賣」都視為進貨向的合約
+                const isAcq = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
                 setFormData(prev => ({
                     ...prev,
-                    customerName: isPurchase ? (car.acquisition?.vendor || '') : (car.customerName || ''),
-                    customerPhone: isPurchase ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
-                    customerId: isPurchase ? (car.acquisition?.vendorID || '') : (car.customerID || ''),
-                    customerAddress: isPurchase ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
-                    price: isPurchase ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0')
+                    customerName: isAcq ? (car.acquisition?.vendor || '') : (car.customerName || ''),
+                    customerPhone: isAcq ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
+                    customerId: isAcq ? (car.acquisition?.vendorID || '') : (car.customerID || ''),
+                    customerAddress: isAcq ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
+                    price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0')
                 }));
             }
         }
@@ -286,7 +287,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setSelectedCarId(car.id);
         
         // ★★★ 智能進銷分流機制 (Acquisition vs Sales) ★★★
-        const isPurchase = selectedDocType === 'purchase_contract';
+        // ★ 修正：將「收車」與「寄賣」都視為進貨向的合約
+        const isAcq = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
         
         setFormData((prev: any) => ({
             ...prev, regMark: car.regMark || '', make: car.make || '', model: car.model || '',
@@ -296,12 +298,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             mileage: car.mileage ? car.mileage.toString() : '', seat: car.seating ? car.seating.toString() : '',
             previousOwners: car.previousOwners !== undefined ? car.previousOwners.toString() : '',
             
-            // ★ 分流抓取：如果是收車合約抓成本與供應商，否則抓售價與買家
-            price: isPurchase ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'), 
-            customerName: isPurchase ? (car.acquisition?.vendor || '') : (car.customerName || ''), 
-            customerPhone: isPurchase ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
-            customerId: isPurchase ? (car.acquisition?.vendorID || '') : (car.customerID || ''), 
-            customerAddress: isPurchase ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
+            // ★ 分流抓取：如果是收車/寄賣合約抓成本與供應商，否則抓售價與買家
+            price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'), 
+            customerName: isAcq ? (car.acquisition?.vendor || '') : (car.customerName || ''), 
+            customerPhone: isAcq ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
+            customerId: isAcq ? (car.acquisition?.vendorID || '') : (car.customerID || ''), 
+            customerAddress: isAcq ? (car.acquisition?.vendorAddress || '') : (car.customerAddress || ''),
             
             docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
