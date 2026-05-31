@@ -382,9 +382,39 @@ const VehicleFormModal = ({
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database'), where('category', '==', 'Vehicle')); 
             const snapshot = await getDocs(q);
             const searchKey = vrdSearch.toUpperCase().trim();
-            const matches: any[] = [];
-            snapshot.forEach(doc => { const data = doc.data(); if ((data.plateNoHK||'').toUpperCase().includes(searchKey) || (data.chassisNo||'').toUpperCase().includes(searchKey)) matches.push(data); });
-            if (matches.length > 0) setVrdResults(matches); else alert("資料庫中心找不到相符的車輛");
+            
+            // ★ 智能去重複引擎 (Deduplication)
+            const uniqueMap = new Map();
+            let duplicateCount = 0;
+
+            snapshot.forEach(doc => { 
+                const data = doc.data(); 
+                if ((data.plateNoHK||'').toUpperCase().includes(searchKey) || (data.chassisNo||'').toUpperCase().includes(searchKey)) {
+                    // 使用車牌或底盤號作為去重 Key
+                    const key = data.plateNoHK || data.chassisNo || doc.id;
+                    if (uniqueMap.has(key)) {
+                        duplicateCount++;
+                        // 如果有重複，保留時間戳最新的一筆 (過濾掉不完整的舊資料)
+                        const existing = uniqueMap.get(key);
+                        const existingTime = existing.updatedAt?.seconds || 0;
+                        const newTime = data.updatedAt?.seconds || 0;
+                        if (newTime > existingTime) {
+                            uniqueMap.set(key, { id: doc.id, ...data });
+                        }
+                    } else {
+                        uniqueMap.set(key, { id: doc.id, ...data });
+                    }
+                } 
+            });
+
+            const matches = Array.from(uniqueMap.values());
+
+            if (duplicateCount > 0) {
+                alert(`⚠️ 系統提示：資料庫中發現 ${duplicateCount} 筆重複或不完整的舊 VRD 紀錄！\n系統已自動為您過濾，提取「最新」的一筆完美資料。請放心導入！\n(日後可至「資料庫中心」清理舊檔案)`);
+            }
+
+            if (matches.length > 0) setVrdResults(matches); 
+            else alert("資料庫中心找不到相符的車輛");
         } catch (e) { alert("搜尋錯誤"); } finally { setSearching(false); }
     };
 
@@ -1170,18 +1200,29 @@ const VehicleFormModal = ({
                                     </div>
                                 </div>
                             ) : (
-                                /* ★★★ 本地收車表單 ★★★ */
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
-                                    <div className="sm:col-span-2">
-                                        <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner</label>
-                                        <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder="收車對象名稱"/>
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                        <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label>
-                                        <select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none font-bold text-slate-700 shadow-sm min-w-0">
-                                            <option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option>
-                                        </select>
-                                    </div>
+                                {/* ★★★ 本地收車表單 ★★★ */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner (前車主/行家)</label>
+                                    <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder="收車對象名稱"/>
+                                </div>
+                                <div className="col-span-1 w-full min-w-0">
+                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor ID (身份證/BR)</label>
+                                    <input name="acq_vendorID" defaultValue={(v as any).acquisition?.vendorID || ''} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm font-mono min-w-0" placeholder="證件號碼"/>
+                                </div>
+                                <div className="col-span-1 w-full min-w-0">
+                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor Phone (聯絡電話)</label>
+                                    <input name="acq_vendorPhone" defaultValue={(v as any).acquisition?.vendorPhone || ''} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm font-mono min-w-0" placeholder="電話號碼"/>
+                                </div>
+                                
+                                <div className="sm:col-span-4 border-t border-red-100 pt-3"></div>
+
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Payment Status</label>
+                                    <select name="acq_paymentStatus" defaultValue={(v as any).acquisition?.paymentStatus || 'Unpaid'} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none font-bold text-slate-700 shadow-sm min-w-0">
+                                        <option value="Unpaid">未付 (Unpaid)</option><option value="Offset">對數抵銷 (Offset)</option><option value="Paid">已結清 (Paid)</option>
+                                    </select>
+                                </div>
 
                                     <div className="bg-red-100/80 p-3 md:p-2 rounded-xl md:rounded border-2 border-red-300 sm:col-span-2 shadow-inner w-full min-w-0 flex flex-col justify-between">
                                         <label className="block text-xs md:text-[10px] text-red-800 font-black mb-1 uppercase">Purchase Price (收車本金 HKD)</label>
