@@ -2345,6 +2345,10 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         const acquisitionData = {
             type: currentAcqType,
             vendor: formData.get('acq_vendor') as string || '',
+         // ★ 新增：儲存前車主/行家的 ID、電話與地址
+            vendorID: formData.get('acq_vendorID') as string || '',
+            vendorPhone: formData.get('acq_vendorPhone') as string || '',
+            vendorAddress: formData.get('acq_vendorAddress') as string || '',
             currency: getStr('acq_currency', isImport, (editingVehicle as any)?.acquisition?.currency) || 'HKD',
             exchangeRate: getNum('acq_exchangeRate', isImport, (editingVehicle as any)?.acquisition?.exchangeRate) || 1,
             foreignPrice: getNum('acq_foreignPrice', isImport, (editingVehicle as any)?.acquisition?.foreignPrice),
