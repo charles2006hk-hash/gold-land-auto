@@ -5,7 +5,7 @@ import {
     BookOpen, Printer, ExternalLink, Download, 
     ChevronDown, ChevronUp, FileText, CheckCircle2, 
     Link as LinkIcon, Share2, Car, Globe, ShieldCheck,
-    Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar
+    Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar, ArrowRight
 } from 'lucide-react';
 
 export default function BusinessProcessModule(props: any) {
@@ -15,7 +15,6 @@ export default function BusinessProcessModule(props: any) {
     // --- 1. 車輛牌費動態試算引擎狀態 ---
     const [ownerType, setOwnerType] = useState<'hk' | 'cn' | 'overseas'>('hk'); 
     const [licenceType, setLicenceType] = useState<'petrol' | 'electric'>('petrol'); 
-    // ★ 更新：電動車改為輸入 kW，汽油車為 cc
     const [ccOrKw, setCcOrKw] = useState<string>('1500'); 
     const [calculatedFee, setCalculatedFee] = useState<string>('5074'); 
     const [plateType, setPlateType] = useState<'traditional' | 'custom'>('traditional'); 
@@ -30,19 +29,18 @@ export default function BusinessProcessModule(props: any) {
     const [settlementAmt, setSettlementAmt] = useState<string>('');
     const [settlementTerms, setSettlementTerms] = useState<string>('雙方同意以上和解金額已包括所有車輛損毀及醫療追討，此後互不追究。');
 
-    // --- ★ 核心修正：監聽並精確計算香港運輸署最新牌費 (已內含 $114 TAVA 基金) ---
+    // --- 監聽並精確計算香港運輸署最新牌費 (已內含 $114 TAVA 基金) ---
     useEffect(() => {
         const num = parseInt(ccOrKw) || 0;
         let fee = 0;
         if (licenceType === 'petrol') {
-            // 傳統汽油私家車最新一年牌費公式 (根據 2026 最新收費表)
             if (num <= 1500) fee = 5074;
             else if (num <= 2500) fee = 7498;
             else if (num <= 3500) fee = 9929;
             else if (num <= 4500) fee = 12360;
             else fee = 14694;
         } else {
-            // 純電動私家車最新一年牌費公式 (根據 2026/03/01 生效，按「額定功率 kW」計算)
+            // 純電動車 kW 計算公式
             if (num <= 75) fee = 1614;
             else if (num <= 125) fee = 2114;
             else if (num <= 175) fee = 2614;
@@ -161,6 +159,115 @@ export default function BusinessProcessModule(props: any) {
             ]
         },
         {
+            category: "大灣區跨境專區 (港車/澳車)",
+            icon: Globe,
+            items: [
+                {
+                    id: "northbound_app",
+                    title: "🚗 港車北上：申請與免抽籤續期",
+                    description: "香港私家車經大橋入廣東省之首簽與每年續期 SOP",
+                    docs: [
+                        "香港身份證及回鄉證",
+                        "香港牌簿 VRD 正本",
+                        "香港及內地駕駛執照",
+                        "內地「交強險」或「等效先認」保險憑證",
+                        "【續期專用】運輸署發出的續期邀請電郵 (內含專屬登入密碼)"
+                    ],
+                    steps: [
+                        "【首次申請】: 於官方網站登記電腦抽籤。中籤後於獲分配的時段內遞交申請，並聯絡保險公司購買保險。前往中檢查驗車輛，獲批內地「電子牌證」與香港「電子批准信」。",
+                        "【注意】: 自2025年10月起，車輛已無須於擋風玻璃展示實體禁區紙，只需在手機保留「電子批准信」備查即可進出廣東省。",
+                        "【每年續期機制】: 運輸署會於內地「電子牌證」屆滿前 2 至 3 個月，向車主發出通知電郵。符合資格的車主 *完全無須重新參與電腦抽籤*。",
+                        "【續期手續】: 憑通知電郵內提供的密碼、身份證、車牌號碼及電子批准編號，於指定時段內登入網上續期系統，即可直接提交續期申請！"
+                    ],
+                    forms: [],
+                    links: [
+                        { name: "港車北上 - 官方申請及抽籤平台", url: "https://www.hzmbqfs.gov.hk/tc/application/" },
+                        { name: "港車北上 - 續期申請指定系統", url: "https://www.hzmbqfs.gov.hk/tc/RenewalApplication/" }
+                    ]
+                },
+                {
+                    id: "northbound_booking",
+                    title: "📅 港車北上：預約出行規律與取消",
+                    description: "拆解「指定日子預約系統」日曆規律及爽約停賽罰則",
+                    docs: [
+                        "已獲批的有效「電子牌證」及「電子批准信」",
+                        "已啟動的「指定日子預約系統」帳戶"
+                    ],
+                    steps: [
+                        "【日曆開放規律】: 運輸署於 *每個月的第15日*，開放下一個曆月的指定日子預約。預約採用先到先得方式處理。",
+                        "【須預約 vs 免預約】: 逢星期一、四、五、六、日，以及香港/內地公眾假期（指定日子），必須預約。 *逢星期二、三（若非公眾假期）則無須預約即可隨時出行*。",
+                        "【預約死線】: 如要在指定日子出行，必須在出行日子的 *前一天中午 12 時前* 成功完成預約。",
+                        "【取消死線】: 如行程有變需取消，必須在出行日子的 *前一天的中午 12 時前* 於系統內取消預約。",
+                        "【🚨 爽約與違規罰則】: 預約後沒有出行，過往一年內累計：\n- 第1次：提示訊息\n- 第2次：警告訊息\n- 第3次：暫停預約資格 4 星期\n- 第4次：暫停預約資格 6 星期\n- 第5次：撤銷港車北上資格，並暫停再次申請 3 個月！"
+                    ],
+                    forms: [],
+                    links: [
+                        { name: "港車北上 - 預約出行與查閱日曆系統", url: "https://www.hzmbqfs.gov.hk/tc/BookingForTravel/" },
+                        { name: "港車北上 - 綜合常見問題 (FAQ)", url: "https://www.hzmbqfs.gov.hk/tc/faq/" }
+                    ]
+                },
+                {
+                    id: "zhuhai_police",
+                    title: "🚨 港車北上：內地救援與珠海交警",
+                    description: "內地發生交通事故處理 SOP 及官方求助渠道",
+                    docs: [
+                        "手機安裝內地「交管12123」App 或微信關注「珠海交警」",
+                        "內地緊急報警電話：110 (警察)、122 (交警)、120 (急救)",
+                        "內地保險單 (交強險/商業險) 客服專線電話"
+                    ],
+                    steps: [
+                        "【第一步：靠右通行及安全防護】: 內地為右側通行。發生事故後，車輛應立即停車、亮起危險警告燈，車上人員必須迅速撤離到道路外安全區域，切勿在車道內爭論。",
+                        "【輕微事故 (無人傷/財損小)】: 雙方對事實及責任無爭議，應在拍照錄影後 *先將車輛移至不阻礙交通的安全地方*。可直接透過「交管12123」App 處理，或聯絡投保的保險公司辦理理賠。",
+                        "【嚴重事故 (有人傷/有爭議)】: 嚴禁擅自移動車輛 (除非為了搶救傷員，若需移動必須標明原位置)。應立即撥打 122 (交警) 報案，若有人受傷請同時撥打 120 (急救) 或 110 求助。",
+                        "【交通違規與罰單處理】: 若在內地收到違規短訊，可透過微信公眾號「珠海交警」或「交管12123」App 綁定內地銀行卡，直接線上繳費扣分。若需親身處理，需帶齊證件前往珠海市交警支隊各業務大廳。",
+                        "【求助熱線】: 廣東省政府服務熱線為「86-區號(珠海為0756)-12345」；廣東省交通安全管理平台熱線為「86-區號-12123」。"
+                    ],
+                    forms: [],
+                    links: [
+                        { name: "廣東省公安廳交通管理局 (交管12123)", url: "http://gd.122.gov.cn/" },
+                        { name: "珠海市公安局交通警察支隊 (官方門戶)", url: "http://zhjj.zhuhai.gov.cn/" }
+                    ]
+                },
+                {
+                    id: "macau_pnr",
+                    title: "港車轉乘計劃 (香港車去澳門)",
+                    description: "香港私家車經港珠澳大橋駛往澳門東停車場停泊指南",
+                    docs: [
+                        "有效香港汽車保險",
+                        "澳門跨境車輛強制責任保險 (可線上即時購買短期)",
+                        "香港有效駕駛執照"
+                    ],
+                    steps: [
+                        "本計劃免抽籤、免常規指標！香港車主只需透過網上系統申請「港車轉乘計劃」。",
+                        "獲取香港運輸署發出的封閉道路通行許可證 (禁區紙)。",
+                        "出發前至少 1 小時，透過澳門當局網站預約「港珠澳大橋邊檢大樓東停車場」泊位。",
+                        "開車經港珠澳大橋到達澳門口岸後，將車輛停泊於東停車場，隨後人員下車辦理入境手續，轉乘澳門本地巴士或的士進入澳門市區。",
+                        "注意：車輛不可直接開入澳門市區道路，只能停在邊境東停車場。"
+                    ],
+                    forms: [],
+                    links: [
+                        { name: "澳門交通事務局 - 港珠澳大橋東停車場預約", url: "https://hzmbparking.dsat.gov.mo/" },
+                        { name: "運輸署 - 港車轉乘計劃申請指南", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/hzmb_hong_kong_private_cars_to_macao_pnr/index.html" }
+                    ]
+                },
+                {
+                    id: "macau_south_north",
+                    title: "澳車南下 / 澳車北上",
+                    description: "澳門車輛駛往香港 (南下) 及廣東省 (北上) 政策指南",
+                    docs: ["澳門車輛登記摺/所有權登記憑證", "澳門居民身份證及回鄉證", "對應地區之交強險或短期保險"],
+                    steps: [
+                        "【澳車南下 (來港)】: 第一階段已實施，澳門車輛可經大橋駛至香港國際機場人工島指定停車場，人員直接轉乘飛機，車輛不入市區。第二階段（允許駛入香港市區）正由香港運輸署規劃中，敬請留意招標與政策公告。",
+                        "【澳車北上 (去廣東)】: 澳門車主透過「澳車北上」App 註冊並抽籤。中籤後上傳文件並前往指定驗車中心（如新通達）驗車及安裝電子標籤。審批完成後，出發前在 App 預約通關日期，即可免簽注經大橋進入廣東全省。"
+                    ],
+                    forms: [],
+                    links: [
+                        { name: "香港運輸署 - 港珠澳大橋跨界車輛政策", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/hzmb/index.html" },
+                        { name: "澳門交通事務局 - 澳車北上資訊網", url: "https://macao-zhuhai.dsat.gov.mo/" }
+                    ]
+                }
+            ]
+        },
+        {
             category: "中港常規指標業務",
             icon: ShieldCheck,
             items: [
@@ -222,77 +329,6 @@ export default function BusinessProcessModule(props: any) {
                     ],
                     forms: [],
                     links: []
-                }
-            ]
-        },
-        {
-            category: "大灣區跨境專區 (港車/澳車)",
-            icon: Globe,
-            items: [
-                {
-                    id: "northbound_app",
-                    title: "港車北上 (香港車去廣東)",
-                    description: "香港私家車經港珠澳大橋進入廣東省完整 SOP",
-                    docs: ["香港身份證及回鄉證", "香港牌簿 VRD 正本", "兩地駕駛執照", "「等效先認」跨境保險"],
-                    steps: [
-                        "於港車北上官方網站進行電腦登記抽籤。",
-                        "中籤後，於指定時間內登入網上系統填寫申請資料並上傳文件。",
-                        "初步審批通過後，聯絡保險公司加購中國內地交強險（等效先認）。",
-                        "預約車輛前往香港指定驗車點（如中檢）進行封閉查驗。",
-                        "內地審批完成獲發電子牌證後，出發前必須透過「指定日子預約系統」預約通關出行日期。"
-                    ],
-                    forms: [],
-                    links: [{ name: "「港車北上」官方網上申請與抽籤平台", url: "https://www.hzmbqfs.gov.hk/tc/application/" }]
-                },
-                {
-                    id: "macau_pnr",
-                    title: "港車轉乘計劃 (香港車去澳門)",
-                    description: "香港私家車經港珠澳大橋駛往澳門東停車場停泊指南",
-                    docs: [
-                        "有效香港汽車保險",
-                        "澳門跨境車輛強制責任保險 (可線上即時購買短期)",
-                        "香港有效駕駛執照"
-                    ],
-                    steps: [
-                        "本計劃免抽籤、免常規指標！香港車主只需透過網上系統申請「港車轉乘計劃」。",
-                        "獲取香港運輸署發出的封閉道路通行許可證 (禁區紙)。",
-                        "出發前至少 1 小時，透過澳門當局網站預約「港珠澳大橋邊檢大樓東停車場」泊位。",
-                        "開車經港珠澳大橋到達澳門口岸後，將車輛停泊於東停車場，隨後人員下車辦理入境手續，轉乘澳門本地巴士或的士進入澳門市區。",
-                        "注意：車輛不可直接開入澳門市區道路，只能停在邊境東停車場。"
-                    ],
-                    forms: [],
-                    links: [
-                        { name: "澳門交通事務局 - 港珠澳大橋東停車場網上預約系統", url: "https://hzmbparking.dsat.gov.mo/" },
-                        { name: "運輸署 - 港車轉乘計劃申請指南", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/hzmb_hong_kong_private_cars_to_macao_pnr/index.html" }
-                    ]
-                },
-                {
-                    id: "macau_southbound",
-                    title: "澳車南下 (澳門車來香港)",
-                    description: "澳門常規車輛經大橋前往香港國際機場及市區政策指南",
-                    docs: ["澳門有效車輛登記文件", "香港禁區紙與臨時牌照申請", "香港短期汽車保險"],
-                    steps: [
-                        "第一階段（已實施）：澳門私家車經大橋前往香港國際機場人工島指定停車場停泊，旅客可直接入閘搭乘飛機，車輛不入香港市區。",
-                        "第二階段（規劃部署中）：未來將允許符合資格的澳門私家車直接駛入香港市區道路，其申請流程、保險購買、禁區紙配額將比照「港車北上」對等模式辦理。",
-                        "前線同仁需緊密關注香港運輸署關於澳車南下市區配額的最新招標公告，以便第一時間協助澳門行家與客戶代辦。"
-                    ],
-                    forms: [],
-                    links: [{ name: "香港運輸署 - 港珠澳大橋跨界車輛政策", url: "https://www.td.gov.hk/tc/public_services/licences_and_permits/hzmb/index.html" }]
-                },
-                {
-                    id: "macau_northbound",
-                    title: "澳車北上 (澳門車去廣東)",
-                    description: "澳門私家車經港珠澳大橋進入廣東省手續",
-                    docs: ["澳門居民身份證", "回鄉證", "澳門車輛登記摺/所有權登記憑證", "內地交強險"],
-                    steps: [
-                        "透過「澳車北上」App 或官方門戶網站註冊賬號。",
-                        "提交電腦抽籤登記，中籤後上傳澳門車牌簿、回鄉證及駕駛執照。",
-                        "前往澳門指定驗車中心（如新通達）進行車輛查驗與安裝電子標籤。",
-                        "購買內地交強險並等待珠海交警審批獲發電子牌證。",
-                        "出發前在 App 內進行通關日期預約，即可免簽注經大橋開往廣東全省。"
-                    ],
-                    forms: [],
-                    links: [{ name: "澳門交通事務局 - 澳車北上官方資訊網", url: "https://macao-zhuhai.dsat.gov.mo/" }]
                 }
             ]
         },
@@ -373,20 +409,20 @@ export default function BusinessProcessModule(props: any) {
         });
     };
 
+    // ★ 修正 1：將 currentItem 宣告移到上方，讓下面的函數可以安全讀取
+    const currentItem = PROCEDURES.find(c => c.category === activeCategory)?.items.find(i => i.id === expandedItem) 
+                        || PROCEDURES.find(c => c.category === activeCategory)?.items[0];
+
     // ★ 核心修正：棄用原生 window.print()，改用強效 iframe 智能引擎，破解外層框架隱藏限制
     const handlePrintPDF = () => {
         const printContent = document.getElementById('business-process-print-root');
         if (printContent && props.triggerSmartPrint) {
-            // 將欲列印的 HTML 與標題丟給 page.tsx 的獨立列印引擎
-            props.triggerSmartPrint(printContent.outerHTML, `指南_${currentItem.title}`);
+            // ★ 修正 2：加上問號 (?.) 與後備名稱，完美通過 TypeScript 嚴格檢查
+            props.triggerSmartPrint(printContent.outerHTML, `指南_${currentItem?.title || '業務'} `);
         } else {
-            // 退路機制
             window.print();
         }
     };
-
-    const currentItem = PROCEDURES.find(c => c.category === activeCategory)?.items.find(i => i.id === expandedItem) 
-                        || PROCEDURES.find(c => c.category === activeCategory)?.items[0];
 
     return (
         <div className="flex flex-col md:flex-row h-full bg-slate-50 relative">
@@ -480,7 +516,7 @@ export default function BusinessProcessModule(props: any) {
                                 </div>
                             </div>
 
-                            {/* ★★★ 智能控制面板 (設定會自動實時更新下方指南或和解書文本) ★★★ */}
+                            {/* ★★★ 智能控制面板 ★★★ */}
                             <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 no-print-area space-y-3">
                                 <div className="flex items-center gap-2 text-xs font-black text-amber-800 uppercase tracking-wider">
                                     <Calculator size={14} /> 業務資料動態設定面板 (設定將自動注入文案與PDF中)
