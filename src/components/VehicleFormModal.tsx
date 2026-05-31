@@ -1200,8 +1200,8 @@ const VehicleFormModal = ({
                                     </div>
                                 </div>
                             ) : (
-                                {/* ★★★ 本地收車表單 ★★★ */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                                {/* ★★★ 本地收車表單 ★★★ */}
                                 <div className="sm:col-span-2">
                                     <label className="block text-xs md:text-[10px] text-red-500 font-bold mb-1 uppercase">Vendor / Prev. Owner (前車主/行家)</label>
                                     <input name="acq_vendor" list="vendor_list" value={acqVendor} onChange={e => setAcqVendor(e.target.value)} className="w-full bg-white border border-red-200 p-3 md:p-2 rounded-lg md:rounded text-base md:text-sm outline-none focus:ring-2 focus:ring-red-200 shadow-sm min-w-0" placeholder="收車對象名稱"/>
