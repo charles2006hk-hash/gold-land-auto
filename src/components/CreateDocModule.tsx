@@ -1169,10 +1169,26 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 </div>
 
                 {/* --- 右欄：即時預覽 --- */}
-                <div className={`flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center justify-center p-4 ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
-                    <div className="mb-2 text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center bg-white/50 px-3 py-1 rounded-full shadow-sm">
-                        <Eye size={12} className="mr-1.5"/> Live Preview 實時預覽
+                <div className={`flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center p-4 ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
+                    
+                    {/* ★ 頂部控制列：預覽標籤 與 印章開關 */}
+                    <div className="w-full max-w-[800px] flex justify-between items-center mb-3 flex-none">
+                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center bg-white/60 px-3 py-1.5 rounded-full shadow-sm">
+                            <Eye size={14} className="mr-1.5"/> Live Preview 實時預覽
+                        </div>
+                        
+                        {/* ★ 新增：電子印章/簽名 隱藏開關 */}
+                        <button 
+                            type="button"
+                            onClick={() => setShowStampAndSig(!showStampAndSig)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm border ${showStampAndSig ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                            title="切換顯示或隱藏單據上的電子印章與簽名"
+                        >
+                            {showStampAndSig ? <Check size={14} className="text-indigo-500" /> : <X size={14} className="text-slate-400" />}
+                            {showStampAndSig ? '電子印章：顯示' : '電子印章：隱藏'}
+                        </button>
                     </div>
+
                     <div className="w-full h-full flex justify-center overflow-hidden">
                         <LivePreview />
                     </div>
