@@ -182,7 +182,8 @@ export default function BusinessProcessModule(props: any) {
                     forms: [],
                     links: [
                         { name: "港車北上 - 官方申請及抽籤平台", url: "https://www.hzmbqfs.gov.hk/tc/application/" },
-                        { name: "港車北上 - 續期申請指定系統", url: "https://www.hzmbqfs.gov.hk/tc/RenewalApplication/" }
+                        { name: "港車北上 - 續期申請指定系統", url: "https://www.hzmbqfs.gov.hk/tc/RenewalApplication/" },
+                        { name: "中檢公司 - 驗車預約系統 (港車北上)", url: "http://vic.cichk.com/" }
                     ]
                 },
                 {
@@ -282,14 +283,14 @@ export default function BusinessProcessModule(props: any) {
                         "兩地牌公司蓋章 (長條印/公章)"
                     ],
                     steps: [
-                        "登入中國檢驗有限公司 (CCIC) 官方預約網絡系統。",
+                        "登入中國檢驗有限公司 (CCIC) 官方預約網絡系統 (vic.cichk.com)。",
                         "輸入中港車牌號碼、底盤號碼、接收短訊的手機號，選擇前往元朗中心的日期及時段。",
                         "按預約時間駛往元朗工業邨福宏街5號中檢汽車檢驗中心。",
                         "現場繳交驗車費，進行上線安全檢測、拓印底盤號碼並拍攝官方照片。",
                         "檢驗合格後，領取最新的《機動車安全技術檢驗合格證明》，為後續公安廳刷卡延期做準備。"
                     ],
                     forms: [],
-                    links: [{ name: "中檢公司 - 汽車檢驗網上預約官方門戶", url: "http://www.cictc.com/tc/booking.html" }]
+                    links: [{ name: "中檢公司 - 汽車檢驗網上預約官方門戶 (常規中港車)", url: "http://vic.cichk.com/" }]
                 },
                 {
                     id: "gd_police_portal",
