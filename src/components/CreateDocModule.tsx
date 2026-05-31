@@ -312,7 +312,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
         const autoPayments: any[] = [];
         // ★ 分流抓取收款紀錄
-        const paymentsToUse = isPurchase ? (car.acquisition?.payments || []) : (car.payments || []);
+        const paymentsToUse = isAcq ? (car.acquisition?.payments || []) : (car.payments || []);
         
         if (paymentsToUse.length > 0) {
             paymentsToUse.forEach((p: any) => { autoPayments.push({ id: p.id, label: `${p.type || 'Payment'} ${p.method ? `(${p.method})` : ''}`, amount: Number(p.amount) || 0 }); });
