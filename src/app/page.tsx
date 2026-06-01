@@ -661,9 +661,9 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
         <>
           {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
-          {/* ★ 側邊欄外層：改用 top-0 與 min-h-[100dvh] 讓深色背景毫無懸念直達螢幕最底 */}
-          <div className={`fixed top-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static h-full min-h-[100dvh] flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>  
-            {/* Header 區域 - ★ 改用 min-h 並加入 pt 避開瀏海/動態島 */}
+          {/* ★ 側邊欄外層：改用 fixed inset-y-0 完美貼合上下螢幕邊緣 */}
+          <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-full flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>
+           {/* Header 區域 - ★ 改用 min-h 並加入 pt 避開瀏海/動態島 */}
             <div className={`pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
                 <div className="flex items-center gap-3 overflow-hidden">
                     <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
@@ -3079,20 +3079,20 @@ const DatabaseSelector = ({
 
 
   return (
-      <div className="flex h-full min-h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900 font-sans relative">
+      // ★ 終極全面屏方案：改用 fixed inset-0 徹底用盡所有空間，解除高度衝突！
+      <div className="fixed inset-0 flex bg-slate-100 text-slate-900 font-sans overflow-hidden">
       
-        {/* ★ 徹底解決 iPhone 底部白邊與滑動回彈問題 ★ */}
         <style>{`
+            /* ★ 強制鎖定 iOS 底層，防止網頁整體上下回彈，釋放內部的滑動能力 */
             html, body { 
-                height: 100%; 
-                min-height: 100dvh;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
                 width: 100%; 
+                height: 100%; 
                 overflow: hidden; 
-                /* ★ 將底層改為深色，讓 iPhone 底部安全區完美融合側邊欄 */
                 background-color: #0f172a; 
-            }
-            @supports (-webkit-touch-callout: none) {
-                html, body { height: -webkit-fill-available; }
+                overscroll-behavior-y: none;
+                -webkit-overflow-scrolling: touch;
             }
         `}</style>
 
@@ -3120,9 +3120,8 @@ const DatabaseSelector = ({
           onOpenChangePwd={() => setIsChangePwdOpen(true)} />
            
 
-      {/* ★ 終極版：高度改為 h-full，並加入 env(safe-area-inset-bottom) 完美避開 iPhone 底部白條 */}
-      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-full overflow-hidden relative">
-        
+      {/* ★ 終極版：移除 h-full，讓 flex-1 自動計算完美高度，徹底恢復車子清單的順暢上下撥動！ */}
+      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden relative">  
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
             <VehicleShareModal 
