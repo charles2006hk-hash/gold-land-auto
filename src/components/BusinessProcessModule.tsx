@@ -426,15 +426,36 @@ export default function BusinessProcessModule(props: any) {
     };
 
     return (
-        <div className="flex flex-col md:flex-row h-full bg-slate-50 relative">
+        // ★ 加上 overflow-hidden 鎖定外層，讓內部區塊可以獨立滑動
+        <div className="flex flex-col md:flex-row h-full bg-slate-50 relative overflow-hidden">
             
-            {/* 左側欄：分類選單 */}
-            <div className="w-full md:w-64 bg-white border-r border-slate-200 flex-none overflow-y-auto no-print">
-                <div className="p-4 border-b border-slate-100 flex items-center gap-2">
+            {/* ★ 內聯 CSS：新增隱藏橫向捲軸的 scrollbar-hide 魔法 */}
+            <style>{`
+                .print-grid { display: grid; gap: 1.5rem; }
+                @media (min-width: 768px) { .print-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+                .law-contract { font-family: serif; color: #0f172a; }
+                .no-print-area { display: block; }
+                
+                /* 手機版橫向滑動時隱藏醜陋的捲軸 */
+                .scrollbar-hide::-webkit-scrollbar { display: none; }
+                .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+                
+                @media print {
+                    .no-print-area { display: none !important; }
+                    .print-grid { display: block !important; }
+                    .print-col { width: 100% !important; margin-bottom: 20px !important; page-break-inside: avoid !important; border: 1px solid #ccc !important; padding: 15px !important; border-radius: 8px; }
+                    .law-contract { border: 2px solid black !important; padding: 30px !important; background: white !important; margin-top: 0; }
+                    body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                }
+            `}</style>
+
+            {/* 左側欄：分類選單 (手機版變為：橫向滑動藍色膠囊) */}
+            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20">
+                <div className="p-3 md:p-4 border-b border-slate-100 items-center gap-2 hidden md:flex">
                     <BookOpen className="text-blue-600" size={20} />
                     <h2 className="font-black text-slate-800">辦理指南知識庫</h2>
                 </div>
-                <div className="p-2 space-y-1">
+                <div className="p-2 md:p-2 flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-1 scrollbar-hide shadow-inner md:shadow-none bg-slate-100/50 md:bg-transparent">
                     {PROCEDURES.map((cat, idx) => {
                         const Icon = cat.icon;
                         return (
@@ -444,9 +465,9 @@ export default function BusinessProcessModule(props: any) {
                                     setActiveCategory(cat.category);
                                     setExpandedItem(cat.items[0].id);
                                 }}
-                                className={`w-full text-left flex items-center p-3 rounded-lg font-bold transition-all ${activeCategory === cat.category ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                                className={`flex-none md:w-full text-left flex items-center px-4 py-2 md:p-3 rounded-full md:rounded-lg font-bold text-sm md:text-base transition-all whitespace-nowrap ${activeCategory === cat.category ? 'bg-blue-600 text-white shadow-md md:bg-blue-50 md:text-blue-700 md:shadow-sm md:border-transparent' : 'bg-white text-slate-600 border border-slate-200 md:bg-transparent md:border-transparent hover:bg-slate-100'}`}
                             >
-                                <Icon size={18} className="mr-3 flex-none" />
+                                <Icon size={16} className={`mr-2 md:mr-3 flex-none ${activeCategory === cat.category ? 'text-blue-100 md:text-blue-600' : 'text-slate-400 md:text-slate-500'}`} />
                                 {cat.category}
                             </button>
                         );
@@ -455,195 +476,180 @@ export default function BusinessProcessModule(props: any) {
             </div>
 
             {/* 右側主要內容區 */}
-            <div className="flex-1 flex flex-col md:flex-row min-h-0">
+            <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
                 
-                {/* 中間欄：子業務列表 */}
-                <div className="w-full md:w-72 bg-white border-r border-slate-200 overflow-y-auto p-2 space-y-1 no-print flex-none">
-                    <div className="p-2 text-xs font-bold text-slate-400 uppercase tracking-wider">選擇業務子項目</div>
-                    {PROCEDURES.find(c => c.category === activeCategory)?.items.map((item) => (
-                        <button
-                            key={item.id}
-                            onClick={() => setExpandedItem(item.id)}
-                            className={`w-full text-left p-3 rounded-xl transition-all flex flex-col border ${expandedItem === item.id ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-slate-50 text-slate-700 border-slate-100 hover:bg-slate-100'}`}
-                        >
-                            <span className="font-bold text-sm">{item.title}</span>
-                            <span className={`text-xs mt-1 line-clamp-1 ${expandedItem === item.id ? 'text-slate-300' : 'text-slate-400'}`}>{item.description}</span>
-                        </button>
-                    ))}
+                {/* 中間欄：子業務列表 (手機版變為：橫向滑動小卡片) */}
+                <div className="w-full md:w-72 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 md:overflow-y-auto p-2 no-print flex-none z-10 shadow-sm md:shadow-none">
+                    <div className="p-2 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:block">選擇業務子項目</div>
+                    <div className="flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-1 scrollbar-hide pb-1 md:pb-0">
+                        {PROCEDURES.find(c => c.category === activeCategory)?.items.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => setExpandedItem(item.id)}
+                                className={`flex-none md:w-full text-left p-2.5 md:p-3 rounded-xl transition-all flex flex-col border md:whitespace-normal whitespace-nowrap min-w-[150px] max-w-[220px] md:max-w-none md:min-w-0 ${expandedItem === item.id ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                            >
+                                <span className="font-bold text-[13px] md:text-sm truncate w-full">{item.title}</span>
+                                <span className={`text-[10px] md:text-xs mt-0.5 md:mt-1 truncate w-full ${expandedItem === item.id ? 'text-slate-300' : 'text-slate-400'}`}>{item.description}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                {/* 右邊大區塊：看板詳情與互動工具 */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+                {/* 右邊大區塊：看板詳情與互動工具 (手機版：佔滿下方所有空間，獨立滑動) */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white md:bg-slate-50 relative">
                     {currentItem && (
-                        // ★ 給予這個外殼 ID，讓 iframe 智能列印引擎可以整塊抽離
                         <div id="business-process-print-root" className="max-w-3xl mx-auto space-y-5">
-                            
-                            {/* ★ 內聯 CSS 確保獨立列印時格式維持完美 */}
-                            <style>{`
-                                .print-grid { display: grid; gap: 1.5rem; }
-                                @media (min-width: 768px) { .print-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-                                .law-contract { font-family: serif; color: #0f172a; }
-                                .no-print-area { display: block; }
-                                @media print {
-                                    .no-print-area { display: none !important; }
-                                    .print-grid { display: block !important; }
-                                    .print-col { width: 100% !important; margin-bottom: 20px !important; page-break-inside: avoid !important; border: 1px solid #ccc !important; padding: 15px !important; border-radius: 8px; }
-                                    .law-contract { border: 2px solid black !important; padding: 30px !important; background: white !important; margin-top: 0; }
-                                    body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                                }
-                            `}</style>
 
-                            {/* 看板標頭 */}
+                            {/* 看板標頭與按鈕 (手機版自動換行折疊) */}
                             <div className="border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
-                                    <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print-area">{activeCategory}</span>
-                                    <h3 className="font-black text-2xl text-slate-800 mt-1">{currentItem.title}</h3>
-                                    <p className="text-sm text-slate-500 mt-1">{currentItem.description}</p>
+                                    <span className="text-[10px] md:text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print-area">{activeCategory}</span>
+                                    <h3 className="font-black text-xl md:text-2xl text-slate-800 mt-2 md:mt-1 leading-tight">{currentItem.title}</h3>
+                                    <p className="text-xs md:text-sm text-slate-500 mt-1 md:mt-1">{currentItem.description}</p>
                                 </div>
                                 
-                                <div className="flex gap-2 flex-none no-print-area">
+                                {/* 操作按鈕區 */}
+                                <div className="flex flex-wrap gap-2 flex-none no-print-area">
                                     <button 
                                         onClick={() => handleCopyToWhatsApp(currentItem)}
-                                        className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-700 transition-colors shadow-sm"
+                                        className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 md:py-2 bg-green-600 text-white rounded-xl text-xs md:text-sm font-bold hover:bg-green-700 transition-colors shadow-sm"
                                     >
-                                        <Share2 size={14} /> 複製文字 (發給客戶)
+                                        <Share2 size={16} /> 複製文字
                                     </button>
                                     <button 
                                         onClick={handlePrintPDF}
-                                        className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm"
+                                        className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 md:py-2 bg-slate-800 text-white rounded-xl text-xs md:text-sm font-bold hover:bg-slate-700 transition-colors shadow-sm"
                                     >
-                                        <Printer size={14} /> 列印 / 存為 PDF
+                                        <Printer size={16} /> 列印 / PDF
                                     </button>
                                 </div>
                             </div>
 
                             {/* ★★★ 智能控制面板 ★★★ */}
-                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-4 no-print-area space-y-3">
-                                <div className="flex items-center gap-2 text-xs font-black text-amber-800 uppercase tracking-wider">
-                                    <Calculator size={14} /> 業務資料動態設定面板 (設定將自動注入文案與PDF中)
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 md:p-4 no-print-area space-y-3 shadow-sm">
+                                <div className="flex items-center gap-2 text-[11px] md:text-xs font-black text-amber-800 uppercase tracking-wider">
+                                    <Calculator size={14} /> 業務資料動態設定 (設定將自動注入文案中)
                                 </div>
                                 
                                 {currentItem.id === 'td25' && (
-                                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                                        <span>選擇新舊車主身份別：</span>
-                                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
-                                            <button onClick={() => setOwnerType('hk')} className={`px-2.5 py-1 text-xs font-bold rounded-md ${ownerType === 'hk' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>香港本地</button>
-                                            <button onClick={() => setOwnerType('cn')} className={`px-2.5 py-1 text-xs font-bold rounded-md ${ownerType === 'cn' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>中國內地</button>
-                                            <button onClick={() => setOwnerType('overseas')} className={`px-2.5 py-1 text-xs font-bold rounded-md ${ownerType === 'overseas' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>海外/國外</button>
+                                    <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-slate-700">
+                                        <span className="w-full md:w-auto font-bold md:font-normal">選擇新舊車主身份別：</span>
+                                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 w-full md:w-auto overflow-x-auto scrollbar-hide">
+                                            <button onClick={() => setOwnerType('hk')} className={`flex-1 md:flex-none px-3 py-1.5 md:py-1 text-xs font-bold rounded-md whitespace-nowrap ${ownerType === 'hk' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>香港本地</button>
+                                            <button onClick={() => setOwnerType('cn')} className={`flex-1 md:flex-none px-3 py-1.5 md:py-1 text-xs font-bold rounded-md whitespace-nowrap ${ownerType === 'cn' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>中國內地</button>
+                                            <button onClick={() => setOwnerType('overseas')} className={`flex-1 md:flex-none px-3 py-1.5 md:py-1 text-xs font-bold rounded-md whitespace-nowrap ${ownerType === 'overseas' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>海外/國外</button>
                                         </div>
                                     </div>
                                 )}
 
                                 {currentItem.id === 'td558' && (
-                                    <div className="space-y-3 text-sm text-slate-700">
+                                    <div className="space-y-3 text-xs md:text-sm text-slate-700">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <span>選擇計費私家車種類：</span>
-                                            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
-                                                <button onClick={() => { setLicenceType('petrol'); setCcOrKw('1500'); }} className={`px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${licenceType === 'petrol' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>汽油私家車</button>
-                                                <button onClick={() => { setLicenceType('electric'); setCcOrKw('75'); }} className={`px-2.5 py-1 text-xs font-bold rounded-md transition-colors ${licenceType === 'electric' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>純電動私家車</button>
+                                            <span className="w-full md:w-auto font-bold md:font-normal">選擇計費私家車種類：</span>
+                                            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 w-full md:w-auto">
+                                                <button onClick={() => { setLicenceType('petrol'); setCcOrKw('1500'); }} className={`flex-1 md:flex-none px-2.5 py-2 md:py-1 text-xs font-bold rounded-md transition-colors ${licenceType === 'petrol' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>汽油私家車</button>
+                                                <button onClick={() => { setLicenceType('electric'); setCcOrKw('75'); }} className={`flex-1 md:flex-none px-2.5 py-2 md:py-1 text-xs font-bold rounded-md transition-colors ${licenceType === 'electric' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>純電動私家車</button>
                                             </div>
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-4 bg-white p-3 rounded-lg border border-amber-100 shadow-sm">
+                                        <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 bg-white p-3 rounded-lg border border-amber-100 shadow-sm">
                                             <label className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                                                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1.5 rounded flex-none">
                                                     {licenceType === 'petrol' ? '引擎容量 (cc)' : '額定功率 (kW)'}:
                                                 </span>
-                                                <input type="number" value={ccOrKw} onChange={e => setCcOrKw(e.target.value)} className="w-24 px-2 py-1 border border-slate-300 rounded font-bold text-center outline-none focus:border-amber-400 bg-slate-50 text-sm" />
+                                                <input type="number" value={ccOrKw} onChange={e => setCcOrKw(e.target.value)} className="flex-1 md:w-24 px-2 py-1.5 border border-slate-300 rounded font-bold text-center outline-none focus:border-amber-400 bg-slate-50 text-sm" />
                                             </label>
-                                            <div className="flex items-center text-xs font-bold text-slate-600">
-                                                <ArrowRight size={14} className="text-amber-400 mx-2"/>
+                                            <div className="flex flex-wrap items-center text-xs font-bold text-slate-600 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 md:border-transparent">
+                                                <ArrowRight size={14} className="text-amber-400 mx-2 hidden md:block"/>
                                                 系統實時核算一年牌費 (已含 TAVA)：
-                                                <span className="text-lg font-black text-red-600 ml-2 font-mono">${calculatedFee}</span>
+                                                <span className="text-lg md:text-xl font-black text-red-600 ml-2 font-mono tracking-tighter">${calculatedFee}</span>
                                             </div>
                                         </div>
                                     </div>
                                 )}
 
                                 {currentItem.id === 'td320' && (
-                                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                                        <span>車牌種類分流：</span>
-                                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
-                                            <button onClick={() => setPlateType('traditional')} className={`px-2.5 py-1 text-xs font-bold rounded-md ${plateType === 'traditional' ? 'bg-purple-600 text-white' : 'text-slate-600'}`}>傳統特別車牌</button>
-                                            <button onClick={() => setPlateType('custom')} className={`px-2.5 py-1 text-xs font-bold rounded-md ${plateType === 'custom' ? 'bg-purple-600 text-white' : 'text-slate-600'}`}>自訂專屬車牌</button>
+                                    <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-slate-700">
+                                        <span className="w-full md:w-auto font-bold md:font-normal">車牌種類分流：</span>
+                                        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 w-full md:w-auto">
+                                            <button onClick={() => setPlateType('traditional')} className={`flex-1 md:flex-none px-2.5 py-1.5 md:py-1 text-xs font-bold rounded-md ${plateType === 'traditional' ? 'bg-purple-600 text-white' : 'text-slate-600'}`}>傳統特別車牌</button>
+                                            <button onClick={() => setPlateType('custom')} className={`flex-1 md:flex-none px-2.5 py-1.5 md:py-1 text-xs font-bold rounded-md ${plateType === 'custom' ? 'bg-purple-600 text-white' : 'text-slate-600'}`}>自訂專屬車牌</button>
                                         </div>
                                     </div>
                                 )}
 
-                                {currentItem.id === 'settlement_generator' && <span className="text-xs font-bold text-emerald-700 block">請直接在下方合約藍框欄位內填寫，填寫完點擊右上角「列印/存為PDF」即可輸出實體法律文件！</span>}
+                                {currentItem.id === 'settlement_generator' && <span className="text-xs font-bold text-emerald-700 block">請直接在下方合約藍框欄位內填寫，填寫完點擊右上角「列印/PDF」即可輸出！</span>}
                             </div>
 
                             {/* ★★★ 核心渲染：如果是線上和解書生成器，直接印出法律合約格式 ★★★ */}
                             {currentItem.id === 'settlement_generator' ? (
-                                <div className="law-contract bg-white border-2 border-slate-800 p-6 md:p-10 font-serif text-slate-900 shadow-lg space-y-6 relative rounded-sm">
+                                <div className="law-contract bg-white border border-slate-300 md:border-2 md:border-slate-800 p-4 md:p-10 font-serif text-slate-900 shadow-md space-y-6 relative rounded-lg md:rounded-sm">
                                     <div className="text-center space-y-1">
-                                        <h2 className="font-black text-2xl tracking-widest border-b-2 border-slate-900 pb-2">交 通 意 外 和 解 申 報 書</h2>
-                                        <p className="text-xs font-sans text-slate-500 pt-1 no-print-area">（本和解書嚴格依照香港法律合約規範設計，簽署後具備完全約束力）</p>
+                                        <h2 className="font-black text-xl md:text-2xl tracking-widest border-b-2 border-slate-900 pb-2">交 通 意 外 和 解 申 報 書</h2>
+                                        <p className="text-[10px] md:text-xs font-sans text-slate-500 pt-1 no-print-area">（本和解書嚴格依照香港法律合約規範設計，簽署後具備完全約束力）</p>
                                     </div>
 
-                                    <p className="text-sm leading-relaxed indent-8">
+                                    <p className="text-sm leading-relaxed md:indent-8">
                                         本和解協議由以下雙方於 
-                                        <input type="text" placeholder=" 填寫日期 (如2026年5月30日) " value={settlementDate} onChange={e=>setSettlementDate(e.target.value)} className="mx-1 border-b border-blue-400 outline-none text-center font-bold font-sans text-sm bg-blue-50/50 p-0.5 min-w-[180px] print:border-b-0 print:bg-transparent" /> 
+                                        <input type="text" placeholder=" 填寫日期 (如2026年5月30日) " value={settlementDate} onChange={e=>setSettlementDate(e.target.value)} className="mx-1 border-b border-blue-400 outline-none text-center font-bold font-sans text-sm bg-blue-50/50 p-0.5 w-[160px] md:min-w-[180px] print:border-b-0 print:bg-transparent" /> 
                                         在自願及公平原則下共同簽署作實：
                                     </p>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans no-print-area bg-slate-50 p-3 rounded-lg border border-slate-200">
                                         <div className="space-y-2">
                                             <div className="font-bold text-blue-700 border-b pb-1">甲方資料 (賠償方/過錯方)</div>
-                                            <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1" value={partyAName} onChange={e=>setPartyAName(e.target.value)} /></label>
-                                            <label className="flex items-center gap-1">車牌：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1 font-mono uppercase" value={partyAPlate} onChange={e=>setPartyAPlate(e.target.value)} /></label>
+                                            <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-1 rounded text-xs flex-1" value={partyAName} onChange={e=>setPartyAName(e.target.value)} /></label>
+                                            <label className="flex items-center gap-1">車牌：<input type="text" className="border px-2 py-1 rounded text-xs flex-1 font-mono uppercase" value={partyAPlate} onChange={e=>setPartyAPlate(e.target.value)} /></label>
                                         </div>
                                         <div className="space-y-2">
                                             <div className="font-bold text-purple-700 border-b pb-1">乙方資料 (受款方/受害方)</div>
-                                            <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1" value={partyBName} onChange={e=>setPartyBName(e.target.value)} /></label>
-                                            <label className="flex items-center gap-1">車牌：<input type="text" className="border px-2 py-0.5 rounded text-xs flex-1 font-mono uppercase" value={partyBPlate} onChange={e=>setPartyBPlate(e.target.value)} /></label>
+                                            <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-1 rounded text-xs flex-1" value={partyBName} onChange={e=>setPartyBName(e.target.value)} /></label>
+                                            <label className="flex items-center gap-1">車牌：<input type="text" className="border px-2 py-1 rounded text-xs flex-1 font-mono uppercase" value={partyBPlate} onChange={e=>setPartyBPlate(e.target.value)} /></label>
                                         </div>
                                     </div>
 
                                     <div className="space-y-4 text-sm leading-relaxed font-sans">
                                         <div className="flex flex-wrap items-center gap-1">
                                             1. 事發地點位於：
-                                            <input type="text" placeholder="請輸入詳細事發路段" value={settlementLoc} onChange={e=>setSettlementLoc(e.target.value)} className="border-b border-blue-400 outline-none px-2 font-bold text-slate-800 min-w-[280px] print:border-0" />
+                                            <input type="text" placeholder="請輸入詳細事發路段" value={settlementLoc} onChange={e=>setSettlementLoc(e.target.value)} className="border-b border-blue-400 outline-none px-2 font-bold text-slate-800 w-full md:w-auto md:min-w-[280px] mt-1 md:mt-0 print:border-0" />
                                             ，雙方車輛不幸發生輕微交通碰撞意外。
                                         </div>
-                                        <div>
+                                        <div className="leading-loose">
                                             2. 經雙方友好協商，甲方同意向乙方支付合共港幣 
-                                            <input type="number" placeholder="金額" value={settlementAmt} onChange={e=>setSettlementAmt(e.target.value)} className="mx-1 border-b border-blue-400 text-center outline-none font-black text-red-600 w-24 print:border-0" /> 
+                                            <input type="number" placeholder="金額" value={settlementAmt} onChange={e=>setSettlementAmt(e.target.value)} className="mx-1 border-b border-blue-400 text-center outline-none font-black text-red-600 w-20 md:w-24 print:border-0" /> 
                                             元正（HK$ <span className="font-bold border-b border-slate-500 min-w-[60px] inline-block text-center font-mono">{settlementAmt || '________'}</span>），作為本宗意外之全數及最終車輛損毀與相關賠償。
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             3. 條款與承諾：
-                                            <textarea value={settlementTerms} onChange={e=>setSettlementTerms(e.target.value)} className="w-full h-16 border rounded p-2 text-xs text-slate-700 bg-slate-50 font-serif resize-none outline-none focus:border-blue-400 print:border-0 print:bg-transparent print:h-auto" />
+                                            <textarea value={settlementTerms} onChange={e=>setSettlementTerms(e.target.value)} className="w-full h-20 md:h-16 border rounded p-2 text-xs text-slate-700 bg-slate-50 font-serif resize-none outline-none focus:border-blue-400 print:border-0 print:bg-transparent print:h-auto" />
                                         </div>
-                                        <div>
+                                        <div className="text-justify">
                                             4. 雙方明確聲明，簽署本協議並收妥上述款項後，此事件即告徹底解決。任何一方此後均無權再向香港警務處、各保險公司或經由任何法律訴訟途徑向對方追討任何形式之經濟責任、醫療費用或進行民事索償。
                                         </div>
                                     </div>
 
                                     {/* 簽名欄 */}
-                                    <div className="grid grid-cols-2 gap-10 pt-16 font-sans text-sm">
+                                    <div className="grid grid-cols-2 gap-4 md:gap-10 pt-10 md:pt-16 font-sans text-sm">
                                         <div className="border-t border-slate-900 pt-3 text-center space-y-4">
-                                            <p className="font-bold">甲方簽署 (車牌: {partyAPlate || '_______'})</p>
-                                            <p className="text-xs text-slate-400 pt-4">姓名: {partyAName || '________________'}</p>
-                                            <p className="text-xs text-slate-400">身份證: ___________________</p>
+                                            <p className="font-bold text-xs md:text-sm">甲方簽署</p>
+                                            <p className="text-[10px] md:text-xs text-slate-400 pt-2 md:pt-4">車牌: {partyAPlate || '_______'}</p>
                                         </div>
                                         <div className="border-t border-slate-900 pt-3 text-center space-y-4">
-                                            <p className="font-bold">乙方簽署 (車牌: {partyBPlate || '_______'})</p>
-                                            <p className="text-xs text-slate-400 pt-4">姓名: {partyBName || '________________'}</p>
-                                            <p className="text-xs text-slate-400">身份證: ___________________</p>
+                                            <p className="font-bold text-xs md:text-sm">乙方簽署</p>
+                                            <p className="text-[10px] md:text-xs text-slate-400 pt-2 md:pt-4">車牌: {partyBPlate || '_______'}</p>
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                /* 標準雙欄指南排版 */
+                                /* 標準雙欄指南排版 (已優化手機與列印佈局) */
                                 <div className="print-grid">
                                     {/* 左欄：文件清單 */}
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 print-col shadow-sm">
-                                        <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-base">
-                                            <FileText size={16} className="text-amber-500" /> 所需準備文件
+                                        <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-sm md:text-base">
+                                            <FileText size={16} className="text-amber-500 flex-none" /> 所需準備文件
                                         </h4>
-                                        <ul className="space-y-2.5">
+                                        <ul className="space-y-3 md:space-y-2.5">
                                             {currentItem.docs.map((doc, idx) => (
-                                                <li key={idx} className="flex items-start gap-2 text-sm text-slate-700 leading-relaxed">
+                                                <li key={idx} className="flex items-start gap-2.5 md:gap-2 text-[13px] md:text-sm text-slate-700 leading-relaxed">
                                                     <CheckCircle2 size={16} className="text-emerald-500 flex-none mt-0.5" />
                                                     <span>{doc}</span>
                                                 </li>
@@ -652,13 +658,13 @@ export default function BusinessProcessModule(props: any) {
                                         
                                         {currentItem.forms && currentItem.forms.length > 0 && (
                                             <div className="mt-6">
-                                                <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-base">
-                                                    <Download size={16} className="text-blue-500" /> 相關表格下載
+                                                <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-sm md:text-base">
+                                                    <Download size={16} className="text-blue-500 flex-none" /> 相關表格下載
                                                 </h4>
                                                 <div className="space-y-2">
                                                     {currentItem.forms.map((form, idx) => (
-                                                        <a key={idx} href={form.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-2.5 bg-slate-50 border border-blue-100 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all group">
-                                                            <span className="text-xs font-bold text-blue-700 group-hover:text-blue-800 line-clamp-1">{form.name}</span>
+                                                        <a key={idx} href={form.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between p-3 md:p-2.5 bg-slate-50 border border-blue-100 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all group active:scale-[0.98]">
+                                                            <span className="text-xs md:text-xs font-bold text-blue-700 group-hover:text-blue-800 line-clamp-2 md:line-clamp-1 pr-2">{form.name}</span>
                                                             <ExternalLink size={14} className="text-blue-400 group-hover:text-blue-600 flex-none" />
                                                         </a>
                                                     ))}
@@ -669,16 +675,16 @@ export default function BusinessProcessModule(props: any) {
 
                                     {/* 右欄：辦理步驟及標準 SOP */}
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 print-col shadow-sm">
-                                        <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-base">
-                                            <ShieldCheck size={16} className="text-indigo-500" /> 辦理步驟及標準 SOP
+                                        <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-sm md:text-base">
+                                            <ShieldCheck size={16} className="text-indigo-500 flex-none" /> 辦理步驟及標準 SOP
                                         </h4>
-                                        <div className="space-y-3">
+                                        <div className="space-y-4 md:space-y-3">
                                             {currentItem.steps.map((step, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
-                                                    <div className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold text-xs flex-none mt-0.5">
+                                                    <div className="flex items-center justify-center w-6 h-6 md:w-5 md:h-5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold text-xs flex-none mt-0.5">
                                                         {idx + 1}
                                                     </div>
-                                                    <div className="text-xs text-slate-600 leading-relaxed bg-slate-50/50 p-2 rounded border border-slate-100 flex-1">
+                                                    <div className="text-[13px] md:text-xs text-slate-600 leading-relaxed bg-slate-50/70 md:bg-slate-50/50 p-2.5 md:p-2 rounded border border-slate-100 flex-1">
                                                         {step}
                                                     </div>
                                                 </div>
@@ -687,13 +693,13 @@ export default function BusinessProcessModule(props: any) {
 
                                         {currentItem.links && currentItem.links.length > 0 && (
                                             <div className="mt-6">
-                                                <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-2 border-b border-slate-100 pb-2 text-base">
-                                                    <LinkIcon size={16} className="text-purple-500" /> 實用官方連結 / 網上辦理位置
+                                                <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-sm md:text-base">
+                                                    <LinkIcon size={16} className="text-purple-500 flex-none" /> 實用官方連結
                                                 </h4>
-                                                <div className="space-y-1.5">
+                                                <div className="space-y-2 md:space-y-1.5">
                                                     {currentItem.links.map((link, idx) => (
-                                                        <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-3 py-2 rounded-lg border border-purple-100 transition-colors">
-                                                            <span className="line-clamp-1">{link.name}</span> <ExternalLink size={12} className="flex-none" />
+                                                        <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[13px] md:text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 px-3 py-2.5 md:py-2 rounded-lg border border-purple-100 transition-colors active:scale-[0.98]">
+                                                            <span className="line-clamp-2 md:line-clamp-1 flex-1">{link.name}</span> <ExternalLink size={14} className="flex-none" />
                                                         </a>
                                                     ))}
                                                 </div>
