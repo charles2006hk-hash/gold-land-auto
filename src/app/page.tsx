@@ -3077,18 +3077,17 @@ const DatabaseSelector = ({
 
 
   return (
-    <>
-      {/* ★ 徹底解決 iPhone 底部黑邊與滑動回彈問題 ★ */}
-      <style>{`
-          html, body { 
-              height: 100%; 
-              width: 100%; 
-              overflow: hidden; 
-              background-color: #f1f5f9; /* 完美融合系統的 slate-100 底色 */
-          }
-      `}</style>
-      
       <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900 font-sans">
+      
+        {/* ★ 徹底解決 iPhone 底部黑邊與滑動回彈問題 ★ */}
+        <style>{`
+            html, body { 
+                height: 100%; 
+                width: 100%; 
+                overflow: hidden; 
+                background-color: #f1f5f9; 
+            }
+        `}</style>
 
       {/* 全域資料載入畫面 */}
       {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
