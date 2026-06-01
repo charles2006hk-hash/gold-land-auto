@@ -3077,7 +3077,18 @@ const DatabaseSelector = ({
 
 
   return (
-    <div className="flex min-h-screen bg-slate-100 text-slate-900 font-sans">
+    <>
+      {/* ★ 徹底解決 iPhone 底部黑邊與滑動回彈問題 ★ */}
+      <style>{`
+          html, body { 
+              height: 100%; 
+              width: 100%; 
+              overflow: hidden; 
+              background-color: #f1f5f9; /* 完美融合系統的 slate-100 底色 */
+          }
+      `}</style>
+      
+      <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900 font-sans">
 
       {/* 全域資料載入畫面 */}
       {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
@@ -3103,8 +3114,8 @@ const DatabaseSelector = ({
           onOpenChangePwd={() => setIsChangePwdOpen(true)} />
            
 
-      {/* ★ 修改：加入 pt-0 與 h-[100dvh] 讓畫面完美貼合螢幕上下緣 */}
-      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-4 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-[100dvh] overflow-hidden">
+      {/* ★ 終極版：高度改為 h-full，並加入 env(safe-area-inset-bottom) 完美避開 iPhone 底部白條 */}
+      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col h-full overflow-hidden relative">
         
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
