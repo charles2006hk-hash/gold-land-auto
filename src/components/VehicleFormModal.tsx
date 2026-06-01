@@ -274,7 +274,12 @@ const VehicleFormModal = ({
     const handleAddExpenseClick = () => {
         const amt = Number(newExpense.amount.replace(/,/g, ''));
         if (amt > 0) {
-            const obj = { id: Date.now().toString(), ...newExpense, amount: amt };
+            // ★ 智能判斷：如果有選付款方式（非未付），就自動把狀態標為 Paid
+            const isPaid = newExpense.paymentMethod && newExpense.paymentMethod !== 'Unpaid';
+            const finalStatus = isPaid ? 'Paid' : 'Unpaid';
+            const finalMethod = isPaid ? newExpense.paymentMethod : '';
+
+            const obj = { id: Date.now().toString(), ...newExpense, amount: amt, status: finalStatus, paymentMethod: finalMethod };
             if (v.id) addExpense(v.id, obj as any);
             else setEditingVehicle((prev: any) => ({ ...prev, expenses: [...(prev.expenses || []), obj] }));
             
@@ -286,7 +291,7 @@ const VehicleFormModal = ({
                 updateSettings('expenseCompanies', [...(settings.expenseCompanies || []), newExpense.company]);
             }
 
-            setNewExpense({ ...newExpense, amount: '' });
+            setNewExpense({ ...newExpense, amount: '', paymentMethod: 'Unpaid' }); // 重置回未付狀態
         }
     };
 
@@ -1387,6 +1392,8 @@ const VehicleFormModal = ({
                                             <span className="text-gray-400 font-mono w-full sm:w-auto font-bold">{exp.date}</span>
                                             <span className="font-black text-slate-800 bg-slate-100 px-2 py-1 rounded-md">{exp.type}</span>
                                             <span className="text-gray-600 flex-1 truncate w-full sm:w-auto font-medium">{exp.company}</span>
+                                            {/* ★ 顯示付款方式 */}
+                                            {exp.status === 'Paid' && exp.paymentMethod && <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-1 rounded-md text-[10px] font-bold">{exp.paymentMethod}</span>}
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
                                             <span className="font-mono font-black text-lg md:text-base text-slate-700">{formatCurrency(exp.amount)}</span>
@@ -1430,6 +1437,16 @@ const VehicleFormModal = ({
                                         {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
                                     </datalist>
                                 </div>
+
+                                {/* ★ 新增：付款方式與狀態下拉 */}
+                                <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
+                                    <option value="Unpaid">未付 (Unpaid)</option>
+                                    <option value="Cash">現金 (Cash)</option>
+                                    <option value="Cheque">支票 (Cheque)</option>
+                                    <option value="Transfer">轉帳 (Transfer)</option>
+                                    <option value="USDT">USDT</option>
+                                    <option value="Trade-in">對數 (Trade-in)</option>
+                                </select>
                                 
                                 <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
