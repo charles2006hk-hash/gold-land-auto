@@ -277,6 +277,15 @@ const VehicleFormModal = ({
             const obj = { id: Date.now().toString(), ...newExpense, amount: amt };
             if (v.id) addExpense(v.id, obj as any);
             else setEditingVehicle((prev: any) => ({ ...prev, expenses: [...(prev.expenses || []), obj] }));
+            
+            // ★ 智能記憶：自動將新輸入的費用項目與車房/公司，寫入系統的後台設定庫！
+            if (newExpense.type && !settings.expenseTypes.some((t:any) => typeof t === 'string' ? t === newExpense.type : t.name === newExpense.type)) {
+                updateSettings('expenseTypes', [...settings.expenseTypes, { name: newExpense.type, defaultCompany: newExpense.company, defaultAmount: amt, defaultDays: '0' }]);
+            }
+            if (newExpense.company && !(settings.expenseCompanies || []).includes(newExpense.company)) {
+                updateSettings('expenseCompanies', [...(settings.expenseCompanies || []), newExpense.company]);
+            }
+
             setNewExpense({ ...newExpense, amount: '' });
         }
     };
@@ -363,13 +372,15 @@ const VehicleFormModal = ({
     const handleGoToMediaLibrary = () => { setEditingVehicle(null); setActiveTab('media_center'); };
     const setFieldValue = (name: string, val: string) => { const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement; if(el) el.value = val; };
 
-    const handleExpenseTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const selectedType = e.target.value;
+    const handleExpenseTypeChange = (val: string) => {
+        const selectedType = val;
         const setting = settings.expenseTypes.find((item: any) => (typeof item === 'string' ? item === selectedType : item.name === selectedType));
-        let defaultComp = ''; let defaultAmt = ''; let targetDate = newExpense.date;
+        let defaultComp = newExpense.company; 
+        let defaultAmt = newExpense.amount; 
+        let targetDate = newExpense.date;
         if (setting && typeof setting !== 'string') {
-            defaultComp = setting.defaultCompany || '';
-            defaultAmt = setting.defaultAmount ? formatNumberInput(setting.defaultAmount.toString()) : '';
+            if (setting.defaultCompany) defaultComp = setting.defaultCompany;
+            if (setting.defaultAmount) defaultAmt = formatNumberInput(setting.defaultAmount.toString());
             if (setting.defaultDays && Number(setting.defaultDays) > 0) { const d = new Date(); d.setDate(d.getDate() + Number(setting.defaultDays)); targetDate = d.toISOString().split('T')[0]; }
         }
         setNewExpense({ ...newExpense, type: selectedType, company: defaultComp, amount: defaultAmt, date: targetDate });
@@ -1405,8 +1416,20 @@ const VehicleFormModal = ({
                             {/* 新增費用 */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-300 w-full">
                                 <input type="date" value={newExpense.date} onChange={e => setNewExpense({...newExpense, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"/>
-                                <select value={newExpense.type} onChange={handleExpenseTypeChange} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-800 min-w-0"><option value="">選項目...</option>{settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}</select>
-                                <select value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"><option value="">選公司 / 車房...</option>{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</select>
+                                
+                                <div className="w-full lg:w-36 relative min-w-0">
+                                    <input list="expense_type_list" placeholder="選項目 / 自訂..." value={newExpense.type} onChange={e => handleExpenseTypeChange(e.target.value)} className="w-full text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                                    <datalist id="expense_type_list">
+                                        {settings.expenseTypes.map((t: any) => { const name = typeof t === 'string' ? t : t.name; return <option key={name} value={name}>{name}</option>; })}
+                                    </datalist>
+                                </div>
+                                
+                                <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
+                                    <input list="expense_company_list" placeholder="選公司 / 自訂車房..." value={newExpense.company} onChange={e => setNewExpense({...newExpense, company: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
+                                    <datalist id="expense_company_list">
+                                        {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
+                                    </datalist>
+                                </div>
                                 
                                 <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
