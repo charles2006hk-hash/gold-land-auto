@@ -12,14 +12,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// ★★★ 1. Viewport 設定：保持您的設定，鎖死縮放，顏色與系統一致 ★★★
+// ★★★ 1. Viewport 設定：解鎖全面屏，鎖死縮放 ★★★
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover', // ★ 核心：允許網頁內容真正延伸、用盡 iPhone 頂部和底部所有空間
-  themeColor: '#0f172a', 
+  viewportFit: 'cover', 
+  themeColor: '#f1f5f9', // ★ 必須換成與系統背景相同的淺灰色 (slate-100)，讓底部完全隱形！
 };
 
 // ★★★ 2. Metadata 設定：加入圖示路徑 ★★★
