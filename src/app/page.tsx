@@ -660,9 +660,9 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
     return (
         <>
           {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-          {/* ★ 加入 pb-[env(safe-area-inset-bottom)] 確保底部登出按鈕不會被 Home 橫條擋住 */}
-          <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-screen flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800 pb-[env(safe-area-inset-bottom)]`}>
-            
+      
+          {/* ★ 側邊欄外層：改用 top-0 與 min-h-[100dvh] 讓深色背景毫無懸念直達螢幕最底 */}
+          <div className={`fixed top-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static h-full min-h-[100dvh] flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}>  
             {/* Header 區域 - ★ 改用 min-h 並加入 pt 避開瀏海/動態島 */}
             <div className={`pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
                 <div className="flex items-center gap-3 overflow-hidden">
@@ -706,8 +706,8 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
             
             {!isSidebarCollapsed && <InfoWidget />}
             
-            {/* 底部登入資訊 */}
-            <div className="p-3 bg-slate-900 border-t border-slate-800 flex-none">
+            {/* 底部登入資訊：★ 在這裡加入安全內距，讓按鈕避開 Home 橫條，而背景依舊填滿 */}
+            <div className="p-3 bg-slate-900 border-t border-slate-800 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                  {isSidebarCollapsed ? (
                      <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
                  ) : (
@@ -3079,15 +3079,20 @@ const DatabaseSelector = ({
 
 
   return (
-      <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900 font-sans">
+      <div className="flex h-full min-h-[100dvh] w-full overflow-hidden bg-slate-100 text-slate-900 font-sans relative">
       
-        {/* ★ 徹底解決 iPhone 底部黑邊與滑動回彈問題 ★ */}
+        {/* ★ 徹底解決 iPhone 底部白邊與滑動回彈問題 ★ */}
         <style>{`
             html, body { 
                 height: 100%; 
+                min-height: 100dvh;
                 width: 100%; 
                 overflow: hidden; 
-                background-color: #f1f5f9; 
+                /* ★ 將底層改為深色，讓 iPhone 底部安全區完美融合側邊欄 */
+                background-color: #0f172a; 
+            }
+            @supports (-webkit-touch-callout: none) {
+                html, body { height: -webkit-fill-available; }
             }
         `}</style>
 
