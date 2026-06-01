@@ -2019,10 +2019,9 @@ export default function GoldLandAutoDMS() {
         setLink('manifest', '/manifest.json'); // ★ 新增這行，連結 PWA 描述檔
 
         // Web App Meta
-        // ★ 開通 iPhone 動態島延伸與安全區域 (viewport-fit=cover)
-        setMeta('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=0'); 
-        setMeta('theme-color', '#f8fafc'); // 將 Safari 狀態列底色設為白灰色，融入背景
-        setMeta('apple-mobile-web-app-status-bar-style', 'default'); 
+        // ★ 核心修復：全面屏 viewport 設定已經交由 layout.tsx 負責，這裡必須刪除，否則會發生「雙重 meta 衝突」導致 iPhone 邊界失效！
+        setMeta('theme-color', '#f1f5f9'); 
+        setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent'); // ★ 必須是 black-translucent 才能讓網頁完美透底
         
         setMeta('apple-mobile-web-app-title', appName); 
         setMeta('application-name', appName); 
@@ -3788,7 +3787,8 @@ const DatabaseSelector = ({
                                       </div>
                                   </div>
                                   
-                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
+                                  {/* ★ 移除死板的 pb-20，改用 env() 讓內容穿透到螢幕最底，並保護最後一張卡片不被 Home 橫條蓋住 */}
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
                                       {filteredInStockCars.map(car => renderDashboardCard(car))}
                                       {filteredInStockCars.length === 0 && (
                                           <div className="text-center py-10 text-slate-400 text-xs">
@@ -3826,7 +3826,8 @@ const DatabaseSelector = ({
                                       </div>
                                   </div>
                                   
-                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-20 md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
+                                  {/* ★ 移除死板的 pb-20，改用 env() 讓內容穿透到螢幕最底 */}
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
                                       {filteredActionCars.map(car => renderDashboardCard(car))}
                                       {filteredActionCars.length === 0 && (
                                           <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">
@@ -3891,7 +3892,7 @@ const DatabaseSelector = ({
               </div>
 
               {/* Grid Container (v18.0: 現代化 4:3 滿版垂直卡片 + 原有邏輯保留) */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-20 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-[calc(2rem+env(safe-area-inset-bottom))] scrollbar-thin">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {getSortedInventory()
                         .sort((a, b) => {
