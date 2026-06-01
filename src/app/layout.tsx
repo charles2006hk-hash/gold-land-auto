@@ -18,8 +18,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover', // ★ 這是解鎖 iPhone 上下黑邊/灰邊的終極指令！
-  themeColor: '#0f172a', // 與您的 manifest 背景顏色一致
+  viewportFit: 'cover', // ★ 核心：允許網頁內容真正延伸、用盡 iPhone 頂部和底部所有空間
+  themeColor: '#0f172a', 
 };
 
 // ★★★ 2. Metadata 設定：加入圖示路徑 ★★★
