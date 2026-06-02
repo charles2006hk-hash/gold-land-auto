@@ -1022,7 +1022,7 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                         ))}
                     </div>
                 </div>
-
+ 
                 {/* ★ 右側：運輸署私家車銷售情報區 (結合 Market Intelligence 展開功能) */}
                 <div 
                     className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group"
