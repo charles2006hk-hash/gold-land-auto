@@ -1025,24 +1025,24 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
  
                {/* ★ 右側：運輸署私家車銷售情報區 (結合 Market Intelligence 展開功能) */}
                 <div 
-                    className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group relative"
+                    className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group"
                     title="點擊展開市場大數據與採購推算"
-                    onClick={() => {
+                    onClick={(e) => {
+                        // 防止點擊事件擴散干擾旁邊的匯率計算機
+                        e.stopPropagation(); 
+                        
                         const wrapper = document.getElementById('market-intel-hidden-wrapper');
                         if (wrapper) {
-                            // ★ 終極穿透點擊：精準找出天上那個隱藏的按鈕並按下
-                            const btn = wrapper.querySelector('button');
-                            if (btn) {
-                                btn.click();
-                            } else {
-                                // 防呆：如果它不是 button，就點擊它的主容器
-                                const firstChild = wrapper.firstElementChild;
-                                if (firstChild instanceof HTMLElement) firstChild.click();
+                            // ★ 終極真實模擬點擊：精準找出天上那個隱藏的按鈕並按下
+                            const target = wrapper.querySelector('button') || wrapper.firstElementChild;
+                            if (target instanceof HTMLElement) {
+                                // 發送真實的 MouseEvent，保證能喚醒 React 的 onClick 監聽器！
+                                target.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
                             }
                         }
                     }}
                 >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 pointer-events-none">
                         <div className="text-[9px] text-slate-400 leading-tight border-r border-slate-600 pr-2 group-hover:text-slate-300 transition-colors">
                             {carSalesStats.month}月全港登記<br/><span className="text-slate-200 font-bold tracking-widest">{carSalesStats.total}</span>
                         </div>
@@ -1060,12 +1060,13 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     </div>
                 </div>
 
-                {/* ★ 核心修復：「負空間隱身術」！*/}
-                {/* 把它整台搬到螢幕上方一萬像素 (-9999px) 的地方。 */}
-                {/* 絕對不使用 overflow-hidden 或 opacity-0，讓 Fixed Modal 可以自由地飛回螢幕正中央！ */}
+                {/* ★ 核心修復：「實體脫離術」！*/}
+                {/* 1. 給予真實的 width/height (100px)，確保 React 承認它存在並願意處理點擊事件。 */}
+                {/* 2. 用 position: fixed 把它丟到螢幕外 (-9999px)，保證肉眼看不見，且絕對不影響版面。 */}
+                {/* 3. 當它內部的 Modal 被觸發時，Fixed 定位的 Modal 會自動對齊螢幕視窗，完美降落！ */}
                 <div 
                     id="market-intel-hidden-wrapper" 
-                    style={{ position: 'absolute', top: '-9999px', left: 0 }}
+                    style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '100px', height: '100px', zIndex: 0 }}
                 >
                     <MarketIntelligence 
                         dbEntries={dbEntries} 
@@ -1075,6 +1076,7 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     />
                 </div>
             </div>
+         
             {/* ★★★ 雙向實時匯率計算機 (Modal) ★★★ */}
             {isConverterOpen && (
                 <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsConverterOpen(false)}>
