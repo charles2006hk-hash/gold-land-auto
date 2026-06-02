@@ -1239,61 +1239,59 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台卡片列印引擎 (光速物理切換版：0秒延遲不阻擋) ★★★
+// ★★★ 終極完美版跨平台卡片列印引擎 (Blob 極速秒開版) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
-    // 1. 瞬間隱藏所有原本的 React 畫面 (解放 iOS CPU，解決 10 秒卡死)
-    const hiddenElements: { el: HTMLElement, origDisplay: string }[] = [];
-    Array.from(document.body.children).forEach(child => {
-        const el = child as HTMLElement;
-        if (el.tagName !== 'SCRIPT' && el.tagName !== 'STYLE' && el.id !== 'pwa-print-container') {
-            hiddenElements.push({ el, origDisplay: el.style.display });
-            el.style.display = 'none'; // 物理隱藏，Safari 就不會去算它的排版
-        }
-    });
-
-    // 2. 建立極致乾淨的列印圖層
-    const printContainer = document.createElement('div');
-    printContainer.id = 'pwa-print-container';
+    // 1. 【光速抓取樣式】直接複製現有的 link 與 style 標籤，耗時 0 毫秒！徹底解決 10 秒卡死問題！
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        .map(el => el.outerHTML)
+        .join('\n');
     
-    // 加上「返回按鈕」，在列印選項關閉後讓用戶可以安全返回
-    printContainer.innerHTML = `
-        <style>
-            @media print {
-                #print-back-btn { display: none !important; }
-                html, body { background: white !important; display: block !important; overflow: visible !important; height: auto !important; position: static !important; }
+    // 確保相對路徑能抓到圖片與 CSS
+    const baseTag = `<base href="${window.location.origin}/">`;
+
+    // 2. 組合純淨的列印專用 HTML
+    const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${title}</title>
+            ${baseTag}
+            ${styles}
+            <style>
                 @page { margin: 10mm; size: auto; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            }
-        </style>
-        <div id="print-back-btn" style="padding: 20px; text-align: center; background: #0f172a; min-height: 100vh;">
-            <div style="margin-bottom: 20px; color: white; font-size: 18px; font-weight: bold;">列印排版已就緒</div>
-            <button id="pwa-restore-btn" style="padding: 16px 32px; background: #eab308; color: black; font-weight: bold; border-radius: 12px; font-size: 18px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">⬅ 列印完成後，點此返回系統</button>
-        </div>
-        <div style="background: white; width: 100%; max-width: 800px; margin: 0 auto; position: absolute; top: 0; left: 0; z-index: -1;">
-            ${htmlContent}
-        </div>
+                html, body { 
+                    margin: 0 !important; padding: 0 !important; 
+                    background: white !important; 
+                    height: auto !important; overflow: visible !important;
+                    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
+                }
+                .print-wrapper { 
+                    width: 100%; max-width: 800px; margin: 0 auto; 
+                    background: white; padding: 0; height: auto !important; overflow: visible !important;
+                }
+                body * { visibility: visible !important; }
+                script { display: none !important; }
+                .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+            </style>
+        </head>
+        <body onload="setTimeout(() => window.print(), 800)">
+            <div class="print-wrapper">
+                ${htmlContent}
+            </div>
+        </body>
+        </html>
     `;
-    document.body.appendChild(printContainer);
 
-    // 3. 還原系統的機制
-    const restoreApp = () => {
-        if (document.getElementById('pwa-print-container')) {
-            document.body.removeChild(printContainer);
-            hiddenElements.forEach(({ el, origDisplay }) => {
-                el.style.display = origDisplay; // 裝回原本的系統畫面
-            });
-        }
-        window.removeEventListener('afterprint', restoreApp);
-    };
-
-    // 綁定手動返回按鈕與原生列印結束事件
-    document.getElementById('pwa-restore-btn')?.addEventListener('click', restoreApp);
-    window.addEventListener('afterprint', restoreApp);
-
-    // 4. 強制重繪後，【直接同步呼叫列印】！(iOS 絕對不會阻擋)
-    void printContainer.offsetHeight;
-    window.print();
+    // 3. 【瞬間開新視窗】因為沒有 10 秒的延遲，iOS 絕對不會觸發「阻擋彈出視窗」的警告！
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    
+    // 清理記憶體
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
@@ -1430,62 +1428,64 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (光速物理切換版：A4合約專用) ★★★
+// ★★★ 終極完美版無痕列印引擎 (Blob 極速秒開 A4 合約) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
-    // 1. 瞬間隱藏原本畫面，解放 CPU
-    const hiddenElements: { el: HTMLElement, origDisplay: string }[] = [];
-    Array.from(document.body.children).forEach(child => {
-        const el = child as HTMLElement;
-        if (el.tagName !== 'SCRIPT' && el.tagName !== 'STYLE' && el.id !== 'pwa-print-container') {
-            hiddenElements.push({ el, origDisplay: el.style.display });
-            el.style.display = 'none'; 
-        }
-    });
-
-    // 2. 建立 A4 列印圖層
-    const printContainer = document.createElement('div');
-    printContainer.id = 'pwa-print-container';
+    // 1. 光速抓取樣式 (耗時 0 毫秒)
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        .map(el => el.outerHTML)
+        .join('\n');
     
-    printContainer.innerHTML = `
-        <style>
-            @media print {
-                #print-back-btn { display: none !important; }
-                html, body { background: white !important; display: block !important; overflow: visible !important; height: auto !important; position: static !important; }
+    const baseTag = `<base href="${window.location.origin}/">`;
+
+    // 2. 組合 A4 專屬 HTML
+    const fullHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${title}</title>
+            ${baseTag}
+            ${styles}
+            <style>
                 @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
-                .a4-container { width: 794px !important; height: 1123px !important; margin: 0 auto !important; background: white !important; position: relative !important; overflow: hidden !important; page-break-after: always; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            }
-        </style>
-        <div id="print-back-btn" style="padding: 20px; text-align: center; background: #0f172a; min-height: 100vh;">
-            <div style="margin-bottom: 20px; color: white; font-size: 18px; font-weight: bold;">列印排版已就緒</div>
-            <button id="pwa-restore-btn" style="padding: 16px 32px; background: #eab308; color: black; font-weight: bold; border-radius: 12px; font-size: 18px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">⬅ 列印完成後，點此返回系統</button>
-        </div>
-        <div class="a4-container" style="position: absolute; top: 0; left: 0; z-index: -1;">
-            ${htmlContent}
-        </div>
+                html, body { 
+                    margin: 0 !important; padding: 0 !important; 
+                    background: white !important; 
+                    width: 794px !important; height: 1123px !important;
+                    overflow: hidden !important; /* 確保不超過 A4 */
+                    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
+                }
+                .print-container { 
+                    width: 794px !important; min-height: 1123px !important;
+                    margin: 0 auto !important; padding: 0 !important;
+                    background: white !important; position: relative !important; overflow: hidden !important;
+                }
+                #print-root {
+                    width: 794px !important; height: 1123px !important;
+                    max-width: none !important; min-height: 0 !important;
+                    box-shadow: none !important; border: none !important; margin: 0 !important; transform: none !important;
+                }
+                body * { visibility: visible !important; }
+                script { display: none !important; }
+            </style>
+        </head>
+        <body onload="setTimeout(() => window.print(), 800)">
+            <div class="print-container">
+                ${htmlContent}
+            </div>
+        </body>
+        </html>
     `;
-    document.body.appendChild(printContainer);
 
-    // 3. 還原機制
-    const restoreApp = () => {
-        if (document.getElementById('pwa-print-container')) {
-            document.body.removeChild(printContainer);
-            hiddenElements.forEach(({ el, origDisplay }) => {
-                el.style.display = origDisplay;
-            });
-        }
-        window.removeEventListener('afterprint', restoreApp);
-    };
-
-    document.getElementById('pwa-restore-btn')?.addEventListener('click', restoreApp);
-    window.addEventListener('afterprint', restoreApp);
-
-    // 4. 同步秒開列印
-    void printContainer.offsetHeight;
-    window.print();
+    // 3. 建立並瞬間開啟
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
-
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
