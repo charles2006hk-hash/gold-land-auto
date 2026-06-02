@@ -1239,7 +1239,7 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台卡片列印引擎 (中繼防阻擋版) ★★★
+// ★★★ 終極跨平台卡片列印引擎 (中繼極速版：秒按秒出) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     let printDiv = document.getElementById('pwa-print-container');
@@ -1249,6 +1249,7 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         document.body.appendChild(printDiv);
     }
 
+    // ★ 徹底刪除耗時 10 秒的 extractedCss 迴圈！
     // 注入中繼確認畫面，將複雜的 DOM 先隱藏，解決卡頓與阻擋問題
     printDiv.innerHTML = `
         <style>
@@ -1288,7 +1289,6 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         </div>
     `;
 };
-
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
@@ -1423,7 +1423,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (中繼防阻擋版) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (中繼極速版：秒按秒出) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     let printDiv = document.getElementById('pwa-print-container');
@@ -1433,6 +1433,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
         document.body.appendChild(printDiv);
     }
 
+    // ★ 徹底刪除耗時 10 秒的 extractedCss 迴圈！
     printDiv.innerHTML = `
         <style>
             @media screen {
