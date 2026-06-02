@@ -3808,6 +3808,42 @@ const DatabaseSelector = ({
                               </button>
                           </div>
 
+                         {/* ========================================================= */}
+                          {/* ★★★ 桌面版專屬：完美融合的全局懸浮搜尋列 ★★★ */}
+                          {/* ========================================================= */}
+                          <div className="hidden md:flex w-full mb-3 px-1 z-10 flex-none animate-fade-in">
+                              <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-[0_2px_15px_rgba(0,0,0,0.03)] border border-slate-200/80 p-1.5 flex items-center transition-all focus-within:ring-2 focus-within:ring-blue-500/50 focus-within:border-blue-500 focus-within:shadow-md hover:bg-white w-full group">
+                                  <div className="pl-4 pr-3 text-slate-400 group-focus-within:text-blue-500 transition-colors">
+                                      <Search size={18} />
+                                  </div>
+                                  <input 
+                                      type="text"
+                                      placeholder="全域搜尋：請輸入廠牌、型號、車牌或關鍵字..."
+                                      value={dashSearchInStock} 
+                                      onChange={(e) => {
+                                          setDashSearchInStock(e.target.value);
+                                          setDashSearchAction(e.target.value); // ★ 雙邊同步篩選
+                                      }}
+                                      className="flex-1 bg-transparent border-none outline-none text-slate-700 placeholder-slate-400 font-bold px-2 py-2 text-sm w-full"
+                                  />
+                                  {dashSearchInStock && (
+                                      <button onClick={() => { setDashSearchInStock(''); setDashSearchAction(''); }} className="pr-4 text-slate-400 hover:text-slate-600 transition-colors">
+                                          <X size={16} />
+                                      </button>
+                                  )}
+                                  <div className="hidden md:flex pr-1.5 gap-2 border-l border-slate-200 pl-3">
+                                      <button onClick={() => setActiveTab('inventory')} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all border border-slate-200 shadow-sm active:scale-95 flex items-center gap-1.5">
+                                          <Car size={14} className="text-slate-500" />
+                                          完整庫存
+                                      </button>
+                                      <button onClick={() => {setEditingVehicle({} as any); setActiveTab('inventory_add');}} className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all border border-blue-200 shadow-sm active:scale-95 flex items-center gap-1.5">
+                                          <Plus size={14} />
+                                          新增入庫
+                                      </button>
+                                  </div>
+                              </div>
+                          </div>
+
                           <div className="flex flex-col lg:flex-row gap-0 lg:gap-5 flex-1 min-h-0 overflow-hidden">
                               
                               {/* 左側看板：在庫優先 */}
@@ -3818,18 +3854,21 @@ const DatabaseSelector = ({
                                           <Layout size={16} className="mr-1.5 text-green-500" /> 在庫待售
                                       </h3>
                                       
-                                      {/* ★ 手機點擊展開覆蓋，桌面 Hover 顯示的魔法搜尋框 */}
-                                      <div className="absolute right-16 left-2 md:static md:flex-1 md:mx-4 flex justify-end md:justify-center z-20">
-                                          <div className={`relative flex items-center justify-end md:w-full md:max-w-[200px] transition-all duration-300 ${dashSearchInStock ? 'w-full' : 'w-8'} focus-within:w-full`}>
-                                              <Search size={14} className={`absolute left-2.5 text-slate-500 pointer-events-none md:text-slate-400 transition-opacity z-10 ${dashSearchInStock ? 'md:opacity-100' : 'md:opacity-0'} md:group-hover:opacity-100`} />
+                                      {/* ★ 手機專用：隱藏在右側的魔法搜尋框 (桌面版已改用上方全局搜尋) */}
+                                      <div className="absolute right-16 left-2 md:hidden flex justify-end z-20">
+                                          <div className={`relative flex items-center justify-end transition-all duration-300 ${dashSearchInStock ? 'w-full' : 'w-8'} focus-within:w-full`}>
+                                              <Search size={14} className={`absolute left-2.5 text-slate-500 pointer-events-none transition-opacity z-10 ${dashSearchInStock ? 'opacity-0' : 'opacity-100'}`} />
                                               <input 
                                                   type="text" 
                                                   value={dashSearchInStock}
-                                                  onChange={(e) => setDashSearchInStock(e.target.value)}
+                                                  onChange={(e) => {
+                                                      setDashSearchInStock(e.target.value);
+                                                      setDashSearchAction(e.target.value); // 手機版也同步
+                                                  }}
                                                   placeholder="搜尋車牌、廠型..." 
-                                                  className={`w-full h-8 pl-8 pr-6 rounded-full text-xs outline-none focus:ring-1 focus:ring-green-100 transition-all cursor-pointer focus:cursor-text relative z-0 border md:bg-white md:border-slate-200 md:text-slate-700 md:placeholder-slate-400 md:shadow-sm md:group-hover:opacity-100 md:focus-within:opacity-100 ${dashSearchInStock ? 'md:opacity-100 bg-white border-green-400 text-slate-700 placeholder-slate-400 shadow-sm' : 'md:opacity-0 bg-transparent border-transparent text-transparent placeholder-transparent focus:bg-white focus:border-green-400 focus:text-slate-700 focus:placeholder-slate-400 focus:shadow-sm'}`}
+                                                  className={`w-full h-8 pl-8 pr-6 rounded-full text-xs outline-none focus:ring-1 focus:ring-green-100 transition-all cursor-pointer focus:cursor-text relative z-0 border ${dashSearchInStock ? 'opacity-100 bg-white border-green-400 text-slate-700 placeholder-slate-400 shadow-sm' : 'opacity-0 bg-transparent border-transparent text-transparent placeholder-transparent focus:bg-white focus:border-green-400 focus:text-slate-700 focus:placeholder-slate-400 focus:shadow-sm'}`}
                                               />
-                                              {dashSearchInStock && <button onClick={(e) => { e.preventDefault(); setDashSearchInStock(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12} /></button>}
+                                              {dashSearchInStock && <button onClick={(e) => { e.preventDefault(); setDashSearchInStock(''); setDashSearchAction(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12} /></button>}
                                           </div>
                                       </div>
 
@@ -3857,18 +3896,21 @@ const DatabaseSelector = ({
                                           <FileCheck size={16} className="mr-1.5 text-amber-500" /> 已訂與待結清
                                       </h3>
                                       
-                                      {/* ★ 手機點擊展開覆蓋，桌面 Hover 顯示的魔法搜尋框 */}
-                                      <div className="absolute right-16 left-2 md:static md:flex-1 md:mx-4 flex justify-end md:justify-center z-20">
-                                          <div className={`relative flex items-center justify-end md:w-full md:max-w-[200px] transition-all duration-300 ${dashSearchAction ? 'w-full' : 'w-8'} focus-within:w-full`}>
-                                              <Search size={14} className={`absolute left-2.5 text-slate-500 pointer-events-none md:text-slate-400 transition-opacity z-10 ${dashSearchAction ? 'md:opacity-100' : 'md:opacity-0'} md:group-hover:opacity-100`} />
+                                      {/* ★ 手機專用：隱藏在右側的魔法搜尋框 (桌面版已改用上方全局搜尋) */}
+                                      <div className="absolute right-16 left-2 md:hidden flex justify-end z-20">
+                                          <div className={`relative flex items-center justify-end transition-all duration-300 ${dashSearchAction ? 'w-full' : 'w-8'} focus-within:w-full`}>
+                                              <Search size={14} className={`absolute left-2.5 text-slate-500 pointer-events-none transition-opacity z-10 ${dashSearchAction ? 'opacity-0' : 'opacity-100'}`} />
                                               <input 
                                                   type="text" 
                                                   value={dashSearchAction}
-                                                  onChange={(e) => setDashSearchAction(e.target.value)}
+                                                  onChange={(e) => {
+                                                      setDashSearchAction(e.target.value);
+                                                      setDashSearchInStock(e.target.value); // 手機版也同步
+                                                  }}
                                                   placeholder="搜尋車牌、廠型..." 
-                                                  className={`w-full h-8 pl-8 pr-6 rounded-full text-xs outline-none focus:ring-1 focus:ring-amber-100 transition-all cursor-pointer focus:cursor-text relative z-0 border md:bg-white md:border-slate-200 md:text-slate-700 md:placeholder-slate-400 md:shadow-sm md:group-hover:opacity-100 md:focus-within:opacity-100 ${dashSearchAction ? 'md:opacity-100 bg-white border-amber-400 text-slate-700 placeholder-slate-400 shadow-sm' : 'md:opacity-0 bg-transparent border-transparent text-transparent placeholder-transparent focus:bg-white focus:border-amber-400 focus:text-slate-700 focus:placeholder-slate-400 focus:shadow-sm'}`}
+                                                  className={`w-full h-8 pl-8 pr-6 rounded-full text-xs outline-none focus:ring-1 focus:ring-amber-100 transition-all cursor-pointer focus:cursor-text relative z-0 border ${dashSearchAction ? 'opacity-100 bg-white border-amber-400 text-slate-700 placeholder-slate-400 shadow-sm' : 'opacity-0 bg-transparent border-transparent text-transparent placeholder-transparent focus:bg-white focus:border-amber-400 focus:text-slate-700 focus:placeholder-slate-400 focus:shadow-sm'}`}
                                               />
-                                              {dashSearchAction && <button onClick={(e) => { e.preventDefault(); setDashSearchAction(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12} /></button>}
+                                              {dashSearchAction && <button onClick={(e) => { e.preventDefault(); setDashSearchAction(''); setDashSearchInStock(''); }} className="absolute right-2.5 text-slate-400 hover:text-slate-600 z-10"><X size={12} /></button>}
                                           </div>
                                       </div>
 
