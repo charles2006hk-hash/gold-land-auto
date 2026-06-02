@@ -1239,13 +1239,9 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台卡片列印引擎 (專為車輛分享卡片設計，允許無限向下延伸) ★★★
-// ------------------------------------------------------------------
-// ------------------------------------------------------------------
 // ★★★ 終極跨平台卡片列印引擎 (支援 iPhone PWA) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
-    // 建立專屬列印圖層
     let printDiv = document.getElementById('pwa-print-container');
     if (!printDiv) {
         printDiv = document.createElement('div');
@@ -1267,16 +1263,21 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     printDiv.innerHTML = `
         <style>
             ${extractedCss}
-            /* 平時完全隱藏 */
+            /* ★ 核心修復 1：平時藏在螢幕外，絕不用 display: none，大幅提升 iOS 預覽載入速度！ */
             @media screen { 
-                #pwa-print-container { display: none !important; } 
+                #pwa-print-container { 
+                    position: fixed !important;
+                    top: -9999px !important;
+                    left: -9999px !important;
+                    width: 1px !important;
+                    height: 1px !important;
+                    overflow: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                } 
             }
-            /* 列印時瞬間接管整個螢幕 */
             @media print {
-                /* 隱藏原本的 React 系統畫面 */
                 body > *:not(#pwa-print-container) { display: none !important; }
-                
-                /* 強制解鎖所有蘋果的邊界與高度限制 */
                 html, body {
                     background: white !important;
                     width: auto !important;
@@ -1287,15 +1288,13 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
                     margin: 0 !important;
                     padding: 0 !important;
                 }
-                
                 #pwa-print-container { 
                     display: block !important; 
                     position: static !important; 
                     width: 100% !important; 
+                    opacity: 1 !important;
                 }
-                
                 @page { margin: 10mm; size: auto; }
-                
                 .print-wrapper { 
                     width: 100%; 
                     max-width: 800px; 
@@ -1304,7 +1303,6 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
                     height: auto !important;
                     overflow: visible !important;
                 }
-                
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
@@ -1312,12 +1310,10 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         <div class="print-wrapper">${htmlContent}</div>
     `;
 
-    // 延遲一點點讓 DOM 渲染完成，然後呼叫原生列印
+    // ★ 核心修復 2：拿掉自動清空 DOM 的 setTimeout。給 iOS Safari 充足的時間生成 PDF 預覽！
     setTimeout(() => {
         window.print();
-        // 列印視窗關閉後，自動清理圖層
-        setTimeout(() => { if (printDiv) printDiv.innerHTML = ''; }, 1000);
-    }, 500);
+    }, 300);
 };
 
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
@@ -1478,12 +1474,21 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     printDiv.innerHTML = `
         <style>
             ${extractedCss}
+            /* ★ 同樣藏於畫面外，加速生成 */
             @media screen { 
-                #pwa-print-container { display: none !important; } 
+                #pwa-print-container { 
+                    position: fixed !important;
+                    top: -9999px !important;
+                    left: -9999px !important;
+                    width: 1px !important;
+                    height: 1px !important;
+                    overflow: hidden !important;
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                } 
             }
             @media print {
                 body > *:not(#pwa-print-container) { display: none !important; }
-                
                 html, body {
                     background: white !important;
                     width: auto !important;
@@ -1494,13 +1499,12 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     margin: 0 !important;
                     padding: 0 !important;
                 }
-                
                 #pwa-print-container { 
                     display: block !important; 
                     position: static !important; 
                     width: 100% !important; 
+                    opacity: 1 !important;
                 }
-                
                 /* 強制 A4 尺寸，確保合約與印章不走位 */
                 @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
                 
@@ -1514,7 +1518,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     overflow: hidden !important;
                     page-break-after: always;
                 }
-                
                 #print-root {
                     width: 794px !important;
                     height: 1123px !important;
@@ -1525,17 +1528,16 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     margin: 0 !important;
                     transform: none !important;
                 }
-                
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
         </style>
         <div class="print-container">${htmlContent}</div>
     `;
 
+    // ★ 移除刪除機制，保證 iOS 安全取件
     setTimeout(() => {
         window.print();
-        setTimeout(() => { if (printDiv) printDiv.innerHTML = ''; }, 1000);
-    }, 500);
+    }, 300);
 };
 
 // --- 主應用程式 ---
