@@ -3079,18 +3079,18 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 終極全面屏方案：改用 fixed inset-0 強制鎖定物理全螢幕，徹底解決高度計算誤差
-      <div className="fixed inset-0 flex bg-slate-100 text-slate-900 font-sans overflow-hidden">
+      // ★ 暴力破解：棄用 fixed inset-0，改用 w-screen h-[100dvh] 強行撐滿螢幕每一寸像素！
+      <div className="flex w-screen h-[100dvh] bg-slate-100 text-slate-900 font-sans overflow-hidden">
       
         <style>{`
-            /* ★ 強制鎖定 iOS 底層，背景改為與 APP 一致的淺灰色，並釋放滑動能力 */
+            /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
             html, body { 
-                position: fixed;
-                inset: 0;
-                width: 100%; 
-                height: 100%; 
-                overflow: hidden; 
-                background-color: #f1f5f9; 
+                margin: 0 !important; 
+                padding: 0 !important;
+                width: 100vw !important; 
+                height: 100dvh !important; 
+                overflow: hidden !important; 
+                background-color: #f1f5f9 !important; 
                 overscroll-behavior-y: none;
                 -webkit-overflow-scrolling: touch;
             }
