@@ -1029,8 +1029,11 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     title="點擊展開市場大數據與採購推算"
                     onClick={() => {
                         const wrapper = document.getElementById('market-intel-hidden-wrapper');
-                        const btn = wrapper?.querySelector('button') || wrapper?.firstElementChild;
-                        if (btn) (btn as HTMLElement).click();
+                        // ★ 確保精準抓到內部的按鈕並觸發點擊
+                        const trigger = wrapper?.querySelector('button') || wrapper?.firstElementChild;
+                        if (trigger instanceof HTMLElement) {
+                            trigger.click();
+                        }
                     }}
                 >
                     <div className="flex items-center gap-3">
@@ -1051,8 +1054,9 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     </div>
                 </div>
                 
-                {/* 隱藏的 MarketIntelligence 組件，保留其彈窗能力 */}
-                <div id="market-intel-hidden-wrapper" className="w-0 h-0 overflow-hidden">
+                {/* ★ 核心修復：絕對不能用 overflow-hidden，改用 Off-screen 物理位移 (-9999px) */}
+                {/* 這樣按鈕會藏在螢幕外，但它彈出的 Modal 依然可以霸氣地覆蓋整個螢幕！ */}
+                <div id="market-intel-hidden-wrapper" className="absolute top-[-9999px] left-[-9999px] overflow-visible">
                     <MarketIntelligence 
                         dbEntries={dbEntries} 
                         inventory={inventory} 
