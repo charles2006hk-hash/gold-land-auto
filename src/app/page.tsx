@@ -1241,8 +1241,18 @@ type SettingsManagerProps = {
 // ------------------------------------------------------------------
 // ★★★ 終極跨平台卡片列印引擎 (專為車輛分享卡片設計，允許無限向下延伸) ★★★
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// ★★★ 終極跨平台卡片列印引擎 (支援 iPhone PWA) ★★★
+// ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
-    const isMobile = window.innerWidth < 768;
+    // 建立專屬列印圖層
+    let printDiv = document.getElementById('pwa-print-container');
+    if (!printDiv) {
+        printDiv = document.createElement('div');
+        printDiv.id = 'pwa-print-container';
+        document.body.appendChild(printDiv);
+    }
+
     let extractedCss = '';
     try {
         Array.from(document.styleSheets).forEach((sheet) => {
@@ -1252,78 +1262,62 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
             } catch (e) {}
         });
     } catch (err) {}
-
     if (!extractedCss) extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
-    const baseTag = `<base href="${window.location.origin}/">`;
 
-    const fullHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${title}</title>
-            ${baseTag}
-            <style>${extractedCss}</style>
-            <style>
-                /* 解除 A4 鎖定，允許自由跨頁 */
-                @page { margin: 10mm; size: auto; }
-                html, body { 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    background: white !important; 
+    printDiv.innerHTML = `
+        <style>
+            ${extractedCss}
+            /* 平時完全隱藏 */
+            @media screen { 
+                #pwa-print-container { display: none !important; } 
+            }
+            /* 列印時瞬間接管整個螢幕 */
+            @media print {
+                /* 隱藏原本的 React 系統畫面 */
+                body > *:not(#pwa-print-container) { display: none !important; }
+                
+                /* 強制解鎖所有蘋果的邊界與高度限制 */
+                html, body {
+                    background: white !important;
+                    width: auto !important;
                     height: auto !important;
+                    position: static !important;
                     overflow: visible !important;
-                    -webkit-print-color-adjust: exact !important; 
-                    print-color-adjust: exact !important; 
+                    display: block !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
                 }
+                
+                #pwa-print-container { 
+                    display: block !important; 
+                    position: static !important; 
+                    width: 100% !important; 
+                }
+                
+                @page { margin: 10mm; size: auto; }
+                
                 .print-wrapper { 
                     width: 100%; 
                     max-width: 800px; 
                     margin: 0 auto; 
                     background: white; 
-                    padding: 0; 
                     height: auto !important;
                     overflow: visible !important;
                 }
-                body * { visibility: visible !important; }
-                script { display: none !important; }
+                
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
-            </style>
-        </head>
-        <body>
-            <div class="print-wrapper">
-                ${htmlContent}
-            </div>
-            <script>
-                window.onload = function() {
-                    setTimeout(function() { window.print(); }, 800);
-                };
-            </script>
-        </body>
-        </html>
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            }
+        </style>
+        <div class="print-wrapper">${htmlContent}</div>
     `;
 
-    if (isMobile) {
-        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-    } else {
-        let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
-        if (!iframe) {
-            iframe = document.createElement('iframe');
-            iframe.id = 'smart-print-iframe';
-            iframe.style.position = 'fixed';
-            iframe.style.right = '0';
-            iframe.style.bottom = '0';
-            iframe.style.width = '0';
-            iframe.style.height = '0';
-            iframe.style.border = '0';
-            document.body.appendChild(iframe);
-        }
-        const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
-        if (iframeDoc) { iframeDoc.open(); iframeDoc.write(fullHtml); iframeDoc.close(); }
-    }
+    // 延遲一點點讓 DOM 渲染完成，然後呼叫原生列印
+    setTimeout(() => {
+        window.print();
+        // 列印視窗關閉後，自動清理圖層
+        setTimeout(() => { if (printDiv) printDiv.innerHTML = ''; }, 1000);
+    }, 500);
 };
 
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
@@ -1460,11 +1454,16 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極跨平台無痕列印引擎 (全內聯 CSS + 強制邊界鎖定) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (支援 iPhone PWA 打包單) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
-    const isMobile = window.innerWidth < 768;
-    
+    let printDiv = document.getElementById('pwa-print-container');
+    if (!printDiv) {
+        printDiv = document.createElement('div');
+        printDiv.id = 'pwa-print-container';
+        document.body.appendChild(printDiv);
+    }
+
     let extractedCss = '';
     try {
         Array.from(document.styleSheets).forEach((sheet) => {
@@ -1474,44 +1473,48 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             } catch (e) {}
         });
     } catch (err) {}
-
     if (!extractedCss) extractedCss = Array.from(document.querySelectorAll('style')).map(s => s.innerHTML).join('\n');
 
-    const baseTag = `<base href="${window.location.origin}/">`;
-
-    const fullHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${title}</title>
-            ${baseTag}
-            <style>${extractedCss}</style>
-            <style>
-                /* ★ 徹底關閉瀏覽器預設的網址、頁碼與邊界 */
+    printDiv.innerHTML = `
+        <style>
+            ${extractedCss}
+            @media screen { 
+                #pwa-print-container { display: none !important; } 
+            }
+            @media print {
+                body > *:not(#pwa-print-container) { display: none !important; }
+                
+                html, body {
+                    background: white !important;
+                    width: auto !important;
+                    height: auto !important;
+                    position: static !important;
+                    overflow: visible !important;
+                    display: block !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+                
+                #pwa-print-container { 
+                    display: block !important; 
+                    position: static !important; 
+                    width: 100% !important; 
+                }
+                
+                /* 強制 A4 尺寸，確保合約與印章不走位 */
                 @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
                 
-                html, body { 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    background: white !important; 
-                    width: 794px !important;
-                    height: 1123px !important;
-                    overflow: hidden !important;
-                    -webkit-print-color-adjust: exact !important; 
-                    print-color-adjust: exact !important; 
-                }
                 .print-container { 
                     width: 794px !important; 
                     height: 1123px !important;
-                    margin: 0 !important; 
+                    margin: 0 auto !important; 
                     padding: 0 !important;
                     background: white !important; 
                     position: relative !important;
                     overflow: hidden !important;
+                    page-break-after: always;
                 }
-                /* 強制把內容區塊鎖定在 A4 範圍內，保證印章不被擠出去 */
+                
                 #print-root {
                     width: 794px !important;
                     height: 1123px !important;
@@ -1522,44 +1525,19 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     margin: 0 !important;
                     transform: none !important;
                 }
-                body * { visibility: visible !important; }
-                script { display: none !important; }
-            </style>
-        </head>
-        <body>
-            <div class="print-container">
-                ${htmlContent}
-            </div>
-            <script>
-                window.onload = function() {
-                    setTimeout(function() { window.print(); }, 800);
-                };
-            </script>
-        </body>
-        </html>
+                
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            }
+        </style>
+        <div class="print-container">${htmlContent}</div>
     `;
 
-    if (isMobile) {
-        const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-    } else {
-        let iframe = document.getElementById('smart-print-iframe') as HTMLIFrameElement;
-        if (!iframe) {
-            iframe = document.createElement('iframe');
-            iframe.id = 'smart-print-iframe';
-            iframe.style.position = 'fixed';
-            iframe.style.right = '0';
-            iframe.style.bottom = '0';
-            iframe.style.width = '0';
-            iframe.style.height = '0';
-            iframe.style.border = '0';
-            document.body.appendChild(iframe);
-        }
-        const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
-        if (iframeDoc) { iframeDoc.open(); iframeDoc.write(fullHtml); iframeDoc.close(); }
-    }
+    setTimeout(() => {
+        window.print();
+        setTimeout(() => { if (printDiv) printDiv.innerHTML = ''; }, 1000);
+    }, 500);
 };
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
@@ -3079,8 +3057,8 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 暴力破解：棄用 fixed inset-0，改用 w-screen h-[100dvh] 強行撐滿螢幕每一寸像素！
-      <div className="flex w-screen h-[100dvh] bg-slate-100 text-slate-900 font-sans overflow-hidden">
+      // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
+      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block bg-slate-100 text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white">
       
         <style>{`
             /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
@@ -3093,6 +3071,17 @@ const DatabaseSelector = ({
                 background-color: #f1f5f9 !important; 
                 overscroll-behavior-y: none;
                 -webkit-overflow-scrolling: touch;
+            }
+            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
+            @media print {
+                html, body {
+                    position: static !important;
+                    width: auto !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                    background-color: #ffffff !important;
+                    display: block !important;
+                }
             }
         `}</style>
 
@@ -3120,8 +3109,8 @@ const DatabaseSelector = ({
           onOpenChangePwd={() => setIsChangePwdOpen(true)} />
            
 
-      {/* ★ 全面屏終極版：移除 pb-[env(...)] 和 h-full 限制！讓 <main> 直接延伸到螢幕最底部的物理邊緣，實現真正的全面屏穿透！ */}
-      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden relative">
+      {/* ★ 加入 print:overflow-visible print:block，防止列印時內容被截斷 */}
+      <main className="flex-1 w-full min-w-0 md:ml-0 pt-0 px-4 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
         
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
