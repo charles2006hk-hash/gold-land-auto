@@ -1023,25 +1023,26 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     </div>
                 </div>
  
-                {/* ★ 右側：運輸署私家車銷售情報區 (結合 Market Intelligence 展開功能) */}
+               {/* ★ 右側：運輸署私家車銷售情報區 (結合 Market Intelligence 展開功能) */}
                 <div 
                     className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group relative"
                     title="點擊展開市場大數據與採購推算"
                     onClick={() => {
                         const wrapper = document.getElementById('market-intel-hidden-wrapper');
                         if (wrapper) {
-                            // ★ 終極穿透點擊：精準打擊組件的根節點與按鈕，絕對能喚醒 React 事件！
-                            const root = wrapper.firstElementChild;
-                            if (root instanceof HTMLElement) {
-                                root.click(); // 點擊外層容器
-                                const innerBtn = root.querySelector('button');
-                                if (innerBtn) innerBtn.click(); // 點擊內部按鈕
+                            // ★ 終極穿透點擊：精準找出天上那個隱藏的按鈕並按下
+                            const btn = wrapper.querySelector('button');
+                            if (btn) {
+                                btn.click();
+                            } else {
+                                // 防呆：如果它不是 button，就點擊它的主容器
+                                const firstChild = wrapper.firstElementChild;
+                                if (firstChild instanceof HTMLElement) firstChild.click();
                             }
                         }
                     }}
                 >
-                    {/* ★ 加上 pointer-events-none 確保滑鼠點擊不會被文字擋住 */}
-                    <div className="flex items-center gap-3 pointer-events-none">
+                    <div className="flex items-center gap-3">
                         <div className="text-[9px] text-slate-400 leading-tight border-r border-slate-600 pr-2 group-hover:text-slate-300 transition-colors">
                             {carSalesStats.month}月全港登記<br/><span className="text-slate-200 font-bold tracking-widest">{carSalesStats.total}</span>
                         </div>
@@ -1059,9 +1060,13 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     </div>
                 </div>
 
-                {/* ★ 核心修復：「1x1像素隱身術」！*/}
-                {/* 讓組件真實渲染以接收點擊，但鎖死在 1 像素內。它彈出的 Modal 會自動突破限制覆蓋全螢幕！ */}
-                <div id="market-intel-hidden-wrapper" className="fixed bottom-0 right-0 w-[1px] h-[1px] overflow-hidden z-[-1]">
+                {/* ★ 核心修復：「負空間隱身術」！*/}
+                {/* 把它整台搬到螢幕上方一萬像素 (-9999px) 的地方。 */}
+                {/* 絕對不使用 overflow-hidden 或 opacity-0，讓 Fixed Modal 可以自由地飛回螢幕正中央！ */}
+                <div 
+                    id="market-intel-hidden-wrapper" 
+                    style={{ position: 'absolute', top: '-9999px', left: 0 }}
+                >
                     <MarketIntelligence 
                         dbEntries={dbEntries} 
                         inventory={inventory} 
