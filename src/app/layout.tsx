@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next"; // ★ 移除了用不到的 Viewport 型別
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,22 +12,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// ★★★ 1. Viewport 設定：解鎖全面屏，鎖死縮放 ★★★
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  viewportFit: 'cover', 
-  themeColor: '#f1f5f9', // ★ 必須換成與系統背景相同的淺灰色 (slate-100)，讓底部完全隱形！
-};
+// ★★★ 核心修復：拿掉了原來的 export const viewport，改為直接寫在底下的 <head> 裡面 ★★★
 
-// ★★★ 2. Metadata 設定：加入圖示路徑 ★★★
+// ★★★ 2. Metadata 設定：保持您的設定 ★★★
 export const metadata: Metadata = {
   title: "Gold Land Auto DMS", 
   description: "Vehicle Management System for Gold Land Auto",
   manifest: "/manifest.json", 
-  // ★ 加入以下 icons 設定，確保瀏覽器分頁與 iOS 桌面圖示正確讀取
   icons: {
     icon: '/GL_APPLOGO.png',
     apple: '/GL_APPLOGO.png',
@@ -45,9 +36,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-HK"> {/* 建議改為 zh-HK 或 zh-TW */}
+    <html lang="zh-HK">
       <head>
-        {/* 這裡可以放其他需要手動加入的 head 標籤 */}
+        {/* ★★★ 終極全面屏解鎖：直接刻印在 HTML 最底層 head 內，強迫 iOS 釋放底部所有物理空間！ ★★★ */}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#f1f5f9" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
