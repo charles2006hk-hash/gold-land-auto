@@ -28,6 +28,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
     const [carPhotos, setCarPhotos] = useState<string[]>([]);
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
+    const [sortMode, setSortMode] = useState<'created' | 'updated'>('created');
 
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -121,6 +122,17 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             if (!docDateStr || (filterStartDate && docDateStr < filterStartDate) || (filterEndDate && docDateStr > filterEndDate)) return false; 
         }
         return true;
+    }).sort((a: any, b: any) => {
+        // ★ 動態排序邏輯：根據使用者點擊的模式排列
+        if (sortMode === 'created') {
+            const timeA = a.createdAt?.seconds || a.updatedAt?.seconds || 0;
+            const timeB = b.createdAt?.seconds || b.updatedAt?.seconds || 0;
+            return timeB - timeA; // 建立時間：由新到舊
+        } else {
+            const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
+            const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
+            return timeB - timeA; // 更新時間：由新到舊
+        }
     });
 
     const DEFAULT_REMARKS = "匯豐銀行香港賬戶：747-057347-838\n賬戶名稱：GOLD LAND POWER LIMITED T/A GOLD LAND AUTO\n「轉數快」識別碼 6134530";
@@ -696,7 +708,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             <table className="w-full min-w-[800px] text-sm text-left border-collapse bg-white shadow-sm"> {/* ★ 加上 min-w-[800px] */}
                                 <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
                                     <tr>
-                                        <th className="p-3 w-28">單據日期</th>
+                                        <th 
+                                            className="p-3 w-36 cursor-pointer hover:bg-slate-200 transition-colors select-none group"
+                                            onClick={() => setSortMode(prev => prev === 'created' ? 'updated' : 'created')}
+                                            title="點擊切換排序方式"
+                                        >
+                                            <div className="flex items-center gap-1">
+                                                {sortMode === 'created' ? '建立日期 ▼' : '更新日期 ▼'}
+                                                <span className="text-[9px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-full group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                                                    切換
+                                                </span>
+                                            </div>
+                                        </th>
                                         <th className="p-3 w-32">單據類型</th>
                                         <th className="p-3">摘要內容</th>
                                         <th className="p-3 text-right w-32">總金額</th>
