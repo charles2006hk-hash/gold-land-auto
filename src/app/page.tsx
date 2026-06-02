@@ -1239,7 +1239,7 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極極速同步版跨平台卡片列印 (突破 iOS 阻擋機制) ★★★
+// ★★★ 終極跨平台卡片列印引擎 (中繼防阻擋版) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     let printDiv = document.getElementById('pwa-print-container');
@@ -1249,50 +1249,44 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         document.body.appendChild(printDiv);
     }
 
-    // 直接寫入內容，不抓取 CSS，並改用 display: none 避免影響原畫面排版
+    // 注入中繼確認畫面，將複雜的 DOM 先隱藏，解決卡頓與阻擋問題
     printDiv.innerHTML = `
         <style>
-            @media screen { 
-                #pwa-print-container { display: none !important; } 
+            @media screen {
+                #pwa-print-ui {
+                    position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 999999;
+                    background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    font-family: sans-serif;
+                }
+                #pwa-print-content { display: none !important; }
             }
             @media print {
                 body > *:not(#pwa-print-container) { display: none !important; }
-                html, body {
-                    background: white !important;
-                    width: auto !important;
-                    height: auto !important;
-                    position: static !important;
-                    overflow: visible !important;
-                    display: block !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                }
-                #pwa-print-container { 
-                    display: block !important; 
-                    position: static !important; 
-                    width: 100% !important; 
-                }
+                #pwa-print-ui { display: none !important; }
+                #pwa-print-content { display: block !important; }
+                html, body { background: white !important; width: auto !important; height: auto !important; position: static !important; overflow: visible !important; display: block !important; margin: 0 !important; padding: 0 !important; }
                 @page { margin: 10mm; size: auto; }
-                .print-wrapper { 
-                    width: 100%; 
-                    max-width: 800px; 
-                    margin: 0 auto; 
-                    background: white; 
-                    height: auto !important;
-                    overflow: visible !important;
-                }
+                .print-wrapper { width: 100%; max-width: 800px; margin: 0 auto; background: white; height: auto !important; overflow: visible !important; }
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
         </style>
-        <div class="print-wrapper">${htmlContent}</div>
+        
+        <div id="pwa-print-ui">
+            <div style="background:white; padding:40px; border-radius:24px; text-align:center; max-width:85%; width:320px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">
+                <div style="font-size:48px; margin-bottom:16px;">🖨️</div>
+                <h2 style="margin:0 0 8px 0; color:#0f172a; font-size:22px; font-weight:900;">車輛資料卡已就緒</h2>
+                <p style="margin:0 0 24px 0; color:#64748b; font-size:14px; line-height:1.5;">系統已排版完成<br/>請點擊下方按鈕呼叫列印</p>
+                <button onclick="window.print()" style="width:100%; padding:16px; background:#eab308; color:#000; border:none; border-radius:12px; font-size:16px; font-weight:900; cursor:pointer; margin-bottom:12px; box-shadow:0 4px 6px -1px rgba(234, 179, 8, 0.3);">開始列印 / 存為 PDF</button>
+                <button onclick="document.getElementById('pwa-print-container').innerHTML=''" style="width:100%; padding:12px; background:transparent; color:#94a3b8; border:1px solid #cbd5e1; border-radius:12px; font-size:14px; font-weight:bold; cursor:pointer;">取消返回</button>
+            </div>
+        </div>
+
+        <div id="pwa-print-content">
+            <div class="print-wrapper">${htmlContent}</div>
+        </div>
     `;
-
-    // ★ 魔法：讀取 offsetHeight 強迫瀏覽器「瞬間同步」完成畫面渲染 (Reflow)
-    void printDiv.offsetHeight;
-
-    // ★ 核心修復：拔除 setTimeout，直接同步呼叫！Safari 會認定這是用戶親手點擊的，絕對不阻擋！
-    window.print();
 };
 
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
@@ -1429,7 +1423,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極極速同步版無痕列印 (突破 iOS 阻擋機制) ★★★
+// ★★★ 終極跨平台無痕列印引擎 (中繼防阻擋版) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     let printDiv = document.getElementById('pwa-print-container');
@@ -1441,59 +1435,41 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
 
     printDiv.innerHTML = `
         <style>
-            @media screen { 
-                #pwa-print-container { display: none !important; } 
+            @media screen {
+                #pwa-print-ui {
+                    position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 999999;
+                    background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    font-family: sans-serif;
+                }
+                #pwa-print-content { display: none !important; }
             }
             @media print {
                 body > *:not(#pwa-print-container) { display: none !important; }
-                html, body {
-                    background: white !important;
-                    width: auto !important;
-                    height: auto !important;
-                    position: static !important;
-                    overflow: visible !important;
-                    display: block !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                }
-                #pwa-print-container { 
-                    display: block !important; 
-                    position: static !important; 
-                    width: 100% !important; 
-                }
+                #pwa-print-ui { display: none !important; }
+                #pwa-print-content { display: block !important; }
+                html, body { background: white !important; width: auto !important; height: auto !important; position: static !important; overflow: visible !important; display: block !important; margin: 0 !important; padding: 0 !important; }
                 @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
-                
-                .print-container { 
-                    width: 794px !important; 
-                    height: 1123px !important;
-                    margin: 0 auto !important; 
-                    padding: 0 !important;
-                    background: white !important; 
-                    position: relative !important;
-                    overflow: hidden !important;
-                    page-break-after: always;
-                }
-                #print-root {
-                    width: 794px !important;
-                    height: 1123px !important;
-                    max-width: none !important;
-                    min-height: 0 !important;
-                    box-shadow: none !important;
-                    border: none !important;
-                    margin: 0 !important;
-                    transform: none !important;
-                }
+                .print-container { width: 794px !important; height: 1123px !important; margin: 0 auto !important; padding: 0 !important; background: white !important; position: relative !important; overflow: hidden !important; page-break-after: always; }
+                #print-root { width: 794px !important; height: 1123px !important; max-width: none !important; min-height: 0 !important; box-shadow: none !important; border: none !important; margin: 0 !important; transform: none !important; }
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             }
         </style>
-        <div class="print-container">${htmlContent}</div>
+        
+        <div id="pwa-print-ui">
+            <div style="background:white; padding:40px; border-radius:24px; text-align:center; max-width:85%; width:320px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">
+                <div style="font-size:48px; margin-bottom:16px;">📄</div>
+                <h2 style="margin:0 0 8px 0; color:#0f172a; font-size:22px; font-weight:900;">A4 文件準備就緒</h2>
+                <p style="margin:0 0 24px 0; color:#64748b; font-size:14px; line-height:1.5;">高畫質合約/單據已生成<br/>請點擊下方按鈕呼叫列印</p>
+                <button onclick="window.print()" style="width:100%; padding:16px; background:#eab308; color:#000; border:none; border-radius:12px; font-size:16px; font-weight:900; cursor:pointer; margin-bottom:12px; box-shadow:0 4px 6px -1px rgba(234, 179, 8, 0.3);">開始列印 / 存為 PDF</button>
+                <button onclick="document.getElementById('pwa-print-container').innerHTML=''" style="width:100%; padding:12px; background:transparent; color:#94a3b8; border:1px solid #cbd5e1; border-radius:12px; font-size:14px; font-weight:bold; cursor:pointer;">取消返回</button>
+            </div>
+        </div>
+
+        <div id="pwa-print-content">
+            <div class="print-container">${htmlContent}</div>
+        </div>
     `;
-
-    // ★ 強制瀏覽器同步重繪
-    void printDiv.offsetHeight;
-
-    // ★ 直接同步呼叫列印，秒開不卡頓，不再跳出阻擋警告！
-    window.print();
 };
 
 // --- 主應用程式 ---
