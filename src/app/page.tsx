@@ -828,6 +828,9 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
     const [valA, setValA] = useState('100');
     const [valB, setValB] = useState('');
 
+    // ★ 核心修復：大數據圖表專用的彈窗狀態！
+    const [isMarketIntelOpen, setIsMarketIntelOpen] = useState(false);
+
     useEffect(() => {
         if (isConverterOpen && allRates && allRates[currA] && allRates[currB]) {
             const rate = allRates[currB] / allRates[currA];
@@ -979,7 +982,7 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     <span className="md:hidden">AI</span>
                 </div>
 
-                {/* ★ 金融實時翻頁區 (點擊打開計算機) */}
+                {/* ★ 金融實時翻頁區 (點擊打開匯率計算機) */}
                 <div 
                     onClick={() => setIsConverterOpen(true)}
                     className="flex-none bg-slate-800 text-white h-full relative overflow-hidden flex items-center justify-center min-w-[130px] md:min-w-[160px] border-r border-slate-700 z-10 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group"
@@ -1003,7 +1006,6 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                             </div>
                         );
                     })}
-                    {/* Hover 提示圖示 */}
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-yellow-400 transition-opacity z-20">
                         <ArrowUpDown size={12} />
                     </div>
@@ -1022,27 +1024,14 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                         ))}
                     </div>
                 </div>
- 
-               {/* ★ 右側：運輸署私家車銷售情報區 (結合 Market Intelligence 展開功能) */}
+
+                {/* ★ 右側：運輸署私家車銷售情報區 (純淨正統 React 點擊事件，直接改變 State！) */}
                 <div 
+                    onClick={() => setIsMarketIntelOpen(true)}
                     className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group"
                     title="點擊展開市場大數據與採購推算"
-                    onClick={(e) => {
-                        // 防止點擊事件擴散干擾旁邊的匯率計算機
-                        e.stopPropagation(); 
-                        
-                        const wrapper = document.getElementById('market-intel-hidden-wrapper');
-                        if (wrapper) {
-                            // ★ 終極真實模擬點擊：精準找出天上那個隱藏的按鈕並按下
-                            const target = wrapper.querySelector('button') || wrapper.firstElementChild;
-                            if (target instanceof HTMLElement) {
-                                // 發送真實的 MouseEvent，保證能喚醒 React 的 onClick 監聽器！
-                                target.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
-                            }
-                        }
-                    }}
                 >
-                    <div className="flex items-center gap-3 pointer-events-none">
+                    <div className="flex items-center gap-3">
                         <div className="text-[9px] text-slate-400 leading-tight border-r border-slate-600 pr-2 group-hover:text-slate-300 transition-colors">
                             {carSalesStats.month}月全港登記<br/><span className="text-slate-200 font-bold tracking-widest">{carSalesStats.total}</span>
                         </div>
@@ -1059,33 +1048,15 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                         </div>
                     </div>
                 </div>
-
-                {/* ★ 核心修復：「實體脫離術」！*/}
-                {/* 1. 給予真實的 width/height (100px)，確保 React 承認它存在並願意處理點擊事件。 */}
-                {/* 2. 用 position: fixed 把它丟到螢幕外 (-9999px)，保證肉眼看不見，且絕對不影響版面。 */}
-                {/* 3. 當它內部的 Modal 被觸發時，Fixed 定位的 Modal 會自動對齊螢幕視窗，完美降落！ */}
-                <div 
-                    id="market-intel-hidden-wrapper" 
-                    style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '100px', height: '100px', zIndex: 0 }}
-                >
-                    <MarketIntelligence 
-                        dbEntries={dbEntries} 
-                        inventory={inventory} 
-                        staffId={staffId} 
-                        currentUser={currentUser} 
-                    />
-                </div>
             </div>
-         
+
             {/* ★★★ 雙向實時匯率計算機 (Modal) ★★★ */}
             {isConverterOpen && (
                 <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsConverterOpen(false)}>
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all" onClick={e => e.stopPropagation()}>
-                        
                         <div className="bg-slate-900 p-5 text-white flex justify-between items-center relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 rounded-full blur-[50px] opacity-20 -mr-10 -mt-10 pointer-events-none"></div>
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-yellow-500 rounded-full blur-[50px] opacity-20 -ml-10 -mb-10 pointer-events-none"></div>
-                            
                             <h3 className="font-bold flex items-center gap-2 text-lg relative z-10">
                                 <RefreshCw size={18} className="text-yellow-400"/> 實時雙向匯率換算
                             </h3>
@@ -1095,49 +1066,29 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                         <div className="p-6 space-y-4 bg-slate-50">
                             {/* 常用匯率快捷鍵 */}
                             <div className="flex gap-2 mb-2">
-                                <button 
-                                    onClick={() => { setCurrA('CNY'); setCurrB('HKD'); handleAChange({target:{value: valA}}, 'CNY', 'HKD'); }}
-                                    className={`flex-1 py-2.5 text-xs font-bold rounded-xl border transition-all ${currA==='CNY'&&currB==='HKD' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    🇨🇳 CNY ⇌ 🇭🇰 HKD
-                                </button>
-                                <button 
-                                    onClick={() => { setCurrA('JPY'); setCurrB('HKD'); handleAChange({target:{value: valA}}, 'JPY', 'HKD'); }}
-                                    className={`flex-1 py-2.5 text-xs font-bold rounded-xl border transition-all ${currA==='JPY'&&currB==='HKD' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    🇯🇵 JPY ⇌ 🇭🇰 HKD
-                                </button>
+                                <button onClick={() => { setCurrA('CNY'); setCurrB('HKD'); handleAChange({target:{value: valA}}, 'CNY', 'HKD'); }} className={`flex-1 py-2.5 text-xs font-bold rounded-xl border transition-all ${currA==='CNY'&&currB==='HKD' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>🇨🇳 CNY ⇌ 🇭🇰 HKD</button>
+                                <button onClick={() => { setCurrA('JPY'); setCurrB('HKD'); handleAChange({target:{value: valA}}, 'JPY', 'HKD'); }} className={`flex-1 py-2.5 text-xs font-bold rounded-xl border transition-all ${currA==='JPY'&&currB==='HKD' ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>🇯🇵 JPY ⇌ 🇭🇰 HKD</button>
                             </div>
 
                             {/* Input A */}
                             <div className="relative bg-white rounded-2xl p-2 shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500 transition-all">
                                 <div className="flex items-center">
                                     <select value={currA} onChange={e => { setCurrA(e.target.value); handleAChange({target:{value:valA}}, e.target.value, currB); }} className="bg-transparent px-2 py-2 outline-none font-bold text-slate-700 w-[100px] cursor-pointer border-r border-slate-100">
-                                        <option value="CNY">🇨🇳 人民幣</option>
-                                        <option value="HKD">🇭🇰 港幣</option>
-                                        <option value="JPY">🇯🇵 日圓</option>
-                                        <option value="USD">🇺🇸 美元</option>
-                                        <option value="EUR">🇪🇺 歐元</option>
+                                        <option value="CNY">🇨🇳 人民幣</option><option value="HKD">🇭🇰 港幣</option><option value="JPY">🇯🇵 日圓</option><option value="USD">🇺🇸 美元</option><option value="EUR">🇪🇺 歐元</option>
                                     </select>
                                     <input type="number" step="any" value={valA} onChange={e => handleAChange(e, currA, currB)} className="flex-1 px-3 py-2 outline-none font-mono text-2xl font-black text-right text-slate-800 bg-transparent w-full" placeholder="0.00" />
                                 </div>
                             </div>
 
                             <div className="flex justify-center -my-5 relative z-10">
-                                <button onClick={swapCurrencies} className="bg-slate-900 p-2 rounded-full shadow-md text-yellow-400 hover:scale-110 active:scale-95 transition-all border-4 border-slate-50">
-                                    <ArrowUpDown size={14} />
-                                </button>
+                                <button onClick={swapCurrencies} className="bg-slate-900 p-2 rounded-full shadow-md text-yellow-400 hover:scale-110 active:scale-95 transition-all border-4 border-slate-50"><ArrowUpDown size={14} /></button>
                             </div>
 
                             {/* Input B */}
                             <div className="relative bg-white rounded-2xl p-2 shadow-sm border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500 transition-all">
                                 <div className="flex items-center">
                                     <select value={currB} onChange={e => { setCurrB(e.target.value); handleBChange({target:{value:valB}}, currA, e.target.value); }} className="bg-transparent px-2 py-2 outline-none font-bold text-slate-700 w-[100px] cursor-pointer border-r border-slate-100">
-                                        <option value="HKD">🇭🇰 港幣</option>
-                                        <option value="CNY">🇨🇳 人民幣</option>
-                                        <option value="JPY">🇯🇵 日圓</option>
-                                        <option value="USD">🇺🇸 美元</option>
-                                        <option value="EUR">🇪🇺 歐元</option>
+                                        <option value="HKD">🇭🇰 港幣</option><option value="CNY">🇨🇳 人民幣</option><option value="JPY">🇯🇵 日圓</option><option value="USD">🇺🇸 美元</option><option value="EUR">🇪🇺 歐元</option>
                                     </select>
                                     <input type="number" step="any" value={valB} onChange={e => handleBChange(e, currA, currB)} className="flex-1 px-3 py-2 outline-none font-mono text-2xl font-black text-right text-blue-600 bg-transparent w-full" placeholder="0.00" />
                                 </div>
@@ -1145,12 +1096,40 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
 
                             <div className="bg-blue-50/60 rounded-xl p-3 border border-blue-100/50 mt-2">
                                 <div className="text-xs text-center text-slate-600 font-mono font-bold tracking-wide">
-                                    {allRates && allRates[currA] && allRates[currB] 
-                                        ? `1 ${currA} = ${(allRates[currB] / allRates[currA]).toFixed(4)} ${currB}`
-                                        : '正在同步實時匯率...'}
+                                    {allRates && allRates[currA] && allRates[currB] ? `1 ${currA} = ${(allRates[currB] / allRates[currA]).toFixed(4)} ${currB}` : '正在同步實時匯率...'}
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ★★★ 核心修復：市場大數據專屬全螢幕彈窗 (Modal) ★★★ */}
+            {isMarketIntelOpen && (
+                <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-6 animate-fade-in" onClick={() => setIsMarketIntelOpen(false)}>
+                    <div className="bg-slate-50 rounded-3xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                        
+                        {/* 彈窗標題列 */}
+                        <div className="bg-slate-900 p-5 text-white flex justify-between items-center flex-none">
+                            <h3 className="font-bold flex items-center gap-2 text-lg">
+                                <BarChart3 size={20} className="text-yellow-400"/> 
+                                市場大數據與採購推算
+                            </h3>
+                            <button onClick={() => setIsMarketIntelOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors">
+                                <X size={24}/>
+                            </button>
+                        </div>
+                        
+                        {/* 數據內容區：完美包裹整塊組件 */}
+                        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-100">
+                            <MarketIntelligence 
+                                dbEntries={dbEntries} 
+                                inventory={inventory} 
+                                staffId={staffId} 
+                                currentUser={currentUser} 
+                            />
+                        </div>
+
                     </div>
                 </div>
             )}
