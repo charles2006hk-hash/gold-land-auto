@@ -123,15 +123,30 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
         return true;
     }).sort((a: any, b: any) => {
-        // ★ 動態排序邏輯：根據使用者點擊的模式排列
         if (sortMode === 'created') {
-            const timeA = a.createdAt?.seconds || a.updatedAt?.seconds || 0;
-            const timeB = b.createdAt?.seconds || b.updatedAt?.seconds || 0;
-            return timeB - timeA; // 建立時間：由新到舊
+            // ★ 核心修復：優先讀取您填寫的「單據日期 (docDate)」轉換成時間戳來比較
+            const getTime = (doc: any) => {
+                if (doc.formData?.docDate) return new Date(doc.formData.docDate).getTime();
+                if (doc.createdAt?.seconds) return doc.createdAt.seconds * 1000;
+                if (doc.updatedAt?.seconds) return doc.updatedAt.seconds * 1000;
+                return 0;
+            };
+            const timeA = getTime(a);
+            const timeB = getTime(b);
+            
+            // 如果兩張單據的「日期同一天」，再用系統的更新時間分出先後，確保不會亂跳
+            if (timeB === timeA) {
+                const secA = a.updatedAt?.seconds || 0;
+                const secB = b.updatedAt?.seconds || 0;
+                return secB - secA;
+            }
+            return timeB - timeA; // 由新到舊
+            
         } else {
+            // ★ 模式二：按「最後更新時間」，嚴格抓取系統秒數
             const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
             const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
-            return timeB - timeA; // 更新時間：由新到舊
+            return timeB - timeA;
         }
     });
 
