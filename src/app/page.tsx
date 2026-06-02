@@ -1239,7 +1239,7 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極極速版跨平台卡片列印引擎 (支援 iPhone PWA) ★★★
+// ★★★ 終極極速同步版跨平台卡片列印 (突破 iOS 阻擋機制) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     let printDiv = document.getElementById('pwa-print-container');
@@ -1249,21 +1249,11 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         document.body.appendChild(printDiv);
     }
 
-    // ★ 核心修復：徹底刪除耗時 10 秒的 CSS 提取迴圈！因為在同一個 DOM 底下，Tailwind 樣式是直接共用的！
-
+    // 直接寫入內容，不抓取 CSS，並改用 display: none 避免影響原畫面排版
     printDiv.innerHTML = `
         <style>
             @media screen { 
-                #pwa-print-container { 
-                    position: fixed !important;
-                    top: -9999px !important;
-                    left: -9999px !important;
-                    width: 1px !important;
-                    height: 1px !important;
-                    overflow: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                } 
+                #pwa-print-container { display: none !important; } 
             }
             @media print {
                 body > *:not(#pwa-print-container) { display: none !important; }
@@ -1281,7 +1271,6 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
                     display: block !important; 
                     position: static !important; 
                     width: 100% !important; 
-                    opacity: 1 !important;
                 }
                 @page { margin: 10mm; size: auto; }
                 .print-wrapper { 
@@ -1299,10 +1288,11 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         <div class="print-wrapper">${htmlContent}</div>
     `;
 
-    // 刪除 CSS 提取後，速度極快，只要 100 毫秒緩衝即可喚醒列印
-    setTimeout(() => {
-        window.print();
-    }, 100);
+    // ★ 魔法：讀取 offsetHeight 強迫瀏覽器「瞬間同步」完成畫面渲染 (Reflow)
+    void printDiv.offsetHeight;
+
+    // ★ 核心修復：拔除 setTimeout，直接同步呼叫！Safari 會認定這是用戶親手點擊的，絕對不阻擋！
+    window.print();
 };
 
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
@@ -1439,7 +1429,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極極速版跨平台無痕列印引擎 (支援 iPhone PWA 打包單) ★★★
+// ★★★ 終極極速同步版無痕列印 (突破 iOS 阻擋機制) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     let printDiv = document.getElementById('pwa-print-container');
@@ -1449,21 +1439,10 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
         document.body.appendChild(printDiv);
     }
 
-    // ★ 核心修復：徹底刪除耗時的 CSS 提取迴圈
-
     printDiv.innerHTML = `
         <style>
             @media screen { 
-                #pwa-print-container { 
-                    position: fixed !important;
-                    top: -9999px !important;
-                    left: -9999px !important;
-                    width: 1px !important;
-                    height: 1px !important;
-                    overflow: hidden !important;
-                    opacity: 0 !important;
-                    pointer-events: none !important;
-                } 
+                #pwa-print-container { display: none !important; } 
             }
             @media print {
                 body > *:not(#pwa-print-container) { display: none !important; }
@@ -1481,7 +1460,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     display: block !important; 
                     position: static !important; 
                     width: 100% !important; 
-                    opacity: 1 !important;
                 }
                 @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
                 
@@ -1511,10 +1489,11 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
         <div class="print-container">${htmlContent}</div>
     `;
 
-    // 刪除 CSS 提取後，速度極快，只要 100 毫秒緩衝即可喚醒列印
-    setTimeout(() => {
-        window.print();
-    }, 100);
+    // ★ 強制瀏覽器同步重繪
+    void printDiv.offsetHeight;
+
+    // ★ 直接同步呼叫列印，秒開不卡頓，不再跳出阻擋警告！
+    window.print();
 };
 
 // --- 主應用程式 ---
