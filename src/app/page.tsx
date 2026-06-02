@@ -1029,10 +1029,19 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     title="點擊展開市場大數據與採購推算"
                     onClick={() => {
                         const wrapper = document.getElementById('market-intel-hidden-wrapper');
-                        // ★ 確保精準抓到內部的按鈕並觸發點擊
-                        const trigger = wrapper?.querySelector('button') || wrapper?.firstElementChild;
-                        if (trigger instanceof HTMLElement) {
-                            trigger.click();
+                        if (wrapper) {
+                            // ★ 核心修復 1：使用真實滑鼠事件 (MouseEvent) 突破 React 的 div 點擊限制
+                            const rootEl = wrapper.firstElementChild;
+                            if (rootEl) {
+                                // 對組件的根節點發送真實點擊
+                                rootEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                
+                                // 防呆機制：如果它的觸發器是包在裡面的按鈕，也幫它點一下
+                                const innerBtn = rootEl.querySelector('button');
+                                if (innerBtn) {
+                                    innerBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                }
+                            }
                         }
                     }}
                 >
@@ -1054,18 +1063,18 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                     </div>
                 </div>
                 
-                {/* ★ 核心修復：絕對不能用 overflow-hidden，改用 Off-screen 物理位移 (-9999px) */}
-                {/* 這樣按鈕會藏在螢幕外，但它彈出的 Modal 依然可以霸氣地覆蓋整個螢幕！ */}
-                <div id="market-intel-hidden-wrapper" className="absolute top-[-9999px] left-[-9999px] overflow-visible">
-                    <MarketIntelligence 
-                        dbEntries={dbEntries} 
-                        inventory={inventory} 
-                        staffId={staffId} 
-                        currentUser={currentUser} 
-                    />
+                {/* ★ 核心修復 2：將組件藏在螢幕「右側」外 (left-[200vw])，騙過系統的垂直休眠機制，保證它隨時待命！ */}
+                <div id="market-intel-hidden-wrapper" className="absolute top-0 left-[200vw] overflow-visible w-px h-px pointer-events-none z-0">
+                    <div className="pointer-events-auto">
+                        <MarketIntelligence 
+                            dbEntries={dbEntries} 
+                            inventory={inventory} 
+                            staffId={staffId} 
+                            currentUser={currentUser} 
+                        />
+                    </div>
                 </div>
             </div>
-
             {/* ★★★ 雙向實時匯率計算機 (Modal) ★★★ */}
             {isConverterOpen && (
                 <div className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsConverterOpen(false)}>
