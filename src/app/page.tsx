@@ -1025,27 +1025,23 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
  
                 {/* ★ 右側：運輸署私家車銷售情報區 (結合 Market Intelligence 展開功能) */}
                 <div 
-                    className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group"
+                    className="hidden md:flex flex-none bg-slate-800 text-white h-full px-3 items-center border-l border-slate-700 z-20 shadow-inner cursor-pointer hover:bg-slate-700 transition-colors group relative"
                     title="點擊展開市場大數據與採購推算"
                     onClick={() => {
                         const wrapper = document.getElementById('market-intel-hidden-wrapper');
                         if (wrapper) {
-                            // ★ 核心修復 1：使用真實滑鼠事件 (MouseEvent) 突破 React 的 div 點擊限制
-                            const rootEl = wrapper.firstElementChild;
-                            if (rootEl) {
-                                // 對組件的根節點發送真實點擊
-                                rootEl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                                
-                                // 防呆機制：如果它的觸發器是包在裡面的按鈕，也幫它點一下
-                                const innerBtn = rootEl.querySelector('button');
-                                if (innerBtn) {
-                                    innerBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                                }
+                            // ★ 終極穿透點擊：精準打擊組件的根節點與按鈕，絕對能喚醒 React 事件！
+                            const root = wrapper.firstElementChild;
+                            if (root instanceof HTMLElement) {
+                                root.click(); // 點擊外層容器
+                                const innerBtn = root.querySelector('button');
+                                if (innerBtn) innerBtn.click(); // 點擊內部按鈕
                             }
                         }
                     }}
                 >
-                    <div className="flex items-center gap-3">
+                    {/* ★ 加上 pointer-events-none 確保滑鼠點擊不會被文字擋住 */}
+                    <div className="flex items-center gap-3 pointer-events-none">
                         <div className="text-[9px] text-slate-400 leading-tight border-r border-slate-600 pr-2 group-hover:text-slate-300 transition-colors">
                             {carSalesStats.month}月全港登記<br/><span className="text-slate-200 font-bold tracking-widest">{carSalesStats.total}</span>
                         </div>
@@ -1062,17 +1058,16 @@ const SmartNewsTicker = ({ dbEntries, inventory, staffId, currentUser }: { dbEnt
                         </div>
                     </div>
                 </div>
-                
-                {/* ★ 核心修復 2：將組件藏在螢幕「右側」外 (left-[200vw])，騙過系統的垂直休眠機制，保證它隨時待命！ */}
-                <div id="market-intel-hidden-wrapper" className="absolute top-0 left-[200vw] overflow-visible w-px h-px pointer-events-none z-0">
-                    <div className="pointer-events-auto">
-                        <MarketIntelligence 
-                            dbEntries={dbEntries} 
-                            inventory={inventory} 
-                            staffId={staffId} 
-                            currentUser={currentUser} 
-                        />
-                    </div>
+
+                {/* ★ 核心修復：「1x1像素隱身術」！*/}
+                {/* 讓組件真實渲染以接收點擊，但鎖死在 1 像素內。它彈出的 Modal 會自動突破限制覆蓋全螢幕！ */}
+                <div id="market-intel-hidden-wrapper" className="fixed bottom-0 right-0 w-[1px] h-[1px] overflow-hidden z-[-1]">
+                    <MarketIntelligence 
+                        dbEntries={dbEntries} 
+                        inventory={inventory} 
+                        staffId={staffId} 
+                        currentUser={currentUser} 
+                    />
                 </div>
             </div>
             {/* ★★★ 雙向實時匯率計算機 (Modal) ★★★ */}
