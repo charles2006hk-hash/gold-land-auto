@@ -1356,10 +1356,7 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版跨平台卡片列印引擎 (自動關閉 + 出血位版) ★★★
-// ------------------------------------------------------------------
-// ------------------------------------------------------------------
-// ★★★ 終極完美版跨平台卡片列印引擎 (修復右側出血位被裁切) ★★★
+// ★★★ 終極完美版跨平台卡片列印引擎 (100%流體適應，防白屏裁切) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1376,19 +1373,24 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 設定 4mm 安全邊距 */
-                @page { margin: 4mm; size: auto; }
+                /* ★ 設定 5mm 安全邊距 */
+                @page { margin: 5mm; size: auto; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
-                    height: auto !important; overflow: visible !important;
+                    height: auto !important; 
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
+                /* ★ 核心修復：拔除危險的 zoom，改用 100% 寬度讓瀏覽器自動適應紙張大小 */
                 .print-wrapper { 
-                    /* ★ 關鍵修復：用 zoom 縮小 5%，抵銷 margin 佔用的空間 */
-                    zoom: 0.95;
-                    width: 100%; max-width: 800px; margin: 0 auto; 
-                    background: white; padding: 0; height: auto !important; overflow: visible !important;
+                    width: 100% !important; 
+                    max-width: 100% !important; 
+                    margin: 0 !important; padding: 0 !important; 
+                    background: white !important; 
+                    height: auto !important; 
+                    overflow: visible !important;
+                    transform: none !important;
+                    box-shadow: none !important;
                 }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
@@ -1408,6 +1410,7 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
+
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
@@ -1542,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版無痕列印引擎 (修復右側出血位被裁切) ★★★
+// ★★★ 終極完美版無痕列印引擎 (100%流體適應，防白屏裁切) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1559,26 +1562,25 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 設定 4mm 安全邊距 */
-                @page { size: A4 portrait; margin: 4mm !important; padding: 0 !important; }
+                /* ★ 設定 5mm 安全邊距 */
+                @page { size: A4 portrait; margin: 5mm !important; padding: 0 !important; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
                     width: auto !important; height: auto !important;
-                    overflow: visible !important;
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
-                .print-container { 
-                    /* ★ 關鍵修復：用 zoom 縮小 5%，抵銷 margin 佔用的空間，完美防止右側表格被切掉 */
-                    zoom: 0.95;
-                    width: 794px !important; /* 鎖死原本 A4 像素寬度，保證內部排版不亂 */
-                    margin: 0 auto !important; padding: 0 !important;
-                    background: white !important; position: relative !important; overflow: hidden !important;
-                }
-                #print-root {
-                    width: 100% !important; height: auto !important;
-                    max-width: none !important; min-height: 0 !important;
-                    box-shadow: none !important; border: none !important; margin: 0 !important; transform: none !important;
+                /* ★ 核心修復：拔除危險的 zoom，改用 100% 寬度讓瀏覽器自動適應紙張大小 */
+                .print-container, #print-root { 
+                    width: 100% !important; 
+                    max-width: 100% !important;
+                    height: auto !important; min-height: 0 !important;
+                    margin: 0 !important; padding: 0 !important;
+                    background: white !important; 
+                    position: static !important; 
+                    overflow: visible !important;
+                    box-shadow: none !important; border: none !important; 
+                    transform: none !important; /* 確保不被 React 的縮放影響 */
                 }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
