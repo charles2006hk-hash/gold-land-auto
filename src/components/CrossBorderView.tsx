@@ -211,6 +211,34 @@ export default function CrossBorderView({
 
     const expiredItems: any[] = []; const soonItems: any[] = [];
     cbVehicles.forEach((v:any) => { 
+        // 1. 掃描一般文件
+        Object.entries(dateFields).forEach(([fieldKey, label]) => { 
+            const dateStr = (v.crossBorder as any)?.[fieldKey]; 
+            const reminderKey = fieldKey.replace('date', 'cb_remind_');
+            const isRemind = (v.crossBorder as any)?.[reminderKey] !== false;
+            
+            if (dateStr && isRemind) { 
+                const days = getDaysRemaining(dateStr); 
+                if (days !== null) { 
+                    const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days }; 
+                    if (days < 0) expiredItems.push(itemData); 
+                    else if (days <= 30) soonItems.push(itemData); 
+                } 
+            } 
+        }); 
+
+        // 2. ★ 新增：同步掃描「強制兜圈」死線
+        const lastOutDate = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
+        if (lastOutDate) {
+            const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
+            const days = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: '⚠️ 3個月兜圈', date: lastOutDate, days: days }; 
+            if (days < 0) expiredItems.push(itemData); 
+            else if (days <= 30) soonItems.push(itemData); 
+        }
+    });
+    expiredItems.sort((a, b) => a.days - b.days); soonItems.sort((a, b) => a.days - b.days);
+    cbVehicles.forEach((v:any) => { 
         Object.entries(dateFields).forEach(([fieldKey, label]) => { 
             const dateStr = (v.crossBorder as any)?.[fieldKey]; 
             const reminderKey = fieldKey.replace('date', 'cb_remind_');
@@ -343,12 +371,20 @@ export default function CrossBorderView({
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
                         {filteredVehicles.map((car:any) => {
                             let expiredCount = 0;
+                            // 1. 算一般文件
                             Object.keys(dateFields).forEach(k => { 
                                 const d = (car.crossBorder as any)?.[k]; 
                                 const reminderKey = k.replace('date', 'cb_remind_');
                                 const isRemind = (car.crossBorder as any)?.[reminderKey] !== false;
                                 if(d && isRemind && getDaysRemaining(d)! < 0) expiredCount++; 
                             });
+                            
+                            // 2. ★ 新增：算兜圈是否過期
+                            const lastOut = car.lastOutboundDate || car.crossBorder?.lastOutboundDate;
+                            if (lastOut) {
+                                const deadline = new Date(new Date(lastOut).getTime() + 90 * 24 * 60 * 60 * 1000);
+                                if (deadline.getTime() < new Date().getTime()) expiredCount++;
+                            }
                             
                             const getTags = () => {
                                 const tags = [];
@@ -398,6 +434,63 @@ export default function CrossBorderView({
                                     <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 border rounded text-xs hover:bg-slate-50 flex items-center"><Edit size={12} className="mr-1"/> 編輯資料</button>
                                 </div>
                             </div>
+
+                            {/* ========================================================= */}
+                            {/* ★★★ 新增：中港車兜圈打卡專屬管理看板 ★★★ */}
+                            {/* ========================================================= */}
+                            {(() => {
+                                const lastOutDate = activeCar.lastOutboundDate || activeCar.crossBorder?.lastOutboundDate;
+                                let loopDiff = null;
+                                let deadlineStr = '未計算';
+                                if (lastOutDate) {
+                                    const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
+                                    loopDiff = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                    deadlineStr = deadline.toISOString().split('T')[0];
+                                }
+                                return (
+                                    <div className="bg-slate-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center p-3 md:px-4 border-b border-slate-800 shadow-inner flex-none gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-white/10 p-2 rounded-lg">
+                                                <RefreshCw size={20} className={loopDiff !== null && loopDiff <= 14 ? 'text-red-400 animate-spin-slow' : 'text-amber-400'}/>
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-sm flex items-center gap-2 tracking-wide">
+                                                    強制 3 個月兜圈打卡
+                                                    {loopDiff !== null && (
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono border ${loopDiff < 0 ? 'bg-red-500/20 text-red-300 border-red-500/50' : loopDiff <= 30 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-green-500/20 text-green-300 border-green-500/50'}`}>
+                                                            {loopDiff < 0 ? `已逾期 ${Math.abs(loopDiff)} 天` : `剩餘 ${loopDiff} 天`}
+                                                        </span>
+                                                    )}
+                                                </h4>
+                                                <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                                                    出境紀錄：<span className="text-white">{lastOutDate || 'N/A'}</span> 
+                                                    {lastOutDate && <span className="ml-3">強制死線：<span className={loopDiff !== null && loopDiff < 0 ? 'text-red-400' : 'text-slate-300'}>{deadlineStr}</span></span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="flex w-full md:w-auto gap-2 items-center">
+                                            <input 
+                                                type="date" 
+                                                value={lastOutDate || ''}
+                                                onChange={(e) => updateVehicle(activeCar.id!, { lastOutboundDate: e.target.value })}
+                                                className="bg-black/30 border border-white/20 text-white text-xs px-2 py-2 rounded-lg outline-none flex-1 md:w-36 cursor-pointer focus:border-blue-400 transition-colors font-mono"
+                                                title="手動修改出境日期"
+                                            />
+                                            <button 
+                                                onClick={() => {
+                                                    const todayStr = new Date().toISOString().split('T')[0];
+                                                    updateVehicle(activeCar.id!, { lastOutboundDate: todayStr });
+                                                    alert('🔄 兜圈打卡成功！出境日期已即時重置為今日。');
+                                                }}
+                                                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center whitespace-nowrap"
+                                            >
+                                                <Check size={14} className="mr-1"/> 司機已回港 (重置)
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             <div className="p-4 border-b overflow-x-auto whitespace-nowrap flex gap-3 bg-slate-50/30 flex-none pb-2 scrollbar-hide">
                                 {Object.entries(dateFields).map(([key, label]) => {
