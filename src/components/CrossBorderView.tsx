@@ -209,9 +209,12 @@ export default function CrossBorderView({
 
     const activeCar = inventory.find((v: any) => v.id === activeCbVehicleId) || filteredVehicles[0];
 
-    const expiredItems: any[] = []; const soonItems: any[] = [];
+    // ★ 核心修復：使用 Map 來強制去重複 (Deduplication)，保證同一台車同一個項目只出現一次！
+    const expiredMap = new Map();
+    const soonMap = new Map();
+
     cbVehicles.forEach((v:any) => { 
-        // 1. 掃描一般文件
+        // 1. 一般文件掃描
         Object.entries(dateFields).forEach(([fieldKey, label]) => { 
             const dateStr = (v.crossBorder as any)?.[fieldKey]; 
             const reminderKey = fieldKey.replace('date', 'cb_remind_');
@@ -221,40 +224,31 @@ export default function CrossBorderView({
                 const days = getDaysRemaining(dateStr); 
                 if (days !== null) { 
                     const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days }; 
-                    if (days < 0) expiredItems.push(itemData); 
-                    else if (days <= 30) soonItems.push(itemData); 
+                    if (days < 0) expiredMap.set(`${v.id}-${label}`, itemData); 
+                    else if (days <= 30) soonMap.set(`${v.id}-${label}`, itemData); 
                 } 
             } 
         }); 
 
-        // 2. ★ 新增：同步掃描「強制兜圈」死線
-        const lastOutDate = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
-        if (lastOutDate) {
-            const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
-            const days = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-            const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: '⚠️ 3個月兜圈', date: lastOutDate, days: days }; 
-            if (days < 0) expiredItems.push(itemData); 
-            else if (days <= 30) soonItems.push(itemData); 
+        // 2. ★ 兜圈掃描：只針對粵港車
+        const isYueGang = (v.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (v.crossBorder?.mainlandPlate || '').includes('港');
+        
+        if (isYueGang) {
+            const anyCar = v as any;
+            const lastOutDate = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
+            if (lastOutDate) {
+                const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
+                const days = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: '⚠️ 3個月兜圈', date: lastOutDate, days: days }; 
+                if (days < 0) expiredMap.set(`${v.id}-loop`, itemData); 
+                else if (days <= 30) soonMap.set(`${v.id}-loop`, itemData); 
+            }
         }
     });
-    expiredItems.sort((a, b) => a.days - b.days); soonItems.sort((a, b) => a.days - b.days);
-    cbVehicles.forEach((v:any) => { 
-        Object.entries(dateFields).forEach(([fieldKey, label]) => { 
-            const dateStr = (v.crossBorder as any)?.[fieldKey]; 
-            const reminderKey = fieldKey.replace('date', 'cb_remind_');
-            const isRemind = (v.crossBorder as any)?.[reminderKey] !== false;
-            
-            if (dateStr && isRemind) { 
-                const days = getDaysRemaining(dateStr); 
-                if (days !== null) { 
-                    const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days }; 
-                    if (days < 0) expiredItems.push(itemData); 
-                    else if (days <= 30) soonItems.push(itemData); 
-                } 
-            } 
-        }); 
-    });
-    expiredItems.sort((a, b) => a.days - b.days); soonItems.sort((a, b) => a.days - b.days);
+    
+    // 轉回 Array 並排序
+    const expiredItems = Array.from(expiredMap.values()).sort((a, b) => a.days - b.days); 
+    const soonItems = Array.from(soonMap.values()).sort((a, b) => a.days - b.days);
 
     const openAddModal = () => { if (!activeCar) { alert("請先選擇車輛"); return; } setNewTaskDate(new Date().toISOString().split('T')[0]); setPendingTasks([]); setIsAddModalOpen(true); };
 
@@ -371,7 +365,6 @@ export default function CrossBorderView({
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
                         {filteredVehicles.map((car:any) => {
                             let expiredCount = 0;
-                            // 1. 算一般文件
                             Object.keys(dateFields).forEach(k => { 
                                 const d = (car.crossBorder as any)?.[k]; 
                                 const reminderKey = k.replace('date', 'cb_remind_');
@@ -379,11 +372,15 @@ export default function CrossBorderView({
                                 if(d && isRemind && getDaysRemaining(d)! < 0) expiredCount++; 
                             });
                             
-                            // 2. ★ 新增：算兜圈是否過期
-                            const lastOut = car.lastOutboundDate || car.crossBorder?.lastOutboundDate;
-                            if (lastOut) {
-                                const deadline = new Date(new Date(lastOut).getTime() + 90 * 24 * 60 * 60 * 1000);
-                                if (deadline.getTime() < new Date().getTime()) expiredCount++;
+                            // ★ 兜圈紅點判斷 (只限粵港車)
+                            const isYueGang = (car.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (car.crossBorder?.mainlandPlate || '').includes('港');
+                            if (isYueGang) {
+                                const anyCar = car as any;
+                                const lastOut = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
+                                if (lastOut) {
+                                    const deadline = new Date(new Date(lastOut).getTime() + 90 * 24 * 60 * 60 * 1000);
+                                    if (deadline.getTime() < new Date().getTime()) expiredCount++;
+                                }
                             }
                             
                             const getTags = () => {
@@ -400,11 +397,12 @@ export default function CrossBorderView({
 
                             return (
                                 <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} onDoubleClick={() => setEditingVehicle(car)} className={`p-2.5 rounded-lg cursor-pointer border transition-all flex gap-3 items-center ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`} title="單擊切換右側中港資訊，雙擊開啟車輛詳細資料">
-                                    <div className="w-16 h-12 rounded overflow-visible relative flex-shrink-0 bg-slate-100 border border-slate-200 shadow-inner flex items-center justify-center">
+                                    {/* ★ 放大圖片，改為 w-24 h-16 (約 96px x 64px) 增強視覺融合 */}
+                                    <div className="w-24 h-16 rounded-md overflow-visible relative flex-shrink-0 bg-slate-100 border border-slate-200 shadow-sm flex items-center justify-center">
                                         {(() => {
                                             const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? (typeof car.photos[0] === 'string' ? car.photos[0] : car.photos[0].url) : null);
-                                            if (thumbUrl) return <img src={thumbUrl} className="w-full h-full object-cover rounded-[3px]" alt="thumbnail" />;
-                                            else return <Car size={18} className="text-slate-300"/>;
+                                            if (thumbUrl) return <img src={thumbUrl} className="w-full h-full object-cover rounded-md" alt="thumbnail" />;
+                                            else return <Car size={24} className="text-slate-300"/>;
                                         })()}
                                         {expiredCount > 0 ? (<div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 border border-white rounded-full flex items-center justify-center animate-pulse shadow-sm z-10"><span className="text-[9px] text-white font-bold leading-none">{expiredCount}</span></div>) : (<div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border border-white rounded-full shadow-sm z-10"></div>)}
                                     </div>
@@ -435,7 +433,14 @@ export default function CrossBorderView({
                                 </div>
                             </div>
 
+                            {/* ========================================================= */}
+                            {/* ★★★ 新增：中港車兜圈打卡專屬管理看板 (只對粵港車顯示) ★★★ */}
+                            {/* ========================================================= */}
                             {(() => {
+                                // ★ 檢查是否為粵港車，若不是，直接回傳 null 隱藏此看板！
+                                const isYueGang = (activeCar.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (activeCar.crossBorder?.mainlandPlate || '').includes('港');
+                                if (!isYueGang) return null;
+
                                 // ★ 宣告一個純 any 變數，徹底封印 TypeScript 對這台車的嚴格審查
                                 const anyCar = activeCar as any;
                                 const lastOutDate = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
