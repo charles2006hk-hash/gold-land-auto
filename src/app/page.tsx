@@ -1356,18 +1356,13 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版跨平台卡片列印引擎 (Blob 極速秒開版) ★★★
+// ★★★ 終極完美版跨平台卡片列印引擎 (自動關閉 + 出血位版) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
-    // 1. 【光速抓取樣式】直接複製現有的 link 與 style 標籤，耗時 0 毫秒！徹底解決 10 秒卡死問題！
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-        .map(el => el.outerHTML)
-        .join('\n');
-    
-    // 確保相對路徑能抓到圖片與 CSS
+        .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
 
-    // 2. 組合純淨的列印專用 HTML
     const fullHtml = `
         <!DOCTYPE html>
         <html>
@@ -1378,7 +1373,8 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                @page { margin: 10mm; size: auto; }
+                /* ★ 留出 3mm 邊距出血位 */
+                @page { margin: 3mm; size: auto; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
@@ -1394,7 +1390,7 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
             </style>
         </head>
-        <body onload="setTimeout(() => window.print(), 800)">
+        <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
             <div class="print-wrapper">
                 ${htmlContent}
             </div>
@@ -1402,15 +1398,11 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
         </html>
     `;
 
-    // 3. 【瞬間開新視窗】因為沒有 10 秒的延遲，iOS 絕對不會觸發「阻擋彈出視窗」的警告！
     const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
-    
-    // 清理記憶體
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
-
 // --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
@@ -1545,17 +1537,13 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版無痕列印引擎 (Blob 極速秒開 A4 合約) ★★★
+// ★★★ 終極完美版無痕列印引擎 (A4 合約自動關閉 + 出血位版) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
-    // 1. 光速抓取樣式 (耗時 0 毫秒)
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-        .map(el => el.outerHTML)
-        .join('\n');
-    
+        .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
 
-    // 2. 組合 A4 專屬 HTML
     const fullHtml = `
         <!DOCTYPE html>
         <html>
@@ -1566,21 +1554,23 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                @page { size: A4 portrait; margin: 0 !important; padding: 0 !important; }
+                /* ★ 設定 3mm 邊距，讓合約不貼邊 */
+                @page { size: A4 portrait; margin: 3mm !important; padding: 0 !important; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
-                    width: 794px !important; height: 1123px !important;
-                    overflow: hidden !important; /* 確保不超過 A4 */
+                    /* 取消鎖死寬度，讓瀏覽器自動適應 A4 扣除邊距的尺寸 */
+                    width: auto !important; height: auto !important;
+                    overflow: visible !important;
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 .print-container { 
-                    width: 794px !important; min-height: 1123px !important;
+                    width: 100% !important; min-height: 1123px !important;
                     margin: 0 auto !important; padding: 0 !important;
                     background: white !important; position: relative !important; overflow: hidden !important;
                 }
                 #print-root {
-                    width: 794px !important; height: 1123px !important;
+                    width: 100% !important; height: auto !important;
                     max-width: none !important; min-height: 0 !important;
                     box-shadow: none !important; border: none !important; margin: 0 !important; transform: none !important;
                 }
@@ -1588,7 +1578,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                 script { display: none !important; }
             </style>
         </head>
-        <body onload="setTimeout(() => window.print(), 800)">
+        <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
             <div class="print-container">
                 ${htmlContent}
             </div>
@@ -1596,13 +1586,12 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
         </html>
     `;
 
-    // 3. 建立並瞬間開啟
     const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
-    
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
@@ -1820,11 +1809,21 @@ export default function GoldLandAutoDMS() {
 
   const printAreaRef = useRef<HTMLDivElement>(null);
   
-  // ★ 套用智能列印引擎
+  // ★ 套用智能列印引擎並加上自動檔名
   const handlePrint = () => {
       const printRoot = document.getElementById('print-root');
       if (printRoot) {
-          triggerSmartPrint(printRoot.outerHTML, 'Vehicle_Document');
+          let fileName = 'Vehicle_Document';
+          if (previewDoc && previewDoc.vehicle) {
+              const v = previewDoc.vehicle;
+              const reg = v.regMark && v.regMark !== 'TBC' ? v.regMark : '未出牌';
+              const yr = v.year || '';
+              const mk = v.make || '';
+              const md = v.model || '';
+              // 組合檔名：車牌_年份_廠牌_型號 (空格會自動替換為底線)
+              fileName = `${reg}_${yr}_${mk}_${md}`.replace(/\s+/g, '_');
+          }
+          triggerSmartPrint(printRoot.outerHTML, fileName);
       }
   };
 
