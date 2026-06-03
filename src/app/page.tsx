@@ -3440,12 +3440,24 @@ const DatabaseSelector = ({
                   });
 
                   visibleInventory.forEach(v => {
-                      if (v.licenseExpiry) {
+                      // ★ 核心修復 1：強制加入 licenseReminderEnabled 判定！如果關閉(false)，直接略過這台車！
+                      if (v.licenseExpiry && v.licenseReminderEnabled !== false) {
                           const days = getDaysRemaining(v.licenseExpiry);
                           if (days !== null && days <= 30) {
                               docAlerts.push({ 
-                                  id: v.id, title: v.regMark || '未出牌', desc: '牌費到期', 
+                                  id: v.id + '_lic', title: v.regMark || '未出牌', desc: '牌費到期', 
                                   date: v.licenseExpiry, days, status: days < 0 ? 'expired' : 'soon', raw: v, source: 'vehicle' 
+                              });
+                          }
+                      }
+
+                      // ★ 核心修復 2：同步整頓「保險到期」區塊，同樣嚴格遵守 insuranceReminderEnabled 開關！
+                      if (v.insuranceExpiry && v.insuranceReminderEnabled !== false) {
+                          const days = getDaysRemaining(v.insuranceExpiry);
+                          if (days !== null && days <= 30) {
+                              docAlerts.push({ 
+                                  id: v.id + '_ins', title: v.regMark || '未出牌', desc: '保險到期', 
+                                  date: v.insuranceExpiry, days, status: days < 0 ? 'expired' : 'soon', raw: v, source: 'vehicle' 
                               });
                           }
                       }
