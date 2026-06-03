@@ -303,7 +303,17 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const toggleItem = (id: string) => setDocItems((prev: any[]) => prev.map((item: any) => item.id === id ? { ...item, isSelected: !item.isSelected } : item));
     const deleteItem = (id: string) => setDocItems((prev: any[]) => prev.filter((item: any) => item.id !== id));
 
-    const filteredInventory = inventory.filter((v: any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.make || '').toUpperCase().includes(searchTerm.toUpperCase()));
+    // ★ 核心修復：開單系統車輛搜尋，加入「型號(Model)」、「年份(Year)」與「無大小寫區分」的精準比對
+    const filteredInventory = inventory.filter((v: any) => {
+        if (!searchTerm) return true;
+        const term = searchTerm.toUpperCase();
+        return (
+            (v.regMark || '').toUpperCase().includes(term) || 
+            (v.make || '').toUpperCase().includes(term) || 
+            (v.model || '').toUpperCase().includes(term) ||
+            (v.year || '').toString().includes(term)
+        );
+    });
 
     const handleSelectCar = (car: any) => {
         // ★ 防呆安全鎖：如果正在編輯舊單據，禁止點擊左側車輛以免洗掉數據！
