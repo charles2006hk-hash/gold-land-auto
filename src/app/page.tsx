@@ -1760,10 +1760,14 @@ export default function GoldLandAutoDMS() {
   const visibleInventory = getVisibleInventory();  
 
   // =========================================================
-  // ★★★ 智慧中港車「兜圈」死線自動追蹤器 (有事才顯現) ★★★
+  // ★★★ 智慧中港車「兜圈」死線自動追蹤器 (只針對粵港車 + 有事才顯現) ★★★
   // =========================================================
   const loopReminders = useMemo(() => {
       return visibleInventory.filter((v: any) => {
+          // ★ 核心修復：只針對「粵港車」(檢查口岸是否有香港關口，或者車牌是否包含'港')
+          const isYueGang = (v.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (v.crossBorder?.mainlandPlate || '').includes('港');
+          if (!isYueGang) return false; // 不是粵港車，直接放行，不追蹤！
+
           // 支援讀取根目錄或 crossBorder 裡的最後出境日期
           const dateStr = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
           if (!dateStr) return false;
@@ -1776,7 +1780,7 @@ export default function GoldLandAutoDMS() {
           const diffTime = deadline.getTime() - new Date().getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           
-          // ★ 只抓取距離死線剩餘 30 天以內的車輛
+          // 只抓取距離死線剩餘 30 天以內的車輛
           return diffDays <= 30;
       }).map((v: any) => {
           const dateStr = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
