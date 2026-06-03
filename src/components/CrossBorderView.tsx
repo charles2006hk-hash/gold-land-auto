@@ -436,8 +436,10 @@ export default function CrossBorderView({
                             </div>
 
                             {(() => {
-                                // ★ 加入 (activeCar as any) 繞過 TypeScript 嚴格檢查
-                                const lastOutDate = (activeCar as any).lastOutboundDate || activeCar.crossBorder?.lastOutboundDate;
+                                // ★ 宣告一個純 any 變數，徹底封印 TypeScript 對這台車的嚴格審查
+                                const anyCar = activeCar as any;
+                                const lastOutDate = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
+                                
                                 let loopDiff = null;
                                 let deadlineStr = '未計算';
                                 if (lastOutDate) {
