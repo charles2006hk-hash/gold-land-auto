@@ -1358,6 +1358,9 @@ type SettingsManagerProps = {
 // ------------------------------------------------------------------
 // ★★★ 終極完美版跨平台卡片列印引擎 (自動關閉 + 出血位版) ★★★
 // ------------------------------------------------------------------
+// ------------------------------------------------------------------
+// ★★★ 終極完美版跨平台卡片列印引擎 (修復右側出血位被裁切) ★★★
+// ------------------------------------------------------------------
 const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
@@ -1373,8 +1376,8 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 留出 3mm 邊距出血位 */
-                @page { margin: 3mm; size: auto; }
+                /* ★ 設定 4mm 安全邊距 */
+                @page { margin: 4mm; size: auto; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
@@ -1382,6 +1385,8 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 .print-wrapper { 
+                    /* ★ 關鍵修復：用 zoom 縮小 5%，抵銷 margin 佔用的空間 */
+                    zoom: 0.95;
                     width: 100%; max-width: 800px; margin: 0 auto; 
                     background: white; padding: 0; height: auto !important; overflow: visible !important;
                 }
@@ -1537,7 +1542,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版無痕列印引擎 (A4 合約自動關閉 + 出血位版) ★★★
+// ★★★ 終極完美版無痕列印引擎 (修復右側出血位被裁切) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1554,18 +1559,19 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 設定 3mm 邊距，讓合約不貼邊 */
-                @page { size: A4 portrait; margin: 3mm !important; padding: 0 !important; }
+                /* ★ 設定 4mm 安全邊距 */
+                @page { size: A4 portrait; margin: 4mm !important; padding: 0 !important; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
-                    /* 取消鎖死寬度，讓瀏覽器自動適應 A4 扣除邊距的尺寸 */
                     width: auto !important; height: auto !important;
                     overflow: visible !important;
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 .print-container { 
-                    width: 100% !important; min-height: 1123px !important;
+                    /* ★ 關鍵修復：用 zoom 縮小 5%，抵銷 margin 佔用的空間，完美防止右側表格被切掉 */
+                    zoom: 0.95;
+                    width: 794px !important; /* 鎖死原本 A4 像素寬度，保證內部排版不亂 */
                     margin: 0 auto !important; padding: 0 !important;
                     background: white !important; position: relative !important; overflow: hidden !important;
                 }
