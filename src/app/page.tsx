@@ -3945,12 +3945,11 @@ const DatabaseSelector = ({
                                                               onClick={async () => {
                                                                   if (!confirm(`確定這台車 [${car.regMark || '未出牌'}] 已成功回港打卡（重置兜圈時間）嗎？`)) return;
                                                                   try {
-                                                                      // ★ 自動將最後出境日期更新為「今天」，讓它重新進入下一個 3 個月安全循環
-                                                                      const todayStr = new Date().toISOString().split('T')[0];
+                                                                      // ★ 核心邏輯修正：司機回港，直接清空出境日期，徹底停止倒數計時！
                                                                       await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', car.id), {
-                                                                          lastOutboundDate: todayStr
+                                                                          lastOutboundDate: ''
                                                                       });
-                                                                      alert('🔄 兜圈打卡成功！計時器已重新歸零重置。');
+                                                                      alert('✅ 司機已回港！警報已解除，並停止兜圈計時。');
                                                                   } catch (err) {
                                                                       alert('更新失敗，請稍後再試');
                                                                   }
@@ -3958,7 +3957,7 @@ const DatabaseSelector = ({
                                                               className={`w-full py-1.5 text-xs font-black rounded-lg border transition-all flex items-center justify-center gap-1.5
                                                                   ${isUrgent ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
                                                           >
-                                                              <Check size={14} /> 已回港打卡 (重置為今日)
+                                                              <Check size={14} /> 已回港 (解除警報)
                                                           </button>
                                                       </div>
                                                   </div>
