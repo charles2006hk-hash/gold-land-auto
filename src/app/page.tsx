@@ -1759,7 +1759,42 @@ export default function GoldLandAutoDMS() {
   // 2. ★★★ 產生過濾後的清單 (這就是員工能看到的所有車) ★★★
   const visibleInventory = getVisibleInventory();  
 
+  // =========================================================
+  // ★★★ 智慧中港車「兜圈」死線自動追蹤器 (有事才顯現) ★★★
+  // =========================================================
+  const loopReminders = useMemo(() => {
+      return visibleInventory.filter((v: any) => {
+          // 支援讀取根目錄或 crossBorder 裡的最後出境日期
+          const dateStr = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
+          if (!dateStr) return false;
+          
+          const lastOut = new Date(dateStr);
+          if (isNaN(lastOut.getTime())) return false;
+          
+          // 計算 90 天強制回港死線
+          const deadline = new Date(lastOut.getTime() + 90 * 24 * 60 * 60 * 1000);
+          const diffTime = deadline.getTime() - new Date().getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          // ★ 只抓取距離死線剩餘 30 天以內的車輛
+          return diffDays <= 30;
+      }).map((v: any) => {
+          const dateStr = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
+          const lastOut = new Date(dateStr);
+          const deadline = new Date(lastOut.getTime() + 90 * 24 * 60 * 60 * 1000);
+          const diffTime = deadline.getTime() - new Date().getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          return {
+              ...v,
+              diffDays,
+              deadlineStr: deadline.toISOString().split('T')[0]
+          };
+      }).sort((a, b) => a.diffDays - b.diffDays); // 最緊急的排在最前面
+  }, [visibleInventory]);
+
   const [primaryImages, setPrimaryImages] = useState<Record<string, string>>({});
+
     // 2. 初始化 State (使用上面的 defaultSettings 作為初始值)
   const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
   const [dbEntries, setDbEntries] = useState<DatabaseEntry[]>([]);
@@ -3850,6 +3885,85 @@ const DatabaseSelector = ({
                                   </div>
                               </div>
                           </div>
+
+                          {/* ========================================================= */}
+                          {/* ★★★ 智慧控管：有兜圈警報時才橫空出世的看板 (無事隱形) ★★★ */}
+                          {/* ========================================================= */}
+                          {loopReminders.length > 0 && (
+                              <div className="w-full mb-4 px-4 md:px-1 animate-fade-in z-10 flex-none">
+                                  <div className="bg-gradient-to-r from-amber-50 to-red-50 border-2 border-amber-200/70 rounded-2xl shadow-sm p-4">
+                                      <div className="flex items-center gap-2 mb-3">
+                                          <div className="bg-amber-500 text-white p-1.5 rounded-lg shadow-sm">
+                                              <RefreshCw size={16} className="animate-spin-slow" />
+                                          </div>
+                                          <h4 className="text-sm font-black text-slate-800 tracking-wide">
+                                              🚨 中港車強制「兜圈」逾期預警中心 
+                                              <span className="ml-2 text-xs text-amber-700 font-bold bg-amber-100/80 px-2 py-0.5 rounded-full border border-amber-200">
+                                                  共有 {loopReminders.length} 台車即將到期
+                                              </span>
+                                          </h4>
+                                      </div>
+                                      
+                                      {/* 警報車輛網格列表 */}
+                                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                          {loopReminders.map((car: any) => {
+                                              const isUrgent = car.diffDays <= 14; // 14天內列為紅色緊急
+                                              return (
+                                                  <div 
+                                                      key={car.id} 
+                                                      className={`p-3 rounded-xl border bg-white flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group
+                                                          ${isUrgent ? 'border-red-300 ring-1 ring-red-100' : 'border-amber-200'}`}
+                                                  >
+                                                      {/* 背景緊急微色塊 */}
+                                                      {isUrgent && <div className="absolute top-0 right-0 w-16 h-16 bg-red-500/5 rounded-bl-full pointer-events-none"></div>}
+                                                      
+                                                      <div>
+                                                          <div className="flex justify-between items-start">
+                                                              <span className="font-black text-slate-800 text-sm">{car.regMark || '未出牌'}</span>
+                                                              <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full font-mono border
+                                                                  ${isUrgent ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-amber-50 text-amber-600 border-amber-200'}`}
+                                                              >
+                                                                  {car.diffDays < 0 ? `已逾期 ${Math.abs(car.diffDays)} 天` : car.diffDays === 0 ? '今日到期！' : `剩 ${car.diffDays} 天`}
+                                                                </span>
+                                                          </div>
+                                                          <div className="text-xs font-bold text-slate-600 mt-1">
+                                                              {car.year} {car.make} {car.model}
+                                                          </div>
+                                                          <div className="text-[11px] text-slate-500 mt-2 flex flex-col gap-0.5 font-mono">
+                                                              <div>最後出境：{car.lastOutboundDate || car.crossBorder?.lastOutboundDate}</div>
+                                                              <div className={isUrgent ? 'text-red-500 font-bold' : ''}>強制死線：{car.deadlineStr}</div>
+                                                          </div>
+                                                      </div>
+                                                      
+                                                      {/* 快速打卡重置按鈕 */}
+                                                      <div className="mt-3 pt-2 border-t border-slate-100 flex justify-end">
+                                                          <button 
+                                                              onClick={async () => {
+                                                                  if (!confirm(`確定這台車 [${car.regMark || '未出牌'}] 已成功回港打卡（重置兜圈時間）嗎？`)) return;
+                                                                  try {
+                                                                      // ★ 自動將最後出境日期更新為「今天」，讓它重新進入下一個 3 個月安全循環
+                                                                      const todayStr = new Date().toISOString().split('T')[0];
+                                                                      await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', car.id), {
+                                                                          lastOutboundDate: todayStr
+                                                                      });
+                                                                      alert('🔄 兜圈打卡成功！計時器已重新歸零重置。');
+                                                                  } catch (err) {
+                                                                      alert('更新失敗，請稍後再試');
+                                                                  }
+                                                              }}
+                                                              className={`w-full py-1.5 text-xs font-black rounded-lg border transition-all flex items-center justify-center gap-1.5
+                                                                  ${isUrgent ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                                                          >
+                                                              <Check size={14} /> 已回港打卡 (重置為今日)
+                                                          </button>
+                                                      </div>
+                                                  </div>
+                                              );
+                                          })}
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
 
                           <div className="flex flex-col lg:flex-row gap-0 lg:gap-5 flex-1 min-h-0 overflow-hidden">
                               
