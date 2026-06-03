@@ -262,7 +262,14 @@ const VehicleFormModal = ({
             const obj = { id: Date.now().toString(), name: newAddon.name, amount: amt };
             if (v.id) addSalesAddon(v.id, obj);
             else setEditingVehicle((prev: any) => ({ ...prev, salesAddons: [...(prev.salesAddons || []), obj] }));
-            setNewAddon({ name: '', amount: '' });
+            
+            // ★ 智能記憶：如果輸入了全新的附加費名稱，自動寫入系統資料庫下次用！
+            const currentAddons = settings.salesAddonItems || [];
+            if (newAddon.name && !currentAddons.includes(newAddon.name)) {
+                updateSettings('salesAddonItems', [...currentAddons, newAddon.name]);
+            }
+
+            setNewAddon({ name: '', amount: '' }); // 重置為空，方便連續輸入
         }
     };
 
@@ -1042,7 +1049,23 @@ const VehicleFormModal = ({
                             </div>
                             
                             <div className="flex flex-col sm:flex-row gap-3 md:gap-2">
-                                <input type="text" placeholder="收費項目 (例如: 文件費)..." value={newAddon.name} onChange={e => setNewAddon({...newAddon, name: e.target.value})} className="flex-1 w-full text-sm md:text-xs p-3 md:p-2 border border-indigo-200 rounded-lg outline-none bg-white min-w-0"/>
+                                {/* ★ 智能輸入框：綁定 datalist 實現下拉與搜尋 */}
+                                <div className="flex-1 w-full relative min-w-0">
+                                    <input 
+                                        list="smart_addon_list"
+                                        type="text" 
+                                        placeholder="收費項目 (下拉選擇或搜尋)..." 
+                                        value={newAddon.name} 
+                                        onChange={e => setNewAddon({...newAddon, name: e.target.value})} 
+                                        className="w-full text-sm md:text-xs p-3 md:p-2 border border-indigo-200 rounded-lg outline-none bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
+                                    />
+                                    {/* 隱藏的下拉選單資料庫 (合併預設值與系統記憶) */}
+                                    <datalist id="smart_addon_list">
+                                        {Array.from(new Set(['文件費', '轉名費', '過戶費', '上會手續費', '驗車費', ...(settings.salesAddonItems || [])])).map((item: any, idx: number) => (
+                                            <option key={idx} value={item}>{item}</option>
+                                        ))}
+                                    </datalist>
+                                </div>
                                 <input type="text" placeholder="$ 金額" value={newAddon.amount} onChange={e => setNewAddon({...newAddon, amount: formatNumberInput(e.target.value)})} className="w-full sm:w-32 text-base md:text-sm p-3 md:p-2 border border-indigo-200 rounded-lg outline-none bg-white text-right font-mono font-bold text-indigo-600"/>
                                 <button type="button" onClick={handleAddAddonClick} className="bg-indigo-600 text-white text-sm md:text-xs p-3 md:px-4 rounded-lg hover:bg-indigo-700 font-bold active:scale-95 transition-transform whitespace-nowrap w-full sm:w-auto">加入收費</button>
                             </div>
