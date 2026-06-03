@@ -446,29 +446,38 @@ export default function CrossBorderView({
                                 const lastOutDate = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
                                 
                                 let loopDiff = null;
-                                let deadlineStr = '未計算';
+                                let deadlineStr = '無';
                                 if (lastOutDate) {
+                                    // 只有在有出境日期的情況下，才計算 90 天死線
                                     const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
                                     loopDiff = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                                     deadlineStr = deadline.toISOString().split('T')[0];
                                 }
+                                
                                 return (
                                     <div className="bg-slate-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center p-3 md:px-4 border-b border-slate-800 shadow-inner flex-none gap-3">
                                         <div className="flex items-center gap-3">
                                             <div className="bg-white/10 p-2 rounded-lg">
-                                                <RefreshCw size={20} className={loopDiff !== null && loopDiff <= 14 ? 'text-red-400 animate-spin-slow' : 'text-amber-400'}/>
+                                                {lastOutDate 
+                                                    ? <RefreshCw size={20} className={loopDiff !== null && loopDiff <= 14 ? 'text-red-400 animate-spin-slow' : 'text-amber-400'}/> 
+                                                    : <Building2 size={20} className="text-emerald-400" />
+                                                }
                                             </div>
                                             <div>
                                                 <h4 className="font-bold text-sm flex items-center gap-2 tracking-wide">
-                                                    強制 3 個月兜圈打卡
-                                                    {loopDiff !== null && (
-                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono border ${loopDiff < 0 ? 'bg-red-500/20 text-red-300 border-red-500/50' : loopDiff <= 30 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-green-500/20 text-green-300 border-green-500/50'}`}>
-                                                            {loopDiff < 0 ? `已逾期 ${Math.abs(loopDiff)} 天` : `剩餘 ${loopDiff} 天`}
+                                                    強制 3 個月兜圈管理
+                                                    {lastOutDate ? (
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono border ${loopDiff !== null && loopDiff < 0 ? 'bg-red-500/20 text-red-300 border-red-500/50' : loopDiff !== null && loopDiff <= 30 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-green-500/20 text-green-300 border-green-500/50'}`}>
+                                                            {loopDiff !== null && loopDiff < 0 ? `已逾期 ${Math.abs(loopDiff)} 天` : `剩餘 ${loopDiff} 天`}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-slate-800 text-emerald-400 border-emerald-500/30">
+                                                            📍 在港停留 (無須計時)
                                                         </span>
                                                     )}
                                                 </h4>
                                                 <div className="text-[10px] text-slate-400 mt-1 font-mono">
-                                                    出境紀錄：<span className="text-white">{lastOutDate || 'N/A'}</span> 
+                                                    出境狀態：<span className={lastOutDate ? 'text-amber-300 font-bold' : 'text-emerald-300 font-bold'}>{lastOutDate ? `已出境 (${lastOutDate})` : '目前在香港'}</span> 
                                                     {lastOutDate && <span className="ml-3">強制死線：<span className={loopDiff !== null && loopDiff < 0 ? 'text-red-400' : 'text-slate-300'}>{deadlineStr}</span></span>}
                                                 </div>
                                             </div>
@@ -478,22 +487,34 @@ export default function CrossBorderView({
                                             <input 
                                                 type="date" 
                                                 value={lastOutDate || ''}
-                                                // ★ 加入 as any 繞過 Partial<Vehicle> 的檢查
                                                 onChange={(e) => updateVehicle(activeCar.id!, { lastOutboundDate: e.target.value } as any)}
                                                 className="bg-black/30 border border-white/20 text-white text-xs px-2 py-2 rounded-lg outline-none flex-1 md:w-36 cursor-pointer focus:border-blue-400 transition-colors font-mono"
-                                                title="手動修改出境日期"
+                                                title="手動修改日期"
                                             />
-                                            <button 
-                                                onClick={() => {
-                                                    const todayStr = new Date().toISOString().split('T')[0];
-                                                    // ★ 加入 as any 繞過 Partial<Vehicle> 的檢查
-                                                    updateVehicle(activeCar.id!, { lastOutboundDate: todayStr } as any);
-                                                    alert('🔄 兜圈打卡成功！出境日期已即時重置為今日。');
-                                                }}
-                                                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center whitespace-nowrap"
-                                            >
-                                                <Check size={14} className="mr-1"/> 司機已回港 (重置)
-                                            </button>
+                                            {lastOutDate ? (
+                                                <button 
+                                                    onClick={() => {
+                                                        // ★ 核心邏輯：司機回港，清空出境日期，停止計時
+                                                        updateVehicle(activeCar.id!, { lastOutboundDate: '' } as any);
+                                                        alert('✅ 司機已回港！已停止兜圈計時。');
+                                                    }}
+                                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center whitespace-nowrap"
+                                                >
+                                                    <Check size={14} className="mr-1"/> 已回港 (解除計時)
+                                                </button>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => {
+                                                        // ★ 核心邏輯：司機出境，設定今日為出境日期，開始 90 天計時
+                                                        const todayStr = new Date().toISOString().split('T')[0];
+                                                        updateVehicle(activeCar.id!, { lastOutboundDate: todayStr } as any);
+                                                        alert('🚗 登記出境成功！已開始 90 天兜圈倒數。');
+                                                    }}
+                                                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center whitespace-nowrap"
+                                                >
+                                                    <ArrowRight size={14} className="mr-1"/> 登記出境 (開始計時)
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
