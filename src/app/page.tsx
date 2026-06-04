@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極還原版列印引擎 (單頁鎖死 + 完美左右邊界) ★★★
+// ★★★ 終極版列印引擎 (單頁鎖死 + 各保留 5mm 完美邊界) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,8 +1562,8 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定安全紙張邊界 */
-                @page { size: A4 portrait; margin: 8mm; }
+                /* ★ 1. 設定實體紙張安全邊距 (各保留 5mm) */
+                @page { size: A4 portrait; margin: 5mm; }
                 
                 @media print {
                     /* ★ 2. 100% 高度 + 隱藏溢出 = 徹底消滅空白第二頁 */
@@ -1576,29 +1576,38 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important; 
                         overflow: hidden !important; 
+                        box-sizing: border-box !important;
                     }
                     
-                    /* ★ 3. 恢復兩邊空間！給外層容器強制加上 15mm 的左右內距 */
+                    /* ★ 3. 雙重保護：容器強制加上 5mm 內距，保證文字不貼邊 */
                     .print-container { 
                         width: 100% !important; 
                         height: 100% !important; 
                         margin: 0 auto !important; 
-                        padding: 5mm 15mm !important; /* 👈 左右空間在這裡回來了！ */
+                        padding: 5mm !important; /* 👈 關鍵：四周各保留 5mm 空間 */
                         box-sizing: border-box !important; 
                         overflow: hidden !important; 
                     }
 
-                    /* ★ 4. 消除內部容器的多餘陰影，但保留其原本的排版 */
-                    #print-root {
-                        box-shadow: none !important;
-                        border: none !important;
+                    /* ★ 4. 擊殺邊界消失的元凶：防止 100vw (螢幕寬度) 撐破邊距！ */
+                    .w-screen, .w-\\[100vw\\] {
+                        width: 100% !important;
+                        max-width: 100% !important;
                     }
 
-                    /* ★ 5. 保護高度，但不干擾 Flex 排版 (保證印章不移位，不會切線) */
+                    /* ★ 5. 保護高度，但不干擾 Flex 排版 (保證印章不移位) */
                     .min-h-screen, .h-screen, .h-[100dvh] { 
                         min-height: 100% !important; 
                         height: 100% !important; 
                         box-sizing: border-box !important;
+                    }
+                    
+                    /* 取消多餘的陰影與圓角 */
+                    #print-root {
+                        box-shadow: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        width: 100% !important;
                     }
                     
                     body * { visibility: visible !important; }
