@@ -677,6 +677,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 <table className="w-full text-[10px] border-collapse border border-slate-300">
                                                     <tbody>
                                                         <tr><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Reg. No. (車牌)</td><td className="border p-1.5 font-mono font-bold w-[30%] text-[11px]">{formData.regMark || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Make/Model</td><td className="border p-1.5 w-[30%] text-[11px] font-bold">{formData.make} {formData.model}</td></tr>
+                                                        {/* ★ 新增年份與顏色列 */}
+                                                        <tr><td className="border p-1.5 bg-slate-50 font-bold">Year (年份)</td><td className="border p-1.5 font-bold">{formData.year || 'N/A'}</td><td className="border p-1.5 bg-slate-50 font-bold">Color (顏色)</td><td className="border p-1.5">{formData.color || 'N/A'} {formData.colorInterior ? `(Int: ${formData.colorInterior})` : ''}</td></tr>
                                                         <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No. (車身)</td><td colSpan={3} className="border p-1.5 font-mono">{formData.chassisNo || 'N/A'}</td></tr>
                                                     </tbody>
                                                 </table>
