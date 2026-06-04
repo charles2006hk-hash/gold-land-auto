@@ -3577,23 +3577,32 @@ const DatabaseSelector = ({
                   const actionCars = sortedList.filter(c => {
                       if (c.status === 'Reserved') return true;
                       if (c.status === 'Sold') {
-                          const received = (c.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
-                          const cbFees = (c.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (t.fee || 0), 0);
-                          const salesAddonsTotal = ((c as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
-                          const totalReceivable = (c.price || 0) + cbFees + salesAddonsTotal;
+                          // ★ 核心修復：全面對齊最新的收支計算邏輯
+                          const received = (c.payments || []).reduce((acc:any, p:any) => acc + (Number(p.amount) || 0), 0);
+                          
+                          const cbFees = (c.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (Number(t.fee) || 0), 0);
+                          // 修正 1：正確扣除「贈送」的對客附加費
+                          const salesAddonsTotal = ((c as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (Number(a.amount) || 0)), 0);
+                          // 修正 2：加入未找數的維修對客收費
+                          const maintCharge = (c.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
+                          
+                          const totalReceivable = (Number(c.price) || 0) + cbFees + salesAddonsTotal + maintCharge;
                           const balance = totalReceivable - received;
                           
                           const unpaidExps = (c.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
-                          const pendingCb = (c.crossBorder?.tasks || []).filter((t:any) => !t.isPaid).length;
+                          const unpaidMaint = (c.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Unpaid' && Number(m.cost) > 0).length;
                           
-                          // ★★★ 核心修復：計算進貨/收車的未付尾數 ★★★
+                          // 修正 3：精準判斷中港代辦是否已付 (改用關聯付款 ID 檢查)
+                          const pendingCb = (c.crossBorder?.tasks || []).filter((t:any) => (Number(t.fee) > 0) && !(c.payments || []).some((p:any) => p.relatedTaskId === t.id)).length;
+                          
+                          const totalExpenses = (c.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+                          const baseAcqCost = (Number(c.costPrice) || 0) - totalExpenses;
                           const acqPaid = (c.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
                           const acqOffset = Number(c.acquisition?.offsetAmount || 0);
-                          const acqBalance = (c.costPrice || 0) - acqPaid - acqOffset;
+                          const acqBalance = baseAcqCost - acqPaid - acqOffset;
 
-                          // 只要還有欠款(客欠我)、未付成本雜費(我欠車房)、未付車價(我欠行家)、未完成的中港任務，就留在待處理區
-                          // 使用 acqBalance > 1 來避免浮點數誤差
-                          return balance > 0 || unpaidExps > 0 || pendingCb > 0 || acqBalance > 1;
+                          // 只要還有欠款、未付成本雜費、未完成的中港任務，就留在待處理區 (> 1 避免浮點數誤差)
+                          return balance > 1 || unpaidExps > 0 || unpaidMaint > 0 || pendingCb > 0 || acqBalance > 1;
                       }
                       return false;
                   });
@@ -3636,11 +3645,18 @@ const DatabaseSelector = ({
 
                   // 提取共用的精緻卡片渲染邏輯
                   const renderDashboardCard = (car: any) => {
-                    const received = (car.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
-                    const cbFees = (car.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (t.fee || 0), 0);
-                    const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.amount || 0), 0);
-                    const balance = ((car.price || 0) + cbFees + salesAddonsTotal) - received;
+                    // ★ 核心修復：讓卡片上的標籤也完美對齊最新邏輯
+                    const received = (car.payments || []).reduce((acc:any, p:any) => acc + (Number(p.amount) || 0), 0);
+                    const cbFees = (car.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (Number(t.fee) || 0), 0);
+                    const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (Number(a.amount) || 0)), 0);
+                    const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
+                    
+                    const totalReceivable = (Number(car.price) || 0) + cbFees + salesAddonsTotal + maintCharge;
+                    const balance = totalReceivable - received;
+                    
                     const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
+                    const unpaidMaint = (car.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Unpaid' && Number(m.cost) > 0).length;
+                    const totalUnpaidCosts = unpaidExps + unpaidMaint;
 
                     // ★★★ 計算海外訂車的到港天數 ★★★
                     let daysToArrive: number | null = null;
@@ -3827,7 +3843,7 @@ const DatabaseSelector = ({
                                             })()}
 
                                             {/* 2. 欠車房雜費 (橘色) */}
-                                            {unpaidExps > 0 && (
+                                            {totalUnpaidCosts > 0 && (
                                                 <span className="text-[9px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
                                                     未付成本
                                                 </span>
