@@ -855,7 +855,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex-col overflow-hidden ${mobileStep === 'list' ? 'flex' : 'hidden md:flex'}`}>
                     <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
                         <button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded border bg-white shadow-sm transition-transform active:scale-95 text-slate-500"><ChevronLeft size={16}/></button>
-                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} disabled={docId && isVehicleLocked} placeholder={docId && isVehicleLocked ? "🔒 列表保護中" : "搜尋車牌/型號..."} className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none focus:ring-2 ring-blue-100 font-bold disabled:opacity-50"/>
+                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} disabled={!!docId && isVehicleLocked} placeholder={docId && isVehicleLocked ? "🔒 列表保護中" : "搜尋車牌/型號..."} className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none focus:ring-2 ring-blue-100 font-bold disabled:opacity-50"/>
                     </div>
                     
                     {!docId && (
