@@ -1556,8 +1556,8 @@ const VehicleFormModal = ({
                                                                 regMark: v.regMark || '',
                                                                 make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
                                                                 price: '0',
-                                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
-                                                                remarks: `車輛維修與保養收費`
+                                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
+                                                                // ★ 已刪除 remarks 覆寫，讓系統自動帶入預設銀行資料
                                                             },
                                                             checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
                                                             docItems: docItems,
@@ -1653,8 +1653,8 @@ const VehicleFormModal = ({
                                                                                     customerId: v.customerID || '', customerAddress: v.customerAddress || '',
                                                                                     regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
                                                                                     price: '0',
-                                                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
-                                                                                    remarks: `車輛維修單項收費`
+                                                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
+                                                                                    // ★ 已刪除 remarks 覆寫，讓系統自動帶入預設銀行資料
                                                                                 },
                                                                                 docItems: [{ id: m.id, desc: `[維修保養] ${m.item} ${m.vendor ? `(${m.vendor})` : ''}`, amount: Number(m.charge), isSelected: true }],
                                                                                 depositItems: [], showTerms: false
