@@ -29,6 +29,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [carPhotos, setCarPhotos] = useState<string[]>([]);
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
     const [sortMode, setSortMode] = useState<'created' | 'updated'>('created');
+    const [isVehicleLocked, setIsVehicleLocked] = useState(false); // ★ 新增：左側車輛防誤觸安全鎖
 
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -251,6 +252,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             const invCar = inventory.find((v: any) => v.regMark === doc.formData.regMark);
             if (invCar) setSelectedCarId(invCar.id);
         }
+        setIsVehicleLocked(true); // ★ 讀取舊單時，強制鎖定左側列表保護資料！
         setViewMode('edit');
     };
 
@@ -323,10 +325,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     });
 
     const handleSelectCar = (car: any) => {
-        // ★ 防呆安全鎖：如果正在編輯舊單據，禁止點擊左側車輛以免洗掉數據！
-        if (docId) {
-            alert("🔒 安全鎖已啟動！\n您正在編輯歷史單據，為防止資料遺失，左側車輛切換已鎖定。\n\n如需開新單據，請先點擊右上角的「+ 開新單據」。");
+        // ★ 智能防護盾：檢查鎖定狀態與再次確認
+        if (docId && isVehicleLocked) {
+            alert("🔒 安全鎖已啟動！\n為防止資料遺失，左側車輛已鎖定。\n如需為本單據更換車輛，請先點擊左側藍色卡片上的「🔓 解鎖更換」按鈕。");
             return;
+        }
+        if (docId && !isVehicleLocked) {
+            if (!window.confirm("⚠️ 警告：確定要更換本單據綁定的車輛嗎？\n這將會用新車輛的資料覆蓋您目前的合約欄位！")) return;
         }
         setSelectedCarId(car.id);
         
@@ -403,7 +408,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 });
             }
         }
-        setDocItems(items); setMobileStep('edit');
+        setDocItems(items); 
+        if (docId) setIsVehicleLocked(true); // ★ 更換成功後自動重新上鎖保護
+        setMobileStep('edit');
     };
 
     const handleSelectBlank = () => {
@@ -427,6 +434,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         });
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
+        setIsVehicleLocked(false); // ★ 開新空白單時解鎖，方便自由選車
         setMobileStep('edit');
     };
 
@@ -843,26 +851,76 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
             <div className="flex flex-1 md:flex-row h-full gap-4 relative overflow-hidden md:p-0 p-2">
                 
+                {/* 🌟 智慧優化版左側欄：車輛置頂、全局安全鎖定，拒絕視線干擾 */}
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex-col overflow-hidden ${mobileStep === 'list' ? 'flex' : 'hidden md:flex'}`}>
                     <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
-                        <button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded border bg-white shadow-sm transition-transform active:scale-95"><ChevronLeft size={16}/></button>
-                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋庫存車牌/型號..." className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none focus:ring-2 ring-blue-100"/>
+                        <button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded border bg-white shadow-sm transition-transform active:scale-95 text-slate-500"><ChevronLeft size={16}/></button>
+                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} disabled={docId && isVehicleLocked} placeholder={docId && isVehicleLocked ? "🔒 列表保護中" : "搜尋車牌/型號..."} className="flex-1 px-2 py-1.5 text-xs bg-white border rounded outline-none focus:ring-2 ring-blue-100 font-bold disabled:opacity-50"/>
                     </div>
-                    <div className="p-2 border-b bg-slate-50">
-                        <button onClick={handleSelectBlank} className="w-full py-2 text-xs font-bold rounded border border-dashed border-slate-300 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-colors">
-                            + 建立空白單據 (Blank)
-                        </button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                        {filteredInventory.map((car: any) => (
-                            <div key={car.id} onClick={() => handleSelectCar(car)} className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedCarId === car.id ? 'bg-blue-50 border-blue-400 ring-1 ring-blue-200 shadow-sm' : 'bg-white hover:border-blue-200'}`}>
-                                <div className="flex justify-between items-start font-bold text-sm mb-1">
-                                    <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded font-mono shadow-sm">{car.regMark || '未出牌'}</span>
-                                    <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 border border-slate-200">{car.status}</span>
-                                </div>
-                                <div className="text-xs text-slate-500 font-medium truncate">{car.year} {car.make} {car.model}</div>
-                            </div>
-                        ))}
+                    
+                    {!docId && (
+                        <div className="p-2 border-b bg-slate-50">
+                            <button onClick={handleSelectBlank} className="w-full py-2 text-xs font-bold rounded border border-dashed border-slate-300 bg-white text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-colors">
+                                + 建立空白單據 (Blank)
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex-1 overflow-y-auto p-2 bg-slate-50/50 space-y-3">
+                        
+                        {/* ★ 核心置頂卡片 */}
+                        {docId && (() => {
+                            const currentCar = inventory.find((car: any) => car.id === selectedCarId);
+                            if (!currentCar && selectedCarId === 'BLANK') {
+                                return (
+                                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-xl border border-amber-300 shadow-sm">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="text-[11px] font-black text-amber-800">📝 手填空白單據</span>
+                                        </div>
+                                        <p className="text-[10px] text-amber-600 mb-2">此單據目前未與車庫連結。</p>
+                                        <button type="button" onClick={() => setIsVehicleLocked(false)} className="w-full py-1 text-[10px] bg-white border border-amber-300 text-amber-700 rounded font-bold hover:bg-amber-100 shadow-sm">🔓 重新綁定車輛</button>
+                                    </div>
+                                );
+                            }
+                            if (currentCar) {
+                                return (
+                                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-xl border-2 border-blue-500 shadow-md relative overflow-hidden ring-4 ring-blue-50">
+                                        <div className="absolute top-0 right-0 bg-blue-500 text-white px-2 py-0.5 text-[9px] font-black rounded-bl-lg">本單綁定</div>
+                                        <div className="text-[10px] font-black text-blue-700 uppercase mb-1">📌 當前車輛：</div>
+                                        <div className="flex justify-between items-center font-bold text-sm mb-1.5">
+                                            <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 py-0.5 rounded shadow-sm">{currentCar.regMark || '未出牌'}</span>
+                                            <span className="text-[10px] bg-white px-2 py-0.5 rounded text-blue-700 border border-blue-200 font-bold">{currentCar.status}</span>
+                                        </div>
+                                        <div className="text-xs text-slate-800 font-black truncate mb-3">{currentCar.year} {currentCar.make} {currentCar.model}</div>
+                                        
+                                        {isVehicleLocked ? (
+                                            <button type="button" onClick={() => setIsVehicleLocked(false)} className="w-full py-1.5 text-[10px] font-black bg-white border border-blue-300 text-blue-700 rounded-lg shadow-sm hover:bg-blue-100">🔓 解鎖更換車輛</button>
+                                        ) : (
+                                            <button type="button" onClick={() => setIsVehicleLocked(true)} className="w-full py-1.5 text-[10px] font-black bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700">🔒 放棄更換並鎖定</button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
+
+                        {docId && <div className="text-[9px] font-black text-slate-400 text-center border-b border-slate-200 pb-1">{isVehicleLocked ? '🔒 庫存列表已保護' : '🔓 請點擊下方更換'}</div>}
+
+                        {/* ★ 毛玻璃保護層 */}
+                        <div className={`space-y-2 transition-all duration-300 ${docId && isVehicleLocked ? 'opacity-30 pointer-events-none select-none blur-[0.5px]' : 'opacity-100'}`}>
+                            {filteredInventory.map((car: any) => {
+                                if (docId && car.id === selectedCarId) return null;
+                                return (
+                                    <div key={car.id} onClick={() => handleSelectCar(car)} className="p-3 rounded-lg border bg-white hover:border-blue-400 hover:shadow-md cursor-pointer transition-all">
+                                        <div className="flex justify-between items-center font-bold text-sm mb-1.5">
+                                            <span className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded font-mono shadow-sm">{car.regMark || '未出牌'}</span>
+                                            <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded text-slate-500 border border-slate-200 font-bold">{car.status}</span>
+                                        </div>
+                                        <div className="text-xs text-slate-600 font-bold truncate">{car.year} {car.make} {car.model}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
 
@@ -991,33 +1049,33 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200">
                                 <div className="text-[10px] font-bold text-slate-500 mb-3 uppercase tracking-wider">車輛基本資料 (Vehicle Data)</div>
                                 <div className="grid grid-cols-2 gap-3 mb-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Reg Mark</span><input name="regMark" value={formData.regMark} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Year</span><input name="year" value={formData.year} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Reg Mark</span><input name="regMark" value={formData.regMark || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Year</span><input name="year" value={formData.year || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold font-mono outline-none focus:ring-1 ring-blue-300"/></div>
                                 </div>
-                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Make (廠牌)</span><input name="make" value={formData.make} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Model (型號)</span><input name="model" value={formData.model} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Make (廠牌)</span><input name="make" value={formData.make || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                <div className="relative mb-3"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Model (型號)</span><input name="model" value={formData.model || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
                                 <div className="grid grid-cols-2 gap-3 mb-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Ext.</span><input name="color" value={formData.color} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Ext.</span><input name="color" value={formData.color || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
                                     <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Color Int.</span><input name="colorInterior" value={formData.colorInterior || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-sm font-bold outline-none focus:ring-1 ring-blue-300"/></div>
                                 </div>
                                 
                                 <div className="grid grid-cols-2 gap-3 mb-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine Cap (容積)</span><input name="engineSize" value={formData.engineSize} onChange={handleChange} placeholder="cc" className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Mileage (里數)</span><input name="mileage" value={formData.mileage} onChange={handleChange} placeholder="km" className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine Cap (容積)</span><input name="engineSize" value={formData.engineSize || ''} onChange={handleChange} placeholder="cc" className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Mileage (里數)</span><input name="mileage" value={formData.mileage || ''} onChange={handleChange} placeholder="km" className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
                                 </div>
                                 <div className="grid grid-cols-3 gap-3 mb-3">
                                     <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Transmission</span>
-                                        <select name="transmission" value={formData.transmission} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 cursor-pointer">
+                                        <select name="transmission" value={formData.transmission || 'Automatic'} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 cursor-pointer">
                                             <option value="Automatic">Auto</option><option value="Manual">Manual</option>
                                         </select>
                                     </div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Seating</span><input name="seat" value={formData.seat} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 text-center"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Prev Owners</span><input name="previousOwners" value={formData.previousOwners} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 text-center"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Seating</span><input name="seat" value={formData.seat || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 text-center"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Prev Owners</span><input name="previousOwners" value={formData.previousOwners || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-bold outline-none focus:ring-1 ring-blue-300 text-center"/></div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Chassis No.</span><input name="chassisNo" value={formData.chassisNo} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
-                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine No.</span><input name="engineNo" value={formData.engineNo} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Chassis No.</span><input name="chassisNo" value={formData.chassisNo || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
+                                    <div className="relative"><span className="absolute top-2 left-2 text-[8px] text-slate-400 font-bold uppercase">Engine No.</span><input name="engineNo" value={formData.engineNo || ''} onChange={handleChange} className="w-full border rounded-lg pt-5 pb-1.5 px-2 bg-white text-[10px] font-mono font-bold outline-none focus:ring-1 ring-blue-300"/></div>
                                 </div>
                             </div>
 
