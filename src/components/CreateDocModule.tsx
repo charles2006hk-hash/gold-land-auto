@@ -99,9 +99,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             const merged = Array.from(new Set([...list, ...(invCar?.photos || [])]));
             setCarPhotos(merged);
 
-            if (!docId && formData.contractPhotos.length === 0) {
-                setFormData((prev: any) => ({ ...prev, contractPhotos: merged.slice(0, 5) }));
-            }
+            // ★ 終極修復：使用 Callback 確保拿到最新狀態，不再被舊狀態（例如 Bentley 的相片）干擾
+            setFormData((prev: any) => {
+                if (!docId && prev.contractPhotos.length === 0) {
+                    return { ...prev, contractPhotos: merged.slice(0, 5) };
+                }
+                return prev;
+            });
         } catch (e) { console.error("相片拉取失敗", e); } 
         finally { setIsFetchingPhotos(false); }
     };
@@ -206,6 +210,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             setFormData((prev: any) => ({ ...prev, remarks: prev.remarks || DEFAULT_REMARKS }));
         }
         
+        // ★ 防呆：如果正在編輯歷史單據，絕對不要用庫存資料洗掉客人的資料！
+        if (docId) return;
+
         // ★★★ 智能重抓對象 (當切換單據類型時，自動重新綁定收車或售車對象) ★★★
         if (selectedCarId && selectedCarId !== 'BLANK') {
             const car = inventory.find((v: any) => v.id === selectedCarId);
@@ -323,20 +330,32 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
         setSelectedCarId(car.id);
         
-        // ★★★ 智能進銷分流機制 (Acquisition vs Sales) ★★★
-        // ★ 修正：將「收車」與「寄賣」都視為進貨向的合約
         const isAcq = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
         
-        setFormData((prev: any) => ({
-            ...prev, regMark: car.regMark || '', make: car.make || '', model: car.model || '',
-            chassisNo: car.chassisNo || '', engineNo: car.engineNo || '', year: car.year || '',
-            color: car.colorExt || car.color || '', colorInterior: car.colorInt || car.colorInterior || car.innerColor || '',
-            transmission: car.transmission || 'Automatic', engineSize: car.engineSize ? car.engineSize.toString() : '',
-            mileage: car.mileage ? car.mileage.toString() : '', seat: car.seating ? car.seating.toString() : '',
+        // ★ 終極修復：徹底放棄 `...prev`，改為「完全重新賦值」，徹底斬斷與上一台車的任何瓜葛！
+        setFormData({
+            companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
+            companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+            companyAddress: COMPANY_INFO?.address_ch || '', 
+            companyPhone: COMPANY_INFO?.phone || '', 
+            companyEmail: COMPANY_INFO?.email || '', 
+            regMark: car.regMark || '', 
+            make: car.make || '', 
+            model: car.model || '', 
+            chassisNo: car.chassisNo || '', 
+            engineNo: car.engineNo || '', 
+            year: car.year || '', 
+            color: car.colorExt || car.color || '', 
+            colorInterior: car.colorInt || car.colorInterior || car.innerColor || '',
+            transmission: car.transmission || 'Automatic', 
+            engineSize: car.engineSize ? car.engineSize.toString() : '', 
+            mileage: car.mileage ? car.mileage.toString() : '', 
+            seat: car.seating ? car.seating.toString() : '', 
             previousOwners: car.previousOwners !== undefined ? car.previousOwners.toString() : '',
             
-            // ★ 分流抓取：如果是收車/寄賣合約抓成本與供應商，否則抓售價與買家
             price: isAcq ? (car.costPrice ? car.costPrice.toString() : '0') : (car.price ? car.price.toString() : '0'), 
+            deposit: '', balance: '',
+            
             customerName: isAcq ? (car.acquisition?.vendor || '') : (car.customerName || ''), 
             customerPhone: isAcq ? (car.acquisition?.vendorPhone || '') : (car.customerPhone || ''),
             customerId: isAcq ? (car.acquisition?.vendorID || '') : (car.customerID || ''), 
@@ -344,11 +363,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-            etaFormat: 'date', etaDays: '', etaDate: car.eta || car.acquisition?.eta || '', orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None', contractPhotos: [] 
-        }));
+            remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : '', 
+            paymentMethod: 'Cheque',
+            
+            orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None', 
+            overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: car.eta || car.acquisition?.eta || '',
+            overseasTotalFee: '', localTotalFee: '', 
+            chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
+            
+            contractPhotos: [],
+            isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
+        });
 
         const autoPayments: any[] = [];
-        // ★ 分流抓取收款紀錄
         const paymentsToUse = isAcq ? (car.acquisition?.payments || []) : (car.payments || []);
         
         if (paymentsToUse.length > 0) {
@@ -360,7 +387,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setDepositItems(autoPayments); setShowTerms(true);
         const items: any[] = [];
         
-        // ★ 只有賣車合約才帶入這些額外附加費
         if (!isAcq) {
             if (car.crossBorder?.tasks) car.crossBorder.tasks.forEach((t: any, i: number) => { if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true }); });
             if (car.salesAddons && car.salesAddons.length > 0) car.salesAddons.forEach((addon: any, i: number) => { if (addon.amount > 0) items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false }); });
@@ -382,17 +408,25 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
-        setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true); // ★ 空白單據預設開啟
-        setFormData((prev: any) => ({ 
-            ...prev, regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
+        setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true);
+        
+        // ★ 終極修復：同樣使用「完全重新賦值」
+        setFormData({ 
+            companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
+            companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+            companyAddress: COMPANY_INFO?.address_ch || '', 
+            companyPhone: COMPANY_INFO?.phone || '', 
+            companyEmail: COMPANY_INFO?.email || '', 
+            regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '',
             chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false, etaFormat: 'date', etaDays: '', etaDate: '',
-            isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: ''
-        }));
+            isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
+            remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : ''
+        });
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
-        setShowTerms(true); setShowStampAndSig(true); setMobileStep('edit');
+        setMobileStep('edit');
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
