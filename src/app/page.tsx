@@ -1562,7 +1562,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                <style>
                 /* ★ 拔除 !important，讓瀏覽器正確識別紙張 */
                 @page { size: A4 portrait; margin: 5mm; }
                 
@@ -1570,18 +1569,20 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
                     width: auto !important; 
-                    height: auto !important; /* ★ 恢復 auto，解決高度塌陷產生的橫線切印章問題 */
+                    height: auto !important; 
+                    display: block !important;
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 
-                /* ★ 核心修復：把 5mm 安全邊距強加在這裡，保證絕對不會貼邊 */
+                /* ★ 核心修復：把 5mm 安全邊距強加在這裡，並設定 block 防止 Flexbox 切割印章 */
                 .print-container, #print-root { 
+                    display: block !important;
                     width: 100% !important; 
                     max-width: 100% !important;
-                    height: auto !important; min-height: 0 !important; /* ★ 恢復 auto */
+                    height: auto !important; min-height: 0 !important; 
                     margin: 0 !important; 
-                    padding: 5mm !important; /* ★ 強制內距 */
-                    box-sizing: border-box !important; /* ★ 確保內距不會撐破 100% 寬度導致白頁 */
+                    padding: 5mm !important; 
+                    box-sizing: border-box !important; 
                     background: white !important; 
                     position: relative !important; 
                     overflow: visible !important;
