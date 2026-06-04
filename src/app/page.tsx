@@ -1545,51 +1545,64 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 極簡暴力版列印引擎 (防白頁、印章去線) ★★★
+// ★★★ 終極純淨版列印引擎 (單頁鎖定 + 原汁原味印章 + 圖片完美顯示) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
- 
-    // 核心邏輯：純淨版列印排版 CSS
-    const printCSS = `
-        /* 1. 給紙張 1 公分的邊界 */
-        @page { size: A4 portrait; margin: 10mm !important; }
-        
-        /* 2. 把所有會撐高版面的東西通通變成 auto */
-        html, body, .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
-            width: auto !important; 
-            height: auto !important; 
-            min-height: 0 !important; 
-            margin: 0 !important; 
-            padding: 0 !important; 
-            background: white !important; 
-            display: block !important;
-            flex: none !important;
-            -webkit-print-color-adjust: exact !important; 
-            print-color-adjust: exact !important; 
-        }
-        
-        /* 3. 在發票外層加一個保護殼，確保內縮 15mm 呼吸空間 */
-        .print-container { 
-            display: block !important;
-            width: 100% !important; 
-            height: auto !important; 
-            margin: 0 !important; 
-            padding: 15mm !important; /* 強制留白 */
-            box-sizing: border-box !important; 
-        }
-    `;
+
     const fullHtml = `
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
             ${baseTag}
             ${styles}
-            <style>${printCSS}</style>
+            <style>
+                /* ★ 1. 恢復空間：設定標準 10mm 邊距 */
+                @page { size: A4 portrait; margin: 10mm; }
+                
+                html, body { 
+                    width: auto !important; 
+                    height: auto !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
+                    background: white !important; 
+                    -webkit-print-color-adjust: exact !important; 
+                    print-color-adjust: exact !important; 
+                    overflow: visible !important;
+                }
+                
+                /* ★ 2. 安全容器：保證不再出現第二張白紙 */
+                .print-container, #print-root { 
+                    display: block !important;
+                    width: 100% !important; 
+                    max-width: 100% !important;
+                    height: auto !important; 
+                    min-height: 0 !important; 
+                    margin: 0 auto !important; 
+                    padding: 5mm !important; 
+                    box-sizing: border-box !important; 
+                    background: white !important; 
+                    position: relative !important; 
+                    overflow: visible !important;
+                    box-shadow: none !important; 
+                    border: none !important; 
+                }
+
+                /* ★ 3. 殺掉所有可能撐破版面導致第二頁的 Tailwind 高度 */
+                .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
+                    min-height: 0 !important; 
+                    height: auto !important; 
+                    flex: none !important; 
+                }
+                
+                body * { visibility: visible !important; }
+                script { display: none !important; }
+            </style>
         </head>
         <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
             <div class="print-container">
