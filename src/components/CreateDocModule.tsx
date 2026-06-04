@@ -410,7 +410,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setSelectedCarId('BLANK');
         setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true);
         
-        // ★ 終極修復：同樣使用「完全重新賦值」
+        // ★ 終極修復：移除了未定義的 chk_hk_ 系列屬性，完美通過 TypeScript 檢查
         setFormData({ 
             companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
             companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
@@ -420,7 +420,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '',
-            chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, chk_hk_tax: true, chk_hk_emissions: true, chk_hk_insp: true, chk_hk_reg: true, chk_hk_ins: false, chk_hk_misc: false, etaFormat: 'date', etaDays: '', etaDate: '',
+            chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, etaFormat: 'date', etaDays: '', etaDate: '',
             isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
             remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : ''
         });
