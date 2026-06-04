@@ -1563,31 +1563,38 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${styles}
             <style>
                 <style>
-                /* ★ 設定 5mm 安全邊距 */
-                @page { size: A4 portrait; margin: 5mm !important; padding: 0 !important; }
+                /* ★ 拔除 !important，讓瀏覽器正確識別紙張 */
+                @page { size: A4 portrait; margin: 5mm; }
+                
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
-                    width: auto !important; height: max-content !important; /* ★ 強制高度為內容實際高度 */
+                    width: auto !important; 
+                    height: auto !important; /* ★ 恢復 auto，解決高度塌陷產生的橫線切印章問題 */
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
-                /* ★ 核心修復：拔除危險的 zoom，改用 100% 寬度讓瀏覽器自動適應紙張大小 */
+                
+                /* ★ 核心修復：把 5mm 安全邊距強加在這裡，保證絕對不會貼邊 */
                 .print-container, #print-root { 
                     width: 100% !important; 
                     max-width: 100% !important;
-                    height: max-content !important; min-height: 0 !important;
-                    margin: 0 !important; padding: 0 !important;
+                    height: auto !important; min-height: 0 !important; /* ★ 恢復 auto */
+                    margin: 0 !important; 
+                    padding: 5mm !important; /* ★ 強制內距 */
+                    box-sizing: border-box !important; /* ★ 確保內距不會撐破 100% 寬度導致白頁 */
                     background: white !important; 
                     position: relative !important; 
                     overflow: visible !important;
                     box-shadow: none !important; border: none !important; 
                     transform: none !important; 
                 }
+                
                 /* ★ 殺掉所有可能撐破版面導致第二頁空白的 Tailwind 高度類別 */
                 .min-h-screen, .h-screen, .h-full, .min-h-full { 
                     min-height: 0 !important; 
                     height: auto !important; 
                 }
+                
                 body * { visibility: visible !important; }
                 script { display: none !important; }
             </style>
