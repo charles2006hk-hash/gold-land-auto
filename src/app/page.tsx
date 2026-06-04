@@ -1545,80 +1545,62 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版無痕列印引擎 (發票專用：單頁鎖定 + 印章護盾) ★★★
+// ★★★ 極簡暴力版列印引擎 (防白頁、印章去線) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
 
+    // 核心邏輯：我們把所有的排版 CSS 放在一個獨立的字串裡，保證絕對不會有 <style><style> 的錯誤
+    const printCSS = `
+        /* 1. 給紙張 1 公分的邊界 */
+        @page { size: A4 portrait; margin: 10mm !important; }
+        
+        /* 2. 把所有會撐高版面的東西通通變成 auto */
+        html, body, .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
+            width: auto !important; 
+            height: auto !important; 
+            min-height: 0 !important; 
+            margin: 0 !important; 
+            padding: 0 !important; 
+            background: white !important; 
+            display: block !important;
+            flex: none !important;
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+        }
+        
+        /* 3. 在發票外層加一個保護殼，確保內縮 15mm 呼吸空間 */
+        .print-container { 
+            display: block !important;
+            width: 100% !important; 
+            height: auto !important; 
+            margin: 0 !important; 
+            padding: 15mm !important; /* 強制留白 */
+            box-sizing: border-box !important; 
+        }
+
+        /* 4. 印章去線魔法：加白底、提層級 */
+        img {
+            mix-blend-mode: normal !important;
+            background-color: white !important;
+            border-radius: 50% !important;
+            box-shadow: 0 0 0 10px white !important;
+            position: relative !important;
+            z-index: 99999 !important;
+        }
+    `;
+
     const fullHtml = `
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
             ${baseTag}
             ${styles}
-            <style>
-                /* ★ 1. 恢復空間：設定標準 10mm 邊距 */
-                @page { size: A4 portrait; margin: 10mm; }
-                
-                html, body { 
-                    width: auto !important; 
-                    height: auto !important; 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    background: white !important; 
-                    -webkit-print-color-adjust: exact !important; 
-                    print-color-adjust: exact !important; 
-                    overflow: visible !important;
-                }
-                
-                /* ★ 2. 安全容器：保證不再出現第二張白紙 */
-                .print-container, #print-root { 
-                    display: block !important;
-                    width: 100% !important; 
-                    max-width: 100% !important;
-                    height: auto !important; 
-                    min-height: 0 !important; 
-                    margin: 0 auto !important; 
-                    padding: 5mm !important; /* 內部再加點呼吸空間 */
-                    box-sizing: border-box !important; 
-                    background: white !important; 
-                    position: relative !important; 
-                    overflow: visible !important;
-                    box-shadow: none !important; 
-                    border: none !important; 
-                }
-
-                /* ★ 3. 殺掉所有可能撐破版面導致第二頁的 Tailwind 高度 */
-                .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
-                    min-height: 0 !important; 
-                    height: auto !important; 
-                    flex: none !important; 
-                }
-
-                /* ★ 4. 印章橫線修復：強加實體白底護盾，斬斷表格黑線！ */
-                img {
-                    mix-blend-mode: normal !important; /* 取消色彩穿透 */
-                    background-color: white !important; /* 強制墊上白底 */
-                    border-radius: 50% !important; /* 讓白底變成圓形 */
-                    box-shadow: 0 0 0 10px white !important; /* ★ 往外擴張 10px 白邊，切斷所有靠近的橫線 */
-                    position: relative !important;
-                    z-index: 99999 !important; /* 拉到最高層級 */
-                }
-
-                /* 壓低邊線層級，確保它們乖乖躲在印章底下 */
-                .border-t, .border-b, .border, table, tr, td, th {
-                    position: relative !important;
-                    z-index: 1 !important;
-                }
-                
-                body * { visibility: visible !important; }
-                script { display: none !important; }
-            </style>
+            <style>${printCSS}</style>
         </head>
         <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
             <div class="print-container">
