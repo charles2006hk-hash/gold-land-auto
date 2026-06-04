@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 原生還原版列印引擎 (完美 1 頁 + 12mm 邊距 + 杜絕跑版) ★★★
+// ★★★ 終極完美版列印引擎 (5mm 邊距 + 97% 縮放防切頁) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,47 +1562,39 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定標準 12mm 的完美呼吸邊距 */
-                @page { size: A4 portrait; margin: 12mm !important; }
+                /* ★ 1. 設定小邊距 (5mm)，爭取更多垂直空間給印章 */
+                @page { size: A4 portrait; margin: 5mm !important; }
                 
                 @media print {
-                    /* ★ 2. 將外層鎖死在紙張的「可列印區域」內，並隱藏溢出 (絕對不生出第二頁) */
+                    /* ★ 2. 解除高度鎖定，讓內容自然延展不被硬性剪裁 */
                     html, body { 
-                        width: 100% !important; 
-                        height: 100% !important; 
+                        width: 100% !important;
+                        height: auto !important; 
                         margin: 0 !important; 
                         padding: 0 !important; 
                         background: white !important; 
-                        overflow: hidden !important; 
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important; 
-                        box-sizing: border-box !important;
                     }
                     
-                    .print-container, #print-root { 
+                    /* ★ 3. 核心魔法：左右給 5mm 空間，並將整體等比例微縮小 3% (zoom: 0.97)，保證印章完美塞進第一頁 */
+                    .print-container { 
                         width: 100% !important; 
-                        height: 100% !important; 
-                        max-width: 100% !important;
-                        margin: 0 !important; 
-                        padding: 0 !important; 
+                        margin: 0 auto !important; 
+                        padding: 0 5mm !important; 
                         box-sizing: border-box !important; 
-                        overflow: hidden !important; 
+                        zoom: 0.97 !important; /* 👈 縮小 3%，無痛解決印章溢出到第二頁的問題 */
+                    }
+
+                    #print-root {
                         box-shadow: none !important; 
                         border: none !important; 
+                        border-radius: 0 !important;
                     }
 
-                    /* ★ 3. 解決邊界消失的元凶：防止 w-screen 無視邊距強行撐滿 A4 紙邊緣 */
-                    .w-screen, .w-\\[100vw\\] {
-                        width: 100% !important;
-                        max-width: 100% !important;
-                    }
-
-                    /* ★ 4. 完美保留您原本的 Flex 排版 (保證印章在底部不切線)，只是將高度轉換為 1 頁高 */
-                    .min-h-screen, .h-screen, .h-\\[100dvh\\] { 
-                        min-height: 100% !important; 
-                        height: 100% !important; 
-                        box-sizing: border-box !important;
-                    }
+                    /* ★ 4. 防止 Tailwind 寬高把畫面撐破 */
+                    .w-screen, .w-\\[100vw\\] { width: 100% !important; max-width: 100% !important; }
+                    .min-h-screen, .h-screen, .h-\\[100dvh\\] { min-height: 0 !important; height: auto !important; }
                     
                     body * { visibility: visible !important; }
                     script { display: none !important; }
@@ -1622,7 +1614,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
-
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
