@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版無痕列印引擎 (100%流體適應，防白屏裁切) ★★★
+// ★★★ 終極完美版無痕列印引擎 (100%單頁鎖定，強蓋印章底線) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,48 +1562,51 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 基本安全邊界 */
-                @page { size: A4 portrait; margin: 5mm !important; }
+                /* ★ 1. 空間問題解決：把邊距全部交給實體紙張，容器內部 0 內距，絕不撐破高度！ */
+                @page { size: A4 portrait; margin: 10mm; }
                 
                 html, body { 
                     margin: 0 !important; 
                     padding: 0 !important; 
                     background: white !important; 
-                    width: auto !important; 
+                    width: 100% !important; 
                     height: auto !important; 
-                    display: block !important;
+                    overflow-x: hidden !important; /* 隱藏微小的溢出 */
                     -webkit-print-color-adjust: exact !important; 
                     print-color-adjust: exact !important; 
                 }
                 
-                /* ★ 2. 強制內縮 15mm 留白空間，無懼任何瀏覽器預設值！ */
                 .print-container, #print-root { 
                     display: block !important;
                     width: 100% !important; 
                     max-width: 100% !important;
                     height: auto !important; 
                     min-height: 0 !important; 
-                    margin: 0 auto !important; 
-                    padding: 15mm !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; /* ★ 核心修復：取消 padding，防止總高度超過 A4 產生第二頁 */
                     box-sizing: border-box !important; 
                     background: white !important; 
                     position: relative !important; 
-                    overflow: visible !important;
                     box-shadow: none !important; 
                     border: none !important; 
                     transform: none !important; 
                 }
 
-                /* ★ 3. 修復印章被橫線切斷的問題 (強制加上白底蓋住表格黑線) */
-                img, .mix-blend-multiply {
-                    mix-blend-mode: normal !important;
-                    background-color: white !important;
-                }
-                
-                /* ★ 殺掉所有可能撐破版面導致第二頁空白的 Tailwind 高度類別 */
-                .min-h-screen, .h-screen, .h-full, .min-h-full { 
+                /* ★ 2. 徹底殺掉所有會強迫撐開畫面的 Tailwind 高度與彈性排版 */
+                .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
                     min-height: 0 !important; 
                     height: auto !important; 
+                    flex: none !important; /* 終止彈性延展 */
+                }
+
+                /* ★ 3. 印章橫線修復：強加白底、擴張邊界、拉高層級，絕對斬斷底下表格線！ */
+                .mix-blend-multiply, img[src*="stamp"] {
+                    mix-blend-mode: normal !important; /* 取消色彩透視 */
+                    background-color: white !important; /* 強制塞一塊白底 */
+                    border-radius: 50% !important; /* 變成圓形白底 */
+                    box-shadow: 0 0 0 10px white !important; /* ★ 往外擴張 10px 白邊，吃掉所有靠近的橫線 */
+                    position: relative !important;
+                    z-index: 9999 !important; /* ★ 強制浮在所有表格之上 */
                 }
                 
                 body * { visibility: visible !important; }
@@ -1623,6 +1626,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
