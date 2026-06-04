@@ -69,7 +69,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [showTerms, setShowTerms] = useState(true);
     const [showAttachments, setShowAttachments] = useState(true);
     const [showStampAndSig, setShowStampAndSig] = useState(true); 
-
+    const [showPhotos, setShowPhotos] = useState(true); // ★ 新增：相片列印開關
+    const [newItemDate, setNewItemDate] = useState(''); // ★ 新增：代辦事項到期日
     const [filterType, setFilterType] = useState<string>('All');
     const [docSearchTerm, setDocSearchTerm] = useState('');
     const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
@@ -305,8 +306,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const addItem = () => {
         if (!newItemDesc || !newItemAmount) return;
-        setDocItems([...docItems, { id: Date.now().toString(), desc: newItemDesc, amount: Number(newItemAmount), isSelected: true }]);
-        setNewItemDesc(''); setNewItemAmount('');
+        // ★ 如果有填到期日，自動將它無縫組合進描述裡，不破壞資料庫結構！
+        const finalDesc = newItemDate ? `${newItemDesc} (到期日: ${newItemDate})` : newItemDesc;
+        setDocItems([...docItems, { id: Date.now().toString(), desc: finalDesc, amount: Number(newItemAmount), isSelected: true }]);
+        setNewItemDesc(''); setNewItemAmount(''); setNewItemDate(''); // 清空
     };
     
     const toggleItem = (id: string) => setDocItems((prev: any[]) => prev.map((item: any) => item.id === id ? { ...item, isSelected: !item.isSelected } : item));
@@ -493,10 +496,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     // ★★★ 確保這裡緊接在 handleCalculateLoan 的 }; 下方 ★★★
 
     const LivePreview = () => {
-        const isBill = selectedDocType === 'invoice' || selectedDocType === 'receipt';
+        // ★ 核心分類：判斷目前的單據類型
+        const isSalesInvoice = selectedDocType === 'invoice';
+        const isServiceInvoice = selectedDocType === 'service_invoice';
+        const isReceipt = selectedDocType === 'receipt';
+        const isBill = isSalesInvoice || isServiceInvoice || isReceipt;
         const isQuotation = selectedDocType === 'quotation';
         
-        // ★ 核心邏輯：精準計算實時總價與尾數
         const price = Number(formData.price) || 0;
         const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
         const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0);
@@ -513,7 +519,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' }, 
             'consignment_contract': { en: 'VEHICLE CONSIGNMENT AGREEMENT', ch: '汽車寄賣合約' }, 
             'quotation': { en: 'QUOTATION', ch: '報價單' }, 
-            'invoice': { en: 'INVOICE', ch: '發票' }, 
+            'invoice': { en: 'SALES INVOICE', ch: '車輛銷售發票' }, 
+            'service_invoice': { en: 'SERVICE INVOICE', ch: '服務/維修發票' },
             'receipt': { en: 'OFFICIAL RECEIPT', ch: '正式收據' } 
         };
         const t = titleMap[selectedDocType] || titleMap['sales_contract'];
@@ -522,16 +529,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
-        // ★★★ 新增：動態自適應寬度監聽器 ★★★
-        const [containerWidth, setContainerWidth] = useState(380); // 預設安全寬度
+        const [containerWidth, setContainerWidth] = useState(380);
         const containerRef = useRef<HTMLDivElement>(null);
 
         useEffect(() => {
             if (!containerRef.current) return;
-            // 監聽右側預覽外框的真實寬度
             const resizeObserver = new ResizeObserver((entries) => {
                 for (let entry of entries) {
-                    // 扣掉左右內距 padding 32px
                     const width = entry.contentRect.width - 32;
                     if (width > 10) setContainerWidth(width);
                 }
@@ -540,33 +544,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             return () => resizeObserver.disconnect();
         }, []);
 
-        // 動態計算完美縮放比例 (A4 標準像素寬度為 794px)
-        const dynamicScale = Math.min(containerWidth / 794, 1); // 最高不大於原尺寸 1
+        const dynamicScale = Math.min(containerWidth / 794, 1);
 
         return (
-            // ★ 外層容器：flex 完美置中，並徹底關閉左右滾動條
-            <div 
-                ref={containerRef}
-                className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start"
-            >
-                {/* ★ 智慧外殼：根據動態比例精準算出高度佔位，防止底部灰色區塊穿幫 */}
-                <div 
-                    className="relative flex-shrink-0 transition-all duration-200" 
-                    style={{ 
-                        width: `${794 * dynamicScale}px`, 
-                        height: `${1123 * dynamicScale}px` 
-                    }}
-                >
-                    {/* ★ 智慧內框：使用計算出來的 dynamicScale 進行絕對像素無損縮放 */}
-                    <div 
-                        className="bg-white shadow-2xl overflow-hidden box-border absolute top-0 left-0"
-                        style={{ 
-                            width: '794px', 
-                            height: '1123px',
-                            transform: `scale(${dynamicScale})`,
-                            transformOrigin: 'top left'
-                        }}
-                    >
+            <div ref={containerRef} className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start">
+                <div className="relative flex-shrink-0 transition-all duration-200" style={{ width: `${794 * dynamicScale}px`, height: `${1123 * dynamicScale}px` }}>
+                    <div className="bg-white shadow-2xl overflow-hidden box-border absolute top-0 left-0" style={{ width: '794px', height: '1123px', transform: `scale(${dynamicScale})`, transformOrigin: 'top left' }}>
                         <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border">
                             <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
                                 <div className="flex items-center gap-3 min-w-0">
@@ -580,7 +563,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 <div className="text-right flex-shrink-0 pl-2">
                                     <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
                                     <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
-                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? `${selectedDocType === 'sales_contract' ? 'SAL' : selectedDocType === 'invoice' ? 'INV' : selectedDocType === 'quotation' ? 'QUO' : 'DOC'}-${displayDate.replace(/\//g, '')}-${docId.slice(0,6).toUpperCase()}` : 'PREVIEW-DRAFT'}</div>
+                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? `${selectedDocType === 'sales_contract' ? 'SAL' : isSalesInvoice ? 'INV' : isServiceInvoice ? 'SRV' : selectedDocType === 'quotation' ? 'QUO' : 'DOC'}-${displayDate.replace(/\//g, '')}-${docId.slice(0,6).toUpperCase()}` : 'PREVIEW-DRAFT'}</div>
                                     <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
                                 </div>
                             </div>
@@ -606,7 +589,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </div>
                                     </div>
 
-                                    {formData.contractPhotos.length > 0 && (
+                                    {/* ★ 動態控制相片 */}
+                                    {showPhotos && formData.contractPhotos.length > 0 && (
                                         <div className="mb-3">
                                             <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
                                                 {formData.contractPhotos.map((url: string, idx: number) => (
@@ -647,12 +631,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1.5 font-bold pl-4">Less: {item.label}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(item.amount)}</td></tr>
                                                 ))}
                                                 <tr className="bg-red-50/50 font-black"><td className="border p-1.5 uppercase text-[11px]">Balance Due (總結餘/尾數)</td><td className="border p-1.5 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr>
-                                                
                                                 {formData.isFinance && (
                                                     <tr className="bg-cyan-50/30 text-[10px]">
-                                                        <td colSpan={2} className="border p-1.5 text-cyan-800">
-                                                            <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
-                                                        </td>
+                                                        <td colSpan={2} className="border p-1.5 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
                                                     </tr>
                                                 )}
                                             </tbody>
@@ -660,30 +641,90 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     </div>
                                 </>
                             ) : (
-                                <table className="w-full text-[10px] border-collapse mb-6">
-                                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
-                                    <tbody>
-                                        <tr className="border-b"><td className="p-2 font-bold text-purple-800">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
-                                        {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                            <tr key={i} className="border-b"><td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
-                                        ))}
-                                        {depositItems.map((item: any, idx: number) => (
-                                            <tr key={`dep-${idx}`} className="border-b"><td className="p-2 font-bold text-slate-600">Less: {item.label}{selectedDocType === 'receipt' && idx === depositItems.length - 1 && <span className="ml-2 text-gray-400 font-normal">[{formData.paymentMethod}]</span>}</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">{formatCurrency(item.amount)}</td></tr>
-                                        ))}
-                                        {formData.isFinance && (
-                                            <tr className="bg-cyan-50/30 text-[10px]">
-                                                <td colSpan={2} className="p-2 text-cyan-800">
-                                                    <span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span>
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr></tfoot>
-                                </table>
-                            )}
+                                <>
+                                    {/* ★ 收據專屬極簡排版 */}
+                                    {isReceipt ? (
+                                        <div className="border-2 border-slate-800 p-6 mb-6 bg-slate-50/30 relative">
+                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
+                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">RECEIVED FROM<br/><span className="text-[10px] text-slate-500 font-medium">茲收到客戶</span></div>
+                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-bold text-[14px] text-slate-900">{formData.customerName || '_________________'}</div>
+                                            </div>
+                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
+                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">THE SUM OF HKD<br/><span className="text-[10px] text-slate-500 font-medium">款項總額</span></div>
+                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-mono font-black text-[18px] text-blue-800">{formatCurrency(deposit)}</div>
+                                            </div>
+                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
+                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">BEING PAYMENT OF<br/><span className="text-[10px] text-slate-500 font-medium">支付項目</span></div>
+                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-bold text-slate-800 leading-relaxed">{depositItems.map((d: any) => d.label).join(', ')}</div>
+                                            </div>
+                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
+                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">PAYMENT METHOD<br/><span className="text-[10px] text-slate-500 font-medium">付款方式</span></div>
+                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-mono font-bold text-slate-800">{formData.paymentMethod}</div>
+                                            </div>
+                                            <div className="grid grid-cols-12 gap-4 text-[12px]">
+                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">VEHICLE REF.<br/><span className="text-[10px] text-slate-500 font-medium">相關車輛</span></div>
+                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 text-slate-800 font-bold">{formData.regMark || 'TBC'} - {formData.make} {formData.model} <span className="font-mono text-[10px] text-slate-500 ml-1">(VIN: {formData.chassisNo || 'N/A'})</span></div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* 發票 (賣車或服務) 共同精簡車輛區塊 */}
+                                            <div className="mb-4">
+                                                <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Vehicle Reference (車輛資料)</div>
+                                                <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                                    <tbody>
+                                                        <tr><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Reg. No. (車牌)</td><td className="border p-1.5 font-mono font-bold w-[30%] text-[11px]">{formData.regMark || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Make/Model</td><td className="border p-1.5 w-[30%] text-[11px] font-bold">{formData.make} {formData.model}</td></tr>
+                                                        <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No. (車身)</td><td colSpan={3} className="border p-1.5 font-mono">{formData.chassisNo || 'N/A'}</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            
+                                            {/* ★ 動態控制相片 */}
+                                            {showPhotos && formData.contractPhotos.length > 0 && (
+                                                <div className="mb-4 bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
+                                                    {formData.contractPhotos.map((url: string, idx: number) => (
+                                                        <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                                    ))}
+                                                </div>
+                                            )}
 
-                            {selectedDocType === 'receipt' && (
-                                <div className="mb-6 p-2 border border-slate-300 bg-slate-50 rounded"><span className="text-[10px] font-bold">Payment Method:</span> <span className="text-sm font-mono ml-2">{formData.paymentMethod}</span></div>
+                                            {/* ★ 服務發票 vs 賣車發票 費用區塊區別 */}
+                                            {isServiceInvoice ? (
+                                                <table className="w-full text-[10px] border-collapse mb-6">
+                                                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Service / Description (服務項目與描述)</th><th className="p-2 text-right">Amount (HKD)</th></tr></thead>
+                                                    <tbody>
+                                                        {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
+                                                            <tr key={i} className="border-b"><td className="p-2 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-2 text-right font-mono text-[12px]">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                        ))}
+                                                        {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
+                                                            <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-2 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">- {formatCurrency(item.amount)}</td></tr>
+                                                        ))}
+                                                    </tbody>
+                                                    <tfoot><tr className="bg-slate-100 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Total Due (應付總額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(extrasTotal - deposit)}</td></tr></tfoot>
+                                                </table>
+                                            ) : (
+                                                <table className="w-full text-[10px] border-collapse mb-6">
+                                                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
+                                                    <tbody>
+                                                        <tr className="border-b"><td className="p-2 font-bold text-purple-800">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
+                                                        {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
+                                                            <tr key={i} className="border-b"><td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                        ))}
+                                                        {depositItems.map((item: any, idx: number) => (
+                                                            <tr key={`dep-${idx}`} className="border-b"><td className="p-2 font-bold text-slate-600">Less: {item.label}</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">{formatCurrency(item.amount)}</td></tr>
+                                                        ))}
+                                                        {formData.isFinance && (
+                                                            <tr className="bg-cyan-50/30 text-[10px]">
+                                                                <td colSpan={2} className="p-2 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr></tfoot>
+                                                </table>
+                                            )}
+                                        </>
+                                    )}
+                                </>
                             )}
 
                             {!isBill && showTerms && (
@@ -798,7 +839,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 {filteredDocHistory.map((doc: any) => {
                                     const typeMap: Record<string, string> = {
                                         'sales_contract': '買賣合約', 'purchase_contract': '收車合約',
-                                        'consignment_contract': '寄賣合約', 'quotation': '報價單', 'invoice': '發票', 'receipt': '收據'
+                                        'consignment_contract': '寄賣合約', 'quotation': '報價單', 'invoice': '賣車發票', 'service_invoice': '服務發票', 'receipt': '收據'
                                     };
                                     const typeName = typeMap[doc.type] || doc.type;
                                     const summaryText = doc.formData 
@@ -934,8 +975,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                         
-                        <div className="grid grid-cols-3 md:grid-cols-6 gap-1 bg-slate-100 p-1 rounded-lg">
-                            {[{id:'sales_contract',l:'賣車'}, {id:'purchase_contract',l:'收車'}, {id:'consignment_contract',l:'寄賣'}, {id:'quotation',l:'報價單'}, {id:'invoice',l:'發票'}, {id:'receipt',l:'收據'}].map(t=>(
+                        <div className="grid grid-cols-3 md:grid-cols-7 gap-1 bg-slate-100 p-1 rounded-lg">
+                            {[{id:'sales_contract',l:'賣車'}, {id:'purchase_contract',l:'收車'}, {id:'consignment_contract',l:'寄賣'}, {id:'quotation',l:'報價單'}, {id:'invoice',l:'賣車發票'}, {id:'service_invoice',l:'服務發票'}, {id:'receipt',l:'收據'}].map(t=>(
                                 <button key={t.id} onClick={()=>setSelectedDocType(t.id as any)} className={`py-1.5 rounded text-[10px] font-bold transition-all ${selectedDocType===t.id?'bg-white shadow-sm text-blue-700':'text-slate-500 hover:bg-slate-200'}`}>{t.l}</button>
                             ))}
                         </div>
@@ -1081,7 +1122,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                             <div className="p-3 bg-white rounded-xl border border-slate-300 shadow-sm mt-3">
                                 <div className="flex justify-between items-center mb-2">
-                                    <div className="text-[10px] font-bold text-slate-600">單據相片 (點擊選取，最多選5張)</div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-[10px] font-bold text-slate-600">單據相片 (點擊選取)</div>
+                                        <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-2 py-1 rounded">
+                                            <input type="checkbox" checked={showPhotos} onChange={e => setShowPhotos(e.target.checked)} className="mr-1.5 accent-blue-600"/> 列印顯示相片
+                                        </label>
+                                    </div>
                                     <button 
                                         type="button" 
                                         onClick={() => fetchVehiclePhotos(selectedCarId || '')} 
@@ -1280,9 +1326,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     {docItems.length === 0 && <div className="text-gray-400 text-xs text-center italic py-4 border border-dashed rounded-lg">無額外項目</div>}
                                 </div>
                                 <div className="flex gap-2 pt-3 border-t border-green-200">
-                                    <input value={newItemDesc} onChange={e=>setNewItemDesc(e.target.value)} placeholder="新增項目 (如: 代辦費)..." className="flex-1 text-xs border rounded-lg p-2 outline-none focus:ring-2 ring-green-200"/>
+                                    <input value={newItemDesc} onChange={e=>setNewItemDesc(e.target.value)} placeholder="新增項目 (如: 驗車/代辦)..." className="flex-1 text-xs border rounded-lg p-2 outline-none focus:ring-2 ring-green-200"/>
+                                    <input type="date" value={newItemDate} onChange={e=>setNewItemDate(e.target.value)} title="到期日 (選填)" className="w-28 text-[10px] border rounded-lg p-2 outline-none focus:ring-2 ring-green-200 text-slate-500 cursor-pointer"/>
                                     <input type="number" value={newItemAmount} onChange={e=>setNewItemAmount(e.target.value)} placeholder="$ 金額" className="w-20 text-xs border rounded-lg p-2 outline-none font-mono text-right focus:ring-2 ring-green-200"/>
-                                    <button type="button" onClick={addItem} className="bg-green-600 text-white px-3 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm active:scale-95 transition-transform"><Plus size={16}/></button>
+                                    <button type="button" onClick={addItem} className="bg-green-600 text-white px-3 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm"><Plus size={16}/></button>
                                 </div>
                             </div>
 
