@@ -1544,8 +1544,8 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
     );
 };
 
-/// ------------------------------------------------------------------
-// ★★★ 終極還原版列印引擎 (保留原始完美排版 + 完美單頁鎖死) ★★★
+// ------------------------------------------------------------------
+// ★★★ 終極還原版列印引擎 (單頁鎖死 + 完美左右邊界) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,11 +1562,11 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定 8mm 安全邊距，保留漂亮的呼吸空間 */
+                /* ★ 1. 設定安全紙張邊界 */
                 @page { size: A4 portrait; margin: 8mm; }
                 
                 @media print {
-                    /* ★ 2. 將網頁的 100vh 高度精準轉換為紙張的 100% 高度，並隱藏微小溢出，徹底消滅空白第二頁 */
+                    /* ★ 2. 100% 高度 + 隱藏溢出 = 徹底消滅空白第二頁 */
                     html, body { 
                         width: 100% !important; 
                         height: 100% !important; 
@@ -1578,22 +1578,27 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                         overflow: hidden !important; 
                     }
                     
-                    .print-container, #print-root { 
+                    /* ★ 3. 恢復兩邊空間！給外層容器強制加上 15mm 的左右內距 */
+                    .print-container { 
                         width: 100% !important; 
                         height: 100% !important; 
-                        margin: 0 !important; 
-                        padding: 0 !important; 
+                        margin: 0 auto !important; 
+                        padding: 5mm 15mm !important; /* 👈 左右空間在這裡回來了！ */
                         box-sizing: border-box !important; 
                         overflow: hidden !important; 
-                        box-shadow: none !important; 
-                        border: none !important; 
                     }
 
-                    /* ★ 3. 核心關鍵：只轉換螢幕高度，絕對不干擾 Flexbox (.flex-1) 原本的排版！
-                             這樣印章就不會再掉下來撞到橫線了！ */
+                    /* ★ 4. 消除內部容器的多餘陰影，但保留其原本的排版 */
+                    #print-root {
+                        box-shadow: none !important;
+                        border: none !important;
+                    }
+
+                    /* ★ 5. 保護高度，但不干擾 Flex 排版 (保證印章不移位，不會切線) */
                     .min-h-screen, .h-screen, .h-[100dvh] { 
                         min-height: 100% !important; 
                         height: 100% !important; 
+                        box-sizing: border-box !important;
                     }
                     
                     body * { visibility: visible !important; }
