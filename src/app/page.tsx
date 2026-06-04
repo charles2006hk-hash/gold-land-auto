@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 老闆特調版列印引擎 (整體縮小 95% = 完美留白 + 絕對單頁) ★★★
+// ★★★ 極簡還原版 (保留原汁原味排版，僅拔除撐出第二頁的元凶) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,62 +1562,29 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 徹底關閉瀏覽器預設邊距，不讓它干預我們 */
-                @page { size: A4 portrait; margin: 0 !important; }
+                /* ★ 1. 保留原本最完美的 10mm 邊界 */
+                @page { size: A4 portrait; margin: 10mm; }
                 
-                @media print {
-                    /* ★ 2. 鎖定背景畫布為精準的 A4 實體尺寸 */
-                    html, body { 
-                        width: 210mm !important; 
-                        height: 297mm !important; 
-                        margin: 0 !important; 
-                        padding: 0 !important; 
-                        background: white !important; 
-                        -webkit-print-color-adjust: exact !important; 
-                        print-color-adjust: exact !important; 
-                        overflow: hidden !important; 
-                    }
-                    
-                    /* ★ 3. 老闆的聰明妙招：將內容等比例縮小 95%！ */
-                    .print-container { 
-                        width: 100% !important; 
-                        height: 100% !important; 
-                        margin: 0 !important; 
-                        padding: 0 !important; 
-                        box-sizing: border-box !important; 
-                        overflow: hidden !important; 
-                        
-                        /* 關鍵魔法：縮小 95%，讓四周自然產生完美的留白，且絕對不會超出 1 頁！ */
-                        transform: scale(0.95) !important; 
-                        transform-origin: center top !important; /* 從上方正中央開始縮小 */
-                    }
-
-                    /* ★ 4. 解除 Tailwind 的滿版限制，防止內部強行撐破 */
-                    .w-screen, .w-\\[100vw\\] {
-                        width: 100% !important;
-                        max-width: 100% !important;
-                    }
-                    .min-h-screen, .h-screen, .h-\\[100dvh\\] { 
-                        min-height: 0 !important; 
-                        height: auto !important; 
-                    }
-                    
-                    /* ★ 5. 確保發票外框乾淨無陰影 */
-                    #print-root {
-                        box-shadow: none !important;
-                        border: none !important;
-                        margin: 0 auto !important;
-                    }
-                    
-                    body * { visibility: visible !important; }
-                    script { display: none !important; }
+                /* ★ 2. 這是解決「空白第二頁」的唯一關鍵：拔除所有強制高度 */
+                html, body {
+                    height: max-content !important; /* 讓高度剛好等於內容，絕不亂撐 */
+                    min-height: 0 !important;
+                    background: white !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
                 }
+                
+                /* ★ 3. 把 Tailwind 中會強制撐開畫面的類別失效，防止它溢出到第二頁 */
+                .min-h-screen, .h-screen, .h-full, .min-h-full, .min-h-\\[100dvh\\] {
+                    min-height: 0 !important;
+                    height: auto !important;
+                }
+
+                /* 不做任何 img 或容器的干擾，讓您的完美排版自己發揮！ */
             </style>
         </head>
         <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
-            <div class="print-container">
-                ${htmlContent}
-            </div>
+            ${htmlContent}
         </body>
         </html>
     `;
