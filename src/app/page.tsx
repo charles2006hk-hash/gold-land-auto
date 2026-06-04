@@ -1551,8 +1551,8 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
-
-    // 核心邏輯：我們把所有的排版 CSS 放在一個獨立的字串裡，保證絕對不會有 <style><style> 的錯誤
+ 
+    // 核心邏輯：純淨版列印排版 CSS
     const printCSS = `
         /* 1. 給紙張 1 公分的邊界 */
         @page { size: A4 portrait; margin: 10mm !important; }
@@ -1580,18 +1580,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             padding: 15mm !important; /* 強制留白 */
             box-sizing: border-box !important; 
         }
-
-        /* 4. 印章去線魔法：加白底、提層級 */
-        img {
-            mix-blend-mode: normal !important;
-            background-color: white !important;
-            border-radius: 50% !important;
-            box-shadow: 0 0 0 10px white !important;
-            position: relative !important;
-            z-index: 99999 !important;
-        }
     `;
-
     const fullHtml = `
         <!DOCTYPE html>
         <html>
