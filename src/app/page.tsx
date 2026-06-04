@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 實體 A4 鎖定版列印引擎 (絕對不貼邊、絕對單頁、不切印章) ★★★
+// ★★★ 老闆特調版列印引擎 (整體縮小 95% = 完美留白 + 絕對單頁) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,11 +1562,11 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 把瀏覽器的邊界全部歸零，不讓它插手干預 */
-                @page { size: A4 portrait; margin: 0; }
+                /* ★ 1. 徹底關閉瀏覽器預設邊距，不讓它干預我們 */
+                @page { size: A4 portrait; margin: 0 !important; }
                 
                 @media print {
-                    /* ★ 2. 強制把整張網頁的大小鎖死為精準的 A4 實體尺寸 (210mm x 297mm) */
+                    /* ★ 2. 鎖定背景畫布為精準的 A4 實體尺寸 */
                     html, body { 
                         width: 210mm !important; 
                         height: 297mm !important; 
@@ -1576,38 +1576,37 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important; 
                         overflow: hidden !important; 
-                        box-sizing: border-box !important;
                     }
                     
-                    /* ★ 3. 核心魔法：在這個 A4 框內，強制往內縮 10mm！絕對不可能貼邊！ */
+                    /* ★ 3. 老闆的聰明妙招：將內容等比例縮小 95%！ */
                     .print-container { 
-                        width: 210mm !important; 
-                        height: 297mm !important; 
+                        width: 100% !important; 
+                        height: 100% !important; 
                         margin: 0 !important; 
-                        padding: 10mm !important; /* 👈 四周 1公分的完美呼吸空間 */
+                        padding: 0 !important; 
                         box-sizing: border-box !important; 
-                        overflow: hidden !important; /* 👈 切掉任何多餘的部分，保證不生出第二頁 */
+                        overflow: hidden !important; 
+                        
+                        /* 關鍵魔法：縮小 95%，讓四周自然產生完美的留白，且絕對不會超出 1 頁！ */
+                        transform: scale(0.95) !important; 
+                        transform-origin: center top !important; /* 從上方正中央開始縮小 */
                     }
 
-                    /* ★ 4. 把所有想要撐破螢幕的 Tailwind 元件打回原形 */
+                    /* ★ 4. 解除 Tailwind 的滿版限制，防止內部強行撐破 */
                     .w-screen, .w-\\[100vw\\] {
                         width: 100% !important;
                         max-width: 100% !important;
                     }
-
                     .min-h-screen, .h-screen, .h-\\[100dvh\\] { 
-                        min-height: 100% !important; 
-                        height: 100% !important; 
-                        box-sizing: border-box !important;
+                        min-height: 0 !important; 
+                        height: auto !important; 
                     }
                     
-                    /* ★ 5. 確保發票本身的框不會帶有陰影或破壞邊界 */
+                    /* ★ 5. 確保發票外框乾淨無陰影 */
                     #print-root {
                         box-shadow: none !important;
                         border: none !important;
-                        border-radius: 0 !important;
-                        width: 100% !important;
-                        height: 100% !important;
+                        margin: 0 auto !important;
                     }
                     
                     body * { visibility: visible !important; }
