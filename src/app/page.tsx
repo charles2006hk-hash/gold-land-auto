@@ -1562,8 +1562,8 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 拔除 !important，讓瀏覽器正確識別紙張 */
-                @page { size: A4 portrait; margin: 5mm; }
+                /* ★ 1. 設定標準 10mm 邊距 (解決空間太少的問題) */
+                @page { size: A4 portrait; margin: 10mm; }
                 
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
@@ -1574,7 +1574,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 
-                /* ★ 核心修復：把 5mm 安全邊距強加在這裡，並設定 block 防止 Flexbox 切割印章 */
+                /* ★ 2. 強制容器內距，雙重保證邊界 */
                 .print-container, #print-root { 
                     display: block !important;
                     width: 100% !important; 
@@ -1588,6 +1588,14 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     overflow: visible !important;
                     box-shadow: none !important; border: none !important; 
                     transform: none !important; 
+                }
+
+                /* ★ 3. 修復印章被橫線切斷的問題 (加上白色圓底蓋住黑線) */
+                .mix-blend-multiply {
+                    mix-blend-mode: normal !important;
+                    background-color: white !important;
+                    border-radius: 50% !important;
+                    box-shadow: 0 0 6px white !important; /* 邊緣柔化過渡 */
                 }
                 
                 /* ★ 殺掉所有可能撐破版面導致第二頁空白的 Tailwind 高度類別 */
