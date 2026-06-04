@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極左右留白 + 單頁鎖定版 (絕不跑版、不切印章) ★★★
+// ★★★ 原生還原版列印引擎 (完美 1 頁 + 12mm 邊距 + 杜絕跑版) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,11 +1562,11 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 頁面設定：上下留 8mm 邊界，左右設為 0 交給下方容器控制 */
-                @page { size: A4 portrait; margin: 8mm 0 !important; }
+                /* ★ 1. 設定標準 12mm 的完美呼吸邊距 */
+                @page { size: A4 portrait; margin: 12mm !important; }
                 
                 @media print {
-                    /* ★ 2. 鎖定單頁高度，像剪刀一樣把多餘的溢出空白剪掉，保證不生出第二頁 */
+                    /* ★ 2. 將外層鎖死在紙張的「可列印區域」內，並隱藏溢出 (絕對不生出第二頁) */
                     html, body { 
                         width: 100% !important; 
                         height: 100% !important; 
@@ -1576,23 +1576,32 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                         overflow: hidden !important; 
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important; 
+                        box-sizing: border-box !important;
                     }
                     
-                    /* ★ 3. 完美左右空間：給外層容器強制加上 12mm 的左右內距 */
-                    .print-container { 
+                    .print-container, #print-root { 
                         width: 100% !important; 
                         height: 100% !important; 
-                        margin: 0 auto !important; 
-                        padding: 0 12mm !important; /* 👈 關鍵：左右各保留 1.2 公分呼吸空間 */
+                        max-width: 100% !important;
+                        margin: 0 !important; 
+                        padding: 0 !important; 
                         box-sizing: border-box !important; 
                         overflow: hidden !important; 
+                        box-shadow: none !important; 
+                        border: none !important; 
                     }
 
-                    /* ★ 4. 清除陰影，但絕對不碰內部 Flex 或高度，讓印章和排版保持最完美的原始狀態！ */
-                    #print-root {
-                        box-shadow: none !important;
-                        border: none !important;
-                        border-radius: 0 !important;
+                    /* ★ 3. 解決邊界消失的元凶：防止 w-screen 無視邊距強行撐滿 A4 紙邊緣 */
+                    .w-screen, .w-\\[100vw\\] {
+                        width: 100% !important;
+                        max-width: 100% !important;
+                    }
+
+                    /* ★ 4. 完美保留您原本的 Flex 排版 (保證印章在底部不切線)，只是將高度轉換為 1 頁高 */
+                    .min-h-screen, .h-screen, .h-\\[100dvh\\] { 
+                        min-height: 100% !important; 
+                        height: 100% !important; 
+                        box-sizing: border-box !important;
                     }
                     
                     body * { visibility: visible !important; }
