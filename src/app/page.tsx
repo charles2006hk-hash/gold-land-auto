@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 極簡還原版 (保留原汁原味排版，僅拔除撐出第二頁的元凶) ★★★
+// ★★★ 終極左右留白 + 單頁鎖定版 (絕不跑版、不切印章) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,29 +1562,48 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 保留原本最完美的 10mm 邊界 */
-                @page { size: A4 portrait; margin: 10mm; }
+                /* ★ 1. 頁面設定：上下留 8mm 邊界，左右設為 0 交給下方容器控制 */
+                @page { size: A4 portrait; margin: 8mm 0 !important; }
                 
-                /* ★ 2. 這是解決「空白第二頁」的唯一關鍵：拔除所有強制高度 */
-                html, body {
-                    height: max-content !important; /* 讓高度剛好等於內容，絕不亂撐 */
-                    min-height: 0 !important;
-                    background: white !important;
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }
-                
-                /* ★ 3. 把 Tailwind 中會強制撐開畫面的類別失效，防止它溢出到第二頁 */
-                .min-h-screen, .h-screen, .h-full, .min-h-full, .min-h-\\[100dvh\\] {
-                    min-height: 0 !important;
-                    height: auto !important;
-                }
+                @media print {
+                    /* ★ 2. 鎖定單頁高度，像剪刀一樣把多餘的溢出空白剪掉，保證不生出第二頁 */
+                    html, body { 
+                        width: 100% !important; 
+                        height: 100% !important; 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        background: white !important; 
+                        overflow: hidden !important; 
+                        -webkit-print-color-adjust: exact !important; 
+                        print-color-adjust: exact !important; 
+                    }
+                    
+                    /* ★ 3. 完美左右空間：給外層容器強制加上 12mm 的左右內距 */
+                    .print-container { 
+                        width: 100% !important; 
+                        height: 100% !important; 
+                        margin: 0 auto !important; 
+                        padding: 0 12mm !important; /* 👈 關鍵：左右各保留 1.2 公分呼吸空間 */
+                        box-sizing: border-box !important; 
+                        overflow: hidden !important; 
+                    }
 
-                /* 不做任何 img 或容器的干擾，讓您的完美排版自己發揮！ */
+                    /* ★ 4. 清除陰影，但絕對不碰內部 Flex 或高度，讓印章和排版保持最完美的原始狀態！ */
+                    #print-root {
+                        box-shadow: none !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                    }
+                    
+                    body * { visibility: visible !important; }
+                    script { display: none !important; }
+                }
             </style>
         </head>
         <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
-            ${htmlContent}
+            <div class="print-container">
+                ${htmlContent}
+            </div>
         </body>
         </html>
     `;
