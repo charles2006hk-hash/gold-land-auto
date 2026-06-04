@@ -1524,6 +1524,54 @@ const VehicleFormModal = ({
                             <div className="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-sm w-full">
                                 <h3 className="font-bold text-slate-800 text-base md:text-sm mb-4 flex items-center justify-between">
                                     <div className="flex items-center"><Wrench size={18} className="mr-2 text-slate-600"/> 維修與服務紀錄 (Service Records)</div>
+                                    
+                                    {/* ★ 新增：一鍵將所有未收費的維修項目「分開列出」帶入發票 */}
+                                    {(() => {
+                                        const chargeableItems = (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus !== 'Paid' && Number(m.charge) > 0);
+                                        if (chargeableItems.length > 0) {
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                        
+                                                        // 強制將每一條維修項目變成獨立的一行發票項目
+                                                        const docItems = chargeableItems.map((m: any) => ({
+                                                            id: m.id,
+                                                            desc: `[維修保養] ${m.item} ${m.vendor ? `(${m.vendor})` : ''}`,
+                                                            amount: Number(m.charge) || 0,
+                                                            isSelected: true
+                                                        }));
+
+                                                        onJumpToDoc({
+                                                            id: null,
+                                                            type: 'invoice',
+                                                            vehicleId: v.id,
+                                                            formData: {
+                                                                companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+                                                                companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
+                                                                customerName: v.customerName || '', customerPhone: v.customerPhone || '',
+                                                                customerId: v.customerID || '', customerAddress: v.customerAddress || '',
+                                                                regMark: v.regMark || '',
+                                                                make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
+                                                                price: '0',
+                                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
+                                                                remarks: `車輛維修與保養收費`
+                                                            },
+                                                            checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+                                                            docItems: docItems,
+                                                            depositItems: [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }], showTerms: false
+                                                        });
+                                                    }}
+                                                    className="text-xs bg-indigo-600 text-white border border-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-700 flex items-center font-bold shadow-sm transition-transform active:scale-95"
+                                                >
+                                                    🧾 維修合併發票
+                                                </button>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                 </h3>
                                 
                                 {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
@@ -1588,6 +1636,36 @@ const VehicleFormModal = ({
                                                                 <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
                                                                 {/* ★ 痛點 2 修復：攔截按鈕預設行為 */}
                                                                 <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'chargeStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                                
+                                                                {/* ★ 新增：單獨開單按鈕 (獨立明細，絕對不加總) */}
+                                                                {!isHistory && Number(m.charge) > 0 && (
+                                                                    <button 
+                                                                        type="button" 
+                                                                        onClick={(e) => { 
+                                                                            e.preventDefault(); 
+                                                                            if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                                            onJumpToDoc({
+                                                                                id: null, type: 'invoice', vehicleId: v.id,
+                                                                                formData: {
+                                                                                    companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+                                                                                    companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
+                                                                                    customerName: v.customerName || '', customerPhone: v.customerPhone || '',
+                                                                                    customerId: v.customerID || '', customerAddress: v.customerAddress || '',
+                                                                                    regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
+                                                                                    price: '0',
+                                                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
+                                                                                    remarks: `車輛維修單項收費`
+                                                                                },
+                                                                                docItems: [{ id: m.id, desc: `[維修保養] ${m.item} ${m.vendor ? `(${m.vendor})` : ''}`, amount: Number(m.charge), isSelected: true }],
+                                                                                depositItems: [], showTerms: false
+                                                                            });
+                                                                        }} 
+                                                                        className="px-2 py-0.5 rounded text-[9px] font-bold border bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 shadow-sm transition-colors"
+                                                                        title="為此項目開立獨立發票"
+                                                                    >
+                                                                        🧾 發票
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center border-l pl-2 ml-2">
