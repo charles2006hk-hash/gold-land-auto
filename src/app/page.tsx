@@ -1562,7 +1562,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定標準 10mm 邊距 (解決空間太少的問題) */
+                /* ★ 1. 設定標準 10mm 邊距 (解決邊界太貼的問題) */
                 @page { size: A4 portrait; margin: 10mm; }
                 
                 html, body { 
@@ -1590,12 +1590,12 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                     transform: none !important; 
                 }
 
-                /* ★ 3. 修復印章被橫線切斷的問題 (加上白色圓底蓋住黑線) */
+                /* ★ 3. 修復印章被橫線切斷的問題 (加上白色圓底完美蓋住底下的黑線) */
                 .mix-blend-multiply {
                     mix-blend-mode: normal !important;
                     background-color: white !important;
                     border-radius: 50% !important;
-                    box-shadow: 0 0 6px white !important; /* 邊緣柔化過渡 */
+                    box-shadow: 0 0 6px white !important; 
                 }
                 
                 /* ★ 殺掉所有可能撐破版面導致第二頁空白的 Tailwind 高度類別 */
