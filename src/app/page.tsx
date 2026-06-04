@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極純淨版列印引擎 (單頁鎖定 + 原汁原味印章 + 圖片完美顯示) ★★★
+// ★★★ 返璞歸真版列印引擎 (保留原始排版 + 完美 1 頁鎖死) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,38 +1562,36 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 恢復空間：設定標準 10mm 邊距 */
-                @page { size: A4 portrait; margin: 10mm; }
+                /* ★ 1. 完美 10mm 邊距，保留最初大氣的呼吸空間 */
+                @page { size: A4 portrait; margin: 10mm !important; }
                 
+                /* ★ 2. 徹底殺掉撐破高度的元凶，保證只有 1 頁 */
                 html, body { 
-                    width: auto !important; 
+                    width: 100% !important; 
                     height: auto !important; 
+                    min-height: 0 !important; 
                     margin: 0 !important; 
                     padding: 0 !important; 
                     background: white !important; 
                     -webkit-print-color-adjust: exact !important; 
                     print-color-adjust: exact !important; 
-                    overflow: visible !important;
                 }
                 
-                /* ★ 2. 安全容器：保證不再出現第二張白紙 */
+                /* ★ 3. 容器加上 hidden，切掉任何看不見的 1px 溢出（這就是第二頁白紙的真凶） */
                 .print-container, #print-root { 
                     display: block !important;
                     width: 100% !important; 
-                    max-width: 100% !important;
                     height: auto !important; 
                     min-height: 0 !important; 
-                    margin: 0 auto !important; 
-                    padding: 5mm !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
                     box-sizing: border-box !important; 
-                    background: white !important; 
-                    position: relative !important; 
-                    overflow: visible !important;
+                    overflow: hidden !important; 
                     box-shadow: none !important; 
                     border: none !important; 
                 }
 
-                /* ★ 3. 殺掉所有可能撐破版面導致第二頁的 Tailwind 高度 */
+                /* ★ 4. 強制解除 Tailwind 彈性高度 */
                 .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
                     min-height: 0 !important; 
                     height: auto !important; 
@@ -1617,7 +1615,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
-
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
