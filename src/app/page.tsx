@@ -1544,8 +1544,8 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
     );
 };
 
-// ------------------------------------------------------------------
-// ★★★ 返璞歸真版列印引擎 (保留原始排版 + 完美 1 頁鎖死) ★★★
+/// ------------------------------------------------------------------
+// ★★★ 終極還原版列印引擎 (保留原始完美排版 + 完美單頁鎖死) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,44 +1562,43 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 完美 10mm 邊距，保留最初大氣的呼吸空間 */
-                @page { size: A4 portrait; margin: 10mm !important; }
+                /* ★ 1. 設定 8mm 安全邊距，保留漂亮的呼吸空間 */
+                @page { size: A4 portrait; margin: 8mm; }
                 
-                /* ★ 2. 徹底殺掉撐破高度的元凶，保證只有 1 頁 */
-                html, body { 
-                    width: 100% !important; 
-                    height: auto !important; 
-                    min-height: 0 !important; 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    background: white !important; 
-                    -webkit-print-color-adjust: exact !important; 
-                    print-color-adjust: exact !important; 
-                }
-                
-                /* ★ 3. 容器加上 hidden，切掉任何看不見的 1px 溢出（這就是第二頁白紙的真凶） */
-                .print-container, #print-root { 
-                    display: block !important;
-                    width: 100% !important; 
-                    height: auto !important; 
-                    min-height: 0 !important; 
-                    margin: 0 !important; 
-                    padding: 0 !important; 
-                    box-sizing: border-box !important; 
-                    overflow: hidden !important; 
-                    box-shadow: none !important; 
-                    border: none !important; 
-                }
+                @media print {
+                    /* ★ 2. 將網頁的 100vh 高度精準轉換為紙張的 100% 高度，並隱藏微小溢出，徹底消滅空白第二頁 */
+                    html, body { 
+                        width: 100% !important; 
+                        height: 100% !important; 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        background: white !important; 
+                        -webkit-print-color-adjust: exact !important; 
+                        print-color-adjust: exact !important; 
+                        overflow: hidden !important; 
+                    }
+                    
+                    .print-container, #print-root { 
+                        width: 100% !important; 
+                        height: 100% !important; 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        box-sizing: border-box !important; 
+                        overflow: hidden !important; 
+                        box-shadow: none !important; 
+                        border: none !important; 
+                    }
 
-                /* ★ 4. 強制解除 Tailwind 彈性高度 */
-                .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
-                    min-height: 0 !important; 
-                    height: auto !important; 
-                    flex: none !important; 
+                    /* ★ 3. 核心關鍵：只轉換螢幕高度，絕對不干擾 Flexbox (.flex-1) 原本的排版！
+                             這樣印章就不會再掉下來撞到橫線了！ */
+                    .min-h-screen, .h-screen, .h-[100dvh] { 
+                        min-height: 100% !important; 
+                        height: 100% !important; 
+                    }
+                    
+                    body * { visibility: visible !important; }
+                    script { display: none !important; }
                 }
-                
-                body * { visibility: visible !important; }
-                script { display: none !important; }
             </style>
         </head>
         <body onload="setTimeout(() => window.print(), 800)" onafterprint="window.close()">
@@ -1615,6 +1614,7 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
