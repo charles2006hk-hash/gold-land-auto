@@ -1562,40 +1562,42 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定標準 10mm 邊距 (解決邊界太貼的問題) */
-                @page { size: A4 portrait; margin: 10mm; }
+                /* ★ 1. 基本安全邊界 */
+                @page { size: A4 portrait; margin: 5mm !important; }
                 
                 html, body { 
-                    margin: 0 !important; padding: 0 !important; 
+                    margin: 0 !important; 
+                    padding: 0 !important; 
                     background: white !important; 
                     width: auto !important; 
                     height: auto !important; 
                     display: block !important;
-                    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
+                    -webkit-print-color-adjust: exact !important; 
+                    print-color-adjust: exact !important; 
                 }
                 
-                /* ★ 2. 強制容器內距，雙重保證邊界 */
+                /* ★ 2. 強制內縮 15mm 留白空間，無懼任何瀏覽器預設值！ */
                 .print-container, #print-root { 
                     display: block !important;
                     width: 100% !important; 
                     max-width: 100% !important;
-                    height: auto !important; min-height: 0 !important; 
-                    margin: 0 !important; 
-                    padding: 5mm !important; 
+                    height: auto !important; 
+                    min-height: 0 !important; 
+                    margin: 0 auto !important; 
+                    padding: 15mm !important; 
                     box-sizing: border-box !important; 
                     background: white !important; 
                     position: relative !important; 
                     overflow: visible !important;
-                    box-shadow: none !important; border: none !important; 
+                    box-shadow: none !important; 
+                    border: none !important; 
                     transform: none !important; 
                 }
 
-                /* ★ 3. 修復印章被橫線切斷的問題 (加上白色圓底完美蓋住底下的黑線) */
-                .mix-blend-multiply {
+                /* ★ 3. 修復印章被橫線切斷的問題 (強制加上白底蓋住表格黑線) */
+                img, .mix-blend-multiply {
                     mix-blend-mode: normal !important;
                     background-color: white !important;
-                    border-radius: 50% !important;
-                    box-shadow: 0 0 6px white !important; 
                 }
                 
                 /* ★ 殺掉所有可能撐破版面導致第二頁空白的 Tailwind 高度類別 */
@@ -1621,7 +1623,6 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
-
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
