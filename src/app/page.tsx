@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極版列印引擎 (單頁鎖死 + 各保留 5mm 完美邊界) ★★★
+// ★★★ 實體 A4 鎖定版列印引擎 (絕對不貼邊、絕對單頁、不切印章) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,14 +1562,14 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定實體紙張安全邊距 (各保留 5mm) */
-                @page { size: A4 portrait; margin: 5mm; }
+                /* ★ 1. 把瀏覽器的邊界全部歸零，不讓它插手干預 */
+                @page { size: A4 portrait; margin: 0; }
                 
                 @media print {
-                    /* ★ 2. 100% 高度 + 隱藏溢出 = 徹底消滅空白第二頁 */
+                    /* ★ 2. 強制把整張網頁的大小鎖死為精準的 A4 實體尺寸 (210mm x 297mm) */
                     html, body { 
-                        width: 100% !important; 
-                        height: 100% !important; 
+                        width: 210mm !important; 
+                        height: 297mm !important; 
                         margin: 0 !important; 
                         padding: 0 !important; 
                         background: white !important; 
@@ -1579,35 +1579,35 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                         box-sizing: border-box !important;
                     }
                     
-                    /* ★ 3. 雙重保護：容器強制加上 5mm 內距，保證文字不貼邊 */
+                    /* ★ 3. 核心魔法：在這個 A4 框內，強制往內縮 10mm！絕對不可能貼邊！ */
                     .print-container { 
-                        width: 100% !important; 
-                        height: 100% !important; 
-                        margin: 0 auto !important; 
-                        padding: 5mm !important; /* 👈 關鍵：四周各保留 5mm 空間 */
+                        width: 210mm !important; 
+                        height: 297mm !important; 
+                        margin: 0 !important; 
+                        padding: 10mm !important; /* 👈 四周 1公分的完美呼吸空間 */
                         box-sizing: border-box !important; 
-                        overflow: hidden !important; 
+                        overflow: hidden !important; /* 👈 切掉任何多餘的部分，保證不生出第二頁 */
                     }
 
-                    /* ★ 4. 擊殺邊界消失的元凶：防止 100vw (螢幕寬度) 撐破邊距！ */
+                    /* ★ 4. 把所有想要撐破螢幕的 Tailwind 元件打回原形 */
                     .w-screen, .w-\\[100vw\\] {
                         width: 100% !important;
                         max-width: 100% !important;
                     }
 
-                    /* ★ 5. 保護高度，但不干擾 Flex 排版 (保證印章不移位) */
-                    .min-h-screen, .h-screen, .h-[100dvh] { 
+                    .min-h-screen, .h-screen, .h-\\[100dvh\\] { 
                         min-height: 100% !important; 
                         height: 100% !important; 
                         box-sizing: border-box !important;
                     }
                     
-                    /* 取消多餘的陰影與圓角 */
+                    /* ★ 5. 確保發票本身的框不會帶有陰影或破壞邊界 */
                     #print-root {
                         box-shadow: none !important;
                         border: none !important;
                         border-radius: 0 !important;
                         width: 100% !important;
+                        height: 100% !important;
                     }
                     
                     body * { visibility: visible !important; }
