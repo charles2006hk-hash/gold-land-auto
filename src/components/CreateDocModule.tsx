@@ -352,12 +352,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             model: car.model || '', 
             chassisNo: car.chassisNo || '', 
             engineNo: car.engineNo || '', 
-            year: car.year || '', 
-            color: car.colorExt || car.color || '', 
+            year: car.year || car.manufactureYear || '', 
+            color: car.colorExt || car.colorOuter || car.color || '', 
             colorInterior: car.colorInt || car.colorInterior || car.innerColor || '',
             transmission: car.transmission || 'Automatic', 
-            engineSize: car.engineSize ? car.engineSize.toString() : '', 
-            mileage: car.mileage ? car.mileage.toString() : '', 
+            engineSize: car.engineSize ? car.engineSize.toString() : (car.engineCap ? car.engineCap.toString() : ''), 
+            mileage: car.mileage ? car.mileage.toString() : '',
             seat: car.seating ? car.seating.toString() : '', 
             previousOwners: car.previousOwners !== undefined ? car.previousOwners.toString() : '',
             
@@ -663,7 +663,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             </div>
                                             <div className="grid grid-cols-12 gap-4 text-[12px]">
                                                 <div className="col-span-4 font-bold text-slate-700 tracking-wider">VEHICLE REF.<br/><span className="text-[10px] text-slate-500 font-medium">相關車輛</span></div>
-                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 text-slate-800 font-bold">{formData.regMark || 'TBC'} - {formData.make} {formData.model} <span className="font-mono text-[10px] text-slate-500 ml-1">(VIN: {formData.chassisNo || 'N/A'})</span></div>
+                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 text-slate-800 font-bold">
+                                                    {formData.regMark || 'TBC'} - {formData.year || ''} {formData.make} {formData.model} <span className="text-slate-600 font-normal">({formData.color || 'N/A'})</span>
+                                                    <br/><span className="font-mono text-[10px] text-slate-500">VIN: {formData.chassisNo || 'N/A'}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : (
