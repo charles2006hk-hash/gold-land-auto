@@ -2731,6 +2731,7 @@ const deleteVehicle = async (id: string) => {
                 engineNo: v.engineNo || '', 
                 year: v.year || '',
                 price: v.price ? v.price.toString() : '0', 
+                docDate: payment.date,      // ★ 核心修復：強制讓收據頂部的單據日期同步為「收款日」
                 deliveryDate: payment.date, // 使用收款日期
                 paymentMethod: payment.method || 'Cash',
                 remarks: payment.note || '',
