@@ -1545,7 +1545,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版無痕列印引擎 (100%單頁鎖定，強蓋印章底線) ★★★
+// ★★★ 終極完美版無痕列印引擎 (發票專用：單頁鎖定 + 印章護盾) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
@@ -1562,51 +1562,58 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 空間問題解決：把邊距全部交給實體紙張，容器內部 0 內距，絕不撐破高度！ */
+                /* ★ 1. 恢復空間：設定標準 10mm 邊距 */
                 @page { size: A4 portrait; margin: 10mm; }
                 
                 html, body { 
+                    width: auto !important; 
+                    height: auto !important; 
                     margin: 0 !important; 
                     padding: 0 !important; 
                     background: white !important; 
-                    width: 100% !important; 
-                    height: auto !important; 
-                    overflow-x: hidden !important; /* 隱藏微小的溢出 */
                     -webkit-print-color-adjust: exact !important; 
                     print-color-adjust: exact !important; 
+                    overflow: visible !important;
                 }
                 
+                /* ★ 2. 安全容器：保證不再出現第二張白紙 */
                 .print-container, #print-root { 
                     display: block !important;
                     width: 100% !important; 
                     max-width: 100% !important;
                     height: auto !important; 
                     min-height: 0 !important; 
-                    margin: 0 !important; 
-                    padding: 0 !important; /* ★ 核心修復：取消 padding，防止總高度超過 A4 產生第二頁 */
+                    margin: 0 auto !important; 
+                    padding: 5mm !important; /* 內部再加點呼吸空間 */
                     box-sizing: border-box !important; 
                     background: white !important; 
                     position: relative !important; 
+                    overflow: visible !important;
                     box-shadow: none !important; 
                     border: none !important; 
-                    transform: none !important; 
                 }
 
-                /* ★ 2. 徹底殺掉所有會強迫撐開畫面的 Tailwind 高度與彈性排版 */
+                /* ★ 3. 殺掉所有可能撐破版面導致第二頁的 Tailwind 高度 */
                 .min-h-screen, .h-screen, .h-full, .min-h-full, .flex-1 { 
                     min-height: 0 !important; 
                     height: auto !important; 
-                    flex: none !important; /* 終止彈性延展 */
+                    flex: none !important; 
                 }
 
-                /* ★ 3. 印章橫線修復：強加白底、擴張邊界、拉高層級，絕對斬斷底下表格線！ */
-                .mix-blend-multiply, img[src*="stamp"] {
-                    mix-blend-mode: normal !important; /* 取消色彩透視 */
-                    background-color: white !important; /* 強制塞一塊白底 */
-                    border-radius: 50% !important; /* 變成圓形白底 */
-                    box-shadow: 0 0 0 10px white !important; /* ★ 往外擴張 10px 白邊，吃掉所有靠近的橫線 */
+                /* ★ 4. 印章橫線修復：強加實體白底護盾，斬斷表格黑線！ */
+                img {
+                    mix-blend-mode: normal !important; /* 取消色彩穿透 */
+                    background-color: white !important; /* 強制墊上白底 */
+                    border-radius: 50% !important; /* 讓白底變成圓形 */
+                    box-shadow: 0 0 0 10px white !important; /* ★ 往外擴張 10px 白邊，切斷所有靠近的橫線 */
                     position: relative !important;
-                    z-index: 9999 !important; /* ★ 強制浮在所有表格之上 */
+                    z-index: 99999 !important; /* 拉到最高層級 */
+                }
+
+                /* 壓低邊線層級，確保它們乖乖躲在印章底下 */
+                .border-t, .border-b, .border, table, tr, td, th {
+                    position: relative !important;
+                    z-index: 1 !important;
                 }
                 
                 body * { visibility: visible !important; }
