@@ -1562,25 +1562,31 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
+                <style>
                 /* ★ 設定 5mm 安全邊距 */
                 @page { size: A4 portrait; margin: 5mm !important; padding: 0 !important; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
-                    width: auto !important; height: auto !important;
+                    width: auto !important; height: max-content !important; /* ★ 強制高度為內容實際高度 */
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 /* ★ 核心修復：拔除危險的 zoom，改用 100% 寬度讓瀏覽器自動適應紙張大小 */
                 .print-container, #print-root { 
                     width: 100% !important; 
                     max-width: 100% !important;
-                    height: auto !important; min-height: 0 !important;
+                    height: max-content !important; min-height: 0 !important;
                     margin: 0 !important; padding: 0 !important;
                     background: white !important; 
-                    position: static !important; 
+                    position: relative !important; 
                     overflow: visible !important;
                     box-shadow: none !important; border: none !important; 
-                    transform: none !important; /* 確保不被 React 的縮放影響 */
+                    transform: none !important; 
+                }
+                /* ★ 殺掉所有可能撐破版面導致第二頁空白的 Tailwind 高度類別 */
+                .min-h-screen, .h-screen, .h-full, .min-h-full { 
+                    min-height: 0 !important; 
+                    height: auto !important; 
                 }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
