@@ -443,6 +443,27 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setMobileStep('edit');
     };
 
+    // ★★★ 新增：智能重置/還原表單功能 ★★★
+    const handleResetForm = () => {
+        if (!window.confirm("⚠️ 確定要重置表單嗎？\n所有您手動修改且未儲存的內容將會被還原！")) return;
+        
+        if (docId) {
+            // 情況 1：正在編輯歷史舊單 -> 重新讀取資料庫該單據的最後狀態
+            const originalDoc = savedDocs.find((d: any) => d.id === docId);
+            if (originalDoc) editDoc(originalDoc);
+        } else if (selectedCarId && selectedCarId !== 'BLANK') {
+            // 情況 2：正在開新單 (有選車) -> 重新讀取該車輛的預設資料
+            const originalCar = inventory.find((v: any) => v.id === selectedCarId);
+            if (originalCar) {
+                setIsVehicleLocked(false); // 暫時解除安全鎖以允許重載
+                handleSelectCar(originalCar);
+            }
+        } else {
+            // 情況 3：純空白單 -> 徹底清空
+            handleSelectBlank();
+        }
+    };
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target; setFormData((prev: any) => ({ ...prev, [name]: value }));
     };
@@ -976,6 +997,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     <div className="p-3 border-b bg-slate-50 flex justify-between items-center shadow-sm z-10">
                         <span className="font-bold text-slate-700 text-sm">{docId ? '✏️ 編輯單據' : '📝 新增單據'}</span>
                         <div className="flex gap-2">
+                            {/* ★ 新增：重置按鈕 */}
+                            <button onClick={handleResetForm} className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform hover:bg-slate-300" title="還原至最初載入的狀態">
+                                <RefreshCw size={14} className="mr-1"/> 重置
+                            </button>
                             <button onClick={saveDocRecord} className="px-4 py-1.5 bg-white border border-slate-300 text-slate-700 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform hover:bg-slate-50"><Save size={14} className="mr-1"/> 儲存</button>
                             <button onClick={handlePrint} className="px-5 py-1.5 bg-slate-800 text-white rounded text-xs font-bold flex items-center shadow-md active:scale-95 transition-transform hover:bg-slate-700"><Printer size={14} className="mr-1"/> 列印</button>
                         </div>
