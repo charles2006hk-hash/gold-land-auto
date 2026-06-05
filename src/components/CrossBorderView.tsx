@@ -5,7 +5,7 @@ import {
   FileText, Plus, Check, ChevronUp, ChevronDown, 
   Trash2, Edit, X, ArrowRight, ImageIcon, Loader2, 
   DownloadCloud, Upload, DollarSign, Car, ChevronLeft, ChevronRight,
-  AlertTriangle, Clock, Building2, RefreshCw
+  AlertTriangle, Clock, Building2, RefreshCw, History
 } from 'lucide-react';
 import { Vehicle, CrossBorderTask, Payment, SystemSettings } from '@/types';
 import { PORTS_HK_GD, PORTS_MO_GD, ALL_CB_PORTS, COMPANY_INFO } from '@/config/constants';
