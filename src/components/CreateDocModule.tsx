@@ -66,7 +66,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [newItemDesc, setNewItemDesc] = useState('');
     const [newItemAmount, setNewItemAmount] = useState('');
     const [depositItems, setDepositItems] = useState<any[]>([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
+    
     const [showTerms, setShowTerms] = useState(true);
+    const [showPurchaseGuarantees, setShowPurchaseGuarantees] = useState(true); // ★ 新增：收車保障條款開關
+    
     const [showAttachments, setShowAttachments] = useState(true);
     const [showStampAndSig, setShowStampAndSig] = useState(true); 
     const [showPhotos, setShowPhotos] = useState(true); // ★ 新增：相片列印開關
@@ -824,8 +827,22 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     {isQuotation ? (
                                         <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                                     ) : (
-                                        <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
-                                        本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                        <>
+                                            <p>I, <b>{formData.customerName || '___________'}</b>, agree to <b>{selectedDocType === 'purchase_contract' ? 'sell' : selectedDocType === 'consignment_contract' ? 'consign' : 'purchase'}</b> the vehicle {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? 'to' : 'from'} <b>{formData.companyNameEn}</b> at HKD <b>{formatCurrency(balance + deposit)}</b> (Total) on <b>{formData.deliveryDate || '___________'}</b> at <b>{formData.handoverTime || '_______'}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                            本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                            
+                                            {/* ★ 收車專屬保障條款 */}
+                                            {selectedDocType === 'purchase_contract' && showPurchaseGuarantees && (
+                                                <div className="mt-2 pt-2 border-t border-slate-300">
+                                                    <p className="font-bold mb-1 text-slate-800">Seller's Warranties and Guarantees 賣方保證條款：</p>
+                                                    <ol className="list-decimal pl-4 space-y-1 text-[8.5px]">
+                                                        <li><b>Clear Title & No Encumbrances:</b> The Seller warrants that the Vehicle is free from any outstanding finance, loans, debts, or third-party encumbrances, and ownership can be legally transferred to the Buyer without hindrance. <br/><span className="text-slate-700"><b>無債務及順利過戶：</b>賣方保證上述車輛並無任何未清繳之財務、貸款、債務或第三方權利負擔，且車輛擁有權可合法及順利轉讓予買方而無任何阻礙。</span></li>
+                                                        <li><b>Vehicle Condition:</b> The Seller guarantees that the Vehicle has never been involved in any major accidents resulting in structural damage, nor has it ever been damaged by flooding. <br/><span className="text-slate-700"><b>車輛狀況：</b>賣方保證上述車輛從未涉及任何導致結構受損之重大意外，亦從未受過水浸損壞。</span></li>
+                                                        <li><b>Cross-Border Quota Clearance (If Applicable):</b> For vehicles with prior cross-border registration, the Seller warrants that all associated cross-border quotas, approvals, and electronic tags have been completely detached and cleared, ensuring the Vehicle can be lawfully attached to a new cross-border quota without any restrictions. <br/><span className="text-slate-700"><b>中港指標退清 (如適用)：</b>若上述車輛曾登記為中港跨境車輛，賣方保證已徹底註銷及退清該車輛與之前所有中港車牌指標、批文之關聯，確保該車輛可合法且無限制地重新綁定至全新之中港車牌指標。</span></li>
+                                                    </ol>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )}
@@ -1270,6 +1287,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         <label className="flex items-center text-[10px] cursor-pointer text-slate-500 font-bold hover:text-slate-700">
                                             <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1.5 accent-yellow-600"/>法律條款
                                         </label>
+                                        {/* ★ 新增：收車合約專用的保障條款開關 */}
+                                        {selectedDocType === 'purchase_contract' && (
+                                            <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                                <input type="checkbox" checked={showPurchaseGuarantees} onChange={e => setShowPurchaseGuarantees(e.target.checked)} className="mr-1.5 accent-blue-600"/>收車保障條款
+                                            </label>
+                                        )}
                                     </div>
                                 </div>
 
