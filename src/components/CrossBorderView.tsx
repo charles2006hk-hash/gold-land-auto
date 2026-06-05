@@ -260,6 +260,22 @@ export default function CrossBorderView({
 
     const updatePendingTask = (item: string, field: 'fee' | 'note', value: any) => { setPendingTasks(prev => prev.map(t => t.item === item ? { ...t, [field]: value } : t)); };
 
+    // ★★★ 新增：智能複製引擎 (全螢幕版專用) ★★★
+    const duplicateTasks = (tasksToCopy: any[]) => {
+        if (!activeCar) return;
+        if (!confirm(`確定要複製這 ${tasksToCopy.length} 個項目為「全新未繳費」的待辦事項嗎？\n(系統將自動把新項目的日期設為今日)`)) return;
+        
+        const newItems = tasksToCopy.map((t, i) => ({
+            ...t,
+            id: Date.now().toString() + '_' + i,
+            date: new Date().toISOString().split('T')[0], // 自動更新為今天
+            isPaid: false
+        }));
+        
+        const existingTasks = activeCar.crossBorder?.tasks || [];
+        updateVehicle(activeCar.id!, { crossBorder: { ...activeCar.crossBorder, tasks: [...existingTasks, ...newItems] } });
+    };
+
     const handleAddBatchTasks = () => {
         if (!activeCar) return;
         if (pendingTasks.length === 0) { alert("請至少選擇一個項目"); return; }
@@ -582,84 +598,156 @@ export default function CrossBorderView({
                                         </button>
                                     </div>
                                 </div>
-                                <table className="w-full text-sm border-collapse">
-                                    <thead className="bg-slate-50 font-bold text-xs sticky top-0"><tr><th className="p-2 text-left">日期</th><th className="p-2 text-left">項目</th><th className="p-2 text-right">費用</th><th className="p-2 text-center">收款狀態</th><th className="p-2 text-center">操作</th></tr></thead>
-                                    <tbody className="divide-y">
-                                        {(activeCar.crossBorder?.tasks || []).map((task: any) => {
-                                            const isEditing = editingTaskId === task.id;
-                                            const taskPayments = (activeCar.payments || []).filter((p:any) => p.relatedTaskId === task.id);
-                                            const paid = taskPayments.reduce((s:any,p:any)=>s+p.amount,0);
-                                            const isPaid = paid >= (task.fee || 0) && (task.fee||0) > 0;
-                                            const remaining = (task.fee || 0) - paid;
-                                            const isExpanded = expandedPaymentTaskId === task.id;
+                                {/* ★ 智能收費清單區塊 (進行中 vs 歷史歸檔) ★ */}
+                                {(() => {
+                                    const cbTasks = activeCar.crossBorder?.tasks || [];
+                                    const pendingActiveTasks = cbTasks.filter((t: any) => !(activeCar.payments || []).some((p: any) => p.relatedTaskId === t.id));
+                                    const historyTasks = cbTasks.filter((t: any) => (activeCar.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
-                                            if (isEditing) {
-                                                return (
-                                                    <tr key={task.id} className="bg-blue-50/50">
-                                                        <td className="p-2"><input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})} className="w-full text-xs p-1 border rounded"/></td>
-                                                        <td className="p-2"><input type="text" value={editForm.item} onChange={e => setEditForm({...editForm, item: e.target.value})} className="w-full text-xs p-1 border rounded"/></td>
-                                                        <td className="p-2"><input type="number" value={editForm.fee} onChange={e => setEditForm({...editForm, fee: Number(e.target.value)})} className="w-full text-xs p-1 border rounded text-right"/></td>
-                                                        <td className="p-2 text-center text-xs">編輯中...</td>
-                                                        <td className="p-2 text-center"><button onClick={saveEdit} className="text-green-600 p-1 hover:bg-green-100 rounded"><Check size={16}/></button></td>
-                                                    </tr>
-                                                );
-                                            }
+                                    const historyByDate: Record<string, any[]> = {};
+                                    historyTasks.forEach((t: any) => {
+                                        if (!historyByDate[t.date]) historyByDate[t.date] = [];
+                                        historyByDate[t.date].push(t);
+                                    });
+
+                                    // 共用渲染函數
+                                    const renderTaskRow = (task: any, isHistory: boolean) => {
+                                        const isEditing = editingTaskId === task.id;
+                                        const taskPayments = (activeCar.payments || []).filter((p:any) => p.relatedTaskId === task.id);
+                                        const paid = taskPayments.reduce((s:any,p:any)=>s+Number(p.amount),0);
+                                        const remaining = (task.fee || 0) - paid;
+                                        const isExpanded = expandedPaymentTaskId === task.id;
+
+                                        if (isEditing && !isHistory) {
                                             return (
-                                                <React.Fragment key={task.id}>
-                                                    <tr className={`hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''}`}>
-                                                        <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td><td className="p-2 font-bold text-slate-700">{task.item}</td><td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
-                                                        <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}><div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>{isPaid ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')} {isExpanded ? <ChevronUp size={10}/> : <ChevronDown size={10}/>}</div></td>
-                                                        <td className="p-2 text-center flex justify-center gap-1.5 items-center">
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    if (!onJumpToDoc) { alert("開單系統連動未就緒"); return; }
-                                                                    const hkPlate = activeCar.regMark || '';
-                                                                    const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
-                                                                    const combinedPlates = mainlandPlate ? `${hkPlate} / ${mainlandPlate}` : hkPlate;
-                                                                    const taskNote = task.note || '';
-                                                                    const combinedRemarks = mainlandPlate ? `【中港車牌：${mainlandPlate}】\n${taskNote}` : taskNote;
-                                                                    
-                                                                    const invoiceData = {
-                                                                        id: null,
-                                                                        type: 'invoice',
-                                                                        vehicleId: activeCar.id,
-                                                                        formData: {
-                                                                            companyNameEn: COMPANY_INFO.name_en, companyNameCh: COMPANY_INFO.name_ch,
-                                                                            companyAddress: COMPANY_INFO.address_ch, companyPhone: COMPANY_INFO.phone, companyEmail: COMPANY_INFO.email,
-                                                                            customerName: activeCar.customerName || '', customerPhone: activeCar.customerPhone || '',
-                                                                            customerId: activeCar.customerID || '', customerAddress: activeCar.customerAddress || '',
-                                                                            regMark: combinedPlates, 
-                                                                            make: activeCar.make || '', model: activeCar.model || '', chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
-                                                                            price: '0', 
-                                                                            docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
-                                                                            remarks: combinedRemarks 
-                                                                        },
-                                                                        checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
-                                                                        docItems: [{
-                                                                            id: task.id,
-                                                                            desc: mainlandPlate ? `[中港業務代辦] ${task.item} (${mainlandPlate})` : `[中港業務代辦] ${task.item}`,
-                                                                            amount: task.fee, isSelected: true
-                                                                        }],
-                                                                        depositItems: [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }], showTerms: false
-                                                                    };
-                                                                    onJumpToDoc(invoiceData);
-                                                                }}
-                                                                className="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded hover:bg-blue-100 font-bold tracking-tight flex items-center shadow-sm"
-                                                            >
-                                                                🧾 發票
+                                                <tr key={task.id} className="bg-blue-50/50">
+                                                    <td className="p-2"><input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})} className="w-full text-xs p-1 border rounded"/></td>
+                                                    <td className="p-2"><input type="text" value={editForm.item} onChange={e => setEditForm({...editForm, item: e.target.value})} className="w-full text-xs p-1 border rounded"/></td>
+                                                    <td className="p-2"><input type="number" value={editForm.fee} onChange={e => setEditForm({...editForm, fee: Number(e.target.value)})} className="w-full text-xs p-1 border rounded text-right"/></td>
+                                                    <td className="p-2 text-center text-xs">編輯中...</td>
+                                                    <td className="p-2 text-center"><button onClick={saveEdit} className="text-green-600 p-1 hover:bg-green-100 rounded"><Check size={16}/></button></td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        return (
+                                            <React.Fragment key={task.id}>
+                                                <tr className={`hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''} ${isHistory ? 'opacity-80' : ''}`}>
+                                                    <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td>
+                                                    <td className="p-2 font-bold text-slate-700">
+                                                        {task.item}
+                                                        {/* 單項複製按鈕 */}
+                                                        {isHistory && (
+                                                            <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); duplicateTasks([task]); }} className="ml-2 text-[9px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors" title="複製此單一項目為未繳費">
+                                                                📋 複製
                                                             </button>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
+                                                    <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}>
+                                                        <div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isHistory ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>
+                                                            {isHistory ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')} {isExpanded ? <ChevronUp size={10}/> : <ChevronDown size={10}/>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 text-center flex justify-center gap-1.5 items-center">
+                                                        {!isHistory && (
                                                             <button type="button" onClick={() => startEditing(task)} className="text-blue-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded"><Edit size={14}/></button>
-                                                            <button type="button" onClick={() => deleteCbTask(activeCar.id!, task.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                                        )}
+                                                        <button type="button" onClick={() => deleteCbTask(activeCar.id!, task.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                                    </td>
+                                                </tr>
+                                                {isExpanded && (
+                                                    <tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner">
+                                                        <td colSpan={5} className="p-3 pl-8">
+                                                            <div className="flex gap-6 items-start">
+                                                                {!isHistory && (
+                                                                    <div className="w-1/3 min-w-[200px] bg-white p-3 rounded border shadow-sm">
+                                                                        <h5 className="text-xs font-bold text-gray-500 mb-2">新增收款</h5>
+                                                                        <div className="flex flex-col gap-2">
+                                                                            <input type="number" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} placeholder={`輸入金額 (餘額: ${remaining})`} className="border p-1.5 text-xs rounded w-full"/>
+                                                                            <select value={newPayMethod} onChange={e => setNewPayMethod(e.target.value)} className="border p-1.5 text-xs rounded w-full">
+                                                                                <option value="Cash">現金 (Cash)</option><option value="Bank Transfer">銀行轉帳</option><option value="Cheque">支票</option><option value="WeChat/Alipay">微信/支付寶</option><option value="Trade-in">對數 (Trade-in)</option>
+                                                                            </select>
+                                                                            <button onClick={() => handleAddPartPayment(task)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold hover:bg-blue-700 mt-1">確認收款</button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1">
+                                                                    <h5 className="text-xs font-bold text-gray-500 mb-2">收款紀錄 ({taskPayments.length})</h5>
+                                                                    {taskPayments.length === 0 ? (
+                                                                        <p className="text-xs text-gray-400 italic">尚無收款紀錄</p>
+                                                                    ) : (
+                                                                        <table className="w-full text-xs text-left border-collapse">
+                                                                            <thead><tr className="border-b text-gray-400"><th>日期</th><th>金額</th><th>方式</th><th>操作</th></tr></thead>
+                                                                            <tbody>
+                                                                                {taskPayments.map((p: any) => (
+                                                                                    <tr key={p.id} className="border-b last:border-0 h-8">
+                                                                                        <td className="font-mono text-gray-600">{p.date}</td><td className="font-bold text-green-600">{formatCurrency(p.amount)}</td><td>{p.method}</td>
+                                                                                        <td><button onClick={() => deletePayment(activeCar.id!, p.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         </td>
                                                     </tr>
-                                                    {isExpanded && (<tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner"><td colSpan={5} className="p-3 pl-8"><div className="flex gap-6 items-start"><div className="w-1/3 min-w-[200px] bg-white p-3 rounded border shadow-sm"><h5 className="text-xs font-bold text-gray-500 mb-2">新增收款</h5><div className="flex flex-col gap-2"><input type="number" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} placeholder={`輸入金額 (餘額: ${remaining})`} className="border p-1.5 text-xs rounded w-full"/><select value={newPayMethod} onChange={e => setNewPayMethod(e.target.value)} className="border p-1.5 text-xs rounded w-full">     <option value="Cash">現金 (Cash)</option>     <option value="Bank Transfer">銀行轉帳</option>     <option value="Cheque">支票</option>     <option value="WeChat/Alipay">微信/支付寶</option>     <option value="Trade-in">對數 (Trade-in)</option> </select><button onClick={() => handleAddPartPayment(task)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold hover:bg-blue-700 mt-1">確認收款</button></div></div><div className="flex-1"><h5 className="text-xs font-bold text-gray-500 mb-2">收款紀錄 ({taskPayments.length})</h5>{taskPayments.length === 0 ? (<p className="text-xs text-gray-400 italic">尚無收款紀錄</p>) : (<table className="w-full text-xs text-left border-collapse"><thead><tr className="border-b text-gray-400"><th>日期</th><th>金額</th><th>方式</th><th>操作</th></tr></thead><tbody>{taskPayments.map((p: any) => (<tr key={p.id} className="border-b last:border-0 h-8"><td className="font-mono text-gray-600">{p.date}</td><td className="font-bold text-green-600">{formatCurrency(p.amount)}</td><td>{p.method}</td><td><button onClick={() => deletePayment(activeCar.id!, p.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></td></tr>))}</tbody></table>)}</div></div></td></tr>)}
-                                                </React.Fragment>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    };
+
+                                    return (
+                                        <div className="w-full">
+                                            {/* 區塊 A：進行中 */}
+                                            <div className="mb-6">
+                                                <h4 className="text-xs font-bold text-slate-500 mb-2 pl-2">進行中 / 待繳費 ({pendingActiveTasks.length})</h4>
+                                                <table className="w-full text-sm border-collapse bg-white rounded-lg overflow-hidden shadow-sm border border-slate-200">
+                                                    <thead className="bg-slate-50 font-bold text-xs">
+                                                        <tr className="border-b border-slate-200">
+                                                            <th className="p-2 text-left">日期</th><th className="p-2 text-left">項目</th><th className="p-2 text-right">費用</th><th className="p-2 text-center">收款狀態</th><th className="p-2 text-center">操作</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {pendingActiveTasks.length === 0 ? (
+                                                            <tr><td colSpan={5} className="text-center py-6 text-slate-400 text-xs bg-slate-50/50">目前無待繳費項目</td></tr>
+                                                        ) : (
+                                                            pendingActiveTasks.map((t:any) => renderTaskRow(t, false))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* 區塊 B：歷史歸檔 (摺疊) */}
+                                            {historyTasks.length > 0 && (
+                                                <details className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-6 mb-10">
+                                                    <summary className="p-3 text-sm font-bold text-slate-600 cursor-pointer hover:bg-slate-100 list-none flex items-center justify-between outline-none">
+                                                        <span className="flex items-center"><History size={16} className="mr-2"/> 查看歷史歸檔紀錄 (已付款 {historyTasks.length} 筆)</span>
+                                                        <ChevronDown size={18} className="transition-transform group-open:rotate-180"/>
+                                                    </summary>
+                                                    <div className="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2 bg-slate-100/50">
+                                                        {Object.entries(historyByDate).sort((a,b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([date, tasks]) => (
+                                                            <div key={date} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                                                                <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                                                                    <span className="text-xs font-bold text-slate-600 font-mono">📅 {date} 批次</span>
+                                                                    <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks(tasks); }} className="text-[10px] bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors">
+                                                                        📋 批量複製此批項目
+                                                                    </button>
+                                                                </div>
+                                                                <table className="w-full text-sm border-collapse">
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {tasks.map((t:any) => renderTaskRow(t, true))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </>
                     ) : ( <div className="flex-1 flex flex-col items-center justify-center text-slate-300"><p>請選擇車輛以管理中港業務</p></div> )}
@@ -745,12 +833,19 @@ export default function CrossBorderView({
                                             type: 'invoice',
                                             vehicleId: activeCar.id,
                                             formData: {
-                                                companyNameEn: "GOLD LAND AUTO", companyNameCh: "金田汽車",
+                                                companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
+                                                companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+                                                companyAddress: COMPANY_INFO?.address_ch || '', 
+                                                companyPhone: COMPANY_INFO?.phone || '', 
+                                                companyEmail: COMPANY_INFO?.email || '', 
                                                 customerName: activeCar.customerName || '', customerPhone: activeCar.customerPhone || '', customerId: activeCar.customerID || '', customerAddress: activeCar.customerAddress || '',
                                                 regMark: combinedPlates, 
                                                 make: activeCar.make || '', model: activeCar.model || '', chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
-                                                price: '0', 
-                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
+                                                price: '0', deposit: '', balance: '', color: '', colorInterior: '', transmission: 'Automatic', engineSize: '', mileage: '', seat: '', previousOwners: '',
+                                                orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '', etaFormat: 'date', etaDays: '', etaDate: '',
+                                                chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
+                                                isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP', paymentMethod: 'Cheque',
+                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0], handoverTime: '12:00',
                                                 remarks: mainlandPlate ? `【中港車牌：${mainlandPlate}】\n精選代辦業務收費` : '精選代辦業務收費'
                                             },
                                             checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
