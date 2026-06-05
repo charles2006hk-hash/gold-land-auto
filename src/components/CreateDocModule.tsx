@@ -558,7 +558,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             if (val >= 1000) { word += formatChunk(Math.floor(val / 1000)) + 'THOUSAND '; val %= 1000; }
             if (val > 0) { word += formatChunk(val); }
             word = word.trim();
-            if (cents > 0) word += ` AND CENTS ${cents}`;
+            
+            // ★ 完美修復：將小數點後的數字完全轉為英文單字 (例如 30 轉為 THIRTY, 3 轉為 THREE)
+            if (cents > 0) {
+                if (word !== '') word += ' AND ';
+                word += `CENTS ${formatChunk(cents).trim()}`;
+            }
             return word + ' ONLY';
         };
 
