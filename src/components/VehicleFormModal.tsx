@@ -1831,26 +1831,95 @@ const VehicleFormModal = ({
                                             )}
                                         </div>
                                         
-                                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full space-y-2">
-                                            {(v.crossBorder?.tasks || []).length === 0 && <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">尚無中港代辦收費項目</div>}
-                                            {(v.crossBorder?.tasks || []).map((t: any) => {
-                                                const isPaid = (v.payments || []).some((p: any) => p.relatedTaskId === t.id);
-                                                return (
-                                                    <div key={t.id} className="flex justify-between items-center p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg transition-colors">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-slate-400 font-mono text-xs">{t.date}</span>
-                                                            <span className="font-bold text-slate-800 text-sm">{t.item}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-4">
-                                                            <span className="font-mono font-black text-blue-700">{formatCurrency(t.fee)}</span>
-                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shadow-sm ${isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200 animate-pulse'}`}>
-                                                                {isPaid ? '已付款' : '未繳費'}
-                                                            </span>
-                                                        </div>
+                                        {(() => {
+                                            const cbTasks = v.crossBorder?.tasks || [];
+                                            // 1. 自動分流：未付款(進行中) vs 已付款(歷史)
+                                            const pendingTasks = cbTasks.filter((t: any) => !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
+                                            const historyTasks = cbTasks.filter((t: any) => (v.payments || []).some((p: any) => p.relatedTaskId === t.id));
+
+                                            // 2. 歷史資料按日期分組 (方便批次複製)
+                                            const historyByDate: Record<string, any[]> = {};
+                                            historyTasks.forEach((t: any) => {
+                                                if (!historyByDate[t.date]) historyByDate[t.date] = [];
+                                                historyByDate[t.date].push(t);
+                                            });
+
+                                            // 3. 智能複製引擎
+                                            const duplicateTasks = (tasksToCopy: any[]) => {
+                                                if (!confirm(`確定要複製這 ${tasksToCopy.length} 個項目為「全新未繳費」的待辦事項嗎？\n(系統將自動把新項目的日期設為今日)`)) return;
+                                                
+                                                const newItems = tasksToCopy.map((t, i) => ({
+                                                    ...t,
+                                                    id: Date.now().toString() + '_' + i,
+                                                    date: new Date().toISOString().split('T')[0] // 自動更新為今天
+                                                }));
+                                                
+                                                updateSubItem(v.id!, 'crossBorder', [...cbTasks, ...newItems]);
+                                            };
+
+                                            return (
+                                                <div className="w-full space-y-4">
+                                                    {/* 區塊 A：進行中 / 未繳費 */}
+                                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full space-y-2">
+                                                        <div className="text-xs font-bold text-slate-500 mb-2 border-b pb-1">進行中 / 待繳費 ({pendingTasks.length})</div>
+                                                        {pendingTasks.length === 0 && <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">目前無待繳費項目</div>}
+                                                        
+                                                        {pendingTasks.map((t: any) => (
+                                                            <div key={t.id} className="flex justify-between items-center p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg transition-colors group">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-slate-400 font-mono text-xs">{t.date}</span>
+                                                                    <span className="font-bold text-slate-800 text-sm">{t.item}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="font-mono font-black text-blue-700">{formatCurrency(t.fee)}</span>
+                                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold border shadow-sm bg-red-50 text-red-600 border-red-200 animate-pulse">未繳費</span>
+                                                                    {/* 單項複製按鈕 */}
+                                                                    <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-xs bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="複製此單一項目">
+                                                                        📋 複製
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+
+                                                    {/* 區塊 B：歷史歸檔 (已繳費) */}
+                                                    {historyTasks.length > 0 && (
+                                                        <details className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden w-full">
+                                                            <summary className="p-3 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 list-none flex items-center justify-between outline-none">
+                                                                <span className="flex items-center"><History size={14} className="mr-2"/> 查看歷史歸檔紀錄 ({historyTasks.length} 筆)</span>
+                                                                <ChevronDown size={16} className="transition-transform group-open:rotate-180"/>
+                                                            </summary>
+                                                            <div className="p-3 pt-0 space-y-4 border-t border-slate-200 mt-2">
+                                                                {Object.entries(historyByDate).sort((a,b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([date, tasks]) => (
+                                                                    <div key={date} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                                                                        <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                                                                            <span className="text-xs font-bold text-slate-600 font-mono">📅 {date} 批次</span>
+                                                                            <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks(tasks); }} className="text-[10px] bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors">
+                                                                                📋 批量複製此批項目
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className="divide-y divide-slate-100">
+                                                                            {tasks.map((t: any) => (
+                                                                                <div key={t.id} className="flex justify-between items-center p-2 hover:bg-slate-50 transition-colors group">
+                                                                                    <span className="font-bold text-slate-700 text-xs pl-2">{t.item}</span>
+                                                                                    <div className="flex items-center gap-3 pr-2">
+                                                                                        <span className="font-mono font-bold text-slate-500 text-xs">{formatCurrency(t.fee)}</span>
+                                                                                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-green-50 text-green-600 border-green-200">已付款</span>
+                                                                                        <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-[10px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="單獨複製">
+                                                                                            📋
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </details>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             ) : (
