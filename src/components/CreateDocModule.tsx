@@ -1171,7 +1171,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                             <div className="p-3 bg-yellow-50/50 rounded-xl border border-yellow-200 mb-3">
                                 <div className="flex justify-between items-center mb-3">
-                                    <div className="text-[10px] font-bold text-yellow-700 uppercase tracking-wider">交易金額與收款 (Payment)</div>
+                                    <div className="text-[10px] font-bold text-yellow-700 uppercase tracking-wider">
+                                        {selectedDocType === 'receipt' ? '🧾 本次收款金額與說明 (Receipt Details)' : '交易金額與收款 (Payment)'}
+                                    </div>
                                     <div className="flex gap-3">
                                         <label className="flex items-center text-[10px] cursor-pointer text-slate-500 font-bold hover:text-slate-700">
                                             <input type="checkbox" checked={showStampAndSig} onChange={e => setShowStampAndSig(e.target.checked)} className="mr-1.5 accent-yellow-600"/>印章與簽名
@@ -1181,22 +1183,30 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </label>
                                     </div>
                                 </div>
+
+                                {selectedDocType === 'receipt' && (
+                                    <div className="text-xs text-yellow-700 mb-3 bg-yellow-100/50 p-2 rounded-lg border border-yellow-200 font-bold flex items-center shadow-sm">
+                                        💡 提示：開立收據時，請在下方列表填寫「本次收取的金額」與「原因」。
+                                    </div>
+                                )}
                                 
-                                {/* ★★★ 基礎車價欄位 (智能顯示 收車本金 還是 售價) ★★★ */}
-                                <div className="bg-white p-2 rounded-lg border border-yellow-300 shadow-inner flex items-center mb-3">
-                                    <span className="text-xs font-bold text-yellow-800 w-24">
-                                        {selectedDocType === 'purchase_contract' ? '收車本金' : '車輛售價'}
-                                    </span>
-                                    <span className="text-yellow-600 font-mono font-bold mr-1">$</span>
-                                    <input 
-                                        name="price" 
-                                        type="number" 
-                                        value={formData.price} 
-                                        onChange={handleChange} 
-                                        className="flex-1 bg-transparent text-right font-mono font-black text-lg outline-none text-slate-800" 
-                                        placeholder="0"
-                                    />
-                                </div>
+                                {/* ★★★ 基礎車價欄位 (收據與服務發票不需要車價，自動隱藏) ★★★ */}
+                                {selectedDocType !== 'service_invoice' && selectedDocType !== 'receipt' && (
+                                    <div className="bg-white p-2 rounded-lg border border-yellow-300 shadow-inner flex items-center mb-3">
+                                        <span className="text-xs font-bold text-yellow-800 w-24">
+                                            {selectedDocType === 'purchase_contract' ? '收車本金' : '車輛售價'}
+                                        </span>
+                                        <span className="text-yellow-600 font-mono font-bold mr-1">$</span>
+                                        <input 
+                                            name="price" 
+                                            type="number" 
+                                            value={formData.price} 
+                                            onChange={handleChange} 
+                                            className="flex-1 bg-transparent text-right font-mono font-black text-lg outline-none text-slate-800" 
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                )}
 
                                 <div className="space-y-2 mb-3">
                                     {depositItems.map((item: any, idx: number) => (
@@ -1229,8 +1239,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 )}
                             </div>
                             
-                            {/* ★★★ 新增：上會計數機區塊 ★★★ */}
-                            <div className="p-3 bg-cyan-50/50 rounded-xl border border-cyan-200 mb-3 animate-in fade-in">
+                            {/* ★★★ 新增：上會計數機區塊 (收據/服務發票自動隱藏) ★★★ */}
+                            {selectedDocType !== 'service_invoice' && selectedDocType !== 'receipt' && (
+                                <div className="p-3 bg-cyan-50/50 rounded-xl border border-cyan-200 mb-3 animate-in fade-in">
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="flex items-center text-[10px] font-bold text-cyan-800 uppercase tracking-wider cursor-pointer">
                                         <input type="checkbox" checked={formData.isFinance} onChange={e => setFormData(prev => ({...prev, isFinance: e.target.checked}))} className="mr-2 accent-cyan-600"/>
@@ -1308,11 +1319,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     </div>
                                 )}
                             </div>
-
-                            <div className="p-3 bg-green-50/50 rounded-xl border border-green-100">
-                                <div className="text-[10px] font-bold text-green-700 mb-3 flex justify-between uppercase tracking-wider">
-                                    <span>額外收費/附加項目 (Add-ons)</span><span className="text-green-500/70">請勾選納入單據</span>
-                                </div>
+                            )} {
+                                
+                            {/* ★ 收據不需要附加項目清單，自動隱藏 ★ */}
+                            {selectedDocType !== 'receipt' && (
+                                <div className="p-3 bg-green-50/50 rounded-xl border border-green-100 mb-3">
+                                    <div className="text-[10px] font-bold text-green-700 mb-3 flex justify-between uppercase tracking-wider">
+                                        <span>{selectedDocType === 'service_invoice' ? '服務與維修收費項目 (Service Items)' : '額外收費/附加項目 (Add-ons)'}</span>
+                                        <span className="text-green-500/70">請勾選納入單據</span>
+                                    </div>
                                 <div className="space-y-2 mb-3">
                                     {docItems.map((item: any) => (
                                         <div key={item.id} className="flex items-center text-xs bg-white p-2 rounded-lg border border-green-100 shadow-sm transition-all">
@@ -1339,7 +1354,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     <button type="button" onClick={addItem} className="bg-green-600 text-white px-3 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm"><Plus size={16}/></button>
                                 </div>
                             </div>
-
+                          )} {
+                                
                             <div className="p-3 bg-white rounded border border-slate-300">
                                 <div className="flex justify-between items-center mb-2">
                                     <div className="text-[10px] font-bold text-slate-600">隨車附件</div>
