@@ -1344,7 +1344,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     </div>
                                 )}
                             </div>
-                            )} {
+                            )}
                                 
                             {/* ★ 收據不需要附加項目清單，自動隱藏 ★ */}
                             {selectedDocType !== 'receipt' && (
