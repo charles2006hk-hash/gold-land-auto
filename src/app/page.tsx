@@ -3672,9 +3672,10 @@ const DatabaseSelector = ({
                     const pendingCbTotal = pendingCbTasks.reduce((sum: number, t: any) => sum + Number(t.fee), 0);
                     const balance = totalReceivable - received;
                     
-                    const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
-                    const unpaidMaint = (car.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Unpaid' && Number(m.cost) > 0).length;
-                    const totalUnpaidCosts = unpaidExps + unpaidMaint;
+                    // ★ 升級：精準計算所有「未找數」的維修與雜費成本總金額
+                    const unpaidExpsAmt = (car.expenses || []).reduce((sum: number, e: any) => sum + (e.status === 'Unpaid' ? (Number(e.amount) || 0) : 0), 0);
+                    const unpaidMaintAmt = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.costStatus === 'Unpaid' ? (Number(m.cost) || 0) : 0), 0);
+                    const totalUnpaidAmount = unpaidExpsAmt + unpaidMaintAmt;
 
                     // ★★★ 計算海外訂車的到港天數 ★★★
                     let daysToArrive: number | null = null;
@@ -3860,10 +3861,11 @@ const DatabaseSelector = ({
                                                 return null;
                                             })()}
 
-                                            {/* 2. 欠車房雜費 (橘色) */}
-                                            {totalUnpaidCosts > 0 && (
-                                                <span className="text-[9px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
-                                                    未付成本
+                                            {/* 2. 欠車房雜費與成本 (橘色) */}
+                                            {totalUnpaidAmount > 0 && (
+                                                <span className="text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
+                                                    <span className="mr-1 opacity-80 text-[8px] font-sans">未付成本</span>
+                                                    <span className="font-mono">{formatCurrency(totalUnpaidAmount)}</span>
                                                 </span>
                                             )}
                                             
