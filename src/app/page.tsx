@@ -1197,20 +1197,7 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                     }
                 });
                 
-                // ★ 新增：掃描未繳付的中港服務費用
-                (cb.tasks || []).forEach((t: any) => {
-                    if (t.fee > 0 && !(car.payments || []).some((p: any) => p.relatedTaskId === t.id)) {
-                        alerts.push({ 
-                            id: `${car.id}-fee-${t.id}`, 
-                            vid: car.id!, 
-                            regMark: car.regMark || 'No Plate', 
-                            type: 'CrossBorder', 
-                            item: `未繳費: ${t.item} (${formatCurrency(t.fee)})`, 
-                            date: t.date, 
-                            days: -1 // 強制設定為負數，觸發紅色緊急狀態
-                        });
-                    }
-                });
+                
             }
         });
         return alerts.sort((a, b) => a.days - b.days);
@@ -3513,20 +3500,7 @@ const DatabaseSelector = ({
                           } 
                       }); 
                       
-                      // ★ 新增：儀表板掃描未繳付的中港費用
-                      (cb.tasks || []).forEach((t: any) => {
-                          if (t.fee > 0 && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id)) {
-                              cbAlerts.push({ 
-                                  id: `${v.id}-fee-${t.id}`, 
-                                  title: v.regMark || '未出牌', 
-                                  desc: `未繳費: ${t.item} (${formatCurrency(t.fee)})`, 
-                                  date: t.date, 
-                                  days: -1, 
-                                  status: 'expired', 
-                                  raw: v 
-                              });
-                          }
-                      });
+                     
                   });
                   cbAlerts.sort((a, b) => a.days - b.days);
                   
