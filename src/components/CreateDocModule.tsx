@@ -1379,7 +1379,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     <button type="button" onClick={addItem} className="bg-green-600 text-white px-3 rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm"><Plus size={16}/></button>
                                 </div>
                             </div>
-                          )} {
+                          )}
                                 
                             <div className="p-3 bg-white rounded border border-slate-300">
                                 <div className="flex justify-between items-center mb-2">
