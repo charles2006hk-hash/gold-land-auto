@@ -165,7 +165,7 @@ const VehicleFormModal = ({
     const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
     
     const currentRealTimePrice = Number(priceStr.replace(/,/g, '')) || 0;
-    const totalRevenue = currentRealTimePrice + cbFees + salesAddonsTotal;
+    const totalRevenue = currentRealTimePrice + salesAddonsTotal;
     const balance = totalRevenue - totalReceived;
 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
@@ -998,17 +998,7 @@ const VehicleFormModal = ({
                                 <span className="text-sm md:text-xs text-gray-500 font-bold">牌簿價: <span className="font-mono text-slate-700">{calcRegisteredPrice()}</span></span>
                                 
                                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                                    {v.crossBorder?.isEnabled && (
-                                        <button 
-                                            type="button"
-                                            onClick={() => { setEditingVehicle(null); setActiveTab('cross_border'); alert(`已為您跳轉至「中港業務」。`); }}
-                                            className="flex flex-wrap items-center justify-center text-xs md:text-[10px] bg-purple-50 text-purple-700 border border-purple-200 p-2 md:px-2 md:py-1 rounded-lg md:rounded hover:bg-purple-100 transition-colors shadow-sm w-full md:w-auto h-auto leading-tight"
-                                        >
-                                            <Globe size={14} className="mr-1 flex-shrink-0"/> 
-                                            中港代辦: {formatCurrency(cbFees)} 
-                                            (已收: {formatCurrency((v.payments || []).filter((p:any) => p.relatedTaskId).reduce((sum:number, p:any) => sum + (p.amount || 0), 0))})
-                                        </button>
-                                    )}
+                                    
                                     <span className="font-bold text-blue-600 text-base md:text-sm bg-blue-50 p-2 md:px-3 md:py-1 rounded-lg md:rounded border border-blue-100 w-full sm:w-auto text-center">客戶欠款餘額: {formatCurrency(balance)}</span>
                                 </div>
                             </div>
@@ -1093,19 +1083,7 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                 ))}
-                                {pendingCbTasks.map((task: any) => (
-                                    <div key={task.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-amber-50 border border-amber-200 rounded-lg shadow-sm text-amber-800 cursor-pointer hover:bg-amber-100 transition-colors relative" onClick={() => { setNewPayment({ ...newPayment, amount: formatNumberInput(task.fee.toString()), note: `${task.item}`, relatedTaskId: task.id }); }} title="點擊載入收款欄">
-                                        <div className="flex flex-wrap items-center gap-2 md:flex-1 min-w-0">
-                                            <span className="text-amber-600/70 font-mono font-bold">{task.date}</span>
-                                            <span className="font-bold flex items-center w-full sm:w-auto bg-amber-200/50 px-2 py-1 rounded-md"><Globe size={12} className="mr-1 flex-shrink-0"/>{task.item}</span>
-                                            <span className="text-amber-700 w-full sm:w-auto truncate">{task.institution}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between md:justify-end gap-3 border-t border-amber-200/50 md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
-                                            <span className="font-mono font-black text-lg md:text-base">{formatCurrency(task.fee)}</span>
-                                            <span className="bg-amber-500 text-white px-2 py-1 rounded-md text-[10px] font-bold">待收</span>
-                                        </div>
-                                    </div>
-                                ))}
+                                
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-200 w-full">
@@ -1427,20 +1405,7 @@ const VehicleFormModal = ({
                                         </div>
                                     </div>
                                 ))}
-                                {/* 唯讀的中港業務代辦費 */}
-                                {(v.crossBorder?.tasks || []).filter((t:any) => t.fee > 0).map((task: any) => (
-                                    <div key={`cb-${task.id}`} className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-blue-50/50 border border-blue-200 rounded-lg shadow-sm text-blue-900">
-                                        <div className="flex items-center gap-3 md:flex-1 min-w-0">
-                                            <span className="text-blue-400 font-mono w-20 md:w-24 flex-shrink-0 font-bold">{task.date}</span>
-                                            <span className="font-black flex items-center bg-blue-100/50 px-2 py-1 rounded-md"><Globe size={12} className="mr-1 flex-shrink-0 text-blue-500"/>{task.item}</span>
-                                            <span className="text-blue-600/80 flex-1 truncate font-medium">中港代辦費</span>
-                                        </div>
-                                        <div className="flex items-center justify-end gap-4 md:w-auto flex-shrink-0 w-full md:w-auto">
-                                            <span className="font-mono font-black text-lg md:text-base text-blue-800">{formatCurrency(task.fee)}</span>
-                                            <div className="w-16 md:w-14"></div> {/* 佔位 */}
-                                        </div>
-                                    </div>
-                                ))}
+                                
                             </div>
 
                             {/* 新增費用 */}
@@ -1819,6 +1784,69 @@ const VehicleFormModal = ({
                                                             </label>
                                                         </div>
                                                         <input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-sm md:text-xs font-mono outline-none font-bold text-slate-800"/>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                 {/* ★★★ 新增：中港業務專屬收費與開單區塊 ★★★ */}
+                                    <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-blue-200 w-full min-w-0">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <label className="text-sm md:text-xs text-blue-900 font-black flex items-center bg-blue-100 w-fit px-3 py-1 rounded-full shadow-sm">
+                                                <DollarSign size={16} className="mr-1.5"/> 中港業務收費 (Cross-Border Fees)
+                                            </label>
+                                            {pendingCbTasks.length > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                        const docItems = pendingCbTasks.map((t: any) => ({
+                                                            id: t.id,
+                                                            desc: `[中港代辦] ${t.item}`,
+                                                            amount: Number(t.fee) || 0,
+                                                            isSelected: true
+                                                        }));
+                                                        onJumpToDoc({
+                                                            id: null,
+                                                            type: 'service_invoice', // ★ 智能跳轉：強制使用「服務發票」
+                                                            vehicleId: v.id,
+                                                            formData: {
+                                                                companyNameEn: COMPANY_INFO?.name_en || '', companyNameCh: COMPANY_INFO?.name_ch || '',
+                                                                companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
+                                                                customerName: v.crossBorder?.hkCompany || v.customerName || '', // 優先使用香港公司名
+                                                                customerPhone: v.customerPhone || '',
+                                                                regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '',
+                                                                price: '0', // 隱藏車價
+                                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
+                                                            },
+                                                            docItems: docItems,
+                                                            depositItems: [], showTerms: false
+                                                        });
+                                                    }}
+                                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm font-bold hover:bg-indigo-700 active:scale-95 transition-transform flex items-center"
+                                                >
+                                                    🧾 將未繳費合併為「服務發票」
+                                                </button>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full space-y-2">
+                                            {(v.crossBorder?.tasks || []).length === 0 && <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">尚無中港代辦收費項目</div>}
+                                            {(v.crossBorder?.tasks || []).map((t: any) => {
+                                                const isPaid = (v.payments || []).some((p: any) => p.relatedTaskId === t.id);
+                                                return (
+                                                    <div key={t.id} className="flex justify-between items-center p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-slate-400 font-mono text-xs">{t.date}</span>
+                                                            <span className="font-bold text-slate-800 text-sm">{t.item}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4">
+                                                            <span className="font-mono font-black text-blue-700">{formatCurrency(t.fee)}</span>
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shadow-sm ${isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200 animate-pulse'}`}>
+                                                                {isPaid ? '已付款' : '未繳費'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
