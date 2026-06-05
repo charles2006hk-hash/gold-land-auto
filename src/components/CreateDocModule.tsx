@@ -418,7 +418,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setMobileStep('edit');
     };
 
-    JavaScript
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
         setCarPhotos([]); // ★ 核心修復：重置表單時，徹底清空底下的圖片畫廊
