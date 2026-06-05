@@ -2977,13 +2977,10 @@ const deleteVehicle = async (id: string) => {
         // A. 對客附加費 (排除贈送項目)
         const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.isFree ? 0 : (Number(addon.amount) || 0)), 0);
         
-        // B. 中港代辦服務費
-        const cbFees = (car.crossBorder?.tasks || []).reduce((sum: any, t: any) => sum + (Number(t.fee) || 0), 0);
-        
         // C. 售後維修/服務對客收費 (只計算未找數的 Charge)
         const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
         
-        // --- 修正結束：總應收 = 車價 + 附加費 + 中港費 + 維修費 (完全剔除 expenses 內部開支) ---
+        // --- 修正結束：總應收 = 車價 + 附加費 + 維修費 (剔除中港費，獨立計算) ---
         const totalDue = (Number(car.price) || 0) + salesAddonsTotal + maintCharge;
         const balance = totalDue - received;
         
@@ -3691,11 +3688,14 @@ const DatabaseSelector = ({
                   const renderDashboardCard = (car: any) => {
                     // ★ 核心修復：讓卡片上的標籤也完美對齊最新邏輯
                     const received = (car.payments || []).reduce((acc:any, p:any) => acc + (Number(p.amount) || 0), 0);
-                    const cbFees = (car.crossBorder?.tasks || []).reduce((sum:any, t:any) => sum + (Number(t.fee) || 0), 0);
                     const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (Number(a.amount) || 0)), 0);
                     const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
                     
                     const totalReceivable = (Number(car.price) || 0) + salesAddonsTotal + maintCharge;
+                    
+                    // ★ 新增：計算獨立的「中港未繳費」總額，準備顯示在卡片右下角標籤
+                    const pendingCbTasks = (car.crossBorder?.tasks || []).filter((t:any) => (Number(t.fee) > 0) && !(car.payments || []).some((p:any) => p.relatedTaskId === t.id));
+                    const pendingCbTotal = pendingCbTasks.reduce((sum: number, t: any) => sum + Number(t.fee), 0);
                     const balance = totalReceivable - received;
                     
                     const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
@@ -3893,10 +3893,17 @@ const DatabaseSelector = ({
                                                 </span>
                                             )}
                                             
+                                            {/* ★ 新增：中港待收獨立標籤 (紫色) */}
+                                            {pendingCbTotal > 0 && (
+                                                <span className="text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
+                                                    <span className="mr-1 opacity-80 text-[8px] font-sans">中港待收</span>
+                                                    <span className="font-mono">{formatCurrency(pendingCbTotal)}</span>
+                                                </span>
+                                            )}
                                             {/* 3. 客戶欠款待收 (藍色) */}
                                             {balance > 0 && (
                                                 <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
-                                                    <span className="mr-1 opacity-80 text-[8px] font-sans">待收</span>
+                                                    <span className="mr-1 opacity-80 text-[8px] font-sans">車款待收</span>
                                                     <span className="font-mono">{formatCurrency(balance)}</span>
                                                 </span>
                                             )}
