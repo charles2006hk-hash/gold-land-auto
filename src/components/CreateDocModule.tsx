@@ -418,8 +418,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setMobileStep('edit');
     };
 
+    JavaScript
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
+        setCarPhotos([]); // ★ 核心修復：重置表單時，徹底清空底下的圖片畫廊
         setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true);
         
         // ★ 終極修復：補上 paymentMethod: 'Cheque'，100% 符合系統型別結構
@@ -537,7 +539,31 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
         const balance = (basePrice + extrasTotal) - deposit;
 
-        const titleMap: any = { 
+        // ★★★ 新增：數字轉英文大寫貨幣引擎 (收據專用) ★★★
+        const numberToEnglishWords = (n: number) => {
+            if (n === 0 || !n) return 'ZERO ONLY';
+            const a = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+            const b = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+            const formatChunk = (num: number) => {
+                let str = '';
+                if (num >= 100) { str += a[Math.floor(num / 100)] + ' HUNDRED '; num %= 100; }
+                if (num > 0) {
+                    if (str !== '') str += 'AND ';
+                    if (num < 20) str += a[num] + ' ';
+                    else { str += b[Math.floor(num / 10)] + ' '; if (num % 10 > 0) str += a[num % 10] + ' '; }
+                }
+                return str;
+            };
+            let word = ''; let val = Math.floor(n); const cents = Math.round((n - val) * 100);
+            if (val >= 1000000) { word += formatChunk(Math.floor(val / 1000000)) + 'MILLION '; val %= 1000000; }
+            if (val >= 1000) { word += formatChunk(Math.floor(val / 1000)) + 'THOUSAND '; val %= 1000; }
+            if (val > 0) { word += formatChunk(val); }
+            word = word.trim();
+            if (cents > 0) word += ` AND CENTS ${cents}`;
+            return word + ' ONLY';
+        };
+
+        const titleMap: any = {
             'sales_contract': { en: 'VEHICLE SALES AGREEMENT', ch: '汽車買賣合約' }, 
             'purchase_contract': { en: 'VEHICLE PURCHASE AGREEMENT', ch: '汽車收購合約' }, 
             'consignment_contract': { en: 'VEHICLE CONSIGNMENT AGREEMENT', ch: '汽車寄賣合約' }, 
@@ -665,30 +691,64 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </>
                             ) : (
                                 <>
-                                    {/* ★ 收據專屬極簡排版 */}
+                                    {/* ★ 收據專屬極簡排版 (傳統會計正式收據樣式) */}
                                     {isReceipt ? (
-                                        <div className="border-2 border-slate-800 p-6 mb-6 bg-slate-50/30 relative">
-                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
-                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">RECEIVED FROM<br/><span className="text-[10px] text-slate-500 font-medium">茲收到客戶</span></div>
-                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-bold text-[14px] text-slate-900">{formData.customerName || '_________________'}</div>
+                                        <div className="border-[3px] border-double border-slate-800 p-8 mb-6 relative bg-white">
+                                            {/* 背景隱形浮水印 */}
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
+                                                <img src={COMPANY_INFO?.logo_url || ''} className="w-64 h-64 object-contain grayscale" />
                                             </div>
-                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
-                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">THE SUM OF HKD<br/><span className="text-[10px] text-slate-500 font-medium">款項總額</span></div>
-                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-mono font-black text-[18px] text-blue-800">{formatCurrency(deposit)}</div>
+
+                                            <div className="text-center mb-8 border-b-2 border-slate-800 pb-4 relative z-10">
+                                                <h2 className="text-2xl font-black tracking-widest text-slate-900 uppercase">OFFICIAL RECEIPT</h2>
+                                                <h3 className="text-lg font-bold tracking-[0.5em] text-slate-700 mt-1">正式收據</h3>
                                             </div>
-                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
-                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">BEING PAYMENT OF<br/><span className="text-[10px] text-slate-500 font-medium">支付項目</span></div>
-                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-bold text-slate-800 leading-relaxed">{depositItems.map((d: any) => d.label).join(', ')}</div>
-                                            </div>
-                                            <div className="grid grid-cols-12 gap-4 mb-5 text-[12px]">
-                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">PAYMENT METHOD<br/><span className="text-[10px] text-slate-500 font-medium">付款方式</span></div>
-                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 font-mono font-bold text-slate-800">{formData.paymentMethod}</div>
-                                            </div>
-                                            <div className="grid grid-cols-12 gap-4 text-[12px]">
-                                                <div className="col-span-4 font-bold text-slate-700 tracking-wider">VEHICLE REF.<br/><span className="text-[10px] text-slate-500 font-medium">相關車輛</span></div>
-                                                <div className="col-span-8 border-b-2 border-slate-400 pb-1 text-slate-800 font-bold">
-                                                    {formData.regMark || 'TBC'} - {formData.year || ''} {formData.make} {formData.model} <span className="text-slate-600 font-normal">({formData.color || 'N/A'})</span>
-                                                    <br/><span className="font-mono text-[10px] text-slate-500">VIN: {formData.chassisNo || 'N/A'}</span>
+                                            
+                                            <div className="space-y-6 text-[13px] relative z-10">
+                                                <div className="flex items-end">
+                                                    <div className="w-40 font-bold text-slate-700 leading-tight">
+                                                        Received from<br/><span className="text-[11px] font-medium text-slate-500">茲收到</span>
+                                                    </div>
+                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[14px] text-slate-900 px-2 italic">
+                                                        {formData.customerName || '_________________________________'}
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-end">
+                                                    <div className="w-40 font-bold text-slate-700 leading-tight">
+                                                        the sum of H.K. Dollars<br/><span className="text-[11px] font-medium text-slate-500">港幣</span>
+                                                    </div>
+                                                    {/* 自動將數字轉換為英文大寫！ */}
+                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[12px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">
+                                                        {numberToEnglishWords(deposit)}
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-end">
+                                                    <div className="w-40 font-bold text-slate-700 leading-tight">
+                                                        in payment of<br/><span className="text-[11px] font-medium text-slate-500">係付</span>
+                                                    </div>
+                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-slate-800 px-2">
+                                                        {depositItems.map((d: any) => d.label).join(', ')} 
+                                                        {formData.regMark && ` (Reg No.: ${formData.regMark})`}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-end justify-between mt-10 pt-4">
+                                                    <div className="flex items-center">
+                                                        <span className="text-2xl font-black text-slate-800 mr-4 italic">HK$</span>
+                                                        {/* 傳統會計的雙橫線數字框 */}
+                                                        <div className="border-y-4 border-slate-800 py-1 px-8 bg-slate-50 font-mono font-black text-xl text-slate-900 tracking-wider shadow-sm">
+                                                            {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(deposit)}
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-[11px] text-slate-500 font-bold text-right">Payment Method<br/>交來</div>
+                                                        <div className="border-b border-slate-400 pb-1 px-4 font-mono font-bold text-slate-800 min-w-[120px] text-center">
+                                                            {formData.paymentMethod}
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
