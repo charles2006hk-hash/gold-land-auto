@@ -1186,7 +1186,6 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                 };
                 Object.entries(cbDocs).forEach(([key, label]) => {
                     const dateVal = (cb as any)?.[key];
-                    // ★ 讀取該項目的開關狀態
                     const reminderKey = key.replace('date', 'cb_remind_'); 
                     const isRemind = (cb as any)?.[reminderKey] !== false;
 
@@ -1195,6 +1194,21 @@ const SmartNotificationCenter = ({ inventory, settings }: { inventory: Vehicle[]
                         if (diff <= daysThreshold) {
                             alerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'CrossBorder', item: label, date: dateVal, days: diff });
                         }
+                    }
+                });
+                
+                // ★ 新增：掃描未繳付的中港服務費用
+                (cb.tasks || []).forEach((t: any) => {
+                    if (t.fee > 0 && !(car.payments || []).some((p: any) => p.relatedTaskId === t.id)) {
+                        alerts.push({ 
+                            id: `${car.id}-fee-${t.id}`, 
+                            vid: car.id!, 
+                            regMark: car.regMark || 'No Plate', 
+                            type: 'CrossBorder', 
+                            item: `未繳費: ${t.item} (${formatCurrency(t.fee)})`, 
+                            date: t.date, 
+                            days: -1 // 強制設定為負數，觸發紅色緊急狀態
+                        });
                     }
                 });
             }
@@ -2970,7 +2984,7 @@ const deleteVehicle = async (id: string) => {
         const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
         
         // --- 修正結束：總應收 = 車價 + 附加費 + 中港費 + 維修費 (完全剔除 expenses 內部開支) ---
-        const totalDue = (Number(car.price) || 0) + salesAddonsTotal + cbFees + maintCharge;
+        const totalDue = (Number(car.price) || 0) + salesAddonsTotal + maintCharge;
         const balance = totalDue - received;
         
         if (balance > 0) totalReceivable += balance;
@@ -3501,6 +3515,21 @@ const DatabaseSelector = ({
                               } 
                           } 
                       }); 
+                      
+                      // ★ 新增：儀表板掃描未繳付的中港費用
+                      (cb.tasks || []).forEach((t: any) => {
+                          if (t.fee > 0 && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id)) {
+                              cbAlerts.push({ 
+                                  id: `${v.id}-fee-${t.id}`, 
+                                  title: v.regMark || '未出牌', 
+                                  desc: `未繳費: ${t.item} (${formatCurrency(t.fee)})`, 
+                                  date: t.date, 
+                                  days: -1, 
+                                  status: 'expired', 
+                                  raw: v 
+                              });
+                          }
+                      });
                   });
                   cbAlerts.sort((a, b) => a.days - b.days);
                   
@@ -3601,7 +3630,7 @@ const DatabaseSelector = ({
                           // 修正 2：加入未找數的維修對客收費
                           const maintCharge = (c.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
                           
-                          const totalReceivable = (Number(c.price) || 0) + cbFees + salesAddonsTotal + maintCharge;
+                          const totalReceivable = (Number(c.price) || 0) + salesAddonsTotal + maintCharge;
                           const balance = totalReceivable - received;
                           
                           const unpaidExps = (c.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
@@ -3666,7 +3695,7 @@ const DatabaseSelector = ({
                     const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (Number(a.amount) || 0)), 0);
                     const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
                     
-                    const totalReceivable = (Number(car.price) || 0) + cbFees + salesAddonsTotal + maintCharge;
+                    const totalReceivable = (Number(car.price) || 0) + salesAddonsTotal + maintCharge;
                     const balance = totalReceivable - received;
                     
                     const unpaidExps = (car.expenses || []).filter((e:any) => e.status === 'Unpaid').length;
