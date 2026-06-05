@@ -2052,9 +2052,12 @@ const VehicleFormModal = ({
                                     if (relatedDocs.length === 0) return <span className="text-[10px] text-gray-400 font-bold bg-slate-100 px-2 py-1 rounded-md whitespace-nowrap">尚無單據</span>;
 
                                     return relatedDocs.map((doc: any) => {
-                                        const typeMap: Record<string, string> = { 'sales_contract': '合約', 'purchase_contract': '收車', 'consignment_contract': '寄賣', 'invoice': '發票', 'receipt': '收據' };
+                                        const typeMap: Record<string, string> = { 'sales_contract': '合約', 'purchase_contract': '收車', 'consignment_contract': '寄賣', 'invoice': '發票', 'receipt': '收據', 'service_invoice': '服務發票' };
                                         const typeLabel = typeMap[doc.type] || '單據';
-                                        const dateStr = doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString() : 'N/A';
+                                        // ★ 智能修正：優先抓取單據內的真實日期 (docDate)，沒有才退回用系統更新時間
+                                        const dateStr = doc.formData?.docDate 
+                                            ? doc.formData.docDate.replace(/-/g, '/') 
+                                            : (doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString('zh-HK') : 'N/A');
                                         return (
                                             <button key={doc.id} type="button" onClick={() => onJumpToDoc(doc)} className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center transition-colors flex-shrink-0 shadow-sm active:scale-95 whitespace-nowrap" title={doc.summary}>
                                                 <FileText size={12} className="mr-1 flex-shrink-0"/> {typeLabel} ({dateStr})
