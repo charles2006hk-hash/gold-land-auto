@@ -69,6 +69,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     
     const [showTerms, setShowTerms] = useState(true);
     const [showPurchaseGuarantees, setShowPurchaseGuarantees] = useState(true); // ★ 新增：收車保障條款開關
+    const [showSalesGuarantees, setShowSalesGuarantees] = useState(true);       // ★ 新增：賣車/訂車免責條款開關
     
     const [showAttachments, setShowAttachments] = useState(true);
     const [showStampAndSig, setShowStampAndSig] = useState(true); 
@@ -836,9 +837,25 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 <div className="mt-2 pt-2 border-t border-slate-300">
                                                     <p className="font-bold mb-1 text-slate-800">Seller's Warranties and Guarantees 賣方保證條款：</p>
                                                     <ol className="list-decimal pl-4 space-y-1 text-[8.5px]">
-                                                        <li><b>Clear Title & No Encumbrances:</b> The Seller warrants that the Vehicle is free from any outstanding finance, loans, debts, or third-party encumbrances, and ownership can be legally transferred to the Buyer without hindrance. <br/><span className="text-slate-700"><b>無債務及順利過戶：</b>賣方保證上述車輛並無任何未清繳之財務、貸款、債務或第三方權利負擔，且車輛擁有權可合法及順利轉讓予買方而無任何阻礙。</span></li>
+                                                        <li><b>Clear Title & No Encumbrances:</b> The Seller warrants that the Vehicle is free from any outstanding finance, loans, debts, or third-party encumbrances. <br/><span className="text-slate-700"><b>無債務及順利過戶：</b>賣方保證上述車輛並無任何未清繳之財務、貸款或第三方權利負擔，且可合法順利轉讓予買方。</span></li>
                                                         <li><b>Vehicle Condition:</b> The Seller guarantees that the Vehicle has never been involved in any major accidents resulting in structural damage, nor has it ever been damaged by flooding. <br/><span className="text-slate-700"><b>車輛狀況：</b>賣方保證上述車輛從未涉及任何導致結構受損之重大意外，亦從未受過水浸損壞。</span></li>
-                                                        <li><b>Cross-Border Quota Clearance (If Applicable):</b> For vehicles with prior cross-border registration, the Seller warrants that all associated cross-border quotas, approvals, and electronic tags have been completely detached and cleared, ensuring the Vehicle can be lawfully attached to a new cross-border quota without any restrictions. <br/><span className="text-slate-700"><b>中港指標退清 (如適用)：</b>若上述車輛曾登記為中港跨境車輛，賣方保證已徹底註銷及退清該車輛與之前所有中港車牌指標、批文之關聯，確保該車輛可合法且無限制地重新綁定至全新之中港車牌指標。</span></li>
+                                                        <li><b>Cross-Border Quota Clearance (If Applicable):</b> For vehicles with prior cross-border registration, the Seller warrants that all associated quotas have been completely detached. <br/><span className="text-slate-700"><b>中港指標退清 (如適用)：</b>若為跨境車輛，賣方保證已徹底註銷及退清該車輛與之前所有中港車牌指標之關聯。</span></li>
+                                                    </ol>
+                                                </div>
+                                            )}
+
+                                            {/* ★ 賣車與訂車終極免責/殺訂條款 */}
+                                            {selectedDocType === 'sales_contract' && showSalesGuarantees && (
+                                                <div className="mt-2 pt-2 border-t border-slate-300">
+                                                    <p className="font-bold mb-1 text-slate-800">Purchaser's Acknowledgements and Terms 買方確認及合約條款：</p>
+                                                    <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
+                                                        <li><b>"As-Is" Condition:</b> The Buyer acknowledges having inspected the Vehicle (or waived such right) and agrees to purchase it strictly "As-Is". <br/><span className="text-slate-700"><b>現狀買賣：</b>買方確認已檢驗上述車輛（或自願放棄驗車權利），並同意以「現狀」(As-Is) 購入。賣方對車輛之性能或質量不作任何保證。</span></li>
+                                                        <li><b>Odometer Disclaimer:</b> As a pre-owned vehicle, the odometer reading is indicative only. The Seller cannot warrant the vehicle's history or dashboard alterations. <br/><span className="text-slate-700"><b>里數免責：</b>此為二手車輛，儀錶板里數僅供參考。賣方無法保證該儀錶板未曾被前任車主干擾或更換。</span></li>
+                                                        <li><b>Post-Delivery Liability:</b> Upon vehicle handover, all risks, liabilities, and subsequent repair costs pass entirely to the Buyer. <br/><span className="text-slate-700"><b>交車後免責：</b>自交車之時起，所有風險、法律責任及日後維修費用均由買方承擔，賣方概不負責。</span></li>
+                                                        <li><b>Non-Refundable Deposit & Forfeiture:</b> All deposits paid are strictly non-refundable. Should the Buyer fail to complete the purchase or take delivery within the agreed timeframe, the Seller reserves the absolute right to terminate this Agreement, forfeit the entire deposit as liquidated damages, and resell the vehicle. <br/><span className="text-slate-700 font-bold text-red-800"><b>訂金沒收 (殺訂) 條款：買方所付之訂金概不退還。若買方未能按時支付尾數或完成交易，賣方保留絕對權利單方面終止合約，並全數沒收訂金作為預定違約金，且有權將車輛自由轉售。</b></span></li>
+                                                        {formData.orderType !== 'None' && (
+                                                            <li><b>Vehicle Order & ETA:</b> For ordered vehicles, the Estimated Time of Arrival (ETA) is indicative. Delays caused by shipping, customs, or factors beyond the Seller's control shall not entitle the Buyer to cancel the order or demand a refund. <br/><span className="text-slate-700"><b>訂購車輛特別條款：</b>針對非現貨之訂購車輛，預計到港時間 (ETA) 僅供參考。因船期、海關或非賣方所能控制之因素導致的延誤，買方無權藉此要求取消訂單或退還訂金。</span></li>
+                                                        )}
                                                     </ol>
                                                 </div>
                                             )}
@@ -1289,8 +1306,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </label>
                                         {/* ★ 新增：收車合約專用的保障條款開關 */}
                                         {selectedDocType === 'purchase_contract' && (
-                                            <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                            <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm">
                                                 <input type="checkbox" checked={showPurchaseGuarantees} onChange={e => setShowPurchaseGuarantees(e.target.checked)} className="mr-1.5 accent-blue-600"/>收車保障條款
+                                            </label>
+                                        )}
+                                        {/* ★ 新增：賣車/訂車合約專用的免責條款開關 */}
+                                        {selectedDocType === 'sales_contract' && (
+                                            <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm">
+                                                <input type="checkbox" checked={showSalesGuarantees} onChange={e => setShowSalesGuarantees(e.target.checked)} className="mr-1.5 accent-blue-600"/>賣車/訂車條款
                                             </label>
                                         )}
                                     </div>
