@@ -402,20 +402,35 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* 背景裝飾 */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-20 pointer-events-none">
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600 rounded-full blur-[100px]"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-yellow-600 rounded-full blur-[100px]"></div>
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+      
+      {/* ★★★ 新增：動態宇宙光暈背景 (無限呼吸移動) ★★★ */}
+      <div className="absolute inset-0 w-full h-full overflow-hidden opacity-30 pointer-events-none">
+          {/* 左上角深空藍色流動 */}
+          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-600 rounded-full blur-[120px] animate-[pulse_8s_ease-in-out_infinite]"></div>
+          {/* 右下角金色光芒流動 */}
+          <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-yellow-500 rounded-full blur-[150px] animate-[pulse_10s_ease-in-out_infinite_alternate] mix-blend-screen"></div>
       </div>
 
-      <div className="bg-white/10 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/20 relative z-10">
+      <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/10 relative z-10">
+        
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-2">
-             <img src={COMPANY_INFO.logo_url} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; }} />
+          {/* ★★★ 升級版 Logo：黃金鑲嵌 + 去除白底 + 金色呼吸光暈 ★★★ */}
+          <div className="relative w-28 h-28 mx-auto mb-5 group">
+              {/* 外圍金色發光圈 (呼吸效果) */}
+              <div className="absolute inset-0 bg-yellow-400 rounded-2xl blur-xl opacity-30 animate-pulse transition-opacity duration-1000 group-hover:opacity-60"></div>
+              {/* 細膩的黃金鑲嵌邊框 (沒有白色背景，完全透底) */}
+              <div className="absolute inset-0 rounded-2xl border-[1.5px] border-yellow-500/50 bg-gradient-to-br from-white/10 to-transparent shadow-[inset_0_0_20px_rgba(234,179,8,0.2)] flex items-center justify-center p-2 backdrop-blur-sm z-10">
+                  <img 
+                      src={COMPANY_INFO.logo_url} 
+                      className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,215,0,0.6)]" 
+                      onError={(e) => { e.currentTarget.style.display='none'; }} 
+                  />
+              </div>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">GOLD LAND AUTO</h1>
-          <p className="text-blue-200 text-xs mt-1 font-medium tracking-widest uppercase">Secure DMS Access</p>
+          
+          <h1 className="text-2xl font-black text-white tracking-widest drop-shadow-md">GOLD LAND AUTO</h1>
+          <p className="text-yellow-500/80 text-[10px] mt-1.5 font-bold tracking-[0.3em] uppercase drop-shadow">Secure DMS Access</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
