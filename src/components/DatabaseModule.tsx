@@ -263,14 +263,33 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                 }) as string;
             }
 
-            const response = await fetch('/api/ocr', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: base64ToSend, docType: docType })
-            });
+            // ★★★ 智能防護版 Fetch (自動重試 + 攔截 HTML 錯誤) ★★★
+            const fetchWithRetry = async (retries = 3, delay = 3000): Promise<any> => {
+                const response = await fetch('/api/ocr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: base64ToSend, docType: docType })
+                });
+                
+                // 1. 遇到 429 限制，自動等待並重試
+                if (response.status === 429 && retries > 0) {
+                    showToast(`⚠️ AI 伺服器擁擠，${delay/1000}秒後自動重試...`, 'error');
+                    await new Promise(res => setTimeout(res, delay));
+                    return fetchWithRetry(retries - 1, delay * 2); // 延遲時間加倍 (3s -> 6s -> 12s)
+                }
+                
+                // 2. 攔截 Vercel 冷啟動的 504 HTML 錯誤頁面，防止 JSON 解析崩潰
+                const contentType = response.headers.get("content-type");
+                if (contentType && !contentType.includes("application/json")) {
+                    throw new Error("伺服器冷啟動超時，請再試一次。");
+                }
 
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || '識別請求失敗');
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || '識別請求失敗');
+                return result;
+            };
+
+            const result = await fetchWithRetry();
             const data = result.data;
 
             if (data) {
