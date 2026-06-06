@@ -415,15 +415,15 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
       <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/10 relative z-10">
         
         <div className="text-center mb-8">
-          {/* ★★★ 升級版 Logo：黃金鑲嵌 + 去除白底 + 金色呼吸光暈 ★★★ */}
+          {/* ★★★ 升級版 Logo：極幼細金絲鑲嵌 + 去除白底 + 柔和呼吸光暈 ★★★ */}
           <div className="relative w-28 h-28 mx-auto mb-5 group">
-              {/* 外圍金色發光圈 (呼吸效果) */}
-              <div className="absolute inset-0 bg-yellow-400 rounded-2xl blur-xl opacity-30 animate-pulse transition-opacity duration-1000 group-hover:opacity-60"></div>
-              {/* 細膩的黃金鑲嵌邊框 (沒有白色背景，完全透底) */}
-              <div className="absolute inset-0 rounded-2xl border-[1.5px] border-yellow-500/50 bg-gradient-to-br from-white/10 to-transparent shadow-[inset_0_0_20px_rgba(234,179,8,0.2)] flex items-center justify-center p-2 backdrop-blur-sm z-10">
+              {/* 外圍金色發光圈 (呼吸效果，光暈稍微收斂顯得更高級) */}
+              <div className="absolute inset-0 bg-yellow-400 rounded-2xl blur-lg opacity-25 animate-pulse transition-opacity duration-1000 group-hover:opacity-50"></div>
+              {/* ★ 極端幼細的黃金鑲嵌邊框 (border-[0.5px] 髮絲線) */}
+              <div className="absolute inset-0 rounded-2xl border-[0.5px] border-yellow-400/60 bg-gradient-to-br from-white/5 to-transparent shadow-[inset_0_0_15px_rgba(234,179,8,0.1)] flex items-center justify-center p-2 backdrop-blur-sm z-10">
                   <img 
                       src={COMPANY_INFO.logo_url} 
-                      className="w-full h-full object-contain drop-shadow-[0_0_8px_rgba(255,215,0,0.6)]" 
+                      className="w-full h-full object-contain drop-shadow-[0_0_5px_rgba(255,215,0,0.5)]" 
                       onError={(e) => { e.currentTarget.style.display='none'; }} 
                   />
               </div>
