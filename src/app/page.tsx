@@ -415,15 +415,17 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
       <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/10 relative z-10">
         
         <div className="text-center mb-8">
-          {/* ★★★ 升級版 Logo：極幼細金絲鑲嵌 + 去除白底 + 柔和呼吸光暈 ★★★ */}
-          <div className="relative w-28 h-28 mx-auto mb-5 group">
-              {/* 外圍金色發光圈 (呼吸效果，光暈稍微收斂顯得更高級) */}
-              <div className="absolute inset-0 bg-yellow-400 rounded-2xl blur-lg opacity-25 animate-pulse transition-opacity duration-1000 group-hover:opacity-50"></div>
-              {/* ★ 極端幼細的黃金鑲嵌邊框 (border-[0.5px] 髮絲線) */}
-              <div className="absolute inset-0 rounded-2xl border-[0.5px] border-yellow-400/60 bg-gradient-to-br from-white/5 to-transparent shadow-[inset_0_0_15px_rgba(234,179,8,0.1)] flex items-center justify-center p-2 backdrop-blur-sm z-10">
+          {/* ★★★ 巔峰奢華版 Logo：零實體邊框 + 玻璃反光懸浮 + 金色流光 ★★★ */}
+          <div className="relative w-32 h-32 mx-auto mb-5 group">
+              {/* 底層：極度柔和的金色呼吸光暈 */}
+              <div className="absolute inset-0 bg-yellow-500 rounded-full blur-[25px] opacity-20 animate-pulse transition-opacity duration-1000 group-hover:opacity-40"></div>
+              
+              {/* 核心：徹底移除實體邊框，只保留若隱若現的玻璃高光 (Highlight) */}
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-white/5 via-transparent to-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center p-1 backdrop-blur-[2px] z-10">
+                  {/* Logo 本體：賦予極強的金屬質感與微弱的陰影浮凸感 */}
                   <img 
                       src={COMPANY_INFO.logo_url} 
-                      className="w-full h-full object-contain drop-shadow-[0_0_5px_rgba(255,215,0,0.5)]" 
+                      className="w-[85%] h-[85%] object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] group-hover:drop-shadow-[0_0_15px_rgba(255,215,0,0.8)] transition-all duration-500" 
                       onError={(e) => { e.currentTarget.style.display='none'; }} 
                   />
               </div>
@@ -792,10 +794,11 @@ const GlobalDataLoadingScreen = () => {
                 <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-yellow-500 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
             </div>
             
-            <div className="relative z-10 flex flex-col items-center">
-                {/* Logo 彈跳與發光效果 */}
-                <div className="w-24 h-24 bg-white rounded-3xl shadow-[0_0_50px_rgba(255,255,255,0.15)] p-3 mb-8 animate-bounce" style={{ animationDuration: '2s' }}>
-                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display='none'; }}/>
+           <div className="relative z-10 flex flex-col items-center">
+                {/* ★ 升級版 Loading Logo：無底色透視 + 純金屬光暈彈跳 */}
+                <div className="relative w-28 h-28 mb-8 animate-bounce" style={{ animationDuration: '2s' }}>
+                    <div className="absolute inset-0 bg-yellow-400 rounded-full blur-[30px] opacity-20"></div>
+                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="relative z-10 w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" onError={(e) => { e.currentTarget.style.display='none'; }}/>
                 </div>
                 
                 <h1 className="text-3xl font-black text-white tracking-widest mb-2 drop-shadow-lg">GOLD LAND AUTO</h1>
