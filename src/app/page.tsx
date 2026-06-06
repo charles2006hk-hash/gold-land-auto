@@ -2383,14 +2383,14 @@ useEffect(() => {
         }
     };
 
-// ★★★ 升級版：自動發送推送通知輔助函數 (支援廣播 及 指定員工) ★★★
+// ★★★ 升級版：自動發送推送通知輔助函數 (修復重複發送與冷啟動崩潰) ★★★
     // targetUsers: 如果留空，就發送俾所有人；如果傳入 ['sales01', 'admin']，就只發俾呢兩個人。
     const sendPushNotification = async (title: string, body: string, targetUsers?: string[]) => {
         if (!db || !appId || !settings.pushConfig?.isEnabled) return;
         try {
             const tokenRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tokens');
             const tokenSnap = await getDocs(tokenRef);
-            const tokens: string[] = [];
+            const rawTokens: string[] = [];
             
             tokenSnap.forEach(doc => {
                 const data = doc.data();
@@ -2398,24 +2398,38 @@ useEffect(() => {
                     // 如果有指定員工名單，就檢查呢個 token 屬唔屬於嗰個員工
                     if (targetUsers && targetUsers.length > 0) {
                         if (targetUsers.includes(data.user)) {
-                            tokens.push(data.token);
+                            rawTokens.push(data.token);
                         }
                     } else {
                         // 如果無指定，就全部人都加落去 (廣播模式)
-                        tokens.push(data.token);
+                        rawTokens.push(data.token);
                     }
                 }
             });
 
-            if (tokens.length === 0) return;
+            // ★ 核心修復 1：過濾重複的 Token！ (利用 Set 自動消除陣列中重複的值)
+            const uniqueTokens = Array.from(new Set(rawTokens));
 
-            await fetch('/api/notify', {
+            if (uniqueTokens.length === 0) return;
+
+            const res = await fetch('/api/notify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tokens, title, body })
+                body: JSON.stringify({ tokens: uniqueTokens, title, body })
             });
+
+            // ★ 核心修復 2：攔截 Vercel 冷啟動 HTML 錯誤，防止畫面閃退報錯
+            if (!res.ok) {
+                const contentType = res.headers.get("content-type");
+                // 如果回傳的不是 JSON (通常是 504 Timeout 的 HTML)
+                if (contentType && !contentType.includes("application/json")) {
+                    console.warn("API 喚醒超時 (Cold Start)，但不影響資料儲存。");
+                    return; // 靜默退出，不打擾使用者
+                }
+            }
         } catch (e) {
-            console.error("發送系統通知失敗", e);
+            // 只在背景 Console 印出警告，絕對不要 throw Error 讓畫面崩潰
+            console.warn("發送系統通知失敗 (可忽略):", e);
         }
     };
 
