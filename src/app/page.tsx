@@ -494,6 +494,10 @@ const InfoWidget = () => {
     const [portStatus, setPortStatus] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // ★ 新增：隧道資料與輪播螢幕狀態
+    const [tunnelStatus, setTunnelStatus] = useState<any>(null);
+    const [trafficScreen, setTrafficScreen] = useState<'ports' | 'tunnels'>('ports');
+
     const PORT_MAPPING: Record<string, string> = {
         'SBC': '深圳灣', 'LMC': '皇崗(落馬洲)', 'HZM': '港珠澳大橋',
         'HYW': '蓮塘/香園圍', 'MKT': '文錦渡', 'STK': '沙頭角'
@@ -515,10 +519,18 @@ const InfoWidget = () => {
         return () => clearInterval(timer);
     }, []);
 
+    // ★ 1. 控制畫面：每 10 秒切換一次屏幕
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setTrafficScreen(prev => prev === 'ports' ? 'tunnels' : 'ports');
+        }, 10000);
+        return () => clearInterval(interval);
+    }, []);
+
+    // ★ 2. 抓取資料：每 60 秒在背景雙管齊下更新數據
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
-                // ★ 加入時間戳 ?t= 破解 Vercel 緩存，確保每次都去抓最新狀態
                 const res = await fetch(`/api/traffic?t=${Date.now()}`);
                 if (!res.ok) throw new Error('API Error');
                 const data = await res.json();
@@ -529,20 +541,27 @@ const InfoWidget = () => {
                     });
                     const sortOrder = ['深圳灣', '皇崗(落馬洲)', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
                     formatted.sort((a, b) => sortOrder.indexOf(a.name) - sortOrder.indexOf(b.name));
-                    
-                    // ★ 只有成功抓到大於 0 筆資料時才更新畫面
-                    if (formatted.length > 0) {
-                        setPortStatus(formatted);
-                    }
+                    if (formatted.length > 0) setPortStatus(formatted);
                 }
-            } catch (e) { 
-                console.warn("口岸數據延遲，保持顯示舊數據 (Traffic fetch timeout)"); 
-                // ★ 絕對不要在這裡 setPortStatus([])，讓舊數據留在畫面上！
-            } 
+            } catch (e) { console.warn("口岸數據延遲"); } 
             finally { setLoading(false); }
         };
+
+        const fetchTunnels = async () => {
+            try {
+                const res = await fetch(`/api/tunnels?t=${Date.now()}`);
+                const result = await res.json();
+                if (result.success) setTunnelStatus(result.data);
+            } catch (e) { console.warn("隧道數據延遲"); }
+        };
+
         fetchTraffic();
-        const trafficTimer = setInterval(fetchTraffic, 300000);
+        fetchTunnels();
+        
+        const trafficTimer = setInterval(() => {
+            fetchTraffic();
+            fetchTunnels();
+        }, 60000);
         return () => clearInterval(trafficTimer);
     }, []);
 
@@ -597,34 +616,70 @@ const InfoWidget = () => {
     };
 
     return (
-        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80">
-            <div className="mb-3 border-b border-slate-700 pb-2">
+        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80 relative overflow-hidden pb-5">
+            {/* 時間日期區 (固定在頂部不輪播) */}
+            <div className="mb-3 border-b border-slate-700 pb-2 relative z-10">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">{currentTime.toLocaleTimeString('en-GB', { hour12: false })}</div>
-                {/* ★★★ 修改：將星期改為全稱「星期一」 ★★★ */}
                 <div className="flex justify-between mt-1 text-slate-400">
                     <span>{currentTime.toLocaleDateString('zh-HK')}</span>
                     <span>{['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][currentTime.getDay()]}</span>
                 </div>
-                {/* ★★★ 修改：直接呼叫 getLunarDate() 渲染 ★★★ */}
                 <div className="text-center mt-1 text-yellow-500 font-medium">
                     {getLunarDate()}
                 </div>
             </div>
-            {portStatus.length > 0 ? (
-                <div className="space-y-1.5 animate-fade-in">
-                    <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1"><span>口岸</span><div className="flex gap-3"><span>北上</span><span>南下</span></div></div>
-                    {portStatus.map((port, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
-                            <span className="truncate mr-2 font-medium text-slate-200">{port.name}</span>
-                            <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end">
-                                <span className={getStatusColor(port.up)}>{getStatusText(port.up)}</span>
-                                <span className={getStatusColor(port.down)}>{getStatusText(port.down)}</span>
+            
+            {/* ★ 戰情雙屏幕輪播區 (鎖定高度，防止畫面跳動) */}
+            <div className="relative min-h-[175px]">
+                {trafficScreen === 'ports' ? (
+                    <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1"><span>口岸通關</span><div className="flex gap-3"><span>北上</span><span>南下</span></div></div>
+                        {portStatus.length > 0 ? portStatus.map((port, idx) => (
+                            <div key={`port_${idx}`} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
+                                <span className="truncate mr-2 font-medium text-slate-200">{port.name}</span>
+                                <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end">
+                                    <span className={getStatusColor(port.up)}>{getStatusText(port.up)}</span>
+                                    <span className={getStatusColor(port.down)}>{getStatusText(port.down)}</span>
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                    <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">數據: 入境處 (每5分鐘更新)</div>
-                </div>
-            ) : (<div className="text-center text-slate-600 italic py-2">{loading ? '更新數據中...' : '暫無即時數據'}</div>)}
+                        )) : (<div className="text-center text-slate-600 italic py-6">{loading ? '口岸數據更新中...' : '暫無口岸數據'}</div>)}
+                        <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">入境處實時數據</div>
+                    </div>
+                ) : (
+                    <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-left-4 duration-500">
+                        <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1"><span>隧道預計 (分鐘)</span><div className="flex gap-2"><span>往港/九</span><span>往九/新</span></div></div>
+                        {tunnelStatus ? (
+                            <>
+                                {tunnelStatus.crossHarbour.map((t: any, idx: number) => (
+                                    <div key={`ch_${idx}`} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 px-1 hover:bg-slate-700/30 rounded">
+                                        <span className="truncate mr-2 font-medium text-slate-200">{t.short}</span>
+                                        <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end font-mono">
+                                            <span className={`w-6 text-center ${t.toHK === '--' ? 'text-slate-500' : t.toHK > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toHK}</span>
+                                            <span className={`w-6 text-center ${t.toKln === '--' ? 'text-slate-500' : t.toKln > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toKln}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {tunnelStatus.newTerritories.map((t: any, idx: number) => (
+                                    <div key={`nt_${idx}`} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
+                                        <span className="truncate mr-2 font-medium text-slate-200">{t.short}</span>
+                                        <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end font-mono">
+                                            <span className={`w-6 text-center ${t.toKln === '--' ? 'text-slate-500' : t.toKln > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toKln}</span>
+                                            <span className={`w-6 text-center ${t.toNT === '--' ? 'text-slate-500' : t.toNT > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toNT}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">運輸署實時數據</div>
+                            </>
+                        ) : (<div className="text-center text-slate-600 italic py-6">隧道路況載入中...</div>)}
+                    </div>
+                )}
+            </div>
+
+            {/* 底部小圓點進度指示器 */}
+            <div className="absolute bottom-1.5 left-0 w-full flex justify-center gap-1.5 z-20">
+                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports' ? 'w-4 bg-blue-500' : 'w-1.5 bg-slate-600'}`}></div>
+                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'tunnels' ? 'w-4 bg-amber-500' : 'w-1.5 bg-slate-600'}`}></div>
+            </div>
         </div>
     );
 };
