@@ -1645,12 +1645,14 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
 // ==================================================================
 // ★★★ 新增：28car 大數據實時比對標籤組件 ★★★
 // ==================================================================
-const MarketPriceChecker = ({ make, model, year, myPrice }: { make: string, model: string, year: string|number, myPrice: number }) => {
+const MarketPriceChecker = ({ make, model, year, myPrice, isEnabled }: { make: string, model: string, year: string|number, myPrice: number, isEnabled: boolean }) => {
     const [marketData, setMarketData] = React.useState<any>(null);
     const [loading, setLoading] = React.useState(false);
 
     React.useEffect(() => {
-        if (!make || !model) return;
+        // ★ 如果設定關閉，或者缺乏廠牌型號，就直接罷工不抓資料！
+        if (!isEnabled || !make || !model) return;
+        
         setLoading(true);
         // 去敲我們剛剛建立好的 NAS 橋樑 API
         fetch(`/api/market-data?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${year}`)
@@ -1658,7 +1660,10 @@ const MarketPriceChecker = ({ make, model, year, myPrice }: { make: string, mode
             .then(data => { if (data.success) setMarketData(data); })
             .catch(err => console.error(err))
             .finally(() => setLoading(false));
-    }, [make, model, year]);
+    }, [make, model, year, isEnabled]);
+
+    // ★ 如果開關關閉，直接回傳 null (什麼都不渲染，完全隱藏)
+    if (!isEnabled) return null;
 
     if (loading) return <div className="text-[9px] text-slate-400 font-mono animate-pulse mt-1 mb-1">🔍 正在對比 28car...</div>;
     if (!marketData || marketData.count === 0) return <div className="text-[9px] text-slate-400 mt-1 mb-1">28car 暫無同款</div>;
@@ -3870,6 +3875,7 @@ const DatabaseSelector = ({
                                         model={car.model} 
                                         year={car.year} 
                                         myPrice={Number(car.price) || 0} 
+                                        isEnabled={settings.enable28carSync !== false} 
                                     />
                                     
                                     {/* 車牌與中港標籤同行 (高密度) */}
