@@ -1633,6 +1633,55 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
+
+// ==================================================================
+// ★★★ 新增：28car 大數據實時比對標籤組件 ★★★
+// ==================================================================
+const MarketPriceChecker = ({ make, model, year, myPrice }: { make: string, model: string, year: string|number, myPrice: number }) => {
+    const [marketData, setMarketData] = React.useState<any>(null);
+    const [loading, setLoading] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!make || !model) return;
+        setLoading(true);
+        // 去敲我們剛剛建立好的 NAS 橋樑 API
+        fetch(`/api/market-data?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${year}`)
+            .then(res => res.json())
+            .then(data => { if (data.success) setMarketData(data); })
+            .catch(err => console.error(err))
+            .finally(() => setLoading(false));
+    }, [make, model, year]);
+
+    if (loading) return <div className="text-[9px] text-slate-400 font-mono animate-pulse mt-1 mb-1">🔍 正在對比 28car...</div>;
+    if (!marketData || marketData.count === 0) return <div className="text-[9px] text-slate-400 mt-1 mb-1">28car 暫無同款</div>;
+
+    // 計算利潤與市場競爭力
+    const diff = myPrice - marketData.avgPrice;
+    const isHigherThanMarket = diff > 0;
+
+    return (
+        <div className="mt-1.5 mb-1.5 flex flex-wrap items-center gap-1.5">
+            <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-[2px] rounded-[3px] shadow-sm">
+                28car 盤源: {marketData.count}台
+            </span>
+            <span className="text-[9px] font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-[2px] rounded-[3px] shadow-sm" title={`最低: $${marketData.minPrice.toLocaleString()} | 最高: $${marketData.maxPrice.toLocaleString()}`}>
+                均價: ${(marketData.avgPrice / 1000).toFixed(0)}k
+            </span>
+            {isHigherThanMarket ? (
+                <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] shadow-sm animate-pulse" title={`比市場均價貴 $${Math.abs(diff).toLocaleString()}`}>
+                    📈 偏貴 ${(Math.abs(diff) / 1000).toFixed(1)}k
+                </span>
+            ) : (
+                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] shadow-sm" title={`比市場均價便宜 $${Math.abs(diff).toLocaleString()}`}>
+                    📉 具競爭力 ${(Math.abs(diff) / 1000).toFixed(1)}k
+                </span>
+            )}
+        </div>
+    );
+};
+
+export default function GoldLandAutoDMS() { // <--- 這是原本的代碼
+
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
@@ -3808,6 +3857,14 @@ const DatabaseSelector = ({
                                     <div className="font-bold text-[13px] md:text-sm text-slate-800 leading-tight truncate w-full mb-1">
                                         {car.year} {car.make} {car.model}
                                     </div>
+
+                                    {/* ★★★ 大數據核心注入：自動把這台庫存車的定價，拿去跟 NAS 裡的 28car 數據進行實時比對 ★★★ */}
+                                    <MarketPriceChecker 
+                                        make={car.make} 
+                                        model={car.model} 
+                                        year={car.year} 
+                                        myPrice={Number(car.price) || 0} 
+                                    />
                                     
                                     {/* 車牌與中港標籤同行 (高密度) */}
                                     <div className="flex flex-wrap items-center gap-1.5 w-full mb-1.5">
