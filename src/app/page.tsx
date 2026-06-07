@@ -3329,7 +3329,7 @@ const DatabaseSelector = ({
 
   return (
       // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block bg-slate-100 text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white">
+      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-[#f8fafc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-50 via-slate-50 to-slate-100 relative">
       
         <style>{`
             /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
@@ -3396,7 +3396,7 @@ const DatabaseSelector = ({
         )}
         
         {/* ★ 手機版頂部 Header (透過 CSS env() 延伸至 Dynamic Island 安全區域) */}
-        <div className="md:hidden flex items-center justify-between bg-white px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] rounded-b-2xl shadow-sm print:hidden flex-none -mx-4 mb-4 z-20">
+        <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-4 mb-4 z-20">
             <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
             <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
             <div className="w-9"></div> {/* 不可見的佔位符，讓標題完美居中 */}
@@ -3555,12 +3555,24 @@ const DatabaseSelector = ({
                     </div>
                 </div>
               
-              {/* 卡片統計 */}
-              <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-4 flex-none">
-                <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500"><p className="text-xs text-gray-500 uppercase">庫存總值</p><p className="text-2xl font-bold text-slate-800">{formatCurrency(stats.totalStockValue)}</p></div>
-                <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500"><p className="text-xs text-gray-500 uppercase">未付費用</p><p className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalPayable)}</p></div>
-                <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500"><p className="text-xs text-gray-500 uppercase">應收尾數</p><p className="text-2xl font-bold text-blue-600">{formatCurrency(stats.totalReceivable)}</p></div>
-                <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500"><p className="text-xs text-gray-500 uppercase">本月銷售額</p><p className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSoldThisMonth)}</p></div>
+              {/* 卡片統計 (Apple Glassmorphism 質感) */}
+              <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-5 flex-none">
+                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-yellow-500"></div>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">庫存總值</p><p className="text-3xl font-black text-slate-800 tracking-tight">{formatCurrency(stats.totalStockValue)}</p>
+                </div>
+                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">未付費用</p><p className="text-3xl font-black text-red-600 tracking-tight">{formatCurrency(stats.totalPayable)}</p>
+                </div>
+                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">應收尾數</p><p className="text-3xl font-black text-blue-600 tracking-tight">{formatCurrency(stats.totalReceivable)}</p>
+                </div>
+                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500"></div>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">本月銷售額</p><p className="text-3xl font-black text-green-600 tracking-tight">{formatCurrency(stats.totalSoldThisMonth)}</p>
+                </div>
               </div>
 
               
