@@ -422,7 +422,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         return onSnapshot(q, (snap) => {
             const list = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a:any, b:any) => b.ts - a.ts);
             setHistory(list);
-            if (list.length > 0 && !selectedId) setSelectedId(list[0].id);
+            // ★ 只有在電腦版 (寬度 >= 768px) 時，才自動預設開啟第一台車
+            if (list.length > 0 && !selectedId && window.innerWidth >= 768) {
+                setSelectedId(list[0].id);
+            }
         });
     }, [db, appId, hasModuleAccess]);
 
