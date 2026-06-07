@@ -897,9 +897,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     if (viewMode === 'list') {
         return (
             <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-                    <h2 className="text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2"/> 單據紀錄 (Document History)</h2>
-                    <button onClick={startNewDoc} className="px-4 py-2 bg-blue-600 text-white rounded font-bold text-sm hover:bg-blue-700 flex items-center shadow-sm transition-transform active:scale-95"><Plus size={16} className="mr-1"/> 開新單據</button>
+                <div className="p-4 md:p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50">
+                    <h2 className="text-lg md:text-xl font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-blue-600"/> 單據紀錄 (Document History)</h2>
+                    <button onClick={startNewDoc} className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 flex items-center justify-center shadow-md transition-transform active:scale-95"><Plus size={16} className="mr-1"/> 開新單據</button>
                 </div>
                 
                 <div className="bg-white p-3 border-b border-slate-200 flex flex-wrap gap-4 items-center shadow-sm z-10">
@@ -939,8 +939,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                 <div className="flex-1 overflow-y-auto bg-slate-50/50 p-0 md:p-2">
                     {filteredDocHistory.length === 0 ? <div className="text-center text-slate-400 py-10">找不到符合過濾條件的紀錄</div> : (
-                        <div className="w-full overflow-x-auto rounded-lg"> {/* ★ 包上一層 overflow-x-auto */}
-                            <table className="w-full min-w-[800px] text-sm text-left border-collapse bg-white shadow-sm"> {/* ★ 加上 min-w-[800px] */}
+                        <div className="w-full overflow-x-auto rounded-xl shadow-sm border border-slate-200 scrollbar-thin scrollbar-thumb-slate-300">
+                            <table className="w-full min-w-[900px] text-sm text-left border-collapse bg-white">
                                 <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
                                     <tr>
                                         <th 
