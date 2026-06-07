@@ -262,6 +262,7 @@ export type SystemSettings = {
   };
   backup?: { frequency: 'manual' | 'daily' | 'weekly' | 'monthly'; lastBackupDate: string; autoCloud: boolean; };
   pushConfig?: { isEnabled: boolean; vapidKey: string; events: { newCar: boolean; sold: boolean; expiry: boolean; workflow: boolean; }; };
+  enable28carSync?: boolean; // ★ 新增：28car 大數據比對開關
 };
 
 export type Customer = {
