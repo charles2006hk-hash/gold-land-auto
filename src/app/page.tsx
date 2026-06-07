@@ -1680,8 +1680,6 @@ const MarketPriceChecker = ({ make, model, year, myPrice }: { make: string, mode
     );
 };
 
-export default function GoldLandAutoDMS() { // <--- 這是原本的代碼
-
 // --- 主應用程式 ---
 export default function GoldLandAutoDMS() {
   const [user, setUser] = useState<User | null>(null);
