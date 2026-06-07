@@ -518,7 +518,8 @@ const InfoWidget = () => {
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
-                const res = await fetch('/api/traffic');
+                // ★ 加入時間戳 ?t= 破解 Vercel 緩存，確保每次都去抓最新狀態
+                const res = await fetch(`/api/traffic?t=${Date.now()}`);
                 if (!res.ok) throw new Error('API Error');
                 const data = await res.json();
                 if (data && typeof data === 'object') {
@@ -528,9 +529,16 @@ const InfoWidget = () => {
                     });
                     const sortOrder = ['深圳灣', '皇崗(落馬洲)', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
                     formatted.sort((a, b) => sortOrder.indexOf(a.name) - sortOrder.indexOf(b.name));
-                    setPortStatus(formatted);
+                    
+                    // ★ 只有成功抓到大於 0 筆資料時才更新畫面
+                    if (formatted.length > 0) {
+                        setPortStatus(formatted);
+                    }
                 }
-            } catch (e) { console.error("Traffic fetch failed:", e); setPortStatus([]); } 
+            } catch (e) { 
+                console.warn("口岸數據延遲，保持顯示舊數據 (Traffic fetch timeout)"); 
+                // ★ 絕對不要在這裡 setPortStatus([])，讓舊數據留在畫面上！
+            } 
             finally { setLoading(false); }
         };
         fetchTraffic();
