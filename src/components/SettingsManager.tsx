@@ -477,9 +477,32 @@ const SettingsManager = ({
                 <h2 className="text-xl font-bold text-slate-800 capitalize">{activeTab.replace('_', ' ')} Settings</h2>
             </div>
 
-                {/* 1. 一般設定 */}
+               {/* 1. 一般設定 */}
                 {activeTab === 'general' && (
                     <div className="space-y-6">
+                        
+                        {/* ★ 新增：28car 大數據比對開關 ★ */}
+                        <div className="flex items-center justify-between p-5 bg-white rounded-xl border border-slate-200 shadow-sm">
+                            <div>
+                                <div className="font-bold text-slate-800 text-sm flex items-center">
+                                    <BarChart3 size={18} className="mr-2 text-blue-600"/> 28car 市場大數據實時比對
+                                </div>
+                                <div className="text-xs text-slate-500 mt-1">
+                                    在業務儀表板的車輛卡片上，自動顯示同款車型的 28car 均價與競爭力分析。
+                                </div>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={settings.enable28carSync !== false} // 預設為 true
+                                    onChange={(e) => updateSettings('enable28carSync', e.target.checked)} 
+                                />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            </label>
+                        </div>
+
+                        {/* 原本的數據透視鏡 */}
                         <div className="p-6 bg-slate-900 rounded-xl border-4 border-yellow-500 overflow-hidden shadow-2xl">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-xl font-bold text-yellow-400 flex items-center"><Search size={24} className="mr-2"/> 數據透視鏡 (Data Inspector)</h3>
