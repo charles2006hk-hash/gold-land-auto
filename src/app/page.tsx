@@ -685,20 +685,7 @@ const InfoWidget = () => {
     );
 };
 
-// --- 2. Sidebar (外部組件 - v2.2: 含權限過濾與登出修復) ---
-type SidebarProps = {
-    activeTab: string;
-    setActiveTab: (tab: any) => void;
-    isMobileMenuOpen: boolean;
-    setIsMobileMenuOpen: (open: boolean) => void;
-    isSidebarCollapsed: boolean;
-    setIsSidebarCollapsed: (collapsed: boolean) => void;
-    staffId: string | null;
-    setStaffId: (id: string | null) => void;
-    // ★★★ 新增：接收當前用戶權限物件 ★★★
-    currentUser: { email: string, modules: string[] } | null;
-    onOpenChangePwd: () => void; // ★ 新增這行
-};
+
 
 // --- 2. Sidebar (外部組件 - 🍏 終極升級：True Gemini Style 側欄圖標條) ---
 type SidebarProps = {
@@ -3417,7 +3404,7 @@ const DatabaseSelector = ({
 
       {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
       <main className="flex-1 w-full min-w-0 pt-0 px-4 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
-      
+
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
             <VehicleShareModal 
