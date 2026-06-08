@@ -742,30 +742,45 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
         <>
           {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
-          {/* 🍏 Gemini Style：點擊關閉時，側邊欄會完全向左滑出螢幕 (-translate-x-full) 釋放 100% 空間 */}
-          <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17] text-white transition-all duration-300 ease-in-out flex flex-col w-64 print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.1)] border-r border-slate-800 relative overflow-hidden flex-none md:h-full md:static ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} ${isSidebarCollapsed ? 'md:-ml-64 md:-translate-x-full' : 'md:ml-0 md:translate-x-0'}`}>
-            {/* ★ 側邊欄專屬：登入頁同款的隱藏動態光暈 */}
-            <div className="absolute inset-0 w-full h-full overflow-hidden opacity-20 pointer-events-none z-0">
-                <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
-                <div className="absolute bottom-[10%] right-[-20%] w-[80%] h-[40%] bg-yellow-500 rounded-full blur-[100px] opacity-40"></div>
-            </div>
+          {/* 🍏 True Gemini Style：收起時平滑縮為 w-16 純圖標直列欄，背景完美換血為登入頁同款深空黑玻璃 */}
+                  <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 relative overflow-hidden flex-none md:h-full md:static 
+                      ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
+                      ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
+                  > 
+                   
+                    {/* 內建隱形氛圍宇宙光暈 */}
+                    <div className="absolute inset-0 w-full h-full overflow-hidden opacity-25 pointer-events-none z-0">
+                        <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
+                        <div className="absolute bottom-[10%] right-[-20%] w-[80%] h-[40%] bg-yellow-500 rounded-full blur-[100px] opacity-40"></div>
+                    </div>
 
-           {/* 🍏 側邊欄頂部：固定展開佈局 */}
-            <div className="relative z-10 pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-white/5 flex items-center justify-between px-4 transition-all flex-none">
-                <div className="flex items-center gap-3 overflow-hidden">
-                    <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
-                        <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
+                    {/* 🍏 Gemini Style 頂部：收起時 Logo 精準居中，展開時顯示完整商標與收刀按鈕 */}
+                    <div className={`relative z-10 pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-white/5 flex items-center transition-all duration-300 flex-none ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
+                        {isSidebarCollapsed ? (
+                            <button 
+                                onClick={() => setIsSidebarCollapsed(false)} 
+                                className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all duration-300 transform active:scale-95 group shadow-md"
+                                title="展開導引側欄"
+                            >
+                                <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-7 h-7 object-contain p-0.5 group-hover:rotate-12 transition-transform duration-300" />
+                            </button>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
+                                        <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-base font-bold text-yellow-500 tracking-tight leading-none">金田汽車</h1>
+                                        <span className="text-[10px] text-slate-400 font-medium">DMS 智能管理系統</span>
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsSidebarCollapsed(true)} className="text-slate-400 hover:text-white hover:bg-white/10 p-1.5 rounded-xl transition-colors" title="收起選單">
+                                    <ChevronLeft size={16} />
+                                </button>
+                            </>
+                        )}
                     </div>
-                    <div className="transition-opacity duration-200 opacity-100">
-                        <h1 className="text-base font-bold text-yellow-500 tracking-tight leading-none">金田汽車</h1>
-                        <span className="text-[10px] text-slate-400 font-medium">DMS 智能管理系統</span>
-                    </div>
-                </div>
-                {/* 點擊 X 按鈕，側邊欄像 Gemini 一樣完美往左滑出收起 */}
-                <button onClick={() => setIsSidebarCollapsed(true)} className="hidden md:flex text-slate-400 hover:text-white hover:bg-white/10 p-1.5 rounded-xl transition-colors" title="收起選單">
-                    <X size={18} />
-                </button>
-            </div>
 
             {/* 導航列表 (使用 visibleMenuItems 渲染) - 加入終極無痕隱形捲軸與底部漸層 */}
             <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
@@ -780,25 +795,42 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                      <button 
                         key={item.id} 
                         onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                        // 🍏 登入頁同款：選中時變成搶眼的金色漸層按鈕 (Golden Gradient)
-                        className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-[0_4px_15px_rgba(234,179,8,0.2)] font-black' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
+                        // 🍏 Gemini Style：收起時變成 px-0 justify-center 確保圖標絕對鎖死在中央，展開時使用奢華金色漸層膠囊
+                        className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-[0_4px_15px_rgba(234,179,8,0.25)] font-black' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-3'}`} 
                         title={isSidebarCollapsed ? item.label : ''}
                      >
-                        <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
-                        {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
+                        <item.icon size={18} className={`flex-shrink-0 ${isSidebarCollapsed ? 'mx-auto' : 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
+                        {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide animate-fade-in">{item.label}</span>}
                         
-                        {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
+                        {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-2xl border border-white/10 transition-opacity font-bold">{item.label}</div>}
                      </button>
                   ))}
                 </nav>
-                {/* 底部優雅的漸層遮罩 (暗示可以往下滑，pointer-events-none 確保不阻擋點擊) */}
-                <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none z-10"></div>
+                <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-[#090E17] to-transparent pointer-events-none z-10"></div>
             </div>
             
+            {/* 🍏 智能判斷：收起時自動隱藏戰情小工具，騰出垂直行高 */}
             {!isSidebarCollapsed && <InfoWidget />}
             
-            {/* 🍏 Apple Style: 底部登入區改為全透明與高光邊界 */}
-            <div className="p-3 bg-transparent border-t border-white/10 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            {/* 🍏 底部登出資訊區：收起時智能收縮成單一登出小圖標，完美對齊 */}
+            <div className="relative z-10 p-3 bg-transparent border-t border-white/5 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col items-center justify-center">
+                 {isSidebarCollapsed ? (
+                     <button onClick={handleLogout} className="p-2.5 bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-xl border border-white/5 transition-all active:scale-95 shadow-sm" title="登出系統">
+                         <LogOut size={16} />
+                     </button>
+                 ) : (
+                     <div className="flex items-center justify-between w-full px-1 animate-fade-in">
+                        <div className="flex items-center space-x-2 overflow-hidden">
+                            <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500 border border-slate-700"><UserCircle size={16} /></div>
+                            <div className="flex-1 min-w-0"><p className="text-xs font-bold text-white truncate">{staffId}</p><p className="text-[9px] text-slate-500">在線</p></div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button onClick={onOpenChangePwd} className="text-slate-400 hover:text-yellow-400 transition p-1.5 hover:bg-slate-800 rounded" title="修改密碼"><Key size={14} /></button>
+                            <button onClick={handleLogout} className="text-slate-500 hover:text-red-400 transition p-1.5 hover:bg-slate-800 rounded" title="登出"><LogOut size={14} /></button>
+                        </div>
+                    </div>
+                 )}
+            </div>
                  {isSidebarCollapsed ? (
                      <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
                  ) : (
@@ -3410,28 +3442,11 @@ const DatabaseSelector = ({
             />
         )}
         
-        {/* 🍏 頂部喚醒與導航列 (Mobile 常駐 / Desktop 當側邊欄收合時顯示) */}
-        <div className={`flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none z-20 
-            ${isSidebarCollapsed ? 'md:flex md:-mt-8 md:-mx-8 md:px-8 md:mb-6 md:pt-6 md:sticky md:top-0' : 'md:hidden -mx-4 mb-4'}`}>
-            <div className="flex items-center gap-2">
-                {/* 手機版原生漢堡選單 */}
-                <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
-                
-                {/* 桌面版 Gemini 喚醒按鈕 */}
-                {isSidebarCollapsed && (
-                    <button onClick={() => setIsSidebarCollapsed(false)} className="hidden md:flex items-center gap-3 p-2 pr-4 -ml-2 rounded-xl hover:bg-white/80 transition-all group cursor-pointer active:scale-95 border border-transparent hover:border-slate-200 shadow-sm">
-                        <Menu size={20} className="text-slate-500 group-hover:text-yellow-600 transition-colors" />
-                        <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-slate-900 rounded-lg shadow-inner">
-                            <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
-                        </div>
-                        <span className="font-black text-sm text-slate-800">金田汽車</span>
-                    </button>
-                )}
-                
-                {/* 手機版置中標題 */}
-                <span className={`font-bold text-lg text-slate-800 tracking-tight ${isSidebarCollapsed ? 'md:hidden' : ''}`}>Gold Land Auto</span>
-            </div>
-            <div className="w-9 md:hidden"></div>
+        {/* ★ 手機版頂部 Header (僅在手機端呈現，100% 解除桌面端排版干擾，徹底消滅錯位問題) */}
+        <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-4 mb-4 z-20">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
+            <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
+            <div className="w-9"></div> {/* 不可見的佔位符，讓標題完美居中 */}
         </div>
 
         {isPreviewMode && (
