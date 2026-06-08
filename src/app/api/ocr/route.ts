@@ -69,11 +69,11 @@ export async function POST(req: Request) {
           - name: 為了系統兼容，請將識別到的主要姓名填入此欄 (例如 "葉葳劼")
         `;
     } else {
-        // --- B. 針對其他文件 (包含牌簿、保險等) 的強化指令 ---
+        // --- B. 針對其他文件 (包含牌簿、保險、批文、行駛證等) 的強化融合指令 ---
         prompt = `
           你是一個專業的香港汽車銷售行政助理。請分析這張圖片（文件類型：${docType}），並提取以下欄位。
           請直接回傳純 JSON 格式，絕對不要有 Markdown 標記 (\`\`\`json)，不要有其他解釋文字。
-          如果找不到該欄位，請回傳空字串 ""。
+          如果找不到該欄位，請回傳空字串 "" 或空陣列 []。
 
           【★★★ 全局指令 ★★★】
           1. 所有日期 (簽發日、到期日、車主登記日等) 必須轉換為 "YYYY-MM-DD" 格式。
@@ -82,7 +82,7 @@ export async function POST(req: Request) {
 
           目標欄位與對應內容：
           - tags: [此為陣列格式，請填入你自動產生的標籤]
-          - documentType: 判斷這張圖片最可能是什麼文件 (例如 "車輛登記文件", "汽車保險 Cover Note", "買賣合約", "身分證", "其他")
+          - documentType: 判斷這張圖片最可能是什麼文件 (例如 "車輛登記文件", "汽車保險 Cover Note", "買賣合約", "身分證", "中港批文卡", "內地行駛證", "其他")
           
           // 🚘 牌簿 (VRD) 相關欄位
           - name: 標題名稱 (如果是牌簿，請抓取 Registered Owner，務必合併中英文姓名)
@@ -100,13 +100,9 @@ export async function POST(req: Request) {
           - firstRegCondition: 首次登記狀況
           - prevOwners: 前任車主數目 (純數字)
           - engineSize: 汽缸容量 (純數字)
-          
-          // ★★★ 補回缺失的重要欄位 ★★★
           - vehicleColor: 車身顏色 (Colour)
           - priceA1: 首次登記稅值 (First Registration Taxable Value，請回傳純數字，不要有 $ 符號和逗號)
           - priceTax: 已繳付登記稅 (First Registration Tax Paid，請回傳純數字，不要有 $ 符號和逗號)
-
-          // ★★★ 新增：座位限額、車主登記日期與牌費到期日 ★★★
           - seatingCapacity: 座位限額 (Seating Capacity / 不包括司機)，請回傳純數字
           - registeredOwnerDate: 登記為車主日期 (Date of Registration as Owner)，請務必轉換為 YYYY-MM-DD
           - licenseExpiry: 牌照有效日期 / 牌費到期日 (如文件上有顯示)，請轉換為 YYYY-MM-DD
@@ -117,11 +113,27 @@ export async function POST(req: Request) {
           - expiryDate: 到期日 (Expiry Date)
           - insuranceType: 保險類型 (請判斷為 "三保 Third Party" 或 "全保 Comprehensive")
           - insuredPerson: 受保人姓名 (Insured Name)
+
+          // 🌐 中港批文卡 (Approval Card) 專屬欄位
+          - approvalCardNo: 批文卡號/編號 (例如 GD32795)
+          - hkCompany: 香港公司名稱
+          - mainlandCompany: 內承單位名稱
+          - drivers: ["駕駛人1", "駕駛人2", "駕駛人3"] (陣列格式，最多3個)
+          - handleStatus: 辦理情況 (例如 新辦)
+          - currentApprovalNo: 現批文號
+          - ports: ["深圳灣", "港珠澳大橋", "皇崗"] (陣列格式，通行口岸)
+
+          // 🇨🇳 內地行駛證 / 駕駛證 專屬欄位
+          - relatedPlateNo: 內地車牌 (例如 粵Z L550港)
+          - brandModel: 品牌型號
+          - vin: 車輛識別代號 (VIN / 車架號)
+          - regDate: 註冊日期 (YYYY-MM-DD)
+          - issueDate: 發證日期 (YYYY-MM-DD)
+          - licenseBarcodeNo: 駕駛證號 / 條形碼下方號碼
           
           - description: 其他重要備註摘要 (若有其他你覺得重要的資訊，請寫在這裡)
         `;
     }
-
     // =================================================================================
     // 2. 智能偵錯版 API 呼叫 (遇到 404 會自動列出可用模型)
     // =================================================================================
