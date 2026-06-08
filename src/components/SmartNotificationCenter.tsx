@@ -26,7 +26,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
         const visibleInventory = isAdmin 
             ? inventory 
             : inventory.filter(car => 
-                car.createdBy === currentUser?.email || 
+                (car as any).createdBy === currentUser?.email || // ★ 加上 (car as any)
                 (car as any).assignedTo === currentUser?.email ||
                 (car as any).sales === currentUser?.email
               );
