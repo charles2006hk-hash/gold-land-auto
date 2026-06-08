@@ -357,7 +357,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.issueDate) newExtractedData.issueDate = data.issueDate;
                     if (data.licenseBarcodeNo) newExtractedData.licenseBarcodeNo = data.licenseBarcodeNo;
 
-                    const finalName = data.name || data.registeredOwnerName || data.insuredPerson || prev.name;
+                    // ★ 補回動態資料框的車牌顯示
+                    if (data.plateNoHK) newExtractedData.plateNoHK = data.plateNoHK;
+                    if (data.relatedPlateNo) newExtractedData.relatedPlateNo = data.relatedPlateNo;
+
+                    // ★ 自動以香港或內地公司名稱作為標題
+                    const finalName = data.name || data.hkCompany || data.mainlandCompany || data.registeredOwnerName || data.insuredPerson || prev.name;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
                     let finalSeating = prev.seating;
@@ -374,8 +379,13 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
                         address: data.address || prev.address,
+                        // ★ 自動打勾到期提醒
                         expiryDate: data.expiryDate || prev.expiryDate,
-                        quotaNo: data.quotaNo || prev.quotaNo,
+                        reminderEnabled: (data.expiryDate) ? true : (prev.reminderEnabled || false),
+                        
+                        // ★ 指標號自動抓取批文卡號
+                        quotaNo: data.approvalCardNo || data.quotaNo || prev.quotaNo,
+                        
                         plateNoHK: data.plateNoHK || prev.plateNoHK,
                         make: data.make || prev.make,
                         model: data.model || prev.model,
@@ -392,7 +402,10 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         registeredOwnerId: finalOwnerId,
                         registeredOwnerDate: data.registeredOwnerDate || data.ownerRegDate || data.dateOfRegAsOwner || prev.registeredOwnerDate,
                         seating: finalSeating,
-                        relatedPlateNo: data.relatedPlateNo || prev.relatedPlateNo,
+                        
+                        // ★ 完美對接「關聯香港車牌」下拉選單與「國內車牌」
+                        relatedPlateNo: data.plateNoHK || prev.relatedPlateNo, // 下拉選單自動選取香港車牌
+                        plateNoCN: data.relatedPlateNo || prev.plateNoCN,      // 內地車牌存入專屬格
                         
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
