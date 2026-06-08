@@ -556,7 +556,16 @@ export default function CrossBorderView({
                                 })}
                             </div>
 
-                            {/* ★ 新增：自動連動資料庫中心的中港文件 */}
+                           {/* 1. 原本的文件交收狀態 */}
+                            {(activeCar.crossBorder?.documentLogs?.length || 0) > 0 && (
+                                <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100 flex items-center gap-3 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                                    <span className="text-[10px] font-bold text-yellow-800 uppercase">文件狀態:</span>
+                                    {(() => { const logs = activeCar.crossBorder!.documentLogs!; const lastLog = logs[logs.length-1]; return (<span className="text-xs text-slate-600 flex items-center"><span className={`w-2 h-2 rounded-full mr-1 ${lastLog.action==='CheckIn'?'bg-green-500':'bg-red-500'}`}></span>{lastLog.docName} {lastLog.action==='CheckIn'?'已收':'已交'} ({lastLog.handler} @ {lastLog.timestamp.split(' ')[0]})</span>); })()}
+                                    <button onClick={() => setShowDocModal(true)} className="text-[10px] text-blue-600 underline ml-auto">查看詳情</button>
+                                </div>
+                            )}
+
+                            {/* 2. ★ 新增：自動連動資料庫中心的中港文件 ★ */}
                             {(() => {
                                 const relatedDocs = dbEntries?.filter(entry => 
                                     entry.category === 'CrossBorder' && 
@@ -577,7 +586,7 @@ export default function CrossBorderView({
                                                     <div key={doc.id} className="w-40 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group">
                                                         <div className="h-24 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
                                                             {thumbUrl ? (
-                                                                <img src={thumbUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                                <img src={thumbUrl} alt="doc" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                                             ) : (
                                                                 <FileText size={24} className="text-slate-300 opacity-50"/>
                                                             )}
@@ -593,11 +602,6 @@ export default function CrossBorderView({
                                     </div>
                                 );
                             })()}
-                                    <span className="text-[10px] font-bold text-yellow-800 uppercase">文件狀態:</span>
-                                    {(() => { const logs = activeCar.crossBorder!.documentLogs!; const lastLog = logs[logs.length-1]; return (<span className="text-xs text-slate-600 flex items-center"><span className={`w-2 h-2 rounded-full mr-1 ${lastLog.action==='CheckIn'?'bg-green-500':'bg-red-500'}`}></span>{lastLog.docName} {lastLog.action==='CheckIn'?'已收':'已交'} ({lastLog.handler} @ {lastLog.timestamp.split(' ')[0]})</span>); })()}
-                                    <button onClick={() => setShowDocModal(true)} className="text-[10px] text-blue-600 underline ml-auto">查看詳情</button>
-                                </div>
-                            )}
 
                             <div className="flex-1 overflow-y-auto p-4 bg-white">
                                 <div className="flex justify-between items-end mb-2">
