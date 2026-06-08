@@ -64,6 +64,19 @@ export type DatabaseEntry = {
     customReminders?: any[];
     extractedData?: any;
     isPublic?: boolean;
+    // ★ 新增：中港批文卡與行駛證專屬欄位
+    approvalCardNo?: string;
+    hkCompany?: string;
+    mainlandCompany?: string;
+    drivers?: string[];
+    handleStatus?: string;
+    currentApprovalNo?: string;
+    ports?: string[];
+    brandModel?: string;
+    vin?: string;
+    regDate?: string;
+    issueDate?: string;
+    licenseBarcodeNo?: string;
 };
 
 export type MediaLibraryItem = {
