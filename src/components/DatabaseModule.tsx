@@ -392,7 +392,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         registeredOwnerId: finalOwnerId,
                         registeredOwnerDate: data.registeredOwnerDate || data.ownerRegDate || data.dateOfRegAsOwner || prev.registeredOwnerDate,
                         seating: finalSeating,
-                        plateNoHK: data.plateNoHK || prev.plateNoHK,
                         relatedPlateNo: data.relatedPlateNo || prev.relatedPlateNo,
                         
                         hkid_name: data.hkid_name || prev.hkid_name,
