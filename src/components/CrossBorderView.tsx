@@ -442,7 +442,18 @@ export default function CrossBorderView({
                     {activeCar ? (
                         <>
                             <div className="p-4 border-b bg-slate-50 flex justify-between items-center flex-none">
-                                <div className="flex items-center gap-2"><button onClick={handleBackToList} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800"><ChevronLeft size={24}/></button><div><h3 className="text-2xl font-bold font-mono">{activeCar.regMark}</h3><p className="text-xs text-slate-500">{activeCar.crossBorder?.mainlandPlate}</p></div></div>
+                                <div className="flex items-center gap-2"><button onClick={handleBackToList} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800"><ChevronLeft size={24}/></button>
+                                  <div className="flex flex-col gap-1.5">
+                                      <div className="flex items-center gap-2">
+                                          <span className="bg-[#FFD600] text-black border-[2px] border-black font-black font-mono text-lg px-2 py-0.5 rounded shadow-sm leading-none">{activeCar.regMark || '未出牌'}</span>
+                                          {activeCar.crossBorder?.mainlandPlate && (
+                                              <span className={`${activeCar.crossBorder.mainlandPlate.startsWith('粵Z') || activeCar.crossBorder.mainlandPlate.startsWith('粤Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border-[2px] font-bold font-mono text-lg px-2 py-0.5 rounded shadow-sm leading-none`}>
+                                                  {activeCar.crossBorder.mainlandPlate}
+                                              </span>
+                                          )}
+                                      </div>
+                                  </div>
+                                </div>
                                 <div className="flex gap-2">
                                     <button onClick={() => setShowDocModal(true)} className="px-3 py-2 bg-slate-800 text-white rounded text-xs hover:bg-slate-700 flex items-center shadow-md"><FileText size={14} className="mr-1"/> 文件交收</button>
                                     <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 border rounded text-xs hover:bg-slate-50 flex items-center"><Edit size={12} className="mr-1"/> 編輯資料</button>
@@ -545,8 +556,43 @@ export default function CrossBorderView({
                                 })}
                             </div>
 
-                            {(activeCar.crossBorder?.documentLogs?.length || 0) > 0 && (
-                                <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100 flex items-center gap-3 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                            {/* ★ 新增：自動連動資料庫中心的中港文件 */}
+                            {(() => {
+                                const relatedDocs = dbEntries?.filter(entry => 
+                                    entry.category === 'CrossBorder' && 
+                                    (entry.relatedPlateNo === activeCar.crossBorder?.mainlandPlate || entry.plateNoHK === activeCar.regMark || entry.relatedPlateNo === activeCar.regMark)
+                                ) || [];
+
+                                if (relatedDocs.length === 0) return null;
+
+                                return (
+                                    <div className="px-4 py-3 bg-slate-100 border-b border-slate-200">
+                                        <h4 className="text-xs font-bold text-slate-500 mb-2 flex items-center">
+                                            <Database size={14} className="mr-1"/> 關聯資料庫文件 ({relatedDocs.length})
+                                        </h4>
+                                        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                                            {relatedDocs.map(doc => {
+                                                const thumbUrl = doc.attachments?.[0]?.data;
+                                                return (
+                                                    <div key={doc.id} className="w-40 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group">
+                                                        <div className="h-24 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
+                                                            {thumbUrl ? (
+                                                                <img src={thumbUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                            ) : (
+                                                                <FileText size={24} className="text-slate-300 opacity-50"/>
+                                                            )}
+                                                            <div className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                                                                {doc.docType || '中港文件'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xs font-bold text-slate-800 truncate px-1" title={doc.name}>{doc.name}</div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                                     <span className="text-[10px] font-bold text-yellow-800 uppercase">文件狀態:</span>
                                     {(() => { const logs = activeCar.crossBorder!.documentLogs!; const lastLog = logs[logs.length-1]; return (<span className="text-xs text-slate-600 flex items-center"><span className={`w-2 h-2 rounded-full mr-1 ${lastLog.action==='CheckIn'?'bg-green-500':'bg-red-500'}`}></span>{lastLog.docName} {lastLog.action==='CheckIn'?'已收':'已交'} ({lastLog.handler} @ {lastLog.timestamp.split(' ')[0]})</span>); })()}
                                     <button onClick={() => setShowDocModal(true)} className="text-[10px] text-blue-600 underline ml-auto">查看詳情</button>
