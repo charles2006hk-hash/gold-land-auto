@@ -2844,7 +2844,7 @@ const DatabaseSelector = ({
                             inventory={inventory} 
                             settings={settings} 
                             triggerSmartPrint={triggerSmartPrint} 
-                            currentUser={currentUser}  {/* ★ 將登入者身分傳遞給提醒中心 */}
+                            currentUser={currentUser}
                         />
                     </div>
                 </div>
