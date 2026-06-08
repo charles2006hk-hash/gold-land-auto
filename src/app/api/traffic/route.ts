@@ -1,27 +1,39 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
+  const targetUrl = 'https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json';
+  
   try {
-    // 由 Next.js 伺服器向入境處發送請求 (伺服器對伺服器不會有 CORS 問題)
-    const res = await fetch('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json', {
+    // 🌟 通道 1：嘗試直接請求入境處伺服器（完美偽裝成 iPhone Safari 設備）
+    let res = await fetch(targetUrl, {
       headers: {
-        // 偽裝成瀏覽器，防止被對方防火牆攔截
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'Accept': 'application/json',
+        'Accept-Language': 'zh-HK,zh-TW;q=0.9,zh;q=0.8',
+        'Referer': 'https://www.immd.gov.hk/'
       },
-      next: { revalidate: 60 } // 設定緩存 60 秒，避免過度頻繁請求
+      next: { revalidate: 60 } // 快取 60 秒，避免被當成惡意攻擊
     });
 
+    // 🌟 智能防護：如果 Vercel IP 被政府防火牆封鎖 (非 200 狀態碼)
     if (!res.ok) {
-      throw new Error(`Government API responded with status: ${res.status}`);
+      console.warn(`[口岸 API] 直接請求被攔截 (Status: ${res.status})，瞬間啟動備用代理通道...`);
+      
+      // 通道 2：透過開源代理 (AllOrigins) 繞過 IP 地區限制，把 JSON 抓回來
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+      res = await fetch(proxyUrl, { next: { revalidate: 60 } });
+      
+      if (!res.ok) {
+          throw new Error('備用通道也無法獲取數據');
+      }
     }
 
+    // 成功取得資料後回傳給前端
     const data = await res.json();
-    
-    // 將數據回傳給前端
     return NextResponse.json(data);
     
-  } catch (error) {
-    console.error('Proxy fetch failed:', error);
+  } catch (error: any) {
+    console.error('口岸數據抓取嚴重失敗:', error);
     return NextResponse.json({ error: 'Failed to fetch traffic data' }, { status: 500 });
   }
 }
