@@ -3332,10 +3332,10 @@ const DatabaseSelector = ({
       // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
       <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0">
           
-          {/* 🍏 Apple Style: 隱藏在底層的環境氛圍光 (Ambient Glow) */}
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-300/30 rounded-full blur-[120px] pointer-events-none -z-10 mix-blend-multiply"></div>
-          <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-purple-300/20 rounded-full blur-[100px] pointer-events-none -z-10 mix-blend-multiply"></div>
-          <div className="absolute top-[20%] right-[10%] w-[30%] h-[30%] bg-emerald-200/30 rounded-full blur-[100px] pointer-events-none -z-10 mix-blend-multiply"></div>
+          {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
+          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+          <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
        
         <style>{`
             /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
@@ -4203,10 +4203,10 @@ const DatabaseSelector = ({
 
                           <div className="flex flex-col lg:flex-row gap-0 lg:gap-5 flex-1 min-h-0 overflow-hidden">
                               
-                              {/* 左側看板：在庫優先 */}
-                              <div className={`flex-1 flex-col bg-transparent md:bg-white md:rounded-2xl border-0 md:border border-slate-200/60 md:shadow-sm overflow-hidden min-h-0 relative ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-                                  {/* 標題與懸浮搜尋列 (手機點擊覆蓋 / 桌面 Hover 顯示) */}
-                                  <div className="flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10 md:group cursor-pointer hover:bg-slate-50 transition-colors relative">
+                              {/* 🍏 Apple Style: 左側看板 - 移除實心白底，換上純淨玻璃底板 */}
+                              <div className={`flex-1 flex-col bg-transparent md:bg-white/30 md:backdrop-blur-2xl md:rounded-3xl border-0 md:border md:border-white/60 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden min-h-0 relative ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+                                  {/* 標題列：背景改為半透明 */}
+                                  <div className="flex p-4 border-b border-white/40 bg-white/40 justify-between items-center flex-none z-10 md:group cursor-pointer hover:bg-white/60 transition-colors relative">
                                       <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide flex-none">
                                           <Layout size={16} className="mr-1.5 text-green-500" /> 在庫待售
                                       </h3>
@@ -4234,9 +4234,9 @@ const DatabaseSelector = ({
                                       </div>
                                   </div>
                                   
-                                  {/* ★ 移除死板的 pb-20，改用 env() 讓內容穿透到螢幕最底，並保護最後一張卡片不被 Home 橫條蓋住 */}
-                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
-                                      {filteredInStockCars.map(car => renderDashboardCard(car))}
+                                  {/* ★ 移除實心底色 bg-slate-50/30，讓卡片徹底浮在玻璃上 */}
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent scrollbar-thin relative z-0">  
+                                     {filteredInStockCars.map(car => renderDashboardCard(car))}
                                       {filteredInStockCars.length === 0 && (
                                           <div className="text-center py-10 text-slate-400 text-xs">
                                               {dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}
@@ -4245,10 +4245,10 @@ const DatabaseSelector = ({
                                   </div>
                               </div>
 
-                              {/* 右側看板：已訂 / 待跟進 */}
-                              <div className={`flex-1 flex-col bg-transparent md:bg-white md:rounded-2xl border-0 md:border border-slate-200/60 md:shadow-sm overflow-hidden min-h-0 relative ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-                                  {/* 標題與懸浮搜尋列 (手機點擊覆蓋 / 桌面 Hover 顯示) */}
-                                  <div className="flex p-3 border-b border-slate-100 bg-white justify-between items-center flex-none z-10 md:group cursor-pointer hover:bg-slate-50 transition-colors relative">
+                              {/* 🍏 Apple Style: 右側看板 - 移除實心白底，換上純淨玻璃底板 */}
+                              <div className={`flex-1 flex-col bg-transparent md:bg-white/30 md:backdrop-blur-2xl md:rounded-3xl border-0 md:border md:border-white/60 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden min-h-0 relative ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+                                  {/* 標題列：背景改為半透明 */}
+                                  <div className="flex p-4 border-b border-white/40 bg-white/40 justify-between items-center flex-none z-10 md:group cursor-pointer hover:bg-white/60 transition-colors relative"> 
                                       <h3 className="font-bold text-slate-700 flex items-center text-sm tracking-wide flex-none">
                                           <FileCheck size={16} className="mr-1.5 text-amber-500" /> 已訂與待結清
                                       </h3>
@@ -4276,9 +4276,9 @@ const DatabaseSelector = ({
                                       </div>
                                   </div>
                                   
-                                  {/* ★ 移除死板的 pb-20，改用 env() 讓內容穿透到螢幕最底 */}
-                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent md:bg-slate-50/30 scrollbar-thin relative z-0">
-                                      {filteredActionCars.map(car => renderDashboardCard(car))}
+                                  {/* ★ 移除實心底色 bg-slate-50/30，讓卡片徹底浮在玻璃上 */}
+                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent scrollbar-thin relative z-0">   
+                                     {filteredActionCars.map(car => renderDashboardCard(car))}
                                       {filteredActionCars.length === 0 && (
                                           <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">
                                               {dashSearchAction ? (
