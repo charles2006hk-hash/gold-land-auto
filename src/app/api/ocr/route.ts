@@ -84,7 +84,7 @@ export async function POST(req: Request) {
           - tags: [此為陣列格式，請填入你自動產生的標籤]
           - documentType: 判斷這張圖片最可能是什麼文件 (例如 "車輛登記文件", "汽車保險 Cover Note", "買賣合約", "身分證", "中港批文卡", "內地行駛證", "其他")
           
-          // 🚘 牌簿 (VRD) 相關欄位
+          // 🚘 牌簿 (VRD) 及通用車輛欄位
           - name: 標題名稱 (如果是牌簿，請抓取 Registered Owner，務必合併中英文姓名)
           - registeredOwnerName: 登記車主名稱
           - idNumber: 身份證號 / 商業登記號
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
           - address: 地址
           - plateNoHK: 香港車牌 (Registration Mark)
           - chassisNo: 底盤號碼 (Chassis No.)
-          - engineNo: 引擎號碼 (Engine No.)
+          - engineNo: 引擎號碼 / 發動機號 (Engine No.)
           - make: 廠名 (Make)
           - model: 型號 (Model)
           - manufactureYear: 出廠年份 (Year of Manufacture)
@@ -107,10 +107,10 @@ export async function POST(req: Request) {
           - registeredOwnerDate: 登記為車主日期 (Date of Registration as Owner)，請務必轉換為 YYYY-MM-DD
           - licenseExpiry: 牌照有效日期 / 牌費到期日 (如文件上有顯示)，請轉換為 YYYY-MM-DD
           
-          // 🛡️ 保險 (Cover Note / Policy) 專屬欄位
+          // 🛡️ 保險與通用到期日
+          - expiryDate: 文件到期日 / 有效期至 / 保單到期日 (Expiry Date / Valid Until)
           - insuranceCompany: 保險公司名稱 (例如 Ping An, Bank of China 等)
           - policyNumber: 保單號碼或 Cover Note No.
-          - expiryDate: 到期日 (Expiry Date)
           - insuranceType: 保險類型 (請判斷為 "三保 Third Party" 或 "全保 Comprehensive")
           - insuredPerson: 受保人姓名 (Insured Name)
 
