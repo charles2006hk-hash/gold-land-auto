@@ -616,11 +616,12 @@ const InfoWidget = () => {
     };
 
     return (
-        <div className="mx-3 mb-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700 text-xs backdrop-blur-sm transition-all hover:bg-slate-800/80 relative overflow-hidden pb-5">
+        // 🍏 Apple Style: 微透光玻璃面板，完美融入側邊欄
+        <div className="mx-3 mb-3 p-3 bg-white/5 rounded-2xl border border-white/10 text-xs backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all hover:bg-white/10 relative overflow-hidden pb-5">
             {/* 時間日期區 (固定在頂部不輪播) */}
-            <div className="mb-3 border-b border-slate-700 pb-2 relative z-10">
+            <div className="mb-3 border-b border-white/10 pb-2 relative z-10">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">{currentTime.toLocaleTimeString('en-GB', { hour12: false })}</div>
-                <div className="flex justify-between mt-1 text-slate-400">
+                <div className="flex justify-between mt-1 text-slate-300">
                     <span>{currentTime.toLocaleDateString('zh-HK')}</span>
                     <span>{['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][currentTime.getDay()]}</span>
                 </div>
@@ -633,26 +634,26 @@ const InfoWidget = () => {
             <div className="relative min-h-[175px]">
                 {trafficScreen === 'ports' ? (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
-                        <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1"><span>口岸通關</span><div className="flex gap-3"><span>北上</span><span>南下</span></div></div>
+                        <div className="flex justify-between text-slate-400 text-[10px] mb-1 px-1"><span>口岸通關</span><div className="flex gap-3"><span>北上</span><span>南下</span></div></div>
                         {portStatus.length > 0 ? portStatus.map((port, idx) => (
-                            <div key={`port_${idx}`} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
-                                <span className="truncate mr-2 font-medium text-slate-200">{port.name}</span>
+                            <div key={`port_${idx}`} className="flex justify-between items-center text-slate-200 border-b border-white/5 pb-1 last:border-0 last:pb-0 px-1 hover:bg-white/5 rounded transition-colors">
+                                <span className="truncate mr-2 font-medium text-white">{port.name}</span>
                                 <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end">
                                     <span className={getStatusColor(port.up)}>{getStatusText(port.up)}</span>
                                     <span className={getStatusColor(port.down)}>{getStatusText(port.down)}</span>
                                 </div>
                             </div>
-                        )) : (<div className="text-center text-slate-600 italic py-6">{loading ? '口岸數據更新中...' : '暫無口岸數據'}</div>)}
-                        <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">入境處實時數據</div>
+                        )) : (<div className="text-center text-slate-400 italic py-6">{loading ? '口岸數據更新中...' : '暫無口岸數據'}</div>)}
+                        <div className="text-[9px] text-right text-slate-500 mt-2 italic pr-1">入境處實時數據</div>
                     </div>
                 ) : (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-left-4 duration-500">
-                        <div className="flex justify-between text-slate-500 text-[10px] mb-1 px-1"><span>隧道預計 (分鐘)</span><div className="flex gap-2"><span>往港/九</span><span>往九/新</span></div></div>
+                        <div className="flex justify-between text-slate-400 text-[10px] mb-1 px-1"><span>隧道預計 (分鐘)</span><div className="flex gap-2"><span>往港/九</span><span>往九/新</span></div></div>
                         {tunnelStatus ? (
                             <>
                                 {tunnelStatus.crossHarbour.map((t: any, idx: number) => (
-                                    <div key={`ch_${idx}`} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 px-1 hover:bg-slate-700/30 rounded">
-                                        <span className="truncate mr-2 font-medium text-slate-200">{t.short}</span>
+                                    <div key={`ch_${idx}`} className="flex justify-between items-center text-slate-200 border-b border-white/5 pb-1 px-1 hover:bg-white/5 rounded transition-colors">
+                                        <span className="truncate mr-2 font-medium text-white">{t.short}</span>
                                         <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end font-mono">
                                             <span className={`w-6 text-center ${t.toHK === '--' ? 'text-slate-500' : t.toHK > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toHK}</span>
                                             <span className={`w-6 text-center ${t.toKln === '--' ? 'text-slate-500' : t.toKln > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toKln}</span>
@@ -660,25 +661,25 @@ const InfoWidget = () => {
                                     </div>
                                 ))}
                                 {tunnelStatus.newTerritories.map((t: any, idx: number) => (
-                                    <div key={`nt_${idx}`} className="flex justify-between items-center text-slate-300 border-b border-slate-700/50 pb-1 last:border-0 last:pb-0 px-1 hover:bg-slate-700/30 rounded">
-                                        <span className="truncate mr-2 font-medium text-slate-200">{t.short}</span>
+                                    <div key={`nt_${idx}`} className="flex justify-between items-center text-slate-200 border-b border-white/5 pb-1 last:border-0 last:pb-0 px-1 hover:bg-white/5 rounded transition-colors">
+                                        <span className="truncate mr-2 font-medium text-white">{t.short}</span>
                                         <div className="flex gap-3 text-right font-bold whitespace-nowrap min-w-[60px] justify-end font-mono">
                                             <span className={`w-6 text-center ${t.toKln === '--' ? 'text-slate-500' : t.toKln > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toKln}</span>
                                             <span className={`w-6 text-center ${t.toNT === '--' ? 'text-slate-500' : t.toNT > 15 ? 'text-red-400 bg-red-400/10 rounded' : 'text-emerald-400'}`}>{t.toNT}</span>
                                         </div>
                                     </div>
                                 ))}
-                                <div className="text-[9px] text-right text-slate-600 mt-2 italic pr-1">運輸署實時數據</div>
+                                <div className="text-[9px] text-right text-slate-500 mt-2 italic pr-1">運輸署實時數據</div>
                             </>
-                        ) : (<div className="text-center text-slate-600 italic py-6">隧道路況載入中...</div>)}
+                        ) : (<div className="text-center text-slate-400 italic py-6">隧道路況載入中...</div>)}
                     </div>
                 )}
             </div>
 
             {/* 底部小圓點進度指示器 */}
             <div className="absolute bottom-1.5 left-0 w-full flex justify-center gap-1.5 z-20">
-                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports' ? 'w-4 bg-blue-500' : 'w-1.5 bg-slate-600'}`}></div>
-                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'tunnels' ? 'w-4 bg-amber-500' : 'w-1.5 bg-slate-600'}`}></div>
+                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports' ? 'w-4 bg-blue-500' : 'w-1.5 bg-white/20'}`}></div>
+                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'tunnels' ? 'w-4 bg-amber-500' : 'w-1.5 bg-white/20'}`}></div>
             </div>
         </div>
     );
@@ -744,8 +745,8 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
           {/* 🍏 Apple Style 側邊欄：深色高斯模糊背景 + 微弱的發光邊界 */}
           <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900/80 backdrop-blur-2xl text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-full flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/10`}> 
            
-           {/* Header 區域 - ★ 改用 min-h 並加入 pt 避開瀏海/動態島 */}
-            <div className={`pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
+           {/* 🍏 Apple Style: 頂部 Logo 區改用高光邊界 */}
+            <div className={`pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-white/10 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
                 <div className="flex items-center gap-3 overflow-hidden">
                     <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
                         <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
@@ -788,8 +789,8 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
             
             {!isSidebarCollapsed && <InfoWidget />}
             
-            {/* 底部登入資訊：★ 在這裡加入安全內距，讓按鈕避開 Home 橫條，而背景依舊填滿 */}
-            <div className="p-3 bg-slate-900 border-t border-slate-800 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            {/* 🍏 Apple Style: 底部登入區改為全透明與高光邊界 */}
+            <div className="p-3 bg-transparent border-t border-white/10 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                  {isSidebarCollapsed ? (
                      <button onClick={handleLogout} className="w-full flex justify-center text-slate-500 hover:text-red-400 transition" title="登出"><LogOut size={18} /></button>
                  ) : (
