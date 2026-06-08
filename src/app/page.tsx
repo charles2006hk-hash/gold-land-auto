@@ -3330,8 +3330,13 @@ const DatabaseSelector = ({
 
   return (
       // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-[#f8fafc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-50 via-slate-50 to-slate-100 relative">
-      
+      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0">
+          
+          {/* 🍏 Apple Style: 隱藏在底層的環境氛圍光 (Ambient Glow) */}
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-300/30 rounded-full blur-[120px] pointer-events-none -z-10 mix-blend-multiply"></div>
+          <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-purple-300/20 rounded-full blur-[100px] pointer-events-none -z-10 mix-blend-multiply"></div>
+          <div className="absolute top-[20%] right-[10%] w-[30%] h-[30%] bg-emerald-200/30 rounded-full blur-[100px] pointer-events-none -z-10 mix-blend-multiply"></div>
+       
         <style>{`
             /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
             html, body { 
