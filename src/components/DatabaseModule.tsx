@@ -237,6 +237,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
     const [activeGroupImages, setActiveGroupImages] = useState<Record<string, string>>({});
 
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
+    const [plateSearchText, setPlateSearchText] = useState(''); // ★ 新增：車牌搜尋框狀態
 
     const showToast = (text: string, type: 'success' | 'error' = 'success') => {
         setToastMsg({text, type});
@@ -997,15 +998,64 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                     <label className="block text-xs font-bold text-slate-500 mb-1">指標號 (Quota No)</label>
                                                     <input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/>
                                                 </div>
+                                                {/* 🚗 升級版：支援關鍵字過濾、按 A-Z 排序的車牌選取器 */}
                                                 <div>
-                                                    <label className="block text-xs font-bold text-slate-500 mb-1">關聯香港車牌</label>
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">
+                                                        關聯香港車牌 {isDbEditing && <span className="text-blue-500">(支援打字搜尋)</span>}
+                                                    </label>
                                                     {isDbEditing ? (
-                                                        <select value={editingEntry.relatedPlateNo || ''} onChange={e => setEditingEntry({...editingEntry, relatedPlateNo: e.target.value})} className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold">
-                                                            <option value="">-- 無關聯 --</option>
-                                                            {inventory.map(v => (<option key={v.id} value={v.regMark}>{v.regMark} {v.make} {v.model}</option>))}
-                                                        </select>
+                                                        <div className="relative">
+                                                            {/* 🔍 打字搜尋框 */}
+                                                            <input 
+                                                                type="text"
+                                                                placeholder="🔍 搜尋車牌 / 品牌 / 型號..."
+                                                                value={plateSearchText}
+                                                                onChange={e => setPlateSearchText(e.target.value)}
+                                                                className="w-full bg-white p-1.5 mb-1 rounded border border-blue-200 text-xs outline-none focus:border-blue-500 shadow-sm transition-colors"
+                                                            />
+                                                            {/* 🔽 主選擇框 */}
+                                                            <select 
+                                                                value={editingEntry.relatedPlateNo || ''} 
+                                                                onChange={e => {
+                                                                    setEditingEntry({...editingEntry, relatedPlateNo: e.target.value});
+                                                                    setPlateSearchText(''); // 選完自動清空搜尋框
+                                                                }}
+                                                                className="w-full p-2 border rounded text-sm bg-blue-50 text-blue-800 font-bold font-mono outline-none"
+                                                            >
+                                                                <option value="" className="font-sans text-slate-400">-- ❌ 不關聯車牌 --</option>
+                                                                {(() => {
+                                                                    // 1. 複製列表，避免改動原始數據
+                                                                    let sortedVehicles = [...(inventory || [])];
+                                                                    
+                                                                    // 2. 🧠 核心算法：A-Z、1-10 完美字母數字排序
+                                                                    sortedVehicles.sort((a, b) => {
+                                                                        const markA = (a.regMark || '').toUpperCase();
+                                                                        const markB = (b.regMark || '').toUpperCase();
+                                                                        return markA.localeCompare(markB, 'en', { numeric: true, sensitivity: 'base' });
+                                                                    });
+
+                                                                    // 3. 🔍 智慧大腦：模糊搜尋過濾
+                                                                    if (plateSearchText) {
+                                                                        const keyword = plateSearchText.toUpperCase();
+                                                                        sortedVehicles = sortedVehicles.filter(v => 
+                                                                            (v.regMark || '').toUpperCase().includes(keyword) ||
+                                                                            (v.make || '').toUpperCase().includes(keyword) ||
+                                                                            (v.model || '').toUpperCase().includes(keyword) ||
+                                                                            (v.crossBorder?.mainlandPlate || '').toUpperCase().includes(keyword)
+                                                                        );
+                                                                    }
+
+                                                                    // 4. 渲染結果
+                                                                    return sortedVehicles.map(v => (
+                                                                        <option key={v.id} value={v.regMark}>
+                                                                            【{v.regMark || '未出牌'}】{v.make} {v.model} {v.crossBorder?.mainlandPlate ? `(${v.crossBorder.mainlandPlate})` : ''}
+                                                                        </option>
+                                                                    ));
+                                                                })()}
+                                                            </select>
+                                                        </div>
                                                     ) : (
-                                                        <div className="w-full p-2 border rounded text-sm bg-gray-50">{editingEntry.relatedPlateNo || '-'}</div>
+                                                        <div className="w-full p-2 border rounded text-sm bg-gray-50 font-bold text-slate-700">{editingEntry.relatedPlateNo || '-'}</div>
                                                     )}
                                                 </div>
                                             </div>
