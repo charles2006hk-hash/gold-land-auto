@@ -353,8 +353,20 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.ports && data.ports.length > 0) newExtractedData.ports = Array.isArray(data.ports) ? data.ports.join(', ') : data.ports;
                     if (data.brandModel) newExtractedData.brandModel = data.brandModel;
                     if (data.vin) newExtractedData.vin = data.vin;
-                    if (data.regDate) newExtractedData.regDate = data.regDate;
-                    if (data.issueDate) newExtractedData.issueDate = data.issueDate;
+                    // 🧠 智慧大腦：行駛證日期防呆小工具
+                    const fixShortDate = (dateStr: string) => {
+                        if (!dateStr) return '';
+                        let clean = dateStr.trim();
+                        // 如果格式是 YYYY-MM (7個字)，自動補上 -01
+                        if (clean.length === 7 && clean.includes('-')) {
+                            return `${clean}-01`;
+                        }
+                        return clean;
+                    };
+
+                    if (data.regDate) newExtractedData.regDate = fixShortDate(data.regDate);
+                    if (data.issueDate) newExtractedData.issueDate = fixShortDate(data.issueDate);
+                    if (data.expiryDate) newExtractedData.expiryDate = fixShortDate(data.expiryDate);
                     if (data.licenseBarcodeNo) newExtractedData.licenseBarcodeNo = data.licenseBarcodeNo;
 
                     // ★ 補回動態資料框的車牌與核心車輛數據顯示
@@ -382,7 +394,11 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         phone: data.phone || prev.phone,
                         address: data.address || prev.address,
                         // ★ 自動打勾到期提醒
-                        expiryDate: data.expiryDate || prev.expiryDate,
+                        expiryDate: (data.expiryDate || prev.expiryDate) ? (
+                            (data.expiryDate || prev.expiryDate).trim().length === 7 
+                                ? `${(data.expiryDate || prev.expiryDate).trim()}-01` 
+                                : (data.expiryDate || prev.expiryDate).trim()
+                        ) : '',
                         reminderEnabled: (data.expiryDate) ? true : (prev.reminderEnabled || false),
                         
                         // ★ 指標號自動抓取批文卡號
