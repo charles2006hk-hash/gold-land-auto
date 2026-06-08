@@ -102,12 +102,12 @@ const InfoWidget = () => {
             let y = currentTime.getFullYear(); // 預設值防呆
             yearParts.forEach(p => {
                 // 有些瀏覽器叫 'year'，有些叫 'relatedYear'
-                if (p.type === 'year' || p.type === 'relatedYear') {
+                // ★ 加上 (p.type as string) 繞過 TypeScript 字典太舊的問題
+                if (p.type === 'year' || (p.type as string) === 'relatedYear') {
                     const match = p.value.match(/\d+/);
                     if (match) y = parseInt(match[0], 10);
                 }
             });
-
             // 3. 核心魔法：使用數學公式推算天干地支與生肖！
             const stems = ["癸", "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬"];
             const branches = ["亥", "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌"];
