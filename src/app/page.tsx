@@ -741,8 +741,8 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
         <>
           {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
-          {/* ★ 側邊欄外層：改用 inset-y-0 完美貼合上下邊緣，棄用會算錯高度的 100dvh */}
-          <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900 text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-full flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-xl border-r border-slate-800`}> 
+          {/* 🍏 Apple Style 側邊欄：深色高斯模糊背景 + 微弱的發光邊界 */}
+          <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900/80 backdrop-blur-2xl text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-full flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/10`}> 
            
            {/* Header 區域 - ★ 改用 min-h 並加入 pt 避開瀏海/動態島 */}
             <div className={`pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-slate-700 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
@@ -771,7 +771,8 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                      <button 
                         key={item.id} 
                         onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                        className={`flex items-center w-full p-2.5 rounded-lg transition-all duration-200 group relative ${activeTab === item.id ? 'bg-yellow-600 text-white shadow-md' : 'hover:bg-slate-800 text-slate-300 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
+                        // 🍏 Apple Style 選中狀態：半透明白底 + 邊框高光 + 柔和陰影
+                        className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-white/20 text-white shadow-[0_2px_10px_rgba(0,0,0,0.1)] border border-white/10' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
                         title={isSidebarCollapsed ? item.label : ''}
                      >
                         <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
@@ -3899,7 +3900,8 @@ const DatabaseSelector = ({
                     if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
 
                     return (
-                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex w-full box-border overflow-hidden bg-white p-2.5 md:p-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative">
+                        // 🍏 Apple Style 橫向小卡片：毛玻璃 + 雙高光邊界 + 點擊微縮放
+                        <div key={car.id} onClick={() => setEditingVehicle(car)} className="flex w-full box-border overflow-hidden bg-white/60 backdrop-blur-md p-2.5 md:p-3 rounded-2xl border border-white/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:bg-white/90 hover:shadow-[0_8px_24px_rgba(59,130,246,0.08)] hover:border-blue-300/50 cursor-pointer transition-all duration-300 group relative active:scale-[0.98]">   
                             
                             {/* 左側：改用 object-cover 自動適應放大，完美去邊框 */}
                             <div className="w-28 md:w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-100 border border-slate-200/50 shadow-inner">
@@ -4317,9 +4319,9 @@ const DatabaseSelector = ({
               
               {/* Filter Bar */}
               <div className="flex flex-col sm:flex-row gap-3 overflow-x-auto pb-3 flex-none scrollbar-hide items-start sm:items-center">
-                  {/* ★ 新增：自家 / 行家 快速切換器 */}
-                  <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 shrink-0">
-                      <button onClick={() => setFilterSource('All')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'All' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>全部</button>
+                  {/* 🍏 Apple Style 自家 / 行家 快速切換器 */}
+                  <div className="flex bg-white/50 backdrop-blur-md p-1 rounded-xl border border-white/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0">
+                      <button onClick={() => setFilterSource('All')} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${filterSource === 'All' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>全部</button>
                       <button onClick={() => setFilterSource('own')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'own' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>🟢 自家/寄賣</button>
                       <button onClick={() => setFilterSource('partner')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'partner' ? 'bg-white shadow-sm text-orange-700' : 'text-slate-500 hover:text-slate-700'}`}>🟠 行家盤</button>
                   </div>
@@ -4381,8 +4383,9 @@ const DatabaseSelector = ({
                         const isPartner = car.sourceType === 'partner';
 
                         return (
-                        <div key={car.id} className={`bg-white rounded-2xl shadow-sm border-2 transition-all duration-300 group flex flex-col overflow-hidden cursor-pointer relative ${isPartner ? 'border-orange-200 hover:border-orange-400 hover:shadow-orange-100' : 'border-slate-200 hover:border-yellow-400 hover:shadow-xl'}`} onClick={() => setEditingVehicle(car)}>
-                            
+                        // 🍏 Apple Style 大卡片：3XL 超大圓角 + 精密高光邊框 + 彌散陰影
+                        <div key={car.id} className={`bg-white/60 backdrop-blur-xl rounded-3xl border transition-all duration-300 group flex flex-col overflow-hidden cursor-pointer relative active:scale-[0.99] ${isPartner ? 'border-orange-200/80 hover:border-orange-300 shadow-[0_4px_20px_rgba(249,115,22,0.03)] hover:shadow-[0_12px_30px_rgba(249,115,22,0.1)]' : 'border-white/80 hover:border-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]'}`} onClick={() => setEditingVehicle(car)}>
+                         
                             {/* 上半部：4:3 滿版圖片 */}
                             <div className="w-full aspect-[4/3] bg-slate-900 relative overflow-hidden flex-none flex items-center justify-center">
                                 {thumbUrl ? (
@@ -4412,8 +4415,8 @@ const DatabaseSelector = ({
                                 </div>
                             </div>
 
-                            {/* 下半部：車輛資訊 (垂直排版) */}
-                            <div className="p-4 flex-1 flex flex-col bg-white">
+                           {/* 🍏 下半部：改為 bg-transparent 讓背景毛玻璃質感透視過來 */}
+                            <div className="p-4 flex-1 flex flex-col bg-transparent">
                                 <div className="flex justify-between items-start mb-1 gap-2">
                                     <div className="font-bold text-sm text-slate-800 leading-snug line-clamp-1">
                                         {car.year} {car.make} {car.model}
