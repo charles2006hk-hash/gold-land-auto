@@ -93,7 +93,7 @@ export async function POST(req: Request) {
           - address: 地址
           - plateNoHK: 香港車牌 (Registration Mark)
           - chassisNo: 底盤號碼 (Chassis No.)
-          - engineNo: 引擎號碼 / 發動機號 (Engine No.)
+          - engineNo: 引擎號碼 / 发动机号码 / 發動機號 (Engine No.)
           - make: 廠名 (Make)
           - model: 型號 (Model)
           - manufactureYear: 出廠年份 (Year of Manufacture)
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
           - licenseExpiry: 牌照有效日期 / 牌費到期日 (如文件上有顯示)，請轉換為 YYYY-MM-DD
           
           // 🛡️ 保險與通用到期日
-          - expiryDate: 文件到期日 / 有效期至 / 保單到期日 (Expiry Date / Valid Until)
+          - expiryDate: 文件到期日 / 有效期至 / 检验有效期至 / 保單到期日。若是批文卡顯示如 "2026.05.28 - 2027.05.28"，請只提取最後的到期日並轉為 "YYYY-MM-DD" 格式。若是內地行駛證的「检验有效期至」只顯示年月 (如 2026年05月)，請自動轉為該月月底日期 (如 "2026-05-31")。
           - insuranceCompany: 保險公司名稱 (例如 Ping An, Bank of China 等)
           - policyNumber: 保單號碼或 Cover Note No.
           - insuranceType: 保險類型 (請判斷為 "三保 Third Party" 或 "全保 Comprehensive")
@@ -124,11 +124,11 @@ export async function POST(req: Request) {
           - ports: ["深圳灣", "港珠澳大橋", "皇崗"] (陣列格式，通行口岸)
 
           // 🇨🇳 內地行駛證 / 駕駛證 專屬欄位
-          - relatedPlateNo: 內地車牌 (例如 粵Z L550港)
-          - brandModel: 品牌型號
-          - vin: 車輛識別代號 (VIN / 車架號)
-          - regDate: 註冊日期 (YYYY-MM-DD)
-          - issueDate: 發證日期 (YYYY-MM-DD)
+          - relatedPlateNo: 內地車牌 / 号牌号码 (例如 粵Z L550港。⚠️ 強烈注意：請仔細辨識圖片，極易將字母「S」誤認為數字「5」，例如「LS50」常被誤認，請根據上下文與字體特徵嚴格區分！)
+          - brandModel: 品牌型號 / 品牌型号
+          - vin: 車輛識別代號 / 车辆识别代号 (VIN / 車架號)
+          - regDate: 註冊日期 / 注册日期 (YYYY-MM-DD)
+          - issueDate: 發證日期 / 发证日期 (YYYY-MM-DD)
           - licenseBarcodeNo: 駕駛證號 / 條形碼下方號碼
           
           - description: 其他重要備註摘要 (若有其他你覺得重要的資訊，請寫在這裡)
