@@ -2842,7 +2842,7 @@ const DatabaseSelector = ({
                     <div className="absolute right-0 top-0 md:static">
                         <SmartNotificationCenter 
                             inventory={inventory} 
-                            settings={systemSettings} 
+                            settings={settings} 
                             triggerSmartPrint={triggerSmartPrint} 
                         />
                     </div>
