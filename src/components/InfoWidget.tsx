@@ -78,56 +78,51 @@ const InfoWidget = () => {
         return () => clearInterval(trafficTimer);
     }, []);
 
-    // ★★★ 終極修復：升級版農曆轉換邏輯 (無視瀏覽器格式差異，精準抓取生肖) ★★★
+    // ★★★ 終極修復：數學運算版農曆轉換 (無視瀏覽器格式差異，100% 顯示生肖) ★★★
     const getLunarDate = () => {
         try {
-            const formatter = new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', dateStyle: 'full' });
-            const parts = formatter.formatToParts(currentTime);
+            // 1. 取得準確的中文月日 (讓瀏覽器處理閏月等複雜邏輯)
+            let mdStr = new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
             
-            let yearStr = '', month = '', day = '';
-            parts.forEach(p => {
-                if (p.type === 'year') yearStr = p.value;
-                if (p.type === 'month') month = p.value;
-                if (p.type === 'day') day = p.value;
+            // 防呆：如果某些舊手機瀏覽器偷懶回傳數字 (如 "4月24日")，我們手動轉中文字
+            if (/\d/.test(mdStr)) {
+                const parts = new Intl.DateTimeFormat('en-US', { calendar: 'chinese', month: 'numeric', day: 'numeric' }).formatToParts(currentTime);
+                let m = 0, d = 0;
+                parts.forEach(p => {
+                    if (p.type === 'month') m = parseInt(p.value.match(/\d+/)?.[0] || '1', 10);
+                    if (p.type === 'day') d = parseInt(p.value.match(/\d+/)?.[0] || '1', 10);
+                });
+                const dayNames = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿5','廿六','廿七','廿八','廿九','三十'];
+                const monthNames = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
+                mdStr = `${monthNames[m - 1] || m + '月'}${dayNames[d - 1] || d + '日'}`;
+            }
+
+            // 2. 利用英文 locale 穩定抓取農曆年份的「純數字」(例如 2026)
+            const yearParts = new Intl.DateTimeFormat('en-US', { calendar: 'chinese', year: 'numeric' }).formatToParts(currentTime);
+            let y = currentTime.getFullYear(); // 預設值防呆
+            yearParts.forEach(p => {
+                // 有些瀏覽器叫 'year'，有些叫 'relatedYear'
+                if (p.type === 'year' || p.type === 'relatedYear') {
+                    const match = p.value.match(/\d+/);
+                    if (match) y = parseInt(match[0], 10);
+                }
             });
 
-            // 1. 定義天干與地支 (用來當雷達掃描)
-            const stems = '甲乙丙丁戊己庚辛壬癸';
-            const branches = '子丑寅卯辰巳午未申酉戌亥';
-            const zodiacMap: Record<string, string> = {
-                '子':'鼠', '丑':'牛', '寅':'虎', '卯':'兔', '辰':'龍', '巳':'蛇',
-                '午':'馬', '未':'羊', '申':'猴', '酉':'雞', '戌':'狗', '亥':'豬'
-            };
-            
-            // 2. 精準掃描字串中的天干與地支
-            let stem = '', branch = '';
-            for (let i = 0; i < yearStr.length; i++) {
-                if (stems.includes(yearStr[i])) stem = yearStr[i];
-                if (branches.includes(yearStr[i])) branch = yearStr[i];
-            }
+            // 3. 核心魔法：使用數學公式推算天干地支與生肖！
+            const stems = ["癸", "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬"];
+            const branches = ["亥", "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌"];
+            const zodiacs = ["豬", "鼠", "牛", "虎", "兔", "龍", "蛇", "馬", "羊", "猴", "雞", "狗"];
 
-            let ganzhi = (stem && branch) ? `${stem}${branch}` : '';
-            let zodiac = branch ? zodiacMap[branch] : '';
+            const stem = stems[(y - 3) % 10];
+            const branch = branches[(y - 3) % 12];
+            const zodiac = zodiacs[(y - 3) % 12];
 
-            // 3. 處理日期的中文格式轉換
-            if (/^\d+$/.test(day)) {
-                const num = parseInt(day, 10);
-                const chars = ['十', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-                if (num <= 10) day = '初' + (num === 10 ? '十' : chars[num]);
-                else if (num < 20) day = '十' + (num === 10 ? '' : chars[num % 10]);
-                else if (num === 20) day = '二十';
-                else if (num < 30) day = '廿' + chars[num % 10];
-                else if (num === 30) day = '三十';
-            }
-
-            if (!day.includes('日')) day += '日';
+            if (!mdStr.includes('日')) mdStr += '日';
 
             // 4. 完美輸出
-            if (ganzhi && zodiac) {
-                return `${ganzhi}年 (${zodiac}年) ${month}${day}`;
-            }
-            return `${month}${day}`;
+            return `${stem}${branch}年 (${zodiac}年) ${mdStr}`;
         } catch (e) {
+            console.error("農曆轉換錯誤:", e);
             return '';
         }
     };
