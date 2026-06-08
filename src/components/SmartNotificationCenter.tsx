@@ -5,20 +5,34 @@ import { Vehicle, SystemSettings } from '@/types';
 interface SmartNotificationCenterProps {
     inventory: Vehicle[];
     settings: SystemSettings;
-    // ★ 新增：將主程序的列印函數透過 Props 傳進來，徹底解耦
     triggerSmartPrint: (htmlContent: string, title: string) => void;
+    // ★ 新增：接收當前登入者資訊，用於權限隔離
+    currentUser: { email: string, modules: string[] } | null; 
 }
 
-const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint }: SmartNotificationCenterProps) => {
+const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, currentUser }: SmartNotificationCenterProps) => {
     const [isOpen, setIsOpen] = useState(false);
 
-    // --- 1. 全域掃描邏輯 (修正版：補齊所有中港欄位) ---
+    // --- 1. 全域掃描邏輯 (升級版：加入資料權限隔離) ---
     const useScanReminders = () => {
         const today = new Date();
         const alerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number }[] = [];
         const daysThreshold = settings.reminders?.daysBefore || 30;
 
-        inventory.forEach(car => {
+        // ★ 判斷是否為最高權限管理者 (BOSS 或擁有 all 模組)
+        const isAdmin = currentUser?.email?.toUpperCase() === 'BOSS' || currentUser?.modules?.includes('all');
+
+        // ★ 核心過濾：管理員看全部，一般業務只看自己負責的車
+        const visibleInventory = isAdmin 
+            ? inventory 
+            : inventory.filter(car => 
+                car.createdBy === currentUser?.email || 
+                (car as any).assignedTo === currentUser?.email ||
+                (car as any).sales === currentUser?.email
+              );
+
+        // ★ 改為掃描過濾後的 visibleInventory，而不是全公司資料庫
+        visibleInventory.forEach(car => {
             // A. 一般證件
             const genDocs = [
                 { key: 'licenseExpiry', reminderKey: 'licenseReminderEnabled', label: '車輛牌費 (License)' }, 
@@ -37,7 +51,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint }: Sma
                 }
             });
 
-            // B. 中港證件 (★ 修正 2：補齊所有日期欄位 + 放寬掃描條件 ★)
+            // B. 中港證件
             const cb = car.crossBorder;
             // 只要有資料物件，且 (已啟用 或 有車牌 或 有指標)，就進行掃描
             if (cb && (cb.isEnabled || cb.mainlandPlate || cb.quotaNumber)) {
