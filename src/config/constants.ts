@@ -121,4 +121,37 @@ export const DOCUMENT_FIELD_SCHEMA: Record<string, { key: string, label: string,
         { key: 'brNumber', label: 'BR 號碼', type: 'text' },
         { key: 'brExpiryDate', label: '屆滿日期', type: 'date' }
     ],
+    // ★ 新增：中港批文卡專屬輸入框
+    '批文卡': [
+        { key: 'plateNoHK', label: '香港車牌', type: 'text' },
+        { key: 'relatedPlateNo', label: '內地車牌', type: 'text' },
+        { key: 'approvalCardNo', label: '批文卡號 (編號)', type: 'text' },
+        { key: 'hkCompany', label: '香港公司名稱', type: 'text' },
+        { key: 'mainlandCompany', label: '內承單位名稱', type: 'text' },
+        { key: 'drivers', label: '駕駛人 (最多3個)', type: 'text' },
+        { key: 'handleStatus', label: '辦理情況', type: 'text' },
+        { key: 'currentApprovalNo', label: '現批文號', type: 'text' },
+        { key: 'ports', label: '通行口岸', type: 'text' }
+    ],
+    // ★ 新增：內地行駛證 / 駕駛證專屬輸入框
+    '內地行駛證': [
+        { key: 'relatedPlateNo', label: '內地車牌', type: 'text' },
+        { key: 'plateNoHK', label: '香港車牌', type: 'text' },
+        { key: 'brandModel', label: '品牌型號', type: 'text' },
+        { key: 'vin', label: '車輛識別代號 (車架號)', type: 'text' },
+        { key: 'engineNo', label: '發動機號', type: 'text' },
+        { key: 'regDate', label: '註冊日期', type: 'date' },
+        { key: 'issueDate', label: '發證日期', type: 'date' },
+        { key: 'licenseBarcodeNo', label: '駕駛證號 (條碼號)', type: 'text' }
+    ],
+    '行駛證': [ // 設定別名，防止伙記少打「內地」兩個字
+        { key: 'relatedPlateNo', label: '內地車牌', type: 'text' },
+        { key: 'plateNoHK', label: '香港車牌', type: 'text' },
+        { key: 'brandModel', label: '品牌型號', type: 'text' },
+        { key: 'vin', label: '車輛識別代號 (車架號)', type: 'text' },
+        { key: 'engineNo', label: '發動機號', type: 'text' },
+        { key: 'regDate', label: '註冊日期', type: 'date' },
+        { key: 'issueDate', label: '發證日期', type: 'date' },
+        { key: 'licenseBarcodeNo', label: '駕駛證號 (條碼號)', type: 'text' }
+    ]
 };
