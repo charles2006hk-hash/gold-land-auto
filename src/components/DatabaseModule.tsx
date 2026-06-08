@@ -357,9 +357,11 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.issueDate) newExtractedData.issueDate = data.issueDate;
                     if (data.licenseBarcodeNo) newExtractedData.licenseBarcodeNo = data.licenseBarcodeNo;
 
-                    // ★ 補回動態資料框的車牌顯示
+                    // ★ 補回動態資料框的車牌與核心車輛數據顯示
                     if (data.plateNoHK) newExtractedData.plateNoHK = data.plateNoHK;
                     if (data.relatedPlateNo) newExtractedData.relatedPlateNo = data.relatedPlateNo;
+                    if (data.engineNo) newExtractedData.engineNo = data.engineNo; // 👈 補上這行，發動機號就會顯示了！
+                    if (data.chassisNo) newExtractedData.chassisNo = data.chassisNo;
 
                     // ★ 自動以香港或內地公司名稱作為標題
                     const finalName = data.name || data.hkCompany || data.mainlandCompany || data.registeredOwnerName || data.insuredPerson || prev.name;
