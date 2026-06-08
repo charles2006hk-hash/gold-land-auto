@@ -343,6 +343,20 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.brExpiryDate) newExtractedData.brExpiryDate = data.brExpiryDate;
                     if (data.natureOfBusiness) newExtractedData.natureOfBusiness = data.natureOfBusiness;
 
+                    // ★ 新增：接收中港批文卡與行駛證的深度數據
+                    if (data.approvalCardNo) newExtractedData.approvalCardNo = data.approvalCardNo;
+                    if (data.hkCompany) newExtractedData.hkCompany = data.hkCompany;
+                    if (data.mainlandCompany) newExtractedData.mainlandCompany = data.mainlandCompany;
+                    if (data.drivers && data.drivers.length > 0) newExtractedData.drivers = Array.isArray(data.drivers) ? data.drivers.join(', ') : data.drivers;
+                    if (data.handleStatus) newExtractedData.handleStatus = data.handleStatus;
+                    if (data.currentApprovalNo) newExtractedData.currentApprovalNo = data.currentApprovalNo;
+                    if (data.ports && data.ports.length > 0) newExtractedData.ports = Array.isArray(data.ports) ? data.ports.join(', ') : data.ports;
+                    if (data.brandModel) newExtractedData.brandModel = data.brandModel;
+                    if (data.vin) newExtractedData.vin = data.vin;
+                    if (data.regDate) newExtractedData.regDate = data.regDate;
+                    if (data.issueDate) newExtractedData.issueDate = data.issueDate;
+                    if (data.licenseBarcodeNo) newExtractedData.licenseBarcodeNo = data.licenseBarcodeNo;
+
                     const finalName = data.name || data.registeredOwnerName || data.insuredPerson || prev.name;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
@@ -378,6 +392,8 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         registeredOwnerId: finalOwnerId,
                         registeredOwnerDate: data.registeredOwnerDate || data.ownerRegDate || data.dateOfRegAsOwner || prev.registeredOwnerDate,
                         seating: finalSeating,
+                        plateNoHK: data.plateNoHK || prev.plateNoHK,
+                        relatedPlateNo: data.relatedPlateNo || prev.relatedPlateNo,
                         
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
