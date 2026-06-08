@@ -616,10 +616,10 @@ const InfoWidget = () => {
     };
 
     return (
-        // 🍏 Apple Style: 微透光玻璃面板，完美融入側邊欄
-        <div className="mx-3 mb-3 p-3 bg-white/5 rounded-2xl border border-white/10 text-xs backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all hover:bg-white/10 relative overflow-hidden pb-5">
+        // 🍏 登入頁同款：深色透底的玻璃輸入框質感 (Deep Dark Glass Cutout)
+        <div className="mx-3 mb-3 p-3 bg-black/30 rounded-2xl border border-white/5 text-xs backdrop-blur-md shadow-inner transition-all hover:bg-black/40 relative z-10 overflow-hidden pb-5">
             {/* 時間日期區 (固定在頂部不輪播) */}
-            <div className="mb-3 border-b border-white/10 pb-2 relative z-10">
+            <div className="mb-3 border-b border-white/5 pb-2 relative z-10">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">{currentTime.toLocaleTimeString('en-GB', { hour12: false })}</div>
                 <div className="flex justify-between mt-1 text-slate-300">
                     <span>{currentTime.toLocaleDateString('zh-HK')}</span>
@@ -742,11 +742,17 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
         <>
           {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
-          {/* 🍏 Apple Style 側邊欄：深色高斯模糊背景 + 微弱的發光邊界 */}
-          <div className={`fixed inset-y-0 left-0 z-40 bg-slate-900/80 backdrop-blur-2xl text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-full flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/10`}> 
+          {/* 🍏 登入頁同款：深空透明視窗側邊欄 (Deep Space Window) */}
+          <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17] text-white transition-all duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static md:h-full flex flex-col ${isSidebarCollapsed ? 'w-16' : 'w-64'} print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.1)] border-r border-slate-800 relative overflow-hidden`}> 
            
-           {/* 🍏 Apple Style: 頂部 Logo 區改用高光邊界 */}
-            <div className={`pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-white/10 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
+            {/* ★ 側邊欄專屬：登入頁同款的隱藏動態光暈 */}
+            <div className="absolute inset-0 w-full h-full overflow-hidden opacity-20 pointer-events-none z-0">
+                <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
+                <div className="absolute bottom-[10%] right-[-20%] w-[80%] h-[40%] bg-yellow-500 rounded-full blur-[100px] opacity-40"></div>
+            </div>
+
+           {/* Header 區域 - 確保 relative z-10 浮在光暈上 */}
+            <div className={`relative z-10 pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-white/5 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between px-4'} transition-all flex-none`}>
                 <div className="flex items-center gap-3 overflow-hidden">
                     <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
                         <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
@@ -767,16 +773,16 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                     .sidebar-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
                 `}</style>
                 
-                <nav className="sidebar-no-scroll flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden pb-10">
+                <nav className="sidebar-no-scroll relative z-10 flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden pb-10">
                   {visibleMenuItems.map(item => (
                      <button 
                         key={item.id} 
                         onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                        // 🍏 Apple Style 選中狀態：半透明白底 + 邊框高光 + 柔和陰影
-                        className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-white/20 text-white shadow-[0_2px_10px_rgba(0,0,0,0.1)] border border-white/10' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
+                        // 🍏 登入頁同款：選中時變成搶眼的金色漸層按鈕 (Golden Gradient)
+                        className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-[0_4px_15px_rgba(234,179,8,0.2)] font-black' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center' : ''}`} 
                         title={isSidebarCollapsed ? item.label : ''}
                      >
-                        <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                        <item.icon size={18} className={`flex-shrink-0 ${!isSidebarCollapsed && 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
                         {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide">{item.label}</span>}
                         
                         {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">{item.label}</div>}
