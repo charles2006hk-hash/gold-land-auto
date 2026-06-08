@@ -884,14 +884,29 @@ const SettingsManager = ({
                                 setNewDocType('');
                             }} className="bg-slate-800 text-white px-4 py-2 rounded text-sm">新增</button>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {(settings.dbDocTypes?.[selectedDbCat] || []).map((type:string, idx:number) => (
-                                <span key={idx} className="bg-slate-100 px-3 py-1.5 rounded-full text-sm flex items-center gap-2 border">{type} <X size={14} className="cursor-pointer hover:text-red-500" onClick={() => {
-                                    const current = settings.dbDocTypes[selectedDbCat] || [];
-                                    const newList = current.filter((_:any, i:number) => i !== idx);
-                                    updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList } as any);
-                                }}/></span>
-                            ))}
+                        <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin mt-2">
+                            {(settings.dbDocTypes?.[selectedDbCat] || []).map((type:string, idx:number) => {
+                                const listLength = (settings.dbDocTypes?.[selectedDbCat] || []).length;
+                                return (
+                                    <div key={idx} className="group/item bg-slate-50 hover:bg-blue-50 p-2 rounded-lg text-sm flex items-center justify-between border border-slate-200 w-full transition-colors">
+                                        <div className="flex-1 flex items-center mr-4">
+                                            <span className="text-slate-400 font-mono w-6 text-xs">{idx+1}.</span>
+                                            <span className="font-bold text-slate-700 px-1">{type}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 opacity-50 group-hover/item:opacity-100 transition-opacity">
+                                            <button onClick={() => moveDocType(selectedDbCat, idx, 'up')} disabled={idx === 0} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronUp size={16}/></button>
+                                            <button onClick={() => moveDocType(selectedDbCat, idx, 'down')} disabled={idx === listLength - 1} className="p-1.5 text-slate-400 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-slate-200"><ChevronDown size={16}/></button>
+                                            <div className="w-px h-4 bg-slate-300 mx-1"></div>
+                                            <button onClick={() => {
+                                                const current = settings.dbDocTypes[selectedDbCat] || [];
+                                                const newList = current.filter((_:any, i:number) => i !== idx);
+                                                updateSettings('dbDocTypes', { ...settings.dbDocTypes, [selectedDbCat]: newList } as any);
+                                            }} className="p-1.5 text-red-400 hover:text-white hover:bg-red-500 rounded transition-colors"><Trash2 size={16}/></button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {(settings.dbDocTypes?.[selectedDbCat] || []).length === 0 && <div className="text-sm text-slate-400 p-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">此分類目前沒有任何文件類型。</div>}
                         </div>
                     </div>
                 )}
