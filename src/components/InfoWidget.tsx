@@ -78,34 +78,38 @@ const InfoWidget = () => {
         return () => clearInterval(trafficTimer);
     }, []);
 
-    // ★★★ 修改：升級版農曆轉換邏輯 (支援生肖與全中文日期) ★★★
+    // ★★★ 終極修復：升級版農曆轉換邏輯 (無視瀏覽器格式差異，精準抓取生肖) ★★★
     const getLunarDate = () => {
         try {
             const formatter = new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', dateStyle: 'full' });
             const parts = formatter.formatToParts(currentTime);
             
-            let year = '', month = '', day = '';
+            let yearStr = '', month = '', day = '';
             parts.forEach(p => {
-                if (p.type === 'year') year = p.value;
+                if (p.type === 'year') yearStr = p.value;
                 if (p.type === 'month') month = p.value;
                 if (p.type === 'day') day = p.value;
             });
 
-            // 提取干支 (過濾掉可能的西元年數字與年這字)
-            const ganzhi = year.replace(/[0-9]/g, '').replace('年', '');
-            
-            // 生肖對照表
+            // 1. 定義天干與地支 (用來當雷達掃描)
+            const stems = '甲乙丙丁戊己庚辛壬癸';
+            const branches = '子丑寅卯辰巳午未申酉戌亥';
             const zodiacMap: Record<string, string> = {
                 '子':'鼠', '丑':'牛', '寅':'虎', '卯':'兔', '辰':'龍', '巳':'蛇',
                 '午':'馬', '未':'羊', '申':'猴', '酉':'雞', '戌':'狗', '亥':'豬'
             };
             
-            let zodiac = '';
-            if (ganzhi.length >= 2) {
-                zodiac = zodiacMap[ganzhi.charAt(1)] || '';
+            // 2. 精準掃描字串中的天干與地支
+            let stem = '', branch = '';
+            for (let i = 0; i < yearStr.length; i++) {
+                if (stems.includes(yearStr[i])) stem = yearStr[i];
+                if (branches.includes(yearStr[i])) branch = yearStr[i];
             }
 
-            // 如果日期回傳的是阿拉伯數字 (例如 14)，轉為農曆中文習慣 (十四)
+            let ganzhi = (stem && branch) ? `${stem}${branch}` : '';
+            let zodiac = branch ? zodiacMap[branch] : '';
+
+            // 3. 處理日期的中文格式轉換
             if (/^\d+$/.test(day)) {
                 const num = parseInt(day, 10);
                 const chars = ['十', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
@@ -116,11 +120,11 @@ const InfoWidget = () => {
                 else if (num === 30) day = '三十';
             }
 
-            // 確保尾部有「日」字 (例如: 正月十四日)
             if (!day.includes('日')) day += '日';
 
+            // 4. 完美輸出
             if (ganzhi && zodiac) {
-                return `${ganzhi}年(${zodiac}年) ${month}${day}`;
+                return `${ganzhi}年 (${zodiac}年) ${month}${day}`;
             }
             return `${month}${day}`;
         } catch (e) {
