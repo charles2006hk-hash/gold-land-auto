@@ -541,11 +541,11 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
         <>
           {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
-          {/* 🍏 True Gemini Style：展開 w-64，收起時平滑縮為 w-16 純圖標導航條，換裝登入頁深空黑玻璃 */}
-          <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 relative overflow-hidden flex-none md:h-full md:static 
-              ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
-              ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
-          > 
+          {/* 🍏 True Gemini Style：完美修正行動端定位，移除非法 relative，改用 md:relative 順應桌面排版 */}
+           <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
+               ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
+               ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
+           >
             {/* 內建隱形氛圍宇宙光暈 */}
             <div className="absolute inset-0 w-full h-full overflow-hidden opacity-25 pointer-events-none z-0">
                 <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
