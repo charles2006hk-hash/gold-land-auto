@@ -2670,7 +2670,7 @@ const DatabaseSelector = ({
            
 
       {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
-      <main className="flex-1 w-full min-w-0 pt-0 px-4 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
+      <main className="flex-1 w-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
 
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
@@ -2684,8 +2684,8 @@ const DatabaseSelector = ({
             />
         )}
         
-        {/* ★ 手機版頂部 Header (🍏 滿版極致利用：融合智能提醒中心) */}
-          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-4 mb-4 z-20">
+        {/* ★ 手機版頂部 Header (完美適配動態島，擴大左右屏佔比) */}
+          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
               <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
               <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
               <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
@@ -3355,7 +3355,7 @@ const DatabaseSelector = ({
                       <div className="flex flex-col flex-1 min-h-0 overflow-hidden mt-0 md:mt-2 -mx-4 md:mx-0 bg-slate-100 md:bg-transparent">
                           
                           {/* ★ 創新方式：手機版專屬「浮動分頁按鈕」，釋放 100% 垂直空間！ */}
-                          <div className="md:hidden flex p-1.5 bg-slate-200/60 rounded-xl mx-4 mt-2 mb-2">
+                          <div className="md:hidden flex p-1.5 bg-slate-200/60 rounded-xl mx-1 mt-1 mb-2">
                               <button 
                                   onClick={() => setDashMobileTab('instock')}
                                   className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'instock' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
@@ -3520,7 +3520,7 @@ const DatabaseSelector = ({
                                   </div>
                                   
                                   {/* ★ 移除實心底色 bg-slate-50/30，讓卡片徹底浮在玻璃上 */}
-                                  <div className="flex-1 overflow-y-auto px-4 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent scrollbar-thin relative z-0">  
+                                  <div className="flex-1 overflow-y-auto px-1.5 md:px-3 pb-[calc(2rem+env(safe-area-inset-bottom))] md:pb-3 space-y-2.5 bg-transparent scrollbar-thin relative z-0">  
                                      {filteredInStockCars.map(car => renderDashboardCard(car))}
                                       {filteredInStockCars.length === 0 && (
                                           <div className="text-center py-10 text-slate-400 text-xs">
