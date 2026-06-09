@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // ★ 補上 useEffect
+import { createPortal } from 'react-dom'; // ★ 新增這行傳送門魔法
 import { Bell, CheckCircle, X, FileText, Globe, Printer } from 'lucide-react';
 import { Vehicle, SystemSettings } from '@/types';
 
@@ -12,7 +13,10 @@ interface SmartNotificationCenterProps {
 
 const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, currentUser }: SmartNotificationCenterProps) => {
     const [isOpen, setIsOpen] = useState(false);
-
+    // ★ 新增這兩行：確保系統渲染完畢才開啟傳送門，防止 Next.js 報錯
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+    
     // --- 1. 全域掃描邏輯 (升級版：加入資料權限隔離) ---
     const useScanReminders = () => {
         const today = new Date();
@@ -152,9 +156,9 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                 )}
             </button>
 
-            {/* 2. Detail Modal (詳情彈窗) */}
-            {isOpen && (
-                <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsOpen(false)}>
+            {/* 2. Detail Modal (透過 Portal 傳送到最頂層，突破毛玻璃限制) */}
+            {isOpen && mounted && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsOpen(false)}>
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
                         
                         {/* Title Bar */}
@@ -217,7 +221,8 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                             )}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body  // ★ 傳送門目標：直接送到整個網頁的最高層級
             )}
         </>
     );
