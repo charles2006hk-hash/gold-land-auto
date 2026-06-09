@@ -1101,6 +1101,36 @@ export default function GoldLandAutoDMS() {
       }
   }, []);
 
+ // ★★★ 企業級防呆機制：鎖住瀏覽器上一頁與防誤關閉 ★★★
+    useEffect(() => {
+        // 只有在「已登入 (有 staffId)」的狀態下才啟動鎖定
+        if (!staffId) return;
+
+        // 【防護一】阻擋瀏覽器上一頁 (Swipe Back / Back Button)
+        // 先塞入一個歷史紀錄當作「緩衝墊」
+        window.history.pushState(null, '', window.location.href);
+        const handlePopState = () => {
+            // 當使用者觸發上一頁時，立刻再把緩衝墊塞回去，抵銷退出的動作
+            window.history.pushState(null, '', window.location.href);
+            // (未來如果您有做 Toast 提示組件，也可以在這裡跳出："請使用左下角登出按鈕來離開系統")
+        };
+        window.addEventListener('popstate', handlePopState);
+
+        // 【防護二】阻擋意外刷新或關閉分頁 (F5 / Cmd+R / 點擊關閉標籤)
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            // Chrome 等現代瀏覽器需要設定 returnValue 才會跳出原生的防呆警告框
+            e.returnValue = ''; 
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        // 組件卸載或登出時，解除防護鎖
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [staffId]);
+ 
   // --- User Management Helper (v13.1 新增) ---
     const updateSystemUsers = async (newUsers: any[]) => {
         setSystemUsers(newUsers); // 更新畫面
