@@ -543,9 +543,9 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
       
           {/* 🍏 True Gemini Style：完美修正行動端定位，移除非法 relative，改用 md:relative 順應桌面排版 */}
            <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
-               ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
-               ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
-           >
+                ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
+                ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
+            >
             {/* 內建隱形氛圍宇宙光暈 */}
             <div className="absolute inset-0 w-full h-full overflow-hidden opacity-25 pointer-events-none z-0">
                 <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
@@ -2684,12 +2684,14 @@ const DatabaseSelector = ({
             />
         )}
         
-        {/* ★ 手機版頂部 Header (僅在手機端呈現，100% 解除桌面端排版干擾，徹底消滅錯位問題) */}
-        <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-4 mb-4 z-20">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
-            <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
-            <div className="w-9"></div> {/* 不可見的佔位符，讓標題完美居中 */}
-        </div>
+        {/* ★ 手機版頂部 Header (🍏 滿版極致利用：融合智能提醒中心) */}
+          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-4 mb-4 z-20">
+              <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
+              <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
+              <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
+                  <SmartNotificationCenter inventory={inventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} />
+              </div>
+          </div>
 
         {isPreviewMode && (
           <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-center z-50 shadow-xl print:hidden gap-3">
@@ -2839,14 +2841,9 @@ const DatabaseSelector = ({
                             currentUser={currentUser} 
                         />
                     </div>
-                    <div className="absolute right-0 top-0 md:static">
-                        <SmartNotificationCenter 
-                            inventory={inventory} 
-                            settings={settings} 
-                            triggerSmartPrint={triggerSmartPrint} 
-                            currentUser={currentUser}
-                        />
-                    </div>
+                    <div className="hidden md:block">
+    <SmartNotificationCenter inventory={inventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} />
+</div>
                 </div>
               
               {/* 卡片統計 (Apple Glassmorphism 質感) */}
