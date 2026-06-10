@@ -15,22 +15,26 @@ export async function GET(request: Request) {
         const allMarketCars = await res.json();
         if (!Array.isArray(allMarketCars)) throw new Error('NAS 數據格式錯誤');
 
-        // ★★★ 核心修復：智能大數據清洗與模糊比對 ★★★
+        // ★★★ 核心修復：智能大數據清洗與模糊比對 (升級版：破解 Check Desc 陷阱) ★★★
         const matchedCars = allMarketCars.filter((car: any) => {
             const carMake = (car.make || car.brand || '').toUpperCase().trim();
             const carModel = (car.model || '').toUpperCase().trim();
+            const carTitle = (car.title || '').toUpperCase().trim(); // ★ 新增：把標題也抓出來
             const carYear = String(car.year || '').trim();
 
             // 1. 車廠比對 (Toyota vs 豐田 Toyota)
-            const makeMatch = make ? (carMake.includes(make) || make.includes(carMake)) : true;
+            // ★ 新增 carTitle.includes(make)，因為 title 裡面常包含 "豐田" 或 "平治"
+            const makeMatch = make 
+                ? (carMake.includes(make) || make.includes(carMake) || carTitle.includes(make)) 
+                : true;
             
             // 2. 智能核心車型比對 (解決 Alphard SC vs Alphard 2.5 的問題)
             // 只取第一個英數單字來比對，例如 "ALPHARD SC" -> 只取 "ALPHARD"
             const myCoreModel = model.split(' ')[0].replace(/[^A-Z0-9]/g, '');
-            const targetCoreModel = carModel.split(' ')[0].replace(/[^A-Z0-9]/g, '');
             
+            // ★ 終極破解：既然 car.model 是 "CHECK DESC"，我們直接拿 myCoreModel 去撞 carTitle！
             const modelMatch = myCoreModel 
-                ? (targetCoreModel.includes(myCoreModel) || myCoreModel.includes(targetCoreModel)) 
+                ? (carTitle.includes(myCoreModel) || carModel.includes(myCoreModel)) 
                 : true;
 
             // 3. 年份比對
@@ -38,7 +42,6 @@ export async function GET(request: Request) {
 
             return makeMatch && modelMatch && yearMatch;
         });
-
         if (matchedCars.length === 0) {
             return NextResponse.json({ success: true, count: 0, avgPrice: 0, minPrice: 0, maxPrice: 0, items: [] });
         }
