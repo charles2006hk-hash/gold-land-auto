@@ -616,7 +616,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // 儲存邏輯 (終極手動遞迴消毒版：100% 免疫瀏覽器版本差異)
+    // 儲存邏輯 (絕對防禦版：徹底封殺 OCR 隨機注入的幽靈陣列)
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         
@@ -626,10 +626,29 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
         if (!db || !staffId || !editingEntry) return;
         
-        // 確保標籤是標準陣列
+        // 1. 確保標籤是標準陣列
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
+        // 2. ★★★ 嚴格清洗四大標準陣列 (強制轉型，杜絕巢狀地雷) ★★★
+        const safeTags = Array.from(autoTags).map(t => String(t));
+        const safeRoles = Array.isArray(editingEntry.roles) ? editingEntry.roles.map(r => String(r)) : [];
+        const safeAttachments = Array.isArray(editingEntry.attachments) ? editingEntry.attachments.map(a => ({
+            name: String(a?.name || 'document.jpg'),
+            data: String(a?.data || '')
+        })) : [];
+        const safeReminders = Array.isArray(editingEntry.customReminders) ? editingEntry.customReminders.map(r => ({
+            date: String(r?.date || ''),
+            title: String(r?.title || ''),
+            type: String(r?.type || '')
+        })) : [];
+
+        // 3. ★★★ 封印 OCR 原始資料：全部轉成純字串，徹底斬斷 Firebase 解析 ★★★
+        const safeExtractedData = typeof editingEntry.extractedData === 'object' 
+            ? JSON.stringify(editingEntry.extractedData) 
+            : String(editingEntry.extractedData || '{}');
+
+        // 4. 組合預備儲存的物件
         const finalEntry = { 
             ...editingEntry, 
             phone: editingEntry.phone || '',
@@ -656,16 +675,19 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             priceTax: Number(editingEntry.priceTax) || 0,
             prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
             seating: Number(editingEntry.seating) || 0, 
-            tags: Array.from(autoTags), 
-            roles: Array.isArray(editingEntry.roles) ? editingEntry.roles : [], 
-            attachments: Array.isArray(editingEntry.attachments) ? editingEntry.attachments : [],
+            
+            // 套用已清洗的絕對安全資料
+            tags: safeTags, 
+            roles: safeRoles, 
+            attachments: safeAttachments,
+            customReminders: safeReminders,
+            extractedData: safeExtractedData,
+
             reminderEnabled: editingEntry.reminderEnabled || false,
             expiryDate: editingEntry.expiryDate || '',
             renewalCount: editingEntry.renewalCount || 0,
             renewalDuration: editingEntry.renewalDuration || 1,
             renewalUnit: editingEntry.renewalUnit || 'year',
-            customReminders: Array.isArray(editingEntry.customReminders) ? editingEntry.customReminders : [],
-            extractedData: editingEntry.extractedData || {},
             managedBy: editingEntry.managedBy || staffId, 
             
             hkid_name: editingEntry.hkid_name || '',
@@ -686,55 +708,30 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             cndl_fileNum: editingEntry.cndl_fileNum || ''
         };
 
-        // ★★★ 終極手動遞迴消毒引擎 (100% 絕對壓平，不依賴任何瀏覽器 API) ★★★
-        const sanitizeForFirebase = (data: any): any => {
-            // 第一重：轉純 JSON，徹底剝離所有自訂物件 (如 Firebase Timestamp 等)
-            const plain = JSON.parse(JSON.stringify(data));
-            
-            // 第二重：手動深度掃描與強制攤平
-            const deepSanitize = (val: any): any => {
-                if (val === null || val === undefined) return null;
-                if (typeof val !== 'object') return val;
+        // 5. ★★★ 幽靈陣列掃除器：攔截並絞碎 OCR 隨機注入的未知欄位 ★★★
+        const cleanForFirebase = (obj: any): any => {
+            const result: any = {};
+            const allowedSafeKeys = ['tags', 'roles', 'attachments', 'customReminders', 'extractedData'];
 
-                if (Array.isArray(val)) {
-                    const result: any[] = [];
-                    // 手動把陣列裡的陣列「剝開」塞進 result 裡
-                    const flattenAndClean = (arr: any[]) => {
-                        for (let i = 0; i < arr.length; i++) {
-                            const item = arr[i];
-                            if (Array.isArray(item)) {
-                                flattenAndClean(item); // 若陣列內還有陣列，繼續剝開
-                            } else {
-                                const cleanedItem = deepSanitize(item);
-                                if (cleanedItem !== null && cleanedItem !== undefined) {
-                                    result.push(cleanedItem);
-                                }
-                            }
-                        }
-                    };
-                    flattenAndClean(val);
-                    return result;
+            for (const key in obj) {
+                const val = obj[key];
+                if (val === undefined || val === null) continue;
+
+                if (allowedSafeKeys.includes(key)) {
+                    result[key] = val; // 已經過嚴格轉型，直接放行
+                } else if (Array.isArray(val)) {
+                    // 如果出現未知陣列 (AI 偷塞的幽靈)，強制轉成純文字，阻止 Firebase 崩潰！
+                    result[key] = JSON.stringify(val);
+                } else {
+                    result[key] = val; // 一般字串、數字、或 Firebase Timestamp 正常放行
                 }
-
-                // 處理一般物件
-                const resultObj: any = {};
-                for (const key in val) {
-                    if (Object.prototype.hasOwnProperty.call(val, key)) {
-                        const cleanedVal = deepSanitize(val[key]);
-                        if (cleanedVal !== null && cleanedVal !== undefined) {
-                            resultObj[key] = cleanedVal;
-                        }
-                    }
-                }
-                return resultObj;
-            };
-
-            return deepSanitize(plain);
+            }
+            return result;
         };
 
         try {
-            // 啟動 100% 防護級清洗
-            const cleanData = sanitizeForFirebase(finalEntry); 
+            // 啟用絕對防禦過濾
+            const cleanData = cleanForFirebase(finalEntry); 
 
             if (editingEntry.id) {
                 const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
