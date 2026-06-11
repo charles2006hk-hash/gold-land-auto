@@ -1883,7 +1883,7 @@ useEffect(() => {
 // ==================================================================
   // ★★★ 中心化財務引擎：自動同步車輛收支至全域 Ledger (v22.0) ★★★
   // ==================================================================
-  const syncVehicleFinanceToLedger = async (v: Vehicle) => {
+  const syncVehicleFinanceToLedger = async (v: any) => {
       if (!db || !v.id || !appId) return;
       try {
           const batch = writeBatch(db);
@@ -2150,9 +2150,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             }
 
             // ★★★ 核心觸發：儲存成功後，無縫將資料同步至全域財務總帳 (Ledger) ★★★
-            if (targetVehicleId) {
-                await syncVehicleFinanceToLedger({ id: targetVehicleId, ...vData } as Vehicle);
-            }
+              if (targetVehicleId) {
+                  await syncVehicleFinanceToLedger({ id: targetVehicleId, ...vData });
+              }
 
             // 餵給智能引擎最完整的資料 (以下保留原有邏輯)
             if (vData.customerName) {
