@@ -1,5 +1,5 @@
 'use client';
-  
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
@@ -61,7 +61,7 @@ import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, // ★ 新增：本地快取模組
   collection, addDoc, deleteDoc, doc, onSnapshot, query, 
   orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
-  getDocs, where, limit 
+  getDocs, where, limit,
 } from "firebase/firestore";
 import { 
   getStorage, deleteObject, 
