@@ -2177,7 +2177,11 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             console.error(e); 
             alert('❌ 儲存失敗，請檢查網路連線'); 
         }
-
+        
+        // ⬇️ ★★★ 請補回這兩行，把載入狀態解除並關閉函數 ★★★
+        setIsLoading(false);
+    };
+  
 const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
     if (confirm('確定刪除？資料將無法復原。')) {
