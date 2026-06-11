@@ -2178,8 +2178,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             alert('❌ 儲存失敗，請檢查網路連線'); 
         }
         
-        // ⬇️ ★★★ 請補回這兩行，把載入狀態解除並關閉函數 ★★★
-        setIsLoading(false);
+       
     };
   
 const deleteVehicle = async (id: string) => {
