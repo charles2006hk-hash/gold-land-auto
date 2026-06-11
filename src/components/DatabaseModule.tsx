@@ -616,7 +616,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // 儲存邏輯
+    // 儲存邏輯 (升級版：搭載智能清洗盾牌)
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         
@@ -628,6 +628,13 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
+        // ★★★ 智能數字清洗器：防禦 NaN 與 undefined 炸毀資料庫 ★★★
+        const safeNum = (val: any) => {
+            if (val === undefined || val === null || val === '') return 0;
+            const num = Number(String(val).replace(/,/g, ''));
+            return isNaN(num) ? 0 : num;
+        };
+
         const finalEntry = { 
             ...editingEntry, 
             phone: editingEntry.phone || '',
@@ -649,18 +656,21 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             registeredOwnerName: editingEntry.registeredOwnerName || '',
             registeredOwnerId: editingEntry.registeredOwnerId || '',
             registeredOwnerDate: editingEntry.registeredOwnerDate || '',
-            engineSize: Number(editingEntry.engineSize) || 0,
-            priceA1: Number(editingEntry.priceA1) || 0,
-            priceTax: Number(editingEntry.priceTax) || 0,
-            prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
-            seating: Number(editingEntry.seating) || 0, 
-            tags: Array.from(autoTags), 
-            roles: editingEntry.roles || [], 
+            
+            // ★ 全面套用防禦盾牌
+            engineSize: safeNum(editingEntry.engineSize),
+            priceA1: safeNum(editingEntry.priceA1),
+            priceTax: safeNum(editingEntry.priceTax),
+            prevOwners: safeNum(editingEntry.prevOwners),
+            seating: safeNum(editingEntry.seating), 
+            
+            tags: Array.from(autoTags).filter(Boolean), 
+            roles: (editingEntry.roles || []).filter(Boolean), 
             attachments: editingEntry.attachments || [],
             reminderEnabled: editingEntry.reminderEnabled || false,
             expiryDate: editingEntry.expiryDate || '',
-            renewalCount: editingEntry.renewalCount || 0,
-            renewalDuration: editingEntry.renewalDuration || 1,
+            renewalCount: safeNum(editingEntry.renewalCount),
+            renewalDuration: safeNum(editingEntry.renewalDuration) || 1,
             renewalUnit: editingEntry.renewalUnit || 'year',
             customReminders: editingEntry.customReminders || [],
             extractedData: editingEntry.extractedData || {},
@@ -684,24 +694,48 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             cndl_fileNum: editingEntry.cndl_fileNum || ''
         };
 
+        // ★★★ 終極深度清洗：遞迴移除所有 undefined 與 null，確保符合 Firebase 最嚴格標準 ★★★
+        const deepClean = (obj: any): any => {
+            if (obj === null || obj === undefined) return null;
+            if (typeof obj === 'number' && isNaN(obj)) return 0;
+            if (typeof obj !== 'object') return obj;
+            if (Array.isArray(obj)) return obj.map(deepClean).filter(v => v !== null && v !== undefined);
+            
+            const cleaned: any = {};
+            for (const key in obj) {
+                const val = deepClean(obj[key]);
+                if (val !== null && val !== undefined) {
+                    cleaned[key] = val;
+                }
+            }
+            return cleaned;
+        };
+
         try {
+            const cleanData = deepClean(finalEntry); 
+
             if (editingEntry.id) {
                 const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
-                const cleanData = JSON.parse(JSON.stringify(finalEntry));
+                delete cleanData.id; 
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
                 setIsDbEditing(false); 
                 showToast('✅ 資料已成功更新！'); 
             } else {
-                const { id, ...dataToSave } = finalEntry;
+                delete cleanData.id; 
                 const colRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-                const cleanData = JSON.parse(JSON.stringify(dataToSave));
                 const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
                 setEditingEntry({ ...finalEntry, id: newRef.id }); 
                 setIsDbEditing(false);
                 showToast('✅ 新資料已建立！'); 
             }
-        } catch (err) { 
-            showToast('❌ 儲存失敗，請檢查網路連線', 'error'); 
+        } catch (err: any) { 
+            console.error("Save Error:", err);
+            // ★ 智能攔截容量過大錯誤，給予精確提示
+            if (err.message && err.message.includes('exceeds the limit')) {
+                showToast('❌ 儲存失敗：夾帶的圖片或PDF檔案過大，超出了單筆 1MB 限制！請刪除部分圖片後重試。', 'error');
+            } else {
+                showToast('❌ 儲存失敗，請檢查網路連線或資料格式', 'error'); 
+            }
         }
     };
 
