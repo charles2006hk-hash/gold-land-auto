@@ -1891,7 +1891,7 @@ useEffect(() => {
           
           // 處理 1：維修保養 (Maintenance)
           if (v.maintenanceRecords && Array.isArray(v.maintenanceRecords)) {
-              v.maintenanceRecords.forEach(m => {
+              v.maintenanceRecords.forEach((m: any) => { // 👈 ★★★ 加上 : any 隱身斗篷 ★★★
                   // --- 處理成本 (支出 OUT) ---
                   const costLedgerRef = doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`);
                   if (m.costStatus === 'Paid' && Number(m.cost) > 0) {
