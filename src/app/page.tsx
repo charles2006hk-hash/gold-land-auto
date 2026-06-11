@@ -1880,6 +1880,71 @@ useEffect(() => {
         }
     };
 
+// ==================================================================
+  // ★★★ 中心化財務引擎：自動同步車輛收支至全域 Ledger (v22.0) ★★★
+  // ==================================================================
+  const syncVehicleFinanceToLedger = async (v: Vehicle) => {
+      if (!db || !v.id || !appId) return;
+      try {
+          const batch = writeBatch(db);
+          const ledgerRefBase = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'financial_ledger');
+          
+          // 處理 1：維修保養 (Maintenance)
+          if (v.maintenanceRecords && Array.isArray(v.maintenanceRecords)) {
+              v.maintenanceRecords.forEach(m => {
+                  // --- 處理成本 (支出 OUT) ---
+                  const costLedgerRef = doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`);
+                  if (m.costStatus === 'Paid' && Number(m.cost) > 0) {
+                      batch.set(costLedgerRef, {
+                          refVehicleId: v.id,
+                          refRegMark: v.regMark || '未出牌',
+                          sourceModule: 'maintenance',
+                          type: 'OUT', // ★ 完美對齊 FinanceModule 的 IN/OUT 邏輯
+                          category: '營運開支 (Expenses)', // ★ 對齊您的會計類別
+                          desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`,
+                          amount: Number(m.cost),
+                          date: m.costDate || new Date().toISOString().split('T')[0],
+                          method: m.costMethod || 'Transfer',
+                          remark: m.costRemark || '',
+                          updatedAt: serverTimestamp()
+                      }, { merge: true }); // merge: true 保證修改備註時只覆蓋，不重複新增！
+                  } else {
+                      // 如果被退回未付，自動從財務流水中抽起作廢
+                      batch.delete(costLedgerRef);
+                  }
+
+                  // --- 處理收費 (收入 IN) ---
+                  const chargeLedgerRef = doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`);
+                  if (m.chargeStatus === 'Paid' && Number(m.charge) > 0) {
+                      batch.set(chargeLedgerRef, {
+                          refVehicleId: v.id,
+                          refRegMark: v.regMark || '未出牌',
+                          sourceModule: 'maintenance',
+                          type: 'IN', // ★ 收入
+                          category: '售後服務 (Service)',
+                          desc: `[維修收費] ${m.item}`,
+                          amount: Number(m.charge),
+                          date: m.chargeDate || new Date().toISOString().split('T')[0],
+                          method: m.chargeMethod || 'Transfer',
+                          remark: m.chargeRemark || '',
+                          updatedAt: serverTimestamp()
+                      }, { merge: true });
+                  } else {
+                      batch.delete(chargeLedgerRef);
+                  }
+              });
+          }
+          
+          // 一次性原子提交，保證資料絕對不會斷層！
+          await batch.commit();
+          console.log(`✅ [財務引擎] 車輛 ${v.regMark} 的流水帳已完美同步至總帳本！`);
+      } catch (error) {
+          console.error("❌ 同步財務流水失敗:", error);
+      }
+  };
+
+  // const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => { ...
+ 
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!db || !staffId) return;
@@ -2057,35 +2122,39 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         }
   
         try {
+            let targetVehicleId = editingVehicle?.id; // ★ 記下車輛 ID 給財務引擎使用
+
             if (editingVehicle && editingVehicle.id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
                 addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`);
                 
-                // ★ 判斷是否剛剛售出，若是則觸發通知
                 if (settings.pushConfig?.events?.sold && status === 'Sold' && editingVehicle.status !== 'Sold') {
                     sendPushNotification('🎉 車輛已售出！', `車牌 ${vData.regMark || '未出牌'} (${vData.make} ${vData.model}) 剛剛已成功售出！`);
                 }
-                
                 alert('✅ 車輛資料已成功更新！');
             } else {
-                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
+                const newDocRef = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
                     ...vData,
                     createdAt: serverTimestamp(),
                     expenses: [],
                     payments: [],
                     salesAddons: []
                 });
-                addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
+                targetVehicleId = newDocRef.id; // ★ 取得全新入庫車輛的 ID
                 
-                // ★ 新車入庫，觸發通知
+                addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
                 if (settings.pushConfig?.events?.newCar) {
                     sendPushNotification('🚗 新車入庫通知', `車牌 ${vData.regMark || '未出牌'} (${vData.make} ${vData.model}) 已成功加入庫存！`);
                 }
-                
                 alert('✅ 新車輛已成功入庫！');
             }
 
-            // 餵給智能引擎最完整的資料
+            // ★★★ 核心觸發：儲存成功後，無縫將資料同步至全域財務總帳 (Ledger) ★★★
+            if (targetVehicleId) {
+                await syncVehicleFinanceToLedger({ id: targetVehicleId, ...vData } as Vehicle);
+            }
+
+            // 餵給智能引擎最完整的資料 (以下保留原有邏輯)
             if (vData.customerName) {
                 await syncToDatabase({ 
                     name: vData.customerName, 
@@ -2106,10 +2175,8 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             }
         } catch (e) { 
             console.error(e); 
-            // ★ 已經全域攔截，直接呼叫 alert 就會彈出漂亮的 Toast！
             alert('❌ 儲存失敗，請檢查網路連線'); 
         }
-    };
 
 const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
