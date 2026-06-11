@@ -616,7 +616,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // 儲存邏輯 (終極雙重消毒防護版)
+    // 儲存邏輯 (終極手動遞迴消毒版：100% 免疫瀏覽器版本差異)
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         
@@ -686,32 +686,54 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             cndl_fileNum: editingEntry.cndl_fileNum || ''
         };
 
-        // ★★★ 終極雙重消毒引擎：先轉純文字拔除異物，再遞迴暴力壓平所有陣列 ★★★
+        // ★★★ 終極手動遞迴消毒引擎 (100% 絕對壓平，不依賴任何瀏覽器 API) ★★★
         const sanitizeForFirebase = (data: any): any => {
-            const plain = JSON.parse(JSON.stringify(data)); // 第一重：剔除 undefined 與非 JSON 物件
-            const clean = (obj: any): any => {
-                if (obj === null || obj === undefined) return null;
-                if (typeof obj !== 'object') return obj;
-                
-                if (Array.isArray(obj)) {
-                    // 第二重：不管陣列包了多少層，全部用壓路機壓成一層
-                    return obj.flat(Infinity).map(clean).filter(v => v !== null && v !== undefined);
+            // 第一重：轉純 JSON，徹底剝離所有自訂物件 (如 Firebase Timestamp 等)
+            const plain = JSON.parse(JSON.stringify(data));
+            
+            // 第二重：手動深度掃描與強制攤平
+            const deepSanitize = (val: any): any => {
+                if (val === null || val === undefined) return null;
+                if (typeof val !== 'object') return val;
+
+                if (Array.isArray(val)) {
+                    const result: any[] = [];
+                    // 手動把陣列裡的陣列「剝開」塞進 result 裡
+                    const flattenAndClean = (arr: any[]) => {
+                        for (let i = 0; i < arr.length; i++) {
+                            const item = arr[i];
+                            if (Array.isArray(item)) {
+                                flattenAndClean(item); // 若陣列內還有陣列，繼續剝開
+                            } else {
+                                const cleanedItem = deepSanitize(item);
+                                if (cleanedItem !== null && cleanedItem !== undefined) {
+                                    result.push(cleanedItem);
+                                }
+                            }
+                        }
+                    };
+                    flattenAndClean(val);
+                    return result;
                 }
-                
-                const res: any = {};
-                for (const key in obj) {
-                    const val = clean(obj[key]);
-                    if (val !== null && val !== undefined) {
-                        res[key] = val;
+
+                // 處理一般物件
+                const resultObj: any = {};
+                for (const key in val) {
+                    if (Object.prototype.hasOwnProperty.call(val, key)) {
+                        const cleanedVal = deepSanitize(val[key]);
+                        if (cleanedVal !== null && cleanedVal !== undefined) {
+                            resultObj[key] = cleanedVal;
+                        }
                     }
                 }
-                return res;
+                return resultObj;
             };
-            return clean(plain);
+
+            return deepSanitize(plain);
         };
 
         try {
-            // 啟用核彈級清洗
+            // 啟動 100% 防護級清洗
             const cleanData = sanitizeForFirebase(finalEntry); 
 
             if (editingEntry.id) {
@@ -733,7 +755,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             if (err.message && err.message.includes('exceeds the limit')) {
                 showToast('❌ 儲存失敗：夾帶的圖片過大，超出了 1MB 限制！', 'error');
             } else {
-                // 將更詳細的錯誤顯示出來，方便除錯
                 showToast(`❌ 儲存失敗：${err.message}`, 'error'); 
             }
         }
