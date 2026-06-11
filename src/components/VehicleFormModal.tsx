@@ -222,11 +222,31 @@ const VehicleFormModal = ({
         safeUpdateMaintenance((v.maintenanceRecords || []).filter((m: any) => m.id !== id));
     };
     
+    // ★ 痛點修復：升級狀態切換邏輯，自動填入日期與方式
     const toggleMaintenanceStatus = (m: any, type: 'costStatus' | 'chargeStatus') => {
-        const newStatus = m[type] === 'Paid' ? 'Unpaid' : 'Paid';
-        safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === m.id ? { ...x, [type]: newStatus } : x));
+        const isCurrentlyPaid = m[type] === 'Paid';
+        const newStatus = isCurrentlyPaid ? 'Unpaid' : 'Paid';
+        const prefix = type === 'costStatus' ? 'cost' : 'charge';
+
+        const updated = { ...m, [type]: newStatus };
+        if (!isCurrentlyPaid) {
+            // 變成已付，自動填入當前日期與預設支付方式
+            updated[`${prefix}Method`] = 'Transfer';
+            updated[`${prefix}Date`] = new Date().toISOString().split('T')[0];
+        } else {
+            // 退回未付，清空這些財務細節
+            updated[`${prefix}Method`] = '';
+            updated[`${prefix}Date`] = '';
+            updated[`${prefix}Remark`] = '';
+        }
+        
+        safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === m.id ? updated : x));
     };
 
+    // ★ 新增：處理財務細節欄位更新的專用函數
+    const updateMaintDetail = (id: string, field: string, value: string) => {
+        safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === id ? { ...x, [field]: value } : x));
+    };
     const startEditMaintenance = (m: any) => {
         setEditingMaintenanceId(m.id);
         setEditMaintenanceForm({ ...m, cost: m.cost?.toString() || '0', charge: m.charge?.toString() || '0' });
