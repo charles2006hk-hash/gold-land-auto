@@ -1597,67 +1597,111 @@ const VehicleFormModal = ({
                                             }
 
                                             return (
-                                                <div key={m.id} className={`flex flex-col md:flex-row justify-between gap-3 p-3 rounded-lg shadow-sm transition-colors border ${isHistory ? 'bg-slate-100/50 border-slate-200 opacity-70 hover:opacity-100' : 'bg-slate-50 border-slate-200 hover:border-blue-200'}`}>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
-                                                            <span className="font-bold text-slate-800 text-sm">{m.item}</span>
-                                                            <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
+                                                <div key={m.id} className={`flex flex-col gap-2 p-3 rounded-lg shadow-sm transition-colors border ${isHistory ? 'bg-slate-100/50 border-slate-200 opacity-70 hover:opacity-100' : 'bg-slate-50 border-slate-200 hover:border-blue-200'}`}>
+                                                    
+                                                    {/* 上半部：原本的主資訊列 */}
+                                                    <div className="flex flex-col md:flex-row justify-between gap-3">
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
+                                                                <span className="font-bold text-slate-800 text-sm">{m.item}</span>
+                                                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
+                                                            </div>
+                                                            {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
                                                         </div>
-                                                        {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
-                                                    </div>
-                                                    <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
-                                                                {/* ★ 痛點 2 修復：攔截按鈕預設行為 */}
-                                                                <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'costStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                        <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
+                                                                    <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'costStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
+                                                                    <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'chargeStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                                    
+                                                                    {!isHistory && Number(m.charge) > 0 && (
+                                                                        <button 
+                                                                            type="button" 
+                                                                            onClick={(e) => { 
+                                                                                e.preventDefault(); 
+                                                                                if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                                                onJumpToDoc({
+                                                                                    id: null, type: 'invoice', vehicleId: v.id,
+                                                                                    formData: {
+                                                                                        companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
+                                                                                        companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
+                                                                                        customerName: v.customerName || '', customerPhone: v.customerPhone || '',
+                                                                                        customerId: v.customerID || '', customerAddress: v.customerAddress || '',
+                                                                                        regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
+                                                                                        price: '0', docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
+                                                                                    },
+                                                                                    docItems: [{ id: m.id, desc: `[維修保養] ${m.item} ${m.vendor ? `(${m.vendor})` : ''}`, amount: Number(m.charge), isSelected: true }],
+                                                                                    depositItems: [], showTerms: false
+                                                                                });
+                                                                            }} 
+                                                                            className="px-2 py-0.5 rounded text-[9px] font-bold border bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 shadow-sm transition-colors"
+                                                                            title="為此項目開立獨立發票"
+                                                                        >
+                                                                            🧾 發票
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center border-l pl-2 ml-2">
+                                                                {!isHistory && <button type="button" onClick={(e) => { e.preventDefault(); startEditMaintenance(m); }} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>}
+                                                                <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteMaintenance(m.id); }} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
                                                             </div>
                                                         </div>
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
-                                                                {/* ★ 痛點 2 修復：攔截按鈕預設行為 */}
-                                                                <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'chargeStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
-                                                                
-                                                                {/* ★ 新增：單獨開單按鈕 (獨立明細，絕對不加總) */}
-                                                                {!isHistory && Number(m.charge) > 0 && (
-                                                                    <button 
-                                                                        type="button" 
-                                                                        onClick={(e) => { 
-                                                                            e.preventDefault(); 
-                                                                            if (!onJumpToDoc) return alert("開單系統連動未就緒");
-                                                                            onJumpToDoc({
-                                                                                id: null, type: 'invoice', vehicleId: v.id,
-                                                                                formData: {
-                                                                                    companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
-                                                                                    companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
-                                                                                    customerName: v.customerName || '', customerPhone: v.customerPhone || '',
-                                                                                    customerId: v.customerID || '', customerAddress: v.customerAddress || '',
-                                                                                    regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
-                                                                                    price: '0',
-                                                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
-                                                                                    // ★ 已刪除 remarks 覆寫，讓系統自動帶入預設銀行資料
-                                                                                },
-                                                                                docItems: [{ id: m.id, desc: `[維修保養] ${m.item} ${m.vendor ? `(${m.vendor})` : ''}`, amount: Number(m.charge), isSelected: true }],
-                                                                                depositItems: [], showTerms: false
-                                                                            });
-                                                                        }} 
-                                                                        className="px-2 py-0.5 rounded text-[9px] font-bold border bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 shadow-sm transition-colors"
-                                                                        title="為此項目開立獨立發票"
-                                                                    >
-                                                                        🧾 發票
-                                                                    </button>
-                                                                )}
+                                                    </div>
+
+                                                    {/* ★ 下半部：成本已付細節面板 */}
+                                                    {m.costStatus === 'Paid' && (
+                                                        <div className="mt-1 p-2.5 bg-red-50/50 border border-red-100 rounded-lg flex flex-wrap gap-2 animate-fade-in shadow-inner">
+                                                            <div className="flex-1 min-w-[120px]">
+                                                                <label className="text-[9px] text-red-500 font-bold uppercase mb-0.5 block">成本支付方式</label>
+                                                                <select value={m.costMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'costMethod', e.target.value)} className="w-full text-xs p-1.5 border border-red-200 rounded bg-white text-slate-700 outline-none focus:border-red-400 shadow-sm cursor-pointer">
+                                                                    <option value="Transfer">銀行轉帳 (Bank Transfer)</option>
+                                                                    <option value="Cash">現金 (Cash)</option>
+                                                                    <option value="Cheque">公司支票 (Cheque)</option>
+                                                                    <option value="Shareholder">股東墊付 (Shareholder)</option>
+                                                                    <option value="Offset">對數抵銷 (Offset)</option>
+                                                                </select>
+                                                            </div>
+                                                            <div className="flex-1 min-w-[120px]">
+                                                                <label className="text-[9px] text-red-500 font-bold uppercase mb-0.5 block">付款日期</label>
+                                                                <input type="date" value={m.costDate || ''} onChange={(e) => updateMaintDetail(m.id, 'costDate', e.target.value)} className="w-full text-xs p-1.5 border border-red-200 rounded bg-white text-slate-700 outline-none focus:border-red-400 shadow-sm cursor-pointer" />
+                                                            </div>
+                                                            <div className="w-full">
+                                                                <input type="text" placeholder="財務備註 (例如：支票號碼、入數戶口、墊付人)..." value={m.costRemark || ''} onChange={(e) => updateMaintDetail(m.id, 'costRemark', e.target.value)} className="w-full text-xs p-1.5 border border-red-200 rounded bg-white text-slate-700 outline-none focus:border-red-400 placeholder-slate-400 shadow-sm" />
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center border-l pl-2 ml-2">
-                                                            {!isHistory && <button type="button" onClick={(e) => { e.preventDefault(); startEditMaintenance(m); }} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>}
-                                                            <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteMaintenance(m.id); }} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
+                                                    )}
+
+                                                    {/* ★ 下半部：收費已收細節面板 */}
+                                                    {m.chargeStatus === 'Paid' && Number(m.charge) > 0 && (
+                                                        <div className="mt-1 p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg flex flex-wrap gap-2 animate-fade-in shadow-inner">
+                                                            <div className="flex-1 min-w-[120px]">
+                                                                <label className="text-[9px] text-blue-500 font-bold uppercase mb-0.5 block">收款方式</label>
+                                                                <select value={m.chargeMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'chargeMethod', e.target.value)} className="w-full text-xs p-1.5 border border-blue-200 rounded bg-white text-slate-700 outline-none focus:border-blue-400 shadow-sm cursor-pointer">
+                                                                    <option value="Transfer">銀行轉帳 (Bank Transfer)</option>
+                                                                    <option value="Cash">現金 (Cash)</option>
+                                                                    <option value="Cheque">支票 (Cheque)</option>
+                                                                    <option value="Offset">從車價扣除 (Offset)</option>
+                                                                </select>
+                                                            </div>
+                                                            <div className="flex-1 min-w-[120px]">
+                                                                <label className="text-[9px] text-blue-500 font-bold uppercase mb-0.5 block">收款日期</label>
+                                                                <input type="date" value={m.chargeDate || ''} onChange={(e) => updateMaintDetail(m.id, 'chargeDate', e.target.value)} className="w-full text-xs p-1.5 border border-blue-200 rounded bg-white text-slate-700 outline-none focus:border-blue-400 shadow-sm cursor-pointer" />
+                                                            </div>
+                                                            <div className="w-full">
+                                                                <input type="text" placeholder="財務備註 (例如：客入恆生戶口、支票待兌現)..." value={m.chargeRemark || ''} onChange={(e) => updateMaintDetail(m.id, 'chargeRemark', e.target.value)} className="w-full text-xs p-1.5 border border-blue-200 rounded bg-white text-slate-700 outline-none focus:border-blue-400 placeholder-slate-400 shadow-sm" />
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                             );
                                         };
