@@ -616,7 +616,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // 儲存邏輯 (升級版：搭載智能清洗盾牌)
+    // 儲存邏輯
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         
@@ -628,13 +628,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         const autoTags = new Set(editingEntry.tags || []);
         if(editingEntry.name) autoTags.add(editingEntry.name);
         
-        // ★★★ 智能數字清洗器：防禦 NaN 與 undefined 炸毀資料庫 ★★★
-        const safeNum = (val: any) => {
-            if (val === undefined || val === null || val === '') return 0;
-            const num = Number(String(val).replace(/,/g, ''));
-            return isNaN(num) ? 0 : num;
-        };
-
         const finalEntry = { 
             ...editingEntry, 
             phone: editingEntry.phone || '',
@@ -656,21 +649,18 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             registeredOwnerName: editingEntry.registeredOwnerName || '',
             registeredOwnerId: editingEntry.registeredOwnerId || '',
             registeredOwnerDate: editingEntry.registeredOwnerDate || '',
-            
-            // ★ 全面套用防禦盾牌
-            engineSize: safeNum(editingEntry.engineSize),
-            priceA1: safeNum(editingEntry.priceA1),
-            priceTax: safeNum(editingEntry.priceTax),
-            prevOwners: safeNum(editingEntry.prevOwners),
-            seating: safeNum(editingEntry.seating), 
-            
-            tags: Array.from(autoTags).filter(Boolean), 
-            roles: (editingEntry.roles || []).filter(Boolean), 
+            engineSize: Number(editingEntry.engineSize) || 0,
+            priceA1: Number(editingEntry.priceA1) || 0,
+            priceTax: Number(editingEntry.priceTax) || 0,
+            prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
+            seating: Number(editingEntry.seating) || 0, 
+            tags: Array.from(autoTags), 
+            roles: editingEntry.roles || [], 
             attachments: editingEntry.attachments || [],
             reminderEnabled: editingEntry.reminderEnabled || false,
             expiryDate: editingEntry.expiryDate || '',
-            renewalCount: safeNum(editingEntry.renewalCount),
-            renewalDuration: safeNum(editingEntry.renewalDuration) || 1,
+            renewalCount: editingEntry.renewalCount || 0,
+            renewalDuration: editingEntry.renewalDuration || 1,
             renewalUnit: editingEntry.renewalUnit || 'year',
             customReminders: editingEntry.customReminders || [],
             extractedData: editingEntry.extractedData || {},
@@ -694,12 +684,17 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             cndl_fileNum: editingEntry.cndl_fileNum || ''
         };
 
-        // ★★★ 終極深度清洗：遞迴移除所有 undefined 與 null，確保符合 Firebase 最嚴格標準 ★★★
+        // ★★★ 終極深度清洗：強制攤平陣列，防止「無效巢狀實體」炸毀 Firebase ★★★
         const deepClean = (obj: any): any => {
             if (obj === null || obj === undefined) return null;
             if (typeof obj === 'number' && isNaN(obj)) return 0;
             if (typeof obj !== 'object') return obj;
-            if (Array.isArray(obj)) return obj.map(deepClean).filter(v => v !== null && v !== undefined);
+            
+            if (Array.isArray(obj)) {
+                // 強制攤平所有陣列 (將 [[1,2]] 變成 [1,2])，徹底消滅 Firebase 最怕的 nested entity
+                const flattened = obj.flat(Infinity);
+                return flattened.map(deepClean).filter(v => v !== null && v !== undefined);
+            }
             
             const cleaned: any = {};
             for (const key in obj) {
@@ -712,6 +707,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         };
 
         try {
+            // 替換原本的 JSON.parse，改用我們的終極清洗機
             const cleanData = deepClean(finalEntry); 
 
             if (editingEntry.id) {
@@ -730,9 +726,8 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             }
         } catch (err: any) { 
             console.error("Save Error:", err);
-            // ★ 智能攔截容量過大錯誤，給予精確提示
             if (err.message && err.message.includes('exceeds the limit')) {
-                showToast('❌ 儲存失敗：夾帶的圖片或PDF檔案過大，超出了單筆 1MB 限制！請刪除部分圖片後重試。', 'error');
+                showToast('❌ 儲存失敗：夾帶的圖片過大，超出了 1MB 限制！', 'error');
             } else {
                 showToast('❌ 儲存失敗，請檢查網路連線或資料格式', 'error'); 
             }
