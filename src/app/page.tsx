@@ -2209,19 +2209,19 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
                   await syncVehicleFinanceToLedger({ id: targetVehicleId, ...vData });
               }
 
-            // 餵給智能引擎最完整的資料 (以下保留原有邏輯)
+            // ★★★ 防呆修復：幫所有資料加上 || ''，防止 undefined 炸毀資料庫 ★★★
             if (vData.customerName) {
                 await syncToDatabase({ 
-                    name: vData.customerName, 
-                    phone: vData.customerPhone,
-                    idNumber: vData.customerID,
-                    address: vData.customerAddress
+                    name: vData.customerName || '', 
+                    phone: vData.customerPhone || '',
+                    idNumber: vData.customerID || '',
+                    address: vData.customerAddress || ''
                 }, '客戶');
             }
             if (crossBorderData.isEnabled) {
-                if (crossBorderData.driver1) await syncToDatabase({ name: crossBorderData.driver1, relatedPlateNo: crossBorderData.mainlandPlate, quotaNo: crossBorderData.quotaNumber }, '司機');
-                if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2, relatedPlateNo: crossBorderData.mainlandPlate }, '司機');
-                if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3, relatedPlateNo: crossBorderData.mainlandPlate }, '司機');
+                if (crossBorderData.driver1) await syncToDatabase({ name: crossBorderData.driver1 || '', relatedPlateNo: crossBorderData.mainlandPlate || '', quotaNo: crossBorderData.quotaNumber || '' }, '司機');
+                if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 || '', relatedPlateNo: crossBorderData.mainlandPlate || '' }, '司機');
+                if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 || '', relatedPlateNo: crossBorderData.mainlandPlate || '' }, '司機');
             }
 
             setEditingVehicle(null);
