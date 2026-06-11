@@ -616,7 +616,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // 儲存邏輯 (絕對防禦版：徹底封殺 OCR 隨機注入的幽靈陣列)
+    // 儲存邏輯 (100% 絕對純淨版：拋棄所有展開運算子，手動建構絕對白名單)
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         
@@ -626,124 +626,116 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
         if (!db || !staffId || !editingEntry) return;
         
-        // 1. 確保標籤是標準陣列
-        const autoTags = new Set(editingEntry.tags || []);
-        if(editingEntry.name) autoTags.add(editingEntry.name);
+        // 1. 確保標籤是標準單層陣列
+        const autoTags = new Set<string>();
+        if (Array.isArray(editingEntry.tags)) {
+            editingEntry.tags.forEach(t => autoTags.add(String(t)));
+        }
+        if (editingEntry.name) autoTags.add(String(editingEntry.name));
+        const safeTags = Array.from(autoTags);
         
-        // 2. ★★★ 嚴格清洗四大標準陣列 (強制轉型，杜絕巢狀地雷) ★★★
-        const safeTags = Array.from(autoTags).map(t => String(t));
+        // 2. 確保角色是標準單層陣列
         const safeRoles = Array.isArray(editingEntry.roles) ? editingEntry.roles.map(r => String(r)) : [];
+        
+        // 3. 確保附件是純淨的 Object 陣列 (絕無巢狀)
         const safeAttachments = Array.isArray(editingEntry.attachments) ? editingEntry.attachments.map(a => ({
             name: String(a?.name || 'document.jpg'),
             data: String(a?.data || '')
         })) : [];
+
+        // 4. 確保提醒是純淨的 Object 陣列
         const safeReminders = Array.isArray(editingEntry.customReminders) ? editingEntry.customReminders.map(r => ({
             date: String(r?.date || ''),
             title: String(r?.title || ''),
-            type: String(r?.type || '')
+            renewalCount: Number(r?.renewalCount) || 0,
+            renewalDuration: Number(r?.renewalDuration) || 1,
+            renewalUnit: String(r?.renewalUnit || 'year')
         })) : [];
 
-        // 3. ★★★ 封印 OCR 原始資料：全部轉成純字串，徹底斬斷 Firebase 解析 ★★★
+        // 5. 將所有 OCR 數據強制轉為字串，徹底斬斷 Firebase 解析
         const safeExtractedData = typeof editingEntry.extractedData === 'object' 
             ? JSON.stringify(editingEntry.extractedData) 
             : String(editingEntry.extractedData || '{}');
 
-        // 4. 組合預備儲存的物件
-        const finalEntry = { 
-            ...editingEntry, 
-            phone: editingEntry.phone || '',
-            address: editingEntry.address || '',
-            idNumber: editingEntry.idNumber || '',
-            plateNoHK: editingEntry.plateNoHK || '',
-            plateNoCN: editingEntry.plateNoCN || '',
-            quotaNo: editingEntry.quotaNo || '',
-            docType: editingEntry.docType || '',
-            description: editingEntry.description || '',
-            relatedPlateNo: editingEntry.relatedPlateNo || '',
-            make: editingEntry.make || '',
-            model: editingEntry.model || '',
-            chassisNo: editingEntry.chassisNo || '',
-            engineNo: editingEntry.engineNo || '',
-            manufactureYear: editingEntry.manufactureYear || '',
-            vehicleColor: editingEntry.vehicleColor || '',
-            firstRegCondition: editingEntry.firstRegCondition || '',
-            registeredOwnerName: editingEntry.registeredOwnerName || '',
-            registeredOwnerId: editingEntry.registeredOwnerId || '',
-            registeredOwnerDate: editingEntry.registeredOwnerDate || '',
+        // 6. ★★★ 100% 手動建構資料，絕對不用 ...editingEntry，杜絕一切幽靈屬性 ★★★
+        const finalEntry: Record<string, any> = {
+            category: String(editingEntry.category || 'Person'),
+            docType: String(editingEntry.docType || ''),
+            name: String(editingEntry.name || ''),
+            description: String(editingEntry.description || ''),
+            phone: String(editingEntry.phone || ''),
+            address: String(editingEntry.address || ''),
+            idNumber: String(editingEntry.idNumber || ''),
+            plateNoHK: String(editingEntry.plateNoHK || ''),
+            plateNoCN: String(editingEntry.plateNoCN || ''),
+            quotaNo: String(editingEntry.quotaNo || ''),
+            relatedPlateNo: String(editingEntry.relatedPlateNo || ''),
+            make: String(editingEntry.make || ''),
+            model: String(editingEntry.model || ''),
+            chassisNo: String(editingEntry.chassisNo || ''),
+            engineNo: String(editingEntry.engineNo || ''),
+            manufactureYear: String(editingEntry.manufactureYear || ''),
+            vehicleColor: String(editingEntry.vehicleColor || ''),
+            firstRegCondition: String(editingEntry.firstRegCondition || ''),
+            registeredOwnerName: String(editingEntry.registeredOwnerName || ''),
+            registeredOwnerId: String(editingEntry.registeredOwnerId || ''),
+            registeredOwnerDate: String(editingEntry.registeredOwnerDate || ''),
             engineSize: Number(editingEntry.engineSize) || 0,
             priceA1: Number(editingEntry.priceA1) || 0,
             priceTax: Number(editingEntry.priceTax) || 0,
-            prevOwners: editingEntry.prevOwners !== undefined ? Number(editingEntry.prevOwners) : 0,
-            seating: Number(editingEntry.seating) || 0, 
+            prevOwners: Number(editingEntry.prevOwners) || 0,
+            seating: Number(editingEntry.seating) || 0,
+            reminderEnabled: Boolean(editingEntry.reminderEnabled),
+            expiryDate: String(editingEntry.expiryDate || ''),
+            renewalCount: Number(editingEntry.renewalCount) || 0,
+            renewalDuration: Number(editingEntry.renewalDuration) || 1,
+            renewalUnit: String(editingEntry.renewalUnit || 'year'),
+            managedBy: String(editingEntry.managedBy || staffId),
             
-            // 套用已清洗的絕對安全資料
-            tags: safeTags, 
-            roles: safeRoles, 
-            attachments: safeAttachments,
-            customReminders: safeReminders,
+            hkid_name: String(editingEntry.hkid_name || ''),
+            hkid_code: String(editingEntry.hkid_code || ''),
+            hkid_dob: String(editingEntry.hkid_dob || ''),
+            hkid_issueDate: String(editingEntry.hkid_issueDate || ''),
+            hrp_nameCN: String(editingEntry.hrp_nameCN || ''),
+            hrp_expiry: String(editingEntry.hrp_expiry || ''),
+            hrp_num: String(editingEntry.hrp_num || ''),
+            hkdl_num: String(editingEntry.hkdl_num || ''),
+            hkdl_validTo: String(editingEntry.hkdl_validTo || ''),
+            hkdl_ref: String(editingEntry.hkdl_ref || ''),
+            cndl_num: String(editingEntry.cndl_num || ''),
+            cndl_address: String(editingEntry.cndl_address || ''),
+            cndl_firstIssue: String(editingEntry.cndl_firstIssue || ''),
+            cndl_validPeriod: String(editingEntry.cndl_validPeriod || ''),
+            cndl_issueLoc: String(editingEntry.cndl_issueLoc || ''),
+            cndl_fileNum: String(editingEntry.cndl_fileNum || ''),
+            
             extractedData: safeExtractedData,
-
-            reminderEnabled: editingEntry.reminderEnabled || false,
-            expiryDate: editingEntry.expiryDate || '',
-            renewalCount: editingEntry.renewalCount || 0,
-            renewalDuration: editingEntry.renewalDuration || 1,
-            renewalUnit: editingEntry.renewalUnit || 'year',
-            managedBy: editingEntry.managedBy || staffId, 
-            
-            hkid_name: editingEntry.hkid_name || '',
-            hkid_code: editingEntry.hkid_code || '',
-            hkid_dob: editingEntry.hkid_dob || '',
-            hkid_issueDate: editingEntry.hkid_issueDate || '',
-            hrp_nameCN: editingEntry.hrp_nameCN || '',
-            hrp_expiry: editingEntry.hrp_expiry || '',
-            hrp_num: editingEntry.hrp_num || '',
-            hkdl_num: editingEntry.hkdl_num || '',
-            hkdl_validTo: editingEntry.hkdl_validTo || '',
-            hkdl_ref: editingEntry.hkdl_ref || '',
-            cndl_num: editingEntry.cndl_num || '',
-            cndl_address: editingEntry.cndl_address || '',
-            cndl_firstIssue: editingEntry.cndl_firstIssue || '',
-            cndl_validPeriod: editingEntry.cndl_validPeriod || '',
-            cndl_issueLoc: editingEntry.cndl_issueLoc || '',
-            cndl_fileNum: editingEntry.cndl_fileNum || ''
         };
 
-        // 5. ★★★ 幽靈陣列掃除器：攔截並絞碎 OCR 隨機注入的未知欄位 ★★★
-        const cleanForFirebase = (obj: any): any => {
-            const result: any = {};
-            const allowedSafeKeys = ['tags', 'roles', 'attachments', 'customReminders', 'extractedData'];
+        // ★ 7. 針對陣列欄位：如果裡面有東西才加入，如果是空的直接丟棄，防止 Firebase 對空陣列發瘋
+        if (safeTags.length > 0) finalEntry.tags = safeTags;
+        if (safeRoles.length > 0) finalEntry.roles = safeRoles;
+        if (safeAttachments.length > 0) finalEntry.attachments = safeAttachments;
+        if (safeReminders.length > 0) finalEntry.customReminders = safeReminders;
 
-            for (const key in obj) {
-                const val = obj[key];
-                if (val === undefined || val === null) continue;
-
-                if (allowedSafeKeys.includes(key)) {
-                    result[key] = val; // 已經過嚴格轉型，直接放行
-                } else if (Array.isArray(val)) {
-                    // 如果出現未知陣列 (AI 偷塞的幽靈)，強制轉成純文字，阻止 Firebase 崩潰！
-                    result[key] = JSON.stringify(val);
-                } else {
-                    result[key] = val; // 一般字串、數字、或 Firebase Timestamp 正常放行
-                }
+        // ★ 8. 清除所有空字串與 undefined，保持資料庫極度乾淨
+        const cleanData: any = {};
+        for (const key in finalEntry) {
+            if (finalEntry[key] !== '' && finalEntry[key] !== undefined && finalEntry[key] !== null && finalEntry[key] !== 0) {
+                cleanData[key] = finalEntry[key];
             }
-            return result;
-        };
+        }
 
         try {
-            // 啟用絕對防禦過濾
-            const cleanData = cleanForFirebase(finalEntry); 
-
             if (editingEntry.id) {
                 const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', editingEntry.id);
-                delete cleanData.id; 
                 await updateDoc(docRef, { ...cleanData, updatedAt: serverTimestamp() });
                 setIsDbEditing(false); 
                 showToast('✅ 資料已成功更新！'); 
             } else {
-                delete cleanData.id; 
                 const colRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-                const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp() });
-                setEditingEntry({ ...finalEntry, id: newRef.id }); 
+                const newRef = await addDoc(colRef, { ...cleanData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+                setEditingEntry({ ...cleanData, id: newRef.id } as any); 
                 setIsDbEditing(false);
                 showToast('✅ 新資料已建立！'); 
             }
