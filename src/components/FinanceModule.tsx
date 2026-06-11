@@ -223,16 +223,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const ledger: any[] = [];
         
         inventory.forEach((v: any) => {
-            (v.payments || []).forEach((p: any) => ledger.push({ id: `pay_${p.id}`, date: p.date, type: 'IN', amount: Number(p.amount), category: '營業收入 (Sales)', desc: `[收款] ${p.type} - ${p.method}`, ref: v.regMark || '未出牌', rawDate: new Date(p.date).getTime() }));
-            (v.acquisition?.payments || []).forEach((p: any) => ledger.push({ id: `acq_${p.id}`, date: p.date, type: 'OUT', amount: Number(p.amount), category: '進貨成本 (COGS)', desc: `[進貨付款] ${p.method}`, ref: v.regMark || '未出牌', rawDate: new Date(p.date).getTime() }));
-            (v.expenses || []).filter((e:any) => e.status === 'Paid').forEach((e: any) => ledger.push({ id: `exp_${e.id}`, date: e.date, type: 'OUT', amount: Number(e.amount), category: '營運開支 (Expenses)', desc: `[雜費支出] ${e.type} - ${e.company}`, ref: v.regMark || '未出牌', rawDate: new Date(e.date).getTime() }));
-            (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus === 'Paid' && m.charge > 0).forEach((m: any) => ledger.push({ id: `maint_in_${m.id}`, date: m.date, type: 'IN', amount: Number(m.charge), category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, ref: v.regMark || '未出牌', rawDate: new Date(m.date).getTime() }));
-            (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0).forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.date, type: 'OUT', amount: Number(m.cost), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', rawDate: new Date(m.date).getTime() }));
+            (v.payments || []).forEach((p: any) => ledger.push({ id: `pay_${p.id}`, date: p.date, type: 'IN', amount: Number(p.amount), category: '營業收入 (Sales)', desc: `[收款] ${p.type}`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
+            (v.acquisition?.payments || []).forEach((p: any) => ledger.push({ id: `acq_${p.id}`, date: p.date, type: 'OUT', amount: Number(p.amount), category: '進貨成本 (COGS)', desc: `[進貨付款]`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
+            (v.expenses || []).filter((e:any) => e.status === 'Paid').forEach((e: any) => ledger.push({ id: `exp_${e.id}`, date: e.date, type: 'OUT', amount: Number(e.amount), category: '營運開支 (Expenses)', desc: `[雜費支出] ${e.type} - ${e.company}`, ref: v.regMark || '未出牌', method: e.paymentMethod || '', remark: e.invoiceNo || '', rawDate: new Date(e.date).getTime() }));
+            (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus === 'Paid' && m.charge > 0).forEach((m: any) => ledger.push({ id: `maint_in_${m.id}`, date: m.chargeDate || m.date, type: 'IN', amount: Number(m.charge), category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, ref: v.regMark || '未出牌', method: m.chargeMethod || '', remark: m.chargeRemark || '', rawDate: new Date(m.chargeDate || m.date).getTime() }));
+            (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0).forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.costDate || m.date, type: 'OUT', amount: Number(m.cost), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', method: m.costMethod || '', remark: m.costRemark || '', rawDate: new Date(m.costDate || m.date).getTime() }));
         });
 
         ledgers.forEach((l: any) => {
             const isCashIn = l.type === 'receivable' ? (l.note.includes('收') || l.note.includes('還')) : (l.note.includes('借入') || l.note.includes('收'));
-            ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, rawDate: new Date(l.date).getTime() });
+            ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: '', remark: '', rawDate: new Date(l.date).getTime() });
         });
 
         return ledger.sort((a, b) => b.rawDate - a.rawDate);
@@ -344,8 +344,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const exportAccountingCSV = () => {
         if (filteredAccLedger.length === 0) { alert('沒有資料可以匯出'); return; }
         const bom = "\uFEFF";
-        const headers = "日期 (Date),類別 (Category),對象/車牌 (Reference),摘要 (Description),收入 (Cash In),支出 (Cash Out)\n";
-        const rows = filteredAccLedger.map(l => `${l.date},${l.category},${l.ref},"${l.desc.replace(/"/g, '""')}",${l.type === 'IN' ? l.amount : ''},${l.type === 'OUT' ? l.amount : ''}`).join("\n");
+        const headers = "日期 (Date),類別 (Category),對象/車牌 (Reference),摘要 (Description),支付方式 (Method),備註 (Remark),收入 (Cash In),支出 (Cash Out)\n";
+        const rows = filteredAccLedger.map(l => `${l.date},${l.category},${l.ref},"${l.desc.replace(/"/g, '""')}","${l.method || ''}","${(l.remark || '').replace(/"/g, '""')}",${l.type === 'IN' ? l.amount : ''},${l.type === 'OUT' ? l.amount : ''}`).join("\n");
         const blob = new Blob([bom + headers + rows], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
@@ -670,6 +670,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     <th className="p-3 w-40">會計類別</th>
                                     <th className="p-3 w-32">對象 / 車牌</th>
                                     <th className="p-3 max-w-xs">摘要</th>
+                                    <th className="p-3 w-28">支付方式</th>
+                                    <th className="p-3 max-w-xs">財務備註</th>
                                     <th className="p-3 text-right text-emerald-700">收入 (IN)</th>
                                     <th className="p-3 text-right pr-6 text-red-700">支出 (OUT)</th>
                                 </tr>
@@ -692,6 +694,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </td>
                                         <td className="p-3 font-bold text-slate-700">{l.ref}</td>
                                         <td className="p-3 text-slate-600 truncate max-w-xs" title={l.desc}>{l.desc}</td>
+                                        <td className="p-3">
+                                            {l.method ? <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold border border-slate-200">{l.method}</span> : <span className="text-slate-300">-</span>}
+                                        </td>
+                                        <td className="p-3 text-slate-500 text-xs truncate max-w-xs" title={l.remark}>{l.remark || '-'}</td>
                                         <td className="p-3 text-right font-mono font-bold text-emerald-600 bg-emerald-50/10">
                                             {l.type === 'IN' ? formatCurrency(l.amount) : ''}
                                         </td>
