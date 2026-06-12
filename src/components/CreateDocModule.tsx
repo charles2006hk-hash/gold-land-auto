@@ -478,7 +478,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const dummyVehicle: any = {
             id: finalId || docId || 'DRAFT', ...formData, photos: formData.contractPhotos || [], price: Number(formData.price), deposit: depositItems.reduce((sum: number, item: any) => sum + item.amount, 0),
             customerID: formData.customerId, soldDate: formData.deliveryDate, handoverTime: formData.handoverTime, checklist: checklist, selectedItems: docItems.filter((i: any) => i.isSelected),
-            depositItems: depositItems, showTerms: showTerms, showAttachments: showAttachments, companyNameEn: formData.companyNameEn, companyNameCh: formData.companyNameCh, companyEmail: formData.companyEmail, companyPhone: formData.companyPhone, paymentMethod: formData.paymentMethod 
+            depositItems: depositItems, showTerms: showTerms, showPurchaseGuarantees: showPurchaseGuarantees, showSalesGuarantees: showSalesGuarantees, showAttachments: showAttachments, companyNameEn: formData.companyNameEn, companyNameCh: formData.companyNameCh, companyEmail: formData.companyEmail, companyPhone: formData.companyPhone, paymentMethod: formData.paymentMethod 
         };
         openPrintPreview(selectedDocType, dummyVehicle);
     };
