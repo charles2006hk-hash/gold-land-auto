@@ -177,6 +177,61 @@ const VehicleFormModal = ({
    // ★ 新增：維修保養狀態與函數
     const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
 
+    // ★ 新增：車輛墊資/貸款狀態與函數
+    const [newFinancing, setNewFinancing] = useState({ 
+        startDate: new Date().toISOString().split('T')[0], 
+        lenderName: '', 
+        principal: '', 
+        annualRate: '', 
+        status: 'Active' 
+    });
+
+    const safeUpdateFinancing = async (newRecords: any[]) => {
+        setEditingVehicle((prev: any) => prev ? { ...prev, financingRecords: newRecords } : null);
+        if (v.id && db) {
+            try {
+                const { updateDoc, doc } = await import('firebase/firestore');
+                await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', v.id), {
+                    financingRecords: newRecords
+                });
+            } catch (e) { console.error("更新墊資記錄失敗", e); }
+        }
+    };
+
+    const handleAddFinancing = () => {
+        const prin = Number(newFinancing.principal.replace(/,/g, ''));
+        const rate = Number(newFinancing.annualRate);
+        if (newFinancing.lenderName && prin > 0) {
+            const obj = { id: Date.now().toString(), ...newFinancing, principal: prin, annualRate: rate };
+            safeUpdateFinancing([...(v.financingRecords || []), obj]);
+            setNewFinancing({ startDate: new Date().toISOString().split('T')[0], lenderName: '', principal: '', annualRate: '', status: 'Active' });
+        } else {
+            alert('請填寫墊資方名稱與本金！');
+        }
+    };
+
+    const handleDeleteFinancing = (id: string) => {
+        if(!confirm("確定刪除此筆墊資記錄？")) return;
+        safeUpdateFinancing((v.financingRecords || []).filter((f: any) => f.id !== id));
+    };
+
+    const handleSettleFinancing = (f: any) => {
+        // ★ 核心結息邏輯：按實際天數精準結算！
+        const endDate = new Date().toISOString().split('T')[0]; // 今天結算
+        const start = new Date(f.startDate).getTime();
+        const end = new Date(endDate).getTime();
+        const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+        const actualDays = diffDays > 0 ? diffDays : 1; // 最少算 1 天
+        
+        // 公式：本金 * (年息/100) * (實際天數/365)
+        const calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (actualDays / 365));
+
+        const updated = { ...f, status: 'Settled', endDate: endDate, actualInterest: calculatedInterest, actualDays: actualDays };
+        safeUpdateFinancing((v.financingRecords || []).map((x: any) => x.id === f.id ? updated : x));
+        
+        alert(`✅ 結息完成！\n總計天數: ${actualDays} 天\n產生利息: $${calculatedInterest.toLocaleString()}`);
+    };
+ 
     // ★ 新增：維修保養的修改(Edit)狀態與函數
     const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
     const [editMaintenanceForm, setEditMaintenanceForm] = useState<any>({});
@@ -1399,6 +1454,66 @@ const VehicleFormModal = ({
                             </div>
                         </div>
 
+                        {/* ★★★ 車輛墊資與利息結算 (Floor Plan Financing) ★★★ */}
+                        <div className="bg-purple-50/40 p-4 md:p-5 rounded-xl border border-purple-200 mt-6 shadow-sm w-full">
+                            <h4 className="font-bold text-base md:text-sm text-purple-800 mb-4 flex items-center">
+                                <DollarSign size={18} className="mr-2 text-purple-600"/> 車輛墊資/貸款利息結算 (Floor Plan Financing)
+                            </h4>
+                            
+                            <div className="space-y-3 mb-4">
+                                {(v.financingRecords || []).map((f: any) => (
+                                    <div key={f.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-white border border-purple-200 rounded-lg shadow-sm">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-bold text-slate-800">{f.lenderName}</span>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${f.status === 'Active' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-200 text-slate-600'}`}>{f.status === 'Active' ? '計息中' : '已結算'}</span>
+                                            </div>
+                                            <div className="text-xs text-slate-500 font-mono">
+                                                起息日: {f.startDate} {f.status === 'Settled' && `| 結算日: ${f.endDate} (${f.actualDays}天)`}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-right border-t md:border-t-0 pt-2 md:pt-0">
+                                            <div>
+                                                <div className="text-[9px] text-purple-500 font-bold uppercase">本金 (Principal)</div>
+                                                <div className="font-mono font-bold text-slate-700">{formatCurrency(f.principal)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[9px] text-purple-500 font-bold uppercase">年息 (P.A.)</div>
+                                                <div className="font-mono font-bold text-slate-700">{f.annualRate}%</div>
+                                            </div>
+                                            {f.status === 'Settled' && (
+                                                <div>
+                                                    <div className="text-[9px] text-red-500 font-bold uppercase">產生利息 (Interest)</div>
+                                                    <div className="font-mono font-black text-red-600">{formatCurrency(f.actualInterest)}</div>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-2 border-l pl-3 ml-2">
+                                                {f.status === 'Active' && <button type="button" onClick={(e) => { e.preventDefault(); handleSettleFinancing(f); }} className="bg-purple-600 text-white text-[10px] px-2 py-1 rounded shadow hover:bg-purple-700 font-bold">結算利息</button>}
+                                                <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteFinancing(f.id); }} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 pt-4 border-t border-purple-200">
+                                <input type="date" value={newFinancing.startDate} onChange={e => setNewFinancing({...newFinancing, startDate: e.target.value})} className="w-full lg:w-32 text-sm p-2 border border-purple-200 rounded-lg outline-none font-bold text-slate-700"/>
+                                <div className="w-full lg:w-48">
+                                    <input list="lender_list" placeholder="金主 / 貸款方..." value={newFinancing.lenderName} onChange={e => setNewFinancing({...newFinancing, lenderName: e.target.value})} className="w-full text-sm p-2 border border-purple-200 rounded-lg outline-none font-bold text-slate-800"/>
+                                    <datalist id="lender_list">{(settings.lenders || []).map((l:string) => <option key={l} value={l}/>)}</datalist>
+                                </div>
+                                <div className="w-full relative">
+                                    <span className="absolute top-[-10px] left-2 text-[9px] text-purple-600 bg-purple-50 px-1 font-bold">本金</span>
+                                    <input type="text" placeholder="0" value={newFinancing.principal} onChange={e => setNewFinancing({...newFinancing, principal: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-purple-200 rounded-lg outline-none font-mono font-bold text-right text-slate-800"/>
+                                </div>
+                                <div className="w-full lg:w-24 relative">
+                                    <span className="absolute top-[-10px] left-2 text-[9px] text-purple-600 bg-purple-50 px-1 font-bold">年利率 %</span>
+                                    <input type="number" placeholder="8.0" value={newFinancing.annualRate} onChange={e => setNewFinancing({...newFinancing, annualRate: e.target.value})} className="w-full text-sm p-2 border border-purple-200 rounded-lg outline-none font-mono font-bold text-center text-slate-800"/>
+                                </div>
+                                <button type="button" onClick={handleAddFinancing} className="w-full lg:w-auto bg-purple-700 text-white text-sm py-2 px-4 rounded-lg hover:bg-purple-800 font-bold active:scale-95 transition-transform shadow-md whitespace-nowrap">借入墊資</button>
+                            </div>
+                        </div>
+                     
                         {/* 車輛維修與雜費 (Expenses) */}
                         <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200 mt-6 shadow-sm w-full">
                             <h4 className="font-bold text-base md:text-sm text-gray-800 mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
