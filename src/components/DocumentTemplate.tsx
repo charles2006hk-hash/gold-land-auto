@@ -257,8 +257,38 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             {isQuotation ? (
                                 <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                             ) : (
-                                <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(balance + totalPaid)}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
-                                本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + totalPaid)}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                <>
+                                    <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(balance + totalPaid)}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
+                                    本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + totalPaid)}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
+                                    
+                                    {/* ★ 收車專屬保障條款 */}
+                                    {activeType === 'purchase_contract' && (activeVehicle as any).showPurchaseGuarantees !== false && (
+                                        <div className="mt-2 pt-2 border-t border-slate-300">
+                                            <p className="font-bold mb-1 text-slate-800">Seller's Warranties and Guarantees 賣方保證條款：</p>
+                                            <ol className="list-decimal pl-4 space-y-1 text-[8.5px]">
+                                                <li><b>Clear Title & No Encumbrances:</b> The Seller warrants that the Vehicle is free from any outstanding finance, loans, debts, or third-party encumbrances. <br/><span className="text-slate-700"><b>無債務及順利過戶：</b>賣方保證上述車輛並無任何未清繳之財務、貸款或第三方權利負擔，且可合法順利轉讓予買方。</span></li>
+                                                <li><b>Vehicle Condition:</b> The Seller guarantees that the Vehicle has never been involved in any major accidents resulting in structural damage, nor has it ever been damaged by flooding. <br/><span className="text-slate-700"><b>車輛狀況：</b>賣方保證上述車輛從未涉及任何導致結構受損之重大意外，亦從未受過水浸損壞。</span></li>
+                                                <li><b>Cross-Border Quota Clearance (If Applicable):</b> For vehicles with prior cross-border registration, the Seller warrants that all associated quotas have been completely detached. <br/><span className="text-slate-700"><b>中港指標退清 (如適用)：</b>若為跨境車輛，賣方保證已徹底註銷及退清該車輛與之前所有中港車牌指標之關聯。</span></li>
+                                            </ol>
+                                        </div>
+                                    )}
+
+                                    {/* ★ 賣車與訂車終極免責/殺訂條款 */}
+                                    {activeType === 'sales_contract' && (activeVehicle as any).showSalesGuarantees !== false && (
+                                        <div className="mt-2 pt-2 border-t border-slate-300">
+                                            <p className="font-bold mb-1 text-slate-800">Purchaser's Acknowledgements and Terms 買方確認及合約條款：</p>
+                                            <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
+                                                <li><b>"As-Is" Condition:</b> The Buyer acknowledges having inspected the Vehicle (or waived such right) and agrees to purchase it strictly "As-Is". <br/><span className="text-slate-700"><b>現狀買賣：</b>買方確認已檢驗上述車輛（或自願放棄驗車權利），並同意以「現狀」(As-Is) 購入。賣方對車輛之性能或質量不作任何保證。</span></li>
+                                                <li><b>Odometer Disclaimer:</b> As a pre-owned vehicle, the odometer reading is indicative only. The Seller cannot warrant the vehicle's history or dashboard alterations. <br/><span className="text-slate-700"><b>里數免責：</b>此為二手車輛，儀錶板里數僅供參考。賣方無法保證該儀錶板未曾被前任車主干擾或更換。</span></li>
+                                                <li><b>Post-Delivery Liability:</b> Upon vehicle handover, all risks, liabilities, and subsequent repair costs pass entirely to the Buyer. <br/><span className="text-slate-700"><b>交車後免責：</b>自交車之時起，所有風險、法律責任及日後維修費用均由買方承擔，賣方概不負責。</span></li>
+                                                <li><b>Non-Refundable Deposit & Forfeiture:</b> All deposits paid are strictly non-refundable. Should the Buyer fail to complete the purchase or take delivery within the agreed timeframe, the Seller reserves the absolute right to terminate this Agreement, forfeit the entire deposit as liquidated damages, and resell the vehicle. <br/><span className="text-slate-700 font-bold text-red-800"><b>訂金沒收 (殺訂) 條款：買方所付之訂金概不退還。若買方未能按時支付尾數或完成交易，賣方保留絕對權利單方面終止合約，並全數沒收訂金作為預定違約金，且有權將車輛自由轉售。</b></span></li>
+                                                {((activeVehicle as any).orderType === 'Overseas' || (activeVehicle as any).orderType === 'Local') && (
+                                                    <li><b>Vehicle Order & ETA:</b> For ordered vehicles, the Estimated Time of Arrival (ETA) is indicative. Delays caused by shipping, customs, or factors beyond the Seller's control shall not entitle the Buyer to cancel the order or demand a refund. <br/><span className="text-slate-700"><b>訂購車輛特別條款：</b>針對非現貨之訂購車輛，預計到港時間 (ETA) 僅供參考。因船期、海關或非賣方所能控制之因素導致的延誤，買方無權藉此要求取消訂單或退還訂金。</span></li>
+                                                )}
+                                            </ol>
+                                        </div>
+                                    )}
+                                </>
                             )}
                         </div>
                     )}
