@@ -192,7 +192,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             });
         } else if (reportType === 'sales') {
             data = inventory.filter((v:any) => v.status === 'Sold').map((v:any) => {
-                const totalCost = (v.costPrice || 0) + (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
+                const baseExpenses = (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
+                const interestExpenses = (v.financingRecords || []).reduce((sum:number, f:any) => sum + (f.status === 'Settled' ? (f.actualInterest || 0) : 0), 0);
+                const totalCost = (v.costPrice || 0) + baseExpenses + interestExpenses; // ★ 將結算後的利息納入成本！ []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
                 let safeSaleDate = v.stockOutDate || (v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
