@@ -602,7 +602,8 @@ const SettingsManager = ({
                             <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。車輛採用「品牌 ➔ 型號 ➔ 海關代號」三層聯動架構。</p>
                         </div>
 
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[450px]">
+                        {/* ★ 限制高度為畫面的 50% (h-[50vh])，確保下方的萬能折疊選單能露出來 */}
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row h-[450px] md:h-[50vh] min-h-[400px]">
                             
                             {/* 1. 品牌欄 */}
                             <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 flex flex-col">
@@ -630,29 +631,53 @@ const SettingsManager = ({
                             {/* 2. 型號欄 */}
                             <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-white flex flex-col">
                                 <div className="p-3 border-b border-slate-200 bg-slate-50 font-bold text-slate-700"><span className="flex items-center"><CheckCircle size={16} className="mr-2 text-indigo-500"/> 2. 型號 (Models)</span></div>
-                                {activeSetupMake ? (
-                                    <>
-                                        <div className="p-2 border-b border-slate-200 bg-indigo-50/30 flex gap-1">
-                                            <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
-                                            <button onClick={() => { if (newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                            {(settings.models[activeSetupMake] || []).map((model: string, i: number) => (
-                                                <div key={model} onClick={() => setActiveSetupModel(model)} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupModel === model ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'}`}>
-                                                    <div className="flex items-center flex-1 mr-1">
-                                                        <input type="text" defaultValue={model} onBlur={e => handleEditModel(activeSetupMake, i, model, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-indigo-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
-                                                    </div>
-                                                    <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                                                        <button onClick={() => handleMoveModel(activeSetupMake, i, 'up')} disabled={i === 0} className="p-1 hover:text-indigo-600 disabled:opacity-30"><ChevronUp size={12}/></button>
-                                                        <button onClick={() => handleMoveModel(activeSetupMake, i, 'down')} disabled={i === settings.models[activeSetupMake].length - 1} className="p-1 hover:text-indigo-600 disabled:opacity-30"><ChevronDown size={12}/></button>
-                                                        <button onClick={() => handleDeleteModel(activeSetupMake, i, model)} className="p-1 hover:text-red-500"><Trash2 size={12}/></button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {(settings.models[activeSetupMake] || []).length === 0 && <div className="text-[10px] text-slate-400 text-center py-10">尚無型號</div>}
-                                        </div>
-                                    </>
-                                ) : (
+                                {activeSetupMake ? (() => {
+                                    // ★ 智能排序引擎：計算型號在真實庫存中的使用頻率
+                                    const freqMap: Record<string, number> = {};
+                                    inventory.forEach((v: any) => {
+                                        if (v.make?.toLowerCase() === activeSetupMake.toLowerCase() && v.model) {
+                                            const m = v.model.trim();
+                                            freqMap[m] = (freqMap[m] || 0) + 1;
+                                        }
+                                    });
+                                    // 排序邏輯：有使用量的排前面 (多到少)，沒用過或同頻率的按 A-Z 排列
+                                    const sortedModels = [...(settings.models[activeSetupMake] || [])].sort((a, b) => {
+                                        const freqA = freqMap[a.trim()] || 0;
+                                        const freqB = freqMap[b.trim()] || 0;
+                                        if (freqA !== freqB) return freqB - freqA;
+                                        return a.localeCompare(b);
+                                    });
+
+                                    return (
+                                        <>
+                                            <div className="p-2 border-b border-slate-200 bg-indigo-50/30 flex gap-1">
+                                                <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
+                                                <button onClick={() => { if (newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                                {sortedModels.map((model: string) => {
+                                                    // 尋找此型號在原始陣列中的真實 index 以確保修改/刪除正確
+                                                    const originalIdx = settings.models[activeSetupMake].indexOf(model);
+                                                    const usageCount = freqMap[model.trim()] || 0;
+                                                    return (
+                                                        <div key={model} onClick={() => setActiveSetupModel(model)} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupModel === model ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'}`}>
+                                                            <div className="flex items-center flex-1 mr-1">
+                                                                <input type="text" defaultValue={model} onBlur={e => handleEditModel(activeSetupMake, originalIdx, model, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-indigo-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
+                                                                {/* ★ 自動顯示頻率徽章 */}
+                                                                {usageCount > 0 && <span className="text-[9px] text-indigo-600 font-mono ml-2 bg-indigo-100 px-1.5 py-0.5 rounded shadow-sm flex-none font-black flex items-center" title={`在庫使用中: ${usageCount}台`}>🔥 {usageCount}</span>}
+                                                            </div>
+                                                            <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                                                {/* ★ 已啟用智能排序，移除手動上下移動按鈕，只保留刪除 */}
+                                                                <button onClick={() => handleDeleteModel(activeSetupMake, originalIdx, model)} className="p-1.5 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={12}/></button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {sortedModels.length === 0 && <div className="text-[10px] text-slate-400 text-center py-10">尚無型號</div>}
+                                            </div>
+                                        </>
+                                    );
+                                })() : (
                                     <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-6 text-center"><Car size={24} className="mb-2 opacity-30"/><p className="text-[10px]">請先選擇品牌</p></div>
                                 )}
                             </div>
