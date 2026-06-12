@@ -27,7 +27,8 @@ const formatNumberInput = (value: string) => {
 export default function FinanceModule({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) {
     
     // --- 模塊狀態鎖定 ---
-    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'accounting' | 'capital'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_fin_tab') as any : null) || 'dashboard');
+    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_fin_tab') as any : null) || 'dashboard');
+    const [selectedLender, setSelectedLender] = useState<string>(''); // ★ 資金池專用狀態
     
     // ★ 核心安全邏輯：判斷是否擁有「管理員級別」的資料視角
     const isFullAccess = staffId === 'BOSS' || 
@@ -36,7 +37,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
     // ★ 安全強制重導：如果普通員工誤入了管理員專屬 Tab，自動彈回首頁
     useEffect(() => {
-        if (!isFullAccess && (financeTab === 'partner' || financeTab === 'accounting' || financeTab === 'capital')) {
+        if (!isFullAccess && (financeTab === 'partner' || financeTab === 'lender' || financeTab === 'accounting' || financeTab === 'capital')) {
             setFinanceTab('dashboard');
         }
     }, [financeTab, isFullAccess]);
@@ -375,6 +376,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     {isFullAccess && (
                         <>
                             <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
+                            <button onClick={() => setFinanceTab('lender')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'lender' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><DollarSign size={16} className="mr-1.5"/> 資金池結算</button>
                             <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
                             <button onClick={() => setFinanceTab('capital')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'capital' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="mr-1.5"/> 資金預算沙盤</button>
                         </>
@@ -619,6 +621,135 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 </div>
             )}
 
+            {/* ========================================== */}
+            {/* Tab 3.5: 資金池/墊資結算 (Lender Statements) */}
+            {/* ========================================== */}
+            {financeTab === 'lender' && (() => {
+                const lendersList = settings.lenders || [];
+                
+                // 找出選定金主的所有紀錄
+                let activePrincipalTotal = 0;
+                let currentMonthInterest = 0;
+                let lenderHistory: any[] = [];
+
+                const currentMonthPrefix = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
+
+                if (selectedLender) {
+                    inventory.forEach((v: any) => {
+                        (v.financingRecords || []).forEach((f: any) => {
+                            if (f.lenderName === selectedLender) {
+                                if (f.status === 'Active') {
+                                    activePrincipalTotal += Number(f.principal || 0);
+                                }
+                                
+                                if (f.status === 'Settled' && f.endDate?.startsWith(currentMonthPrefix)) {
+                                    currentMonthInterest += Number(f.actualInterest || 0);
+                                }
+
+                                lenderHistory.push({
+                                    vehicleId: v.id,
+                                    regMark: v.regMark || '未出牌',
+                                    make: v.make,
+                                    model: v.model,
+                                    ...f
+                                });
+                            }
+                        });
+                    });
+                    // 排序：未結算在前，已結算按日期降序
+                    lenderHistory.sort((a, b) => {
+                        if (a.status === 'Active' && b.status === 'Settled') return -1;
+                        if (a.status === 'Settled' && b.status === 'Active') return 1;
+                        const dateA = new Date(a.endDate || a.startDate).getTime();
+                        const dateB = new Date(b.endDate || b.startDate).getTime();
+                        return dateB - dateA;
+                    });
+                }
+
+                return (
+                    <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                        <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
+                            <div className="p-4 border-b border-slate-200 bg-white">
+                                <h3 className="font-bold text-slate-700 flex items-center mb-3"><DollarSign size={18} className="mr-2 text-pink-600"/> 資金池 / 金主名單</h3>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {lendersList.map((lender: string, idx: number) => (
+                                    <div key={idx} onClick={() => setSelectedLender(lender)} className={`p-3 rounded-xl cursor-pointer transition-all font-bold text-sm ${selectedLender === lender ? 'bg-pink-100 border border-pink-300 shadow-sm text-pink-900' : 'hover:bg-white border border-transparent hover:border-slate-200 text-slate-700'}`}>
+                                        {lender}
+                                    </div>
+                                ))}
+                                {lendersList.length === 0 && <div className="text-xs text-slate-400 p-4 text-center">尚未在設定中新增墊資方</div>}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
+                            {!selectedLender ? (
+                                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10">
+                                    <DollarSign size={48} className="mb-4 opacity-30 text-pink-500"/>
+                                    <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左側金主 / 墊資方</h3>
+                                    <p className="text-xs">系統將自動統整該金主名下的所有本金與利息</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="p-6 bg-slate-900 text-white flex flex-wrap justify-between items-center flex-none shadow-md z-10 gap-4">
+                                        <div>
+                                            <h3 className="text-2xl font-black tracking-wide mb-1">{selectedLender}</h3>
+                                            <p className="text-xs text-slate-400">資金池佔用與利息月結單</p>
+                                        </div>
+                                        <div className="flex gap-6 text-right">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">現時動用本金 (Active Principal)</p>
+                                                <span className="text-2xl font-black font-mono text-blue-400">{formatCurrency(activePrincipalTotal)}</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">本月結算利息 (This Month Interest)</p>
+                                                <span className="text-2xl font-black font-mono text-pink-400">{formatCurrency(currentMonthInterest)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                                        <div className="space-y-4">
+                                            {lenderHistory.map((f, idx) => (
+                                                <div key={idx} className={`flex flex-col md:flex-row justify-between p-4 bg-white rounded-xl border shadow-sm transition-colors ${f.status === 'Active' ? 'border-blue-200 hover:border-blue-300' : 'border-slate-200 hover:border-pink-300'}`}>
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black ${f.status === 'Active' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                            {f.status === 'Active' ? '計息' : '結算'}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-bold text-slate-800 text-base">{f.make} {f.model} <span className="text-xs bg-slate-100 px-2 py-0.5 rounded border ml-2 text-slate-600 font-mono">{f.regMark}</span></div>
+                                                            <div className="text-xs text-slate-500 font-mono mt-1">
+                                                                起息: {f.startDate} {f.status === 'Settled' && `| 結算: ${f.endDate} (${f.actualDays}天)`}
+                                                            </div>
+                                                            <div className="text-[11px] font-bold text-slate-400 mt-1 uppercase">年利率: {f.annualRate}%</div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="text-right mt-4 md:mt-0 flex flex-col justify-center">
+                                                        <div className="text-[10px] uppercase font-bold text-slate-400">融資本金</div>
+                                                        <div className="text-lg font-black font-mono text-slate-700">{formatCurrency(f.principal)}</div>
+                                                        
+                                                        {f.status === 'Settled' && (
+                                                            <div className="mt-2">
+                                                                <div className="text-[10px] uppercase font-bold text-pink-500">已產生利息</div>
+                                                                <div className="text-xl font-black font-mono text-pink-600">+{formatCurrency(f.actualInterest)}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {lenderHistory.length === 0 && (
+                                                <div className="text-center p-10 text-slate-400 font-bold">該墊資方目前沒有任何融資紀錄。</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+            
             {/* ========================================== */}
             {/* Tab 4: 會計帳目 (Accounting) */}
             {/* ========================================== */}
