@@ -1496,21 +1496,22 @@ const VehicleFormModal = ({
                                 ))}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 pt-4 border-t border-purple-200">
-                                <input type="date" value={newFinancing.startDate} onChange={e => setNewFinancing({...newFinancing, startDate: e.target.value})} className="w-full lg:w-32 text-sm p-2 border border-purple-200 rounded-lg outline-none font-bold text-slate-700"/>
-                                <div className="w-full lg:w-48">
-                                    <input list="lender_list" placeholder="金主 / 貸款方..." value={newFinancing.lenderName} onChange={e => setNewFinancing({...newFinancing, lenderName: e.target.value})} className="w-full text-sm p-2 border border-purple-200 rounded-lg outline-none font-bold text-slate-800"/>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-purple-200 w-full">
+                                <input type="date" value={newFinancing.startDate} onChange={e => setNewFinancing({...newFinancing, startDate: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-purple-200 rounded-lg outline-none bg-white font-bold text-slate-700 min-w-0"/>
+                                
+                                <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
+                                    <input list="lender_list" placeholder="金主 / 貸款方..." value={newFinancing.lenderName} onChange={e => setNewFinancing({...newFinancing, lenderName: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-purple-200 rounded-lg outline-none bg-white font-bold text-slate-800"/>
                                     <datalist id="lender_list">{(settings.lenders || []).map((l:string) => <option key={l} value={l}/>)}</datalist>
                                 </div>
-                                <div className="w-full relative">
-                                    <span className="absolute top-[-10px] left-2 text-[9px] text-purple-600 bg-purple-50 px-1 font-bold">本金</span>
-                                    <input type="text" placeholder="0" value={newFinancing.principal} onChange={e => setNewFinancing({...newFinancing, principal: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-purple-200 rounded-lg outline-none font-mono font-bold text-right text-slate-800"/>
+                                
+                                <div className="w-full lg:w-28 relative min-w-0">
+                                    <input type="number" step="0.1" placeholder="年息 %" value={newFinancing.annualRate} onChange={e => setNewFinancing({...newFinancing, annualRate: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-purple-200 rounded-lg outline-none bg-white font-mono font-bold text-purple-700 text-center"/>
                                 </div>
-                                <div className="w-full lg:w-24 relative">
-                                    <span className="absolute top-[-10px] left-2 text-[9px] text-purple-600 bg-purple-50 px-1 font-bold">年利率 %</span>
-                                    <input type="number" placeholder="8.0" value={newFinancing.annualRate} onChange={e => setNewFinancing({...newFinancing, annualRate: e.target.value})} className="w-full text-sm p-2 border border-purple-200 rounded-lg outline-none font-mono font-bold text-center text-slate-800"/>
+
+                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
+                                    <input type="text" placeholder="$ 融資本金" value={newFinancing.principal} onChange={e => setNewFinancing({...newFinancing, principal: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-purple-300 rounded-lg outline-none bg-purple-50/50 text-right font-mono font-black text-purple-700 shadow-inner min-w-0"/>
+                                    <button type="button" onClick={handleAddFinancing} className="w-full sm:w-auto bg-purple-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-purple-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">借入墊資</button>
                                 </div>
-                                <button type="button" onClick={handleAddFinancing} className="w-full lg:w-auto bg-purple-700 text-white text-sm py-2 px-4 rounded-lg hover:bg-purple-800 font-bold active:scale-95 transition-transform shadow-md whitespace-nowrap">借入墊資</button>
                             </div>
                         </div>
                      
