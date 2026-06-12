@@ -1990,7 +1990,34 @@ useEffect(() => {
                   }
               });
           }
-          
+
+          // --------------------------------------------------------------
+          // ✨【新接入模組四：車輛墊資/貸款利息 (Floor Plan Interest)】
+          // --------------------------------------------------------------
+          if (v.financingRecords && Array.isArray(v.financingRecords)) {
+              v.financingRecords.forEach((f: any) => {
+                  const finLedgerRef = doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`);
+                  // ★ 只有當狀態為「已結算」且產生了實際利息時，才列入正式開支
+                  if (f.status === 'Settled' && Number(f.actualInterest) > 0) {
+                      batch.set(finLedgerRef, {
+                          refVehicleId: v.id,
+                          refRegMark: v.regMark || '未出牌',
+                          sourceModule: 'financing',
+                          type: 'OUT', // ★ 利息屬於支出，會扣減車輛淨利
+                          category: '營運開支 (Expenses)',
+                          desc: `[墊資利息結算] ${f.lenderName} (${f.actualDays}天)`,
+                          amount: Number(f.actualInterest),
+                          date: f.endDate || new Date().toISOString().split('T')[0],
+                          method: 'Transfer', 
+                          remark: `本金: ${formatCurrency(f.principal)} | 年息: ${f.annualRate}%`,
+                          updatedAt: serverTimestamp()
+                      }, { merge: true });
+                  } else {
+                      batch.delete(finLedgerRef);
+                  }
+              });
+          }
+        
           // 一次性全自動原子提交，確保三個模組的帳目絕對不會同步失敗！
           await batch.commit();
           console.log(`🚀 [終極財務引擎] 車輛 ${v.regMark} 的【維修+銷售+中港】流水已完美同步至總帳本！`);
