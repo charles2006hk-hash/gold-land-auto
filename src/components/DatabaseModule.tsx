@@ -388,6 +388,22 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         if (parsedSeat !== undefined) finalSeating = parsedSeat + 1;
                     }
 
+                    // 🧠 ★★★ 智能車牌清洗引擎 (過濾 VRD 右側獨立數字) ★★★
+                    const sanitizePlate = (plateStr: string) => {
+                        if (!plateStr) return '';
+                        // 1. 斬除 VRD 車牌框右側因為距離太近被誤讀的單一數字 (例如 "HD709 8" -> "HD709")
+                        let cleaned = String(plateStr).replace(/[\s\n]+\d$/, '');
+                        // 2. 剔除所有空格與特殊符號，並強制大寫，保持資料庫純淨
+                        return cleaned.replace(/[^A-Z0-9]/ig, '').toUpperCase();
+                    };
+
+                    const finalPlateHK = sanitizePlate(data.plateNoHK || prev.plateNoHK);
+                    
+                    // 同步修復動態數據框裡的值
+                    if (data.plateNoHK && newExtractedData.plateNoHK) {
+                        newExtractedData.plateNoHK = finalPlateHK;
+                    }
+
                     return {
                         ...prev,
                         name: finalName, 
@@ -406,7 +422,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         // ★ 指標號自動抓取批文卡號
                         quotaNo: data.approvalCardNo || data.quotaNo || prev.quotaNo,
                         
-                        plateNoHK: data.plateNoHK || prev.plateNoHK,
+                        plateNoHK: finalPlateHK,
                         make: data.make || prev.make,
                         model: data.model || prev.model,
                         chassisNo: data.chassisNo || prev.chassisNo,
@@ -424,7 +440,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         seating: finalSeating,
                         
                         // ★ 完美對接「關聯香港車牌」下拉選單與「國內車牌」
-                        relatedPlateNo: data.plateNoHK || prev.relatedPlateNo, // 下拉選單自動選取香港車牌
+                        relatedPlateNo: finalPlateHK || prev.relatedPlateNo, // 下拉選單自動選取清洗後的香港車牌
                         plateNoCN: data.relatedPlateNo || prev.plateNoCN,      // 內地車牌存入專屬格
                         
                         hkid_name: data.hkid_name || prev.hkid_name,
