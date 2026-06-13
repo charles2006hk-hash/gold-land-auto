@@ -178,7 +178,7 @@ const SettingsManager = ({
     // --- ★ 車輛三級聯動操作函數 (Make -> Model -> Code) (防覆寫升級版) ★ ---
     const handleEditMake = async (idx: number, oldMake: string, newMake: string) => {
         if (!newMake.trim() || oldMake === newMake) return;
-        const isExist = (settings.makes || []).some((m, i) => i !== idx && m.toLowerCase() === newMake.trim().toLowerCase());
+        const isExist = (settings.makes || []).some((m: string, i: number) => i !== idx && m.toLowerCase() === newMake.trim().toLowerCase());
         if (isExist) { alert(`⚠️ 品牌「${newMake.trim()}」已存在！`); return; }
 
         const newMakes = [...(settings.makes || [])];
@@ -232,7 +232,7 @@ const SettingsManager = ({
         if (!newModel.trim() || oldModel === newModel) return;
         
         const newMList = [...(settings.models[make] || [])];
-        const isExist = newMList.some((m, i) => i !== idx && m.toLowerCase() === newModel.trim().toLowerCase());
+        const isExist = newMList.some((m: string, i: number) => i !== idx && m.toLowerCase() === newModel.trim().toLowerCase());
         if (isExist) { alert(`⚠️ 型號「${newModel.trim()}」已存在！`); return; }
 
         newMList[idx] = newModel.trim();
@@ -280,7 +280,7 @@ const SettingsManager = ({
     const handleEditCode = (model: string, idx: number, newCode: string) => {
         if (!newCode.trim()) return;
         const newCList = [...((settings.codes || {})[model] || [])];
-        const isExist = newCList.some((c, i) => i !== idx && c === newCode.trim().toUpperCase());
+        const isExist = newCList.some((c: string, i: number) => i !== idx && c === newCode.trim().toUpperCase());
         if (isExist) { alert(`⚠️ 代號「${newCode.toUpperCase()}」已存在！`); return; }
 
         newCList[idx] = newCode.trim().toUpperCase();
