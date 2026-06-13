@@ -135,15 +135,28 @@ const SettingsManager = ({
         }
     };
 
-    // --- 萬能字典操作函數 ---
+    // --- 萬能字典操作函數 (升級防重複) ---
     const addItem = (key: keyof SystemSettings, val: string) => { 
-        if(val) updateSettings(key, [...(settings[key] as any[] || []), val]); 
+        if(!val.trim()) return;
+        const currentList = settings[key] as any[] || [];
+        // ★ 智能防重複：檢查是否已經存在 (不分大小寫)
+        const isExist = currentList.some(item => {
+            const itemName = typeof item === 'string' ? item : item.name;
+            return String(itemName).toLowerCase() === val.trim().toLowerCase();
+        });
+        if (isExist) {
+            alert(`⚠️ 「${val.trim()}」已經存在，不需重複加入！`);
+            return;
+        }
+        updateSettings(key, [...currentList, val.trim()]); 
     };
+
     const removeItem = (key: keyof SystemSettings, idx: number) => { 
         const arr = [...(settings[key] as any[] || [])]; 
         arr.splice(idx, 1); 
         updateSettings(key, arr); 
     };
+
     const moveListItem = (key: keyof SystemSettings, index: number, direction: 'up' | 'down') => {
         const currentList = Array.isArray(settings[key]) ? [...(settings[key] as any[])] : [];
         if (direction === 'up' && index > 0) {
@@ -154,31 +167,40 @@ const SettingsManager = ({
             updateSettings(key, currentList);
         }
     };
+
     const editListItem = (key: keyof SystemSettings, index: number, newValue: string) => {
         if (!newValue.trim()) return;
         const currentList = Array.isArray(settings[key]) ? [...(settings[key] as any[])] : [];
-        currentList[index] = newValue;
+        currentList[index] = newValue.trim();
         updateSettings(key, currentList);
     };
 
-    // --- ★ 車輛三級聯動操作函數 (Make -> Model -> Code) ★ ---
-    const handleEditMake = (idx: number, oldMake: string, newMake: string) => {
+    // --- ★ 車輛三級聯動操作函數 (Make -> Model -> Code) (防覆寫升級版) ★ ---
+    const handleEditMake = async (idx: number, oldMake: string, newMake: string) => {
         if (!newMake.trim() || oldMake === newMake) return;
+        const isExist = (settings.makes || []).some((m, i) => i !== idx && m.toLowerCase() === newMake.trim().toLowerCase());
+        if (isExist) { alert(`⚠️ 品牌「${newMake.trim()}」已存在！`); return; }
+
         const newMakes = [...(settings.makes || [])];
-        newMakes[idx] = newMake;
+        newMakes[idx] = newMake.trim();
         
         const newModels = { ...(settings.models || {}) };
         if (newModels[oldMake]) {
-            newModels[newMake] = newModels[oldMake];
+            newModels[newMake.trim()] = newModels[oldMake];
             delete newModels[oldMake];
         }
         
-        updateSettings('makes', newMakes);
-        updateSettings('models', newModels);
-        if (activeSetupMake === oldMake) setActiveSetupMake(newMake);
+        // 打包儲存防止時序衝突
+        const newSettings = { ...settings, makes: newMakes, models: newModels };
+        setSettings(newSettings);
+        if (db && appId) {
+            const { doc, setDoc } = await import('firebase/firestore');
+            await setDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings'), newSettings, { merge: true });
+        }
+        if (activeSetupMake === oldMake) setActiveSetupMake(newMake.trim());
     };
 
-    const handleDeleteMake = (idx: number, makeName: string) => {
+    const handleDeleteMake = async (idx: number, makeName: string) => {
         if (!confirm(`確定刪除品牌 ${makeName} 及其所有型號與代號？`)) return;
         const newMakes = [...(settings.makes || [])];
         newMakes.splice(idx, 1);
@@ -190,9 +212,12 @@ const SettingsManager = ({
         const newCodes = { ...(settings.codes || {}) };
         modelsToDelete.forEach((m: string) => delete newCodes[m]);
         
-        updateSettings('makes', newMakes);
-        updateSettings('models', newModels);
-        updateSettings('codes', newCodes);
+        const newSettings = { ...settings, makes: newMakes, models: newModels, codes: newCodes };
+        setSettings(newSettings);
+        if (db && appId) {
+            const { doc, setDoc } = await import('firebase/firestore');
+            await setDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings'), newSettings, { merge: true });
+        }
         if (activeSetupMake === makeName) { setActiveSetupMake(''); setActiveSetupModel(''); }
     };
 
@@ -203,32 +228,45 @@ const SettingsManager = ({
         updateSettings('makes', list);
     };
 
-    const handleEditModel = (make: string, idx: number, oldModel: string, newModel: string) => {
+    const handleEditModel = async (make: string, idx: number, oldModel: string, newModel: string) => {
         if (!newModel.trim() || oldModel === newModel) return;
+        
         const newMList = [...(settings.models[make] || [])];
-        newMList[idx] = newModel;
+        const isExist = newMList.some((m, i) => i !== idx && m.toLowerCase() === newModel.trim().toLowerCase());
+        if (isExist) { alert(`⚠️ 型號「${newModel.trim()}」已存在！`); return; }
+
+        newMList[idx] = newModel.trim();
         
         const newCodes = { ...(settings.codes || {}) };
         if (newCodes[oldModel]) {
-            newCodes[newModel] = newCodes[oldModel];
+            newCodes[newModel.trim()] = newCodes[oldModel];
             delete newCodes[oldModel];
         }
 
-        updateSettings('models', { ...settings.models, [make]: newMList });
-        updateSettings('codes', newCodes);
-        if (activeSetupModel === oldModel) setActiveSetupModel(newModel);
+        const newSettings = { ...settings, models: { ...settings.models, [make]: newMList }, codes: newCodes };
+        setSettings(newSettings);
+        if (db && appId) {
+            const { doc, setDoc } = await import('firebase/firestore');
+            await setDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings'), newSettings, { merge: true });
+        }
+        if (activeSetupModel === oldModel) setActiveSetupModel(newModel.trim());
     };
 
-    const handleDeleteModel = (make: string, idx: number, modelName: string) => {
+    const handleDeleteModel = async (make: string, idx: number, modelName: string) => {
         if (!confirm(`確定刪除型號 ${modelName} 及其所有代號？`)) return;
-        const newMList = [...(settings.models[make] || [])];
-        newMList.splice(idx, 1);
+        
+        // ★ 智能去重複刪除法：絞碎所有同名或帶有空白鍵的幽靈分身
+        const newMList = (settings.models[make] || []).filter((m: string) => m.trim() !== modelName.trim());
         
         const newCodes = { ...(settings.codes || {}) };
         delete newCodes[modelName];
 
-        updateSettings('models', { ...settings.models, [make]: newMList });
-        updateSettings('codes', newCodes);
+        const newSettings = { ...settings, models: { ...settings.models, [make]: newMList }, codes: newCodes };
+        setSettings(newSettings);
+        if (db && appId) {
+            const { doc, setDoc } = await import('firebase/firestore');
+            await setDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings'), newSettings, { merge: true });
+        }
         if (activeSetupModel === modelName) setActiveSetupModel('');
     };
 
@@ -242,7 +280,10 @@ const SettingsManager = ({
     const handleEditCode = (model: string, idx: number, newCode: string) => {
         if (!newCode.trim()) return;
         const newCList = [...((settings.codes || {})[model] || [])];
-        newCList[idx] = newCode;
+        const isExist = newCList.some((c, i) => i !== idx && c === newCode.trim().toUpperCase());
+        if (isExist) { alert(`⚠️ 代號「${newCode.toUpperCase()}」已存在！`); return; }
+
+        newCList[idx] = newCode.trim().toUpperCase();
         updateSettings('codes', { ...settings.codes, [model]: newCList });
     };
 
@@ -257,6 +298,34 @@ const SettingsManager = ({
         if (dir === 'up' && idx > 0) [list[idx-1], list[idx]] = [list[idx], list[idx-1]];
         else if (dir === 'down' && idx < list.length - 1) [list[idx+1], list[idx]] = [list[idx], list[idx+1]];
         updateSettings('codes', { ...settings.codes, [model]: list });
+    };
+
+    // --- ★ 新增：安全加入品牌/型號/代號 (防重複) ★ ---
+    const handleAddMake = () => {
+        const val = newSetupMake.trim();
+        if (!val) return;
+        const current = settings.makes || [];
+        if (current.some((m:string) => m.toLowerCase() === val.toLowerCase())) { alert(`⚠️ 品牌「${val}」已存在！`); return; }
+        updateSettings('makes', [...current, val]);
+        setNewSetupMake('');
+    };
+
+    const handleAddModel = () => {
+        const val = newSetupModel.trim();
+        if (!val || !activeSetupMake) return;
+        const current = settings.models[activeSetupMake] || [];
+        if (current.some((m:string) => m.toLowerCase() === val.toLowerCase())) { alert(`⚠️ 型號「${val}」已存在！`); return; }
+        updateSettings('models', { ...settings.models, [activeSetupMake]: [...current, val] } as any);
+        setNewSetupModel('');
+    };
+
+    const handleAddCode = () => {
+        const val = newSetupCode.trim().toUpperCase();
+        if (!val || !activeSetupModel) return;
+        const current = (settings.codes || {})[activeSetupModel] || [];
+        if (current.some((c:string) => c === val)) { alert(`⚠️ 代號「${val}」已存在！`); return; }
+        updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...current, val] } as any);
+        setNewSetupCode('');
     };
 
     // --- 其他操作函數 ---
@@ -609,8 +678,9 @@ const SettingsManager = ({
                             <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 flex flex-col">
                                 <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700"><span className="flex items-center"><Car size={16} className="mr-2 text-blue-500"/> 1. 品牌 (Makes)</span></div>
                                 <div className="p-2 border-b border-slate-200 bg-white flex gap-1">
-                                    <input value={newSetupMake} onChange={e => setNewSetupMake(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupMake) { updateSettings('makes', [...(settings.makes || []), newSetupMake] as any); setNewSetupMake(''); } }} className="border rounded px-2 py-1 text-xs flex-1 outline-none focus:border-blue-400" placeholder="新增品牌..."/>
-                                    <button onClick={() => { if (newSetupMake) { updateSettings('makes', [...(settings.makes || []), newSetupMake] as any); setNewSetupMake(''); } }} className="bg-slate-800 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                    {/* ★ 已經完美綁定 handleAddMake */}
+                                    <input value={newSetupMake} onChange={e => setNewSetupMake(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddMake(); }} className="border rounded px-2 py-1 text-xs flex-1 outline-none focus:border-blue-400" placeholder="新增品牌..."/>
+                                    <button onClick={handleAddMake} className="bg-slate-800 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                     {(settings.makes || []).map((m: string, i: number) => (
@@ -651,12 +721,12 @@ const SettingsManager = ({
                                     return (
                                         <>
                                             <div className="p-2 border-b border-slate-200 bg-indigo-50/30 flex gap-1">
-                                                <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
-                                                <button onClick={() => { if (newSetupModel) { updateSettings('models', { ...settings.models, [activeSetupMake]: [...(settings.models[activeSetupMake] || []), newSetupModel] } as any); setNewSetupModel(''); } }} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                                {/* ★ 已經完美綁定 handleAddModel */}
+                                                <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddModel(); }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
+                                                <button onClick={handleAddModel} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                             </div>
                                             <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                                 {sortedModels.map((model: string) => {
-                                                    // 尋找此型號在原始陣列中的真實 index 以確保修改/刪除正確
                                                     const originalIdx = settings.models[activeSetupMake].indexOf(model);
                                                     const usageCount = freqMap[model.trim()] || 0;
                                                     return (
@@ -667,7 +737,6 @@ const SettingsManager = ({
                                                                 {usageCount > 0 && <span className="text-[9px] text-indigo-600 font-mono ml-2 bg-indigo-100 px-1.5 py-0.5 rounded shadow-sm flex-none font-black flex items-center" title={`在庫使用中: ${usageCount}台`}>🔥 {usageCount}</span>}
                                                             </div>
                                                             <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                                                                {/* ★ 已啟用智能排序，移除手動上下移動按鈕，只保留刪除 */}
                                                                 <button onClick={() => handleDeleteModel(activeSetupMake, originalIdx, model)} className="p-1.5 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 size={12}/></button>
                                                             </div>
                                                         </div>
@@ -688,8 +757,9 @@ const SettingsManager = ({
                                 {activeSetupModel ? (
                                     <>
                                         <div className="p-2 border-b border-slate-200 bg-emerald-50/30 flex gap-1">
-                                            <input value={newSetupCode} onChange={e => setNewSetupCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newSetupCode) { updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...((settings.codes || {})[activeSetupModel] || []), newSetupCode] } as any); setNewSetupCode(''); } }} className="border border-emerald-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-emerald-400 uppercase font-mono" placeholder={`為 ${activeSetupModel} 新增代號...`}/>
-                                            <button onClick={() => { if (newSetupCode) { updateSettings('codes', { ...settings.codes, [activeSetupModel]: [...((settings.codes || {})[activeSetupModel] || []), newSetupCode] } as any); setNewSetupCode(''); } }} className="bg-emerald-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
+                                            {/* ★ 已經完美綁定 handleAddCode */}
+                                            <input value={newSetupCode} onChange={e => setNewSetupCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddCode(); }} className="border border-emerald-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-emerald-400 uppercase font-mono" placeholder={`為 ${activeSetupModel} 新增代號...`}/>
+                                            <button onClick={handleAddCode} className="bg-emerald-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                         </div>
                                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
                                             {((settings.codes || {})[activeSetupModel] || []).map((code: string, i: number) => (
