@@ -443,7 +443,7 @@ const VehicleFormModal = ({
     
     // 1. 計算買車本金與已找數的維修雜費
     const baseCost = Number(costStr.replace(/,/g, '')) || 0;
-    const totalExpensesPaid = (v.expenses || []).filter((e:any) => e.status === 'Paid').reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+    const totalExpensesPaid = (v.expenses || []).filter((e:any) => e.status === 'Paid' && e.paymentMethod !== 'Included').reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
     
     // 2. 總成本 = 買車本金 + 維修雜費
     const totalCostAll = baseCost + totalExpenses;
@@ -1611,8 +1611,27 @@ const VehicleFormModal = ({
                                             <span className="text-gray-400 font-mono w-full sm:w-auto font-bold">{exp.date}</span>
                                             <span className="font-black text-slate-800 bg-slate-100 px-2 py-1 rounded-md">{exp.type}</span>
                                             <span className="text-gray-600 flex-1 truncate w-full sm:w-auto font-medium">{exp.company}</span>
-                                            {/* ★ 顯示付款方式 */}
-                                            {exp.status === 'Paid' && exp.paymentMethod && <span className="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-1 rounded-md text-[10px] font-bold">{exp.paymentMethod}</span>}
+                                            {/* ★ 顯示並允許直接修改付款方式 */}
+                                            {exp.status === 'Paid' && (
+                                                <select 
+                                                    value={exp.paymentMethod || 'Cash'}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (v.id) {
+                                                            updateSubItem(v.id, 'expenses', (v.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: val} : ex));
+                                                        } else {
+                                                            setEditingVehicle((prev: any) => prev ? ({...prev, expenses: (prev.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: val} : ex)}) : null);
+                                                        }
+                                                    }}
+                                                    className={`px-2 py-1 rounded-md text-[10px] font-bold border outline-none cursor-pointer shadow-sm transition-colors ${exp.paymentMethod === 'Included' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}
+                                                >
+                                                    <option value="Included">併入車價 (Included)</option>
+                                                    <option value="Cash">現金 (Cash)</option>
+                                                    <option value="Transfer">轉帳 (Transfer)</option>
+                                                    <option value="Cheque">支票 (Cheque)</option>
+                                                    <option value="USDT">USDT</option>
+                                                </select>
+                                            )}
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
                                             <span className="font-mono font-black text-lg md:text-base text-slate-700">{formatCurrency(exp.amount)}</span>
@@ -1645,8 +1664,9 @@ const VehicleFormModal = ({
                                 </div>
 
                                 {/* ★ 新增：付款方式與狀態下拉 */}
-                                <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
+                                <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
                                     <option value="Unpaid">未付 (Unpaid)</option>
+                                    <option value="Included">併入車價 (Included)</option>
                                     <option value="Cash">現金 (Cash)</option>
                                     <option value="Cheque">支票 (Cheque)</option>
                                     <option value="Transfer">轉帳 (Transfer)</option>
