@@ -811,32 +811,32 @@ const VehicleFormModal = ({
                         </div>
                         
                         {showLogisticsTracker && (
-                            <div className="p-4 bg-white grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-blue-100">
+                            <div className="p-3 bg-white grid grid-cols-2 lg:grid-cols-4 gap-3 border-t border-blue-100">
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 mb-1.5 block">1. 船運到港</label>
-                                    <input type="date" value={logistics.arrivalDate} onChange={(e) => updateLogistics('arrivalDate', e.target.value)} className="w-full text-xs p-2 border border-slate-300 rounded outline-none font-mono bg-slate-50 focus:bg-white focus:border-blue-400 text-slate-700 font-bold"/>
+                                    <label className="text-[10px] font-bold text-slate-500 mb-1 block">1. 船運到港</label>
+                                    <input type="date" value={logistics.arrivalDate} onChange={(e) => updateLogistics('arrivalDate', e.target.value)} className="w-full text-xs p-1.5 border border-slate-300 rounded outline-none font-mono bg-slate-50 focus:bg-white focus:border-blue-400 text-slate-700 font-bold tracking-tighter"/>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-purple-600 mb-1.5 block">2. 環保信日期</label>
-                                    <input type="date" value={logistics.emissionsClearDate} onChange={(e) => updateLogistics('emissionsClearDate', e.target.value)} className="w-full text-xs p-2 border border-purple-200 rounded outline-none font-mono bg-purple-50 focus:bg-white focus:border-purple-400 text-slate-700 font-bold"/>
+                                    <label className="text-[10px] font-bold text-purple-600 mb-1 block">2. 環保信日期</label>
+                                    <input type="date" value={logistics.emissionsClearDate} onChange={(e) => updateLogistics('emissionsClearDate', e.target.value)} className="w-full text-xs p-1.5 border border-purple-200 rounded outline-none font-mono bg-purple-50 focus:bg-white focus:border-purple-400 text-slate-700 font-bold tracking-tighter"/>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-amber-600 mb-1.5 block">3. 驗車合格日</label>
-                                    <input type="date" value={logistics.inspectionPassedDate} onChange={(e) => updateLogistics('inspectionPassedDate', e.target.value)} className="w-full text-xs p-2 border border-amber-200 rounded outline-none font-mono bg-amber-50 focus:bg-white focus:border-amber-400 text-slate-700 font-bold"/>
+                                    <label className="text-[10px] font-bold text-amber-600 mb-1 block">3. 驗車合格日</label>
+                                    <input type="date" value={logistics.inspectionPassedDate} onChange={(e) => updateLogistics('inspectionPassedDate', e.target.value)} className="w-full text-xs p-1.5 border border-amber-200 rounded outline-none font-mono bg-amber-50 focus:bg-white focus:border-amber-400 text-slate-700 font-bold tracking-tighter"/>
                                     {/* 智能提示 4 個月有效期 */}
                                     {logistics.inspectionPassedDate && !logistics.registeredDate && (
-                                        <div className="mt-1.5 text-[9px] font-bold text-red-500 tracking-tight">
-                                            出牌期限: {getInspectionExpiry(logistics.inspectionPassedDate)}
+                                        <div className="mt-1 text-[9px] font-bold text-red-500 tracking-tight leading-tight">
+                                            期限: {getInspectionExpiry(logistics.inspectionPassedDate)}
                                         </div>
                                     )}
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-emerald-600 mb-1.5 block">4. 實際出牌日</label>
+                                    <label className="text-[10px] font-bold text-emerald-600 mb-1 block">4. 實際出牌日</label>
                                     <input type="date" value={logistics.registeredDate} onChange={(e) => {
                                         updateLogistics('registeredDate', e.target.value);
                                         const regInput = document.querySelector('input[name="registeredOwnerDate"]') as HTMLInputElement;
                                         if (regInput && e.target.value) regInput.value = e.target.value;
-                                    }} className="w-full text-xs p-2 border border-emerald-300 rounded outline-none font-mono bg-emerald-50 focus:bg-white focus:border-emerald-500 font-bold text-emerald-800"/>
+                                    }} className="w-full text-xs p-1.5 border border-emerald-300 rounded outline-none font-mono bg-emerald-50 focus:bg-white focus:border-emerald-500 font-bold text-emerald-800 tracking-tighter"/>
                                 </div>
                             </div>
                         )}
