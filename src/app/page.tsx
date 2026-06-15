@@ -3316,30 +3316,44 @@ const DatabaseSelector = ({
                   // 提取共用的精緻卡片渲染邏輯
                   const renderDashboardCard = (car: any) => {
                   
-                    // ★ 新增：計算進度徽章給車輛庫存卡片使用
-                        const getLogisticsBadge = (log: any) => {
-                            if (!log) return null;
-                            if (log.registeredDate) return null; // 已出牌隱藏
-                            if (log.inspectionPassedDate) {
-                                const passed = new Date(log.inspectionPassedDate);
-                                const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
-                                const today = new Date();
-                                today.setHours(0,0,0,0);
-                                expiry.setHours(0,0,0,0);
-                                const diffTime = expiry.getTime() - today.getTime();
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                const expiryStr = expiry.toISOString().split('T')[0];
-                                
-                                // 警報變色邏輯
-                                if (diffDays < 0) return { text: `驗車已過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
-                                if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-50 text-orange-600 border-orange-300' };
-                                return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-                            }
-                            if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
-                            if (log.arrivalDate) return { text: '待驗環保', color: 'bg-blue-50 text-blue-700 border-blue-200' };
-                            return null;
-                        };
-                    const logisticsBadge = getLogisticsBadge(car.logistics);
+                    // ★ 新增：完美融合「船運倒數」與「行政進度」的智能標籤
+                    const getLogisticsBadge = (vehicleData: any) => {
+                        const log = vehicleData.logistics || {};
+                        if (log.registeredDate) return null; // 已出牌隱藏
+                        
+                        if (log.inspectionPassedDate) {
+                            const passed = new Date(log.inspectionPassedDate);
+                            const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            expiry.setHours(0,0,0,0);
+                            const diffTime = expiry.getTime() - today.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const expiryStr = expiry.toISOString().split('T')[0];
+                            
+                            if (diffDays < 0) return { text: `驗車已過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
+                            if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-50 text-orange-600 border-orange-300' };
+                            return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                        }
+                        
+                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+                        
+                        // ★ 完美融合舊版船運 ETA
+                        const arrivalStr = log.arrivalDate || vehicleData.acquisition?.eta || vehicleData.eta;
+                        if (arrivalStr) {
+                            const arr = new Date(arrivalStr);
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            arr.setHours(0,0,0,0);
+                            const diffDays = Math.ceil((arr.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                            
+                            if (diffDays > 0) return { text: `🚢 剩 ${diffDays} 天到港`, color: 'bg-blue-50 text-blue-600 border-blue-200' };
+                            return { text: '🚢 已到港 (待驗環保)', color: 'bg-blue-100 text-blue-700 border-blue-300' };
+                        }
+                        
+                        return null;
+                    };
+                    const logisticsBadge = getLogisticsBadge(car);
 
                     // ★ 核心修復：讓卡片上的標籤也完美對齊最新邏輯
                     const received = (car.payments || []).reduce((acc:any, p:any) => acc + (Number(p.amount) || 0), 0);
@@ -3512,20 +3526,17 @@ const DatabaseSelector = ({
                                     <div className="flex flex-col gap-1 items-end min-w-0 ml-auto">
                                         
                                         {/* 第一排：物流 與 已收狀態 */}
-                                        {(hasValidEta || received > 0) && (
+                                        {(logisticsBadge || received > 0) && (
                                             <div className="flex flex-wrap justify-end items-center gap-1">
                                                 {received > 0 && balance > 0 && (
                                                     <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
                                                         有訂 / 部份已付
                                                     </span>
                                                 )}
-                                                {hasValidEta && (
-                                                    <span className={`text-[8px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold ${
-                                                        isArrived 
-                                                        ? 'text-green-600 bg-green-50 border-green-200' 
-                                                        : 'text-indigo-600 bg-indigo-50 border-indigo-200'
-                                                    }`}>
-                                                        <Ship size={8} className="mr-0.5 opacity-80"/>{isArrived ? '已到港' : `剩${daysToArrive}天`}
+                                                {/* ★ 顯示最新的行政進度與出牌徽章 */}
+                                                {logisticsBadge && (
+                                                    <span className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold ${logisticsBadge.color}`}>
+                                                        {logisticsBadge.text}
                                                     </span>
                                                 )}
                                             </div>
@@ -3872,30 +3883,44 @@ const DatabaseSelector = ({
                         const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
                         const balance = (car.price || 0) - received; 
 
-                        // ★ 新增：計算進度徽章給車輛庫存卡片使用
-                        const getLogisticsBadge = (log: any) => {
-                            if (!log) return null;
-                            if (log.registeredDate) return null;
-                            if (log.inspectionPassedDate) {
-                                const passed = new Date(log.inspectionPassedDate);
-                                const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
-                                const today = new Date();
-                                today.setHours(0,0,0,0);
-                                expiry.setHours(0,0,0,0);
-                                const diffTime = expiry.getTime() - today.getTime();
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                const expiryStr = expiry.toISOString().split('T')[0];
-                                if (diffDays < 0) return { text: `驗車過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
-                                if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-100 text-orange-700 border-orange-300' };
-                                return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-                            }
-                            if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
-                            if (log.arrivalDate) return { text: '待驗環保', color: 'bg-blue-50 text-blue-700 border-blue-200' };
-                            if (log.inspectionScheduleDate) return { text: '排期驗車中', color: 'bg-amber-50 text-amber-700 border-amber-200' };
-                            if (log.emissionsSubmitDate) return { text: '驗環保中', color: 'bg-purple-50 text-purple-700 border-purple-200' };
-                            return null;
-                        };
-                        const logisticsBadge = getLogisticsBadge((car as any).logistics);
+                        // ★ 新增：完美融合「船運倒數」與「行政進度」的智能標籤
+                    const getLogisticsBadge = (vehicleData: any) => {
+                        const log = vehicleData.logistics || {};
+                        if (log.registeredDate) return null; // 已出牌隱藏
+                        
+                        if (log.inspectionPassedDate) {
+                            const passed = new Date(log.inspectionPassedDate);
+                            const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            expiry.setHours(0,0,0,0);
+                            const diffTime = expiry.getTime() - today.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            const expiryStr = expiry.toISOString().split('T')[0];
+                            
+                            if (diffDays < 0) return { text: `驗車已過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
+                            if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-50 text-orange-600 border-orange-300' };
+                            return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                        }
+                        
+                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+                        
+                        // ★ 完美融合舊版船運 ETA
+                        const arrivalStr = log.arrivalDate || vehicleData.acquisition?.eta || vehicleData.eta;
+                        if (arrivalStr) {
+                            const arr = new Date(arrivalStr);
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            arr.setHours(0,0,0,0);
+                            const diffDays = Math.ceil((arr.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                            
+                            if (diffDays > 0) return { text: `🚢 剩 ${diffDays} 天到港`, color: 'bg-blue-50 text-blue-600 border-blue-200' };
+                            return { text: '🚢 已到港 (待驗環保)', color: 'bg-blue-100 text-blue-700 border-blue-300' };
+                        }
+                        
+                        return null;
+                    };
+                    const logisticsBadge = getLogisticsBadge(car);
                         
                         // ★ 保留原來的標籤邏輯
                         const getRefinedTags = () => {
