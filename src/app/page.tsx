@@ -2130,13 +2130,17 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         };
 
         const isPublicFormValue = formData.get('isPublic_hidden') === 'true';
+        
+        // ★★★ 新增：從隱藏欄位解析出剛剛打包的進度追蹤資料 ★★★
+        const logisticsStr = formData.get('logistics_hidden') as string;
+        const logisticsData = logisticsStr ? JSON.parse(logisticsStr) : null;
 
         const vData = {
             isPublic: isPublicFormValue,
+            logistics: logisticsData, // ★★★ 正確儲存進度資料 ★★★
             // ★★★ 修正 2：確保正確存入行家歸屬與名稱 ★★★
             sourceType: (formData.get('sourceType') as string) || 'own',
             partnerName: (formData.get('sourceType') === 'partner') ? (formData.get('acq_vendor') as string || '') : '',
-            // ★★★ 結束 ★★★
 
             licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
             purchaseType: formData.get('purchaseType'),
@@ -3109,6 +3113,25 @@ const DatabaseSelector = ({
                               });
                           }
                       }
+
+                      // ★ 3. 驗車紙到期檢查 (4個月有效期)
+                      // 如果已經驗車合格，但還沒出牌，就要追蹤這 4 個月死線
+                      if (anyV.logistics?.inspectionPassedDate && !anyV.logistics?.registeredDate) {
+                          const passedDate = new Date(anyV.logistics.inspectionPassedDate);
+                          if (!isNaN(passedDate.getTime())) {
+                              // 自動加 4 個月
+                              const expiryDate = new Date(passedDate.setMonth(passedDate.getMonth() + 4));
+                              const expiryDateStr = expiryDate.toISOString().split('T')[0];
+                              const days = getDaysRemaining(expiryDateStr);
+
+                              if (days !== null && days <= 30) {
+                                  docAlerts.push({ 
+                                      id: anyV.id + '_insp', title: anyV.regMark || '未出牌', desc: '驗車紙過期警告', 
+                                      date: expiryDateStr, days, status: days < 0 ? 'expired' : 'soon', raw: anyV, source: 'vehicle' 
+                                  });
+                              }
+                          }
+                      }
                   });
                   docAlerts.sort((a, b) => a.days - b.days);
 
@@ -3292,6 +3315,25 @@ const DatabaseSelector = ({
 
                   // 提取共用的精緻卡片渲染邏輯
                   const renderDashboardCard = (car: any) => {
+                    // ★ 新增：智能判定驗車與出牌進度標籤 (包含 4 個月過期警告)
+                    const getLogisticsBadge = (log: any) => {
+                        if (!log) return null;
+                        if (log.registeredDate) return null; // 已出牌隱藏
+                        if (log.inspectionPassedDate) {
+                            const passed = new Date(log.inspectionPassedDate);
+                            const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
+                            const today = new Date();
+                            if (expiry < today) return { text: '驗車紙過期', color: 'bg-red-100 text-red-700 border-red-300 animate-pulse' };
+                            return { text: '出牌中', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+                        }
+                        if (log.inspectionScheduleDate) return { text: '排期驗車', color: 'bg-amber-100 text-amber-700 border-amber-200' };
+                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' };
+                        if (log.emissionsSubmitDate) return { text: '驗環保中', color: 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse' };
+                        if (log.arrivalDate) return { text: '已到港', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+                        return null;
+                    };
+                    const logisticsBadge = getLogisticsBadge(car.logistics);
+
                     // ★ 核心修復：讓卡片上的標籤也完美對齊最新邏輯
                     const received = (car.payments || []).reduce((acc:any, p:any) => acc + (Number(p.amount) || 0), 0);
                     const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (Number(a.amount) || 0)), 0);
@@ -3383,13 +3425,20 @@ const DatabaseSelector = ({
                                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50"><Car size={20}/><span className="text-[8px] mt-1">No Img</span></div>
                                 )}
                                 
-                                {/* ★ 潮流升級：玻璃透視 + 圓點呼吸燈狀態標籤 */}
+                                {/* ★ 狀態與行家標籤 (左上) ★ */}
                                 <div className="absolute top-1.5 left-1.5 z-20 flex flex-col gap-1">
                                     <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-md px-1.5 py-0.5 rounded-md shadow-sm border border-white/50 w-fit">
                                         <span className={`w-1.5 h-1.5 rounded-full ${dotColor} shadow-[0_0_4px_currentColor]`}></span>
                                         <span className="text-[9px] font-black text-slate-800 leading-none pt-px">{statusText}</span>
                                     </div>
                                     {aging && <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm ${aging.style}`}>{aging.label}</span>}
+                                    
+                                    {/* ★ 新增進度徽章 */}
+                                    {logisticsBadge && (
+                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm border ${logisticsBadge.color}`}>
+                                            🚀 {logisticsBadge.text}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
