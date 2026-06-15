@@ -118,6 +118,31 @@ const VehicleFormModal = ({
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
 
+    // ★★★ 新增：行政與出牌進度追蹤器狀態 ★★★
+    // 預設展開條件：如果是進口車，或者已經有填過任何進度資料，就自動展開
+    const [showLogisticsTracker, setShowLogisticsTracker] = useState((v as any).acquisition?.type === 'Import' || !!v.logistics?.arrivalDate || !!v.logistics?.inspectionPassedDate);
+    const [logistics, setLogistics] = useState({
+        arrivalDate: v.logistics?.arrivalDate || '',
+        emissionsSubmitDate: v.logistics?.emissionsSubmitDate || '',
+        emissionsClearDate: v.logistics?.emissionsClearDate || '',
+        inspectionScheduleDate: v.logistics?.inspectionScheduleDate || '',
+        inspectionPassedDate: v.logistics?.inspectionPassedDate || '',
+        registeredDate: v.logistics?.registeredDate || ''
+    });
+
+    const updateLogistics = (field: string, value: string) => {
+        setLogistics(prev => ({ ...prev, [field]: value }));
+    };
+
+    // 計算驗車合格後的 4 個月死線
+    const getInspectionExpiry = (dateStr: string) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        d.setMonth(d.getMonth() + 4);
+        return d.toISOString().split('T')[0];
+    };
+
     const [acqVendor, setAcqVendor] = useState((v as any).acquisition?.vendor || '');
     const [acqType, setAcqType] = useState<'Local' | 'Import'>((v as any).acquisition?.type || 'Local');
     const [sourceType, setSourceType] = useState<'own' | 'consignment' | 'partner'>(v.sourceType || 'own');
@@ -638,6 +663,15 @@ const VehicleFormModal = ({
             e.currentTarget.appendChild(hiddenCb);
         }
 
+        // ★★★ 新增：將物流追蹤器狀態打包成隱藏欄位，傳遞給 page.tsx ★★★
+        if (!e.currentTarget.querySelector('[name="logistics_hidden"]')) {
+            const hiddenLog = document.createElement('input');
+            hiddenLog.type = 'hidden';
+            hiddenLog.name = 'logistics_hidden';
+            hiddenLog.value = JSON.stringify(logistics);
+            e.currentTarget.appendChild(hiddenLog);
+        }
+
         const formData = new FormData(e.currentTarget);
         if(!formData.has('mileage')) { 
             const hiddenMileage = document.createElement('input'); 
@@ -760,6 +794,67 @@ const VehicleFormModal = ({
                  )}
 
                  <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 scrollbar-thin">
+
+                  {/* ★★★ 新增：所有車輛皆可用的進度追蹤器 ★★★ */}
+                    <div className="bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden mb-4">
+                        <div 
+                            className="p-3 bg-blue-50/80 border-b border-blue-100 flex justify-between items-center cursor-pointer hover:bg-blue-100 transition-colors"
+                            onClick={() => setShowLogisticsTracker(!showLogisticsTracker)}
+                        >
+                            <h3 className="font-bold text-blue-800 text-sm flex items-center">
+                                <Ship size={16} className="mr-2"/> 行政進度與出牌追蹤
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                {(logistics.arrivalDate && !logistics.registeredDate) && <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-sm animate-pulse">進行中</span>}
+                                {showLogisticsTracker ? <ChevronUp size={16} className="text-blue-500"/> : <ChevronDown size={16} className="text-blue-500"/>}
+                            </div>
+                        </div>
+                        
+                        {showLogisticsTracker && (
+                            <div className="p-3 bg-white grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                                {/* Step 1: 到港 */}
+                                <div className="p-2.5 border border-slate-200 rounded-lg bg-slate-50 shadow-inner flex flex-col justify-center">
+                                    <div className="text-[10px] font-bold text-slate-500 mb-1.5">1. 船運到港</div>
+                                    <input type="date" value={logistics.arrivalDate} onChange={(e) => updateLogistics('arrivalDate', e.target.value)} className="w-full text-xs p-1.5 border border-slate-300 rounded outline-none font-mono bg-white focus:border-blue-400 text-slate-700 font-bold"/>
+                                </div>
+                                {/* Step 2: 環保 */}
+                                <div className="p-2.5 border border-purple-100 rounded-lg bg-purple-50 shadow-inner">
+                                    <div className="text-[10px] font-bold text-purple-600 mb-1.5">2. 驗環保 (約14工作天)</div>
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center"><label className="text-[9px] w-8 text-purple-500 font-bold">遞交:</label><input type="date" value={logistics.emissionsSubmitDate} onChange={(e) => updateLogistics('emissionsSubmitDate', e.target.value)} className="flex-1 text-[11px] p-1 border border-purple-200 rounded outline-none font-mono bg-white focus:border-purple-400 text-slate-700 font-bold"/></div>
+                                        <div className="flex items-center"><label className="text-[9px] w-8 text-purple-700 font-bold">出信:</label><input type="date" value={logistics.emissionsClearDate} onChange={(e) => updateLogistics('emissionsClearDate', e.target.value)} className="flex-1 text-[11px] p-1 border border-purple-200 rounded outline-none font-mono bg-white focus:border-purple-400 text-slate-700 font-bold"/></div>
+                                    </div>
+                                </div>
+                                {/* Step 3: 驗車 */}
+                                <div className="p-2.5 border border-amber-100 rounded-lg bg-amber-50 shadow-inner relative">
+                                    <div className="text-[10px] font-bold text-amber-600 mb-1.5">3. 驗車 (約15日)</div>
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center"><label className="text-[9px] w-8 text-amber-500 font-bold">排期:</label><input type="date" value={logistics.inspectionScheduleDate} onChange={(e) => updateLogistics('inspectionScheduleDate', e.target.value)} className="flex-1 text-[11px] p-1 border border-amber-200 rounded outline-none font-mono bg-white focus:border-amber-400 text-slate-700 font-bold"/></div>
+                                        <div className="flex items-center"><label className="text-[9px] w-8 text-amber-700 font-bold">合格:</label><input type="date" value={logistics.inspectionPassedDate} onChange={(e) => updateLogistics('inspectionPassedDate', e.target.value)} className="flex-1 text-[11px] p-1 border border-amber-200 rounded outline-none font-mono bg-white focus:border-amber-400 text-slate-700 font-bold"/></div>
+                                    </div>
+                                    {/* 智能提示 4 個月有效期 */}
+                                    {logistics.inspectionPassedDate && !logistics.registeredDate && (
+                                        <div className="mt-1.5 text-[8.5px] font-bold text-red-500 text-center bg-red-100 rounded border border-red-200 py-0.5">
+                                            有效期至: {getInspectionExpiry(logistics.inspectionPassedDate)}
+                                        </div>
+                                    )}
+                                </div>
+                                {/* Step 4: 出牌 */}
+                                <div className="p-2.5 border border-emerald-100 rounded-lg bg-emerald-50 shadow-inner">
+                                    <div className="text-[10px] font-bold text-emerald-600 mb-1.5">4. 出牌 (3天內)</div>
+                                    <div className="flex flex-col h-full"><label className="text-[9px] text-emerald-700 font-bold mb-1">出牌日:</label>
+                                        <input type="date" value={logistics.registeredDate} onChange={(e) => {
+                                            updateLogistics('registeredDate', e.target.value);
+                                            // ★ 智能連動：填寫出牌日自動覆寫 VRD 車主登記日
+                                            const regInput = document.querySelector('input[name="registeredOwnerDate"]') as HTMLInputElement;
+                                            if (regInput && e.target.value) regInput.value = e.target.value;
+                                        }} className="w-full text-xs p-1.5 border border-emerald-300 rounded outline-none font-mono bg-white font-bold text-emerald-800 focus:border-emerald-500 shadow-sm"/>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                  
                     {/* VRD Card */}
                     <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
                         <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
