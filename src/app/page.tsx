@@ -3315,6 +3315,7 @@ const DatabaseSelector = ({
 
                   // 提取共用的精緻卡片渲染邏輯
                   const renderDashboardCard = (car: any) => {
+                  
                     // ★ 新增：智能判定驗車與出牌進度標籤 (包含 4 個月過期警告)
                     const getLogisticsBadge = (log: any) => {
                         if (!log) return null;
@@ -3323,13 +3324,22 @@ const DatabaseSelector = ({
                             const passed = new Date(log.inspectionPassedDate);
                             const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
                             const today = new Date();
-                            if (expiry < today) return { text: '驗車紙過期', color: 'bg-red-100 text-red-700 border-red-300 animate-pulse' };
-                            return { text: '出牌中', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+                            today.setHours(0,0,0,0);
+                            expiry.setHours(0,0,0,0);
+                            const diffTime = expiry.getTime() - today.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            
+                            const expiryStr = expiry.toISOString().split('T')[0];
+                            
+                            if (diffDays < 0) return { text: `驗車過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
+                            if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-100 text-orange-700 border-orange-300' };
+                            return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
                         }
-                        if (log.inspectionScheduleDate) return { text: '排期驗車', color: 'bg-amber-100 text-amber-700 border-amber-200' };
-                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' };
-                        if (log.emissionsSubmitDate) return { text: '驗環保中', color: 'bg-purple-100 text-purple-700 border-purple-200 animate-pulse' };
-                        if (log.arrivalDate) return { text: '已到港', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+                        if (log.arrivalDate) return { text: '待驗環保', color: 'bg-blue-50 text-blue-700 border-blue-200' };
+                        // 兼容舊資料
+                        if (log.inspectionScheduleDate) return { text: '排期驗車中', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+                        if (log.emissionsSubmitDate) return { text: '驗環保中', color: 'bg-purple-50 text-purple-700 border-purple-200' };
                         return null;
                     };
                     const logisticsBadge = getLogisticsBadge(car.logistics);
@@ -3433,12 +3443,6 @@ const DatabaseSelector = ({
                                     </div>
                                     {aging && <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm ${aging.style}`}>{aging.label}</span>}
                                     
-                                    {/* ★ 新增進度徽章 */}
-                                    {logisticsBadge && (
-                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shadow-sm border ${logisticsBadge.color}`}>
-                                            🚀 {logisticsBadge.text}
-                                        </span>
-                                    )}
                                 </div>
                             </div>
 
@@ -3971,13 +3975,22 @@ const DatabaseSelector = ({
 
                                 {/* 底部操作區 */}
                                 <div className="flex justify-between items-center pt-3 border-t border-slate-100">
-                                    <div className="text-[10px]">
-                                        {car.licenseExpiry ? (() => {
+                                    <div className="flex flex-col gap-1 items-start text-[10px]">
+                                        {car.licenseExpiry && (() => {
                                             const isExp = new Date(car.licenseExpiry) < new Date();
-                                            return <span className={`px-2 py-1 rounded-md font-bold ${isExp?'bg-red-50 text-red-600':'bg-slate-50 text-slate-500 border border-slate-100'}`}>牌費: {car.licenseExpiry} {isExp&&'!'}</span>;
-                                        })() : <span className="text-gray-300">-</span>}
+                                            return <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${isExp?'bg-red-50 text-red-600 border-red-200':'bg-slate-50 text-slate-500 border-slate-200'}`}>牌費: {car.licenseExpiry} {isExp&&'!'}</span>;
+                                        })()}
+                                        
+                                        {/* ★ 進度徽章移到這裡，與牌費上下排列 */}
+                                        {logisticsBadge && (
+                                            <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${logisticsBadge.color}`}>
+                                                {logisticsBadge.text}
+                                            </span>
+                                        )}
+
+                                        {(!car.licenseExpiry && !logisticsBadge) && <span className="text-gray-300">-</span>}
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 items-center">
                                         <button onClick={(e) => { e.stopPropagation(); setShareCleanMode(true); setShareVehicle(car); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><Share2 size={16}/></button>
                                         <button onClick={(e) => { e.stopPropagation(); deleteVehicle(car.id); }} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={16}/></button>
                                     </div>
