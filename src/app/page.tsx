@@ -2554,7 +2554,7 @@ const deleteVehicle = async (id: string) => {
       if (car.status === 'In Stock') totalStockValue += car.price || 0;
       
       // 2. 應付未付 A：一般維修與雜費
-          (car.expenses || []).forEach(exp => {
+          (car.expenses || []).forEach((exp: any) => {
             if (exp.status === 'Unpaid' && !exp.isIncludedInPrice && exp.paymentMethod !== 'Included') totalPayable += exp.amount || 0;
           });
 
