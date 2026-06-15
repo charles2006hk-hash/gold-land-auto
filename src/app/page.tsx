@@ -2554,9 +2554,9 @@ const deleteVehicle = async (id: string) => {
       if (car.status === 'In Stock') totalStockValue += car.price || 0;
       
       // 2. 應付未付 A：一般維修與雜費
-      (car.expenses || []).forEach(exp => {
-        if (exp.status === 'Unpaid') totalPayable += exp.amount || 0;
-      });
+          (car.expenses || []).forEach(exp => {
+            if (exp.status === 'Unpaid' && !exp.isIncludedInPrice && exp.paymentMethod !== 'Included') totalPayable += exp.amount || 0;
+          });
 
       // 3. 應付未付 B：【新增】進貨與收車的「未付尾數」
                   // ★ 核心修復：從總成本中扣除雜費，得出真實的買車本金
@@ -3265,7 +3265,7 @@ const DatabaseSelector = ({
                           // 修正 3：精準判斷中港代辦是否已付 (改用關聯付款 ID 檢查)
                           const pendingCb = (c.crossBorder?.tasks || []).filter((t:any) => (Number(t.fee) > 0) && !(c.payments || []).some((p:any) => p.relatedTaskId === t.id)).length;
                           
-                          const totalExpenses = (c.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+                          const totalExpenses = (c.expenses || []).reduce((sum: number, e: any) => sum + ((e.isIncludedInPrice || e.paymentMethod === 'Included') ? 0 : (Number(e.amount) || 0)), 0);
                           const baseAcqCost = (Number(c.costPrice) || 0) - totalExpenses;
                           const acqPaid = (c.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
                           const acqOffset = Number(c.acquisition?.offsetAmount || 0);
@@ -3368,7 +3368,7 @@ const DatabaseSelector = ({
                     const balance = totalReceivable - received;
                     
                     // ★ 升級：精準計算所有「未找數」的維修與雜費成本總金額
-                    const unpaidExpsAmt = (car.expenses || []).reduce((sum: number, e: any) => sum + (e.status === 'Unpaid' ? (Number(e.amount) || 0) : 0), 0);
+                    const unpaidExpsAmt = (car.expenses || []).reduce((sum: number, e: any) => sum + ((e.status === 'Unpaid' && !e.isIncludedInPrice && e.paymentMethod !== 'Included') ? (Number(e.amount) || 0) : 0), 0);
                     const unpaidMaintAmt = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.costStatus === 'Unpaid' ? (Number(m.cost) || 0) : 0), 0);
                     const totalUnpaidAmount = unpaidExpsAmt + unpaidMaintAmt;
 
@@ -3547,7 +3547,8 @@ const DatabaseSelector = ({
                                             
                                             {/* 1. 欠行家/供應商車價 (紅色) */}
                                             {(() => {
-                                                const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+                                                {(() => {
+                                                const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + ((e.isIncludedInPrice || e.paymentMethod === 'Included') ? 0 : (Number(e.amount) || 0)), 0);
                                                 const baseAcqCost = (car.costPrice || 0) - totalExpenses;
                                                 
                                                 const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
