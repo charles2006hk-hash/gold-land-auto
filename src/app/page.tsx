@@ -3547,7 +3547,6 @@ const DatabaseSelector = ({
                                             
                                             {/* 1. 欠行家/供應商車價 (紅色) */}
                                             {(() => {
-                                                {(() => {
                                                 const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + ((e.isIncludedInPrice || e.paymentMethod === 'Included') ? 0 : (Number(e.amount) || 0)), 0);
                                                 const baseAcqCost = (car.costPrice || 0) - totalExpenses;
                                                 
