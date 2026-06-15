@@ -186,7 +186,7 @@ const VehicleFormModal = ({
 
     const cbFees = (v.crossBorder?.tasks || []).reduce((sum: number, t: any) => sum + (t.fee || 0), 0);
     const totalReceived = (v.payments || []).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-    const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
+    const totalExpenses = (v.expenses || []).reduce((sum: number, e: any) => sum + ((e.isIncludedInPrice || e.paymentMethod === 'Included') ? 0 : (e.amount || 0)), 0);
     const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
     
     const currentRealTimePrice = Number(priceStr.replace(/,/g, '')) || 0;
