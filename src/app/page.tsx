@@ -3874,6 +3874,31 @@ const DatabaseSelector = ({
                         // ★ 保留原來的計算邏輯
                         const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
                         const balance = (car.price || 0) - received; 
+
+                        // ★ 新增：計算進度徽章給車輛庫存卡片使用
+                        const getLogisticsBadge = (log: any) => {
+                            if (!log) return null;
+                            if (log.registeredDate) return null;
+                            if (log.inspectionPassedDate) {
+                                const passed = new Date(log.inspectionPassedDate);
+                                const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
+                                const today = new Date();
+                                today.setHours(0,0,0,0);
+                                expiry.setHours(0,0,0,0);
+                                const diffTime = expiry.getTime() - today.getTime();
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                const expiryStr = expiry.toISOString().split('T')[0];
+                                if (diffDays < 0) return { text: `驗車過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
+                                if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-100 text-orange-700 border-orange-300' };
+                                return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                            }
+                            if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+                            if (log.arrivalDate) return { text: '待驗環保', color: 'bg-blue-50 text-blue-700 border-blue-200' };
+                            if (log.inspectionScheduleDate) return { text: '排期驗車中', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+                            if (log.emissionsSubmitDate) return { text: '驗環保中', color: 'bg-purple-50 text-purple-700 border-purple-200' };
+                            return null;
+                        };
+                        const logisticsBadge = getLogisticsBadge((car as any).logistics);
                         
                         // ★ 保留原來的標籤邏輯
                         const getRefinedTags = () => {
