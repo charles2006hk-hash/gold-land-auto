@@ -3316,32 +3316,29 @@ const DatabaseSelector = ({
                   // 提取共用的精緻卡片渲染邏輯
                   const renderDashboardCard = (car: any) => {
                   
-                    // ★ 新增：智能判定驗車與出牌進度標籤 (包含 4 個月過期警告)
-                    const getLogisticsBadge = (log: any) => {
-                        if (!log) return null;
-                        if (log.registeredDate) return null; // 已出牌隱藏
-                        if (log.inspectionPassedDate) {
-                            const passed = new Date(log.inspectionPassedDate);
-                            const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
-                            expiry.setHours(0,0,0,0);
-                            const diffTime = expiry.getTime() - today.getTime();
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            
-                            const expiryStr = expiry.toISOString().split('T')[0];
-                            
-                            if (diffDays < 0) return { text: `驗車過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
-                            if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-100 text-orange-700 border-orange-300' };
-                            return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-                        }
-                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
-                        if (log.arrivalDate) return { text: '待驗環保', color: 'bg-blue-50 text-blue-700 border-blue-200' };
-                        // 兼容舊資料
-                        if (log.inspectionScheduleDate) return { text: '排期驗車中', color: 'bg-amber-50 text-amber-700 border-amber-200' };
-                        if (log.emissionsSubmitDate) return { text: '驗環保中', color: 'bg-purple-50 text-purple-700 border-purple-200' };
-                        return null;
-                    };
+                    // ★ 新增：計算進度徽章給車輛庫存卡片使用
+                        const getLogisticsBadge = (log: any) => {
+                            if (!log) return null;
+                            if (log.registeredDate) return null; // 已出牌隱藏
+                            if (log.inspectionPassedDate) {
+                                const passed = new Date(log.inspectionPassedDate);
+                                const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
+                                const today = new Date();
+                                today.setHours(0,0,0,0);
+                                expiry.setHours(0,0,0,0);
+                                const diffTime = expiry.getTime() - today.getTime();
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                const expiryStr = expiry.toISOString().split('T')[0];
+                                
+                                // 警報變色邏輯
+                                if (diffDays < 0) return { text: `驗車已過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
+                                if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-50 text-orange-600 border-orange-300' };
+                                return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                            }
+                            if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+                            if (log.arrivalDate) return { text: '待驗環保', color: 'bg-blue-50 text-blue-700 border-blue-200' };
+                            return null;
+                        };
                     const logisticsBadge = getLogisticsBadge(car.logistics);
 
                     // ★ 核心修復：讓卡片上的標籤也完美對齊最新邏輯
