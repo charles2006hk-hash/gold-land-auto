@@ -18,7 +18,6 @@ export const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: strin
 );
 
 export const SignatureImg = () => (
-    // ★ 從 55mm 縮小到 44mm (大約 80% 大小)
     <div className="w-[44mm] relative">
         <svg viewBox="0 0 464 288" className="w-full h-auto opacity-90 mix-blend-multiply text-blue-950" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="
@@ -292,15 +291,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         </div>
     );
 
-    const SignatureSection = ({ labelLeft, labelRight }: any) => (
+   const SignatureSection = ({ labelLeft, labelRight }: any) => (
         <div className="grid grid-cols-2 gap-12 w-full">
             <div className="relative pt-1 border-t border-slate-800 text-center">
                 {showStampAndSig && (
-                    // ★ 這裡把 -translate-x-1/2 改成 -translate-x-[62%] 讓整體視覺往左挪
                     <div className="absolute bottom-full left-1/2 -translate-x-[62%] translate-y-3 flex items-center justify-center">
                         <div className="relative">
                             <div className="opacity-90"><CompanyStamp nameEn={companyEn} nameCh={companyCh} /></div>
-                            {/* 簽名維持在印章 65% 的位置 */}
                             <div className="absolute top-1/2 left-[65%] transform -translate-y-[60%] -rotate-[5deg] z-20 pointer-events-none">
                                 <SignatureImg />
                             </div>
@@ -322,8 +319,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             <div id="print-root" className="w-[794px] h-[1123px] mx-auto bg-white text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
                 <PrintStyle />
                 
-                {/* ★ 內層：加大底端內距 (pb-45mm) 防擠壓 */}
-                <div className="p-8 print:p-0 pb-[45mm] print:pb-[45mm] h-full box-border">
+                {/* ★ 內層：保留四周安全白邊 (p-8)，加大底端內距防擠壓 */}
+                <div className="p-8 pb-[45mm] print:pb-[45mm] h-full box-border">
                     <HeaderSection />
                     
                     <div className="grid grid-cols-3 gap-3 mb-3">
@@ -455,8 +452,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     )}
                 </div>
                 
-                {/* ★ 印章防切斷：位置提升至 bottom-10 / print:bottom-12，並強制套用 z-50 避免被遮擋 */}
-                <div className="absolute bottom-10 left-10 right-10 print:bottom-12 print:left-10 print:right-10 bg-transparent pointer-events-none z-50">
+                {/* ★ 印章防切斷：左右對齊安全邊界 (left-8 right-8)，保證列印不被裁切 */}
+                <div className="absolute bottom-10 left-8 right-8 print:bottom-12 print:left-8 print:right-8 bg-transparent pointer-events-none z-50">
                     <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
                 </div>
             </div>
@@ -468,8 +465,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         <div id="print-root" className="w-[794px] h-[1123px] mx-auto bg-white text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
             <PrintStyle />
             
-            {/* ★ 內層：加大底端內距 (pb-45mm) 防擠壓 */}
-            <div className="p-8 print:p-0 pb-[45mm] print:pb-[45mm] h-full box-border">
+            {/* ★ 內層：保留四周安全白邊 (p-8)，加大底端內距防擠壓 */}
+                <div className="p-8 pb-[45mm] print:pb-[45mm] h-full box-border">
                 <HeaderSection />
                 <div className="flex justify-between mb-6 border p-3 rounded bg-slate-50">
                     <div className="text-[10px]"><p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p><p className="text-sm font-bold">{curCustomer.name}</p><p>{curCustomer.address}</p><p className="font-mono">{curCustomer.phone}</p></div>
@@ -492,10 +489,10 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 <div className="text-[9px] text-slate-500 mt-6"><p className="font-bold">Terms:</p><p>1. Cheques should be crossed and made payable to "{companyEn}".</p><p>2. Official receipt will only be issued upon clearance of cheque.</p></div>
             </div>
 
-            {/* ★ 印章防切斷：位置提升至 bottom-10 / print:bottom-12，並強制套用 z-50 避免被遮擋 */}
-            <div className="absolute bottom-10 left-10 right-10 print:bottom-12 print:left-10 print:right-10 bg-transparent pointer-events-none z-50">
-                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight="Received By" />
-            </div>
+            {/* ★ 印章防切斷：左右對齊安全邊界 (left-8 right-8)，保證列印不被裁切 */}
+                <div className="absolute bottom-10 left-8 right-8 print:bottom-12 print:left-8 print:right-8 bg-transparent pointer-events-none z-50">
+                    <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
+                </div>
         </div>
     );
 }
