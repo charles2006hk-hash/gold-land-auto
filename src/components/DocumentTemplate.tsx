@@ -306,6 +306,11 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 )}
                 <p className="font-bold text-[10px] uppercase mt-1 leading-none">{labelLeft}</p>
             </div>
+            <div className="pt-1 border-t border-slate-800 text-center">
+                <p className="font-bold text-[10px] uppercase mt-1 leading-none">{labelRight}</p>
+                {/* 保留您原本的 ID 顯示 */}
+                {curCustomer.hkid && labelRight !== "Received By" && <p className="text-[9px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>}
+            </div>
         </div>
     );
 
@@ -452,8 +457,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     )}
                 </div>
                 
-                {/* ★ 印章防切斷：左右對齊安全邊界 (left-8 right-8)，保證列印不被裁切 */}
-                <div className="absolute bottom-10 left-8 right-8 print:bottom-12 print:left-8 print:right-8 bg-transparent pointer-events-none z-50">
+                {/* ★ 透明圖層暴力覆蓋：從最左側開始，寬度 100%，並內縮 8 級白邊 */}
+                <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
                     <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
                 </div>
             </div>
@@ -489,10 +494,10 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 <div className="text-[9px] text-slate-500 mt-6"><p className="font-bold">Terms:</p><p>1. Cheques should be crossed and made payable to "{companyEn}".</p><p>2. Official receipt will only be issued upon clearance of cheque.</p></div>
             </div>
 
-            {/* ★ 印章防切斷：左右對齊安全邊界 (left-8 right-8)，保證列印不被裁切 */}
-                <div className="absolute bottom-10 left-8 right-8 print:bottom-12 print:left-8 print:right-8 bg-transparent pointer-events-none z-50">
-                    <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
-                </div>
+            {/* ★ 透明圖層暴力覆蓋：從最左側開始，寬度 100%，並內縮 8 級白邊 */}
+            <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
+                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight="Received By" />
+            </div>
         </div>
     );
 }
