@@ -884,7 +884,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             <div className="grid grid-cols-2 gap-12 w-full">
                                 <div className="relative pt-1 border-t border-slate-800 text-center">
                                     {showStampAndSig && (
-                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 translate-y-3 flex items-center justify-center">
+                                        // ★ 這裡一樣把 -translate-x-1/2 改成 -translate-x-[62%]
+                                        <div className="absolute bottom-full left-1/2 -translate-x-[62%] translate-y-3 flex items-center justify-center">
                                             <div className="relative">
                                                 <div className="opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh} /></div>
                                                 <div className="absolute top-1/2 left-[65%] transform -translate-y-[60%] -rotate-[5deg] z-20 pointer-events-none">
