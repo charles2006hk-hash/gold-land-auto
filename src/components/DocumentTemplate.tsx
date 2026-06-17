@@ -18,9 +18,8 @@ export const CompanyStamp = ({ nameEn, nameCh }: { nameEn: string, nameCh: strin
 );
 
 export const SignatureImg = () => (
-    // ★ 加寬到 55mm，完美容納這個長型藝術簽名
-    <div className="w-[55mm] relative">
-        {/* 自動吃 text-blue-950 墨水色，並與底色完美融合 */}
+    // ★ 從 55mm 縮小到 44mm (大約 80% 大小)
+    <div className="w-[44mm] relative">
         <svg viewBox="0 0 464 288" className="w-full h-auto opacity-90 mix-blend-multiply text-blue-950" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             <path d="
                 M311.466125,289.000000 
