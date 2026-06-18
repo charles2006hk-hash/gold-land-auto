@@ -7,7 +7,7 @@ import {
   ShieldCheck, Globe, CheckCircle, Search, Plus,
   Plane, Cog, RotateCcw, Zap, CreditCard, Anchor, Pencil, Lock, Unlock, FileSignature, Printer, ImageIcon, UploadCloud, Database, X, Eye, FileDown, Download, Loader2, Gauge, Users, Calendar, RefreshCw, UserPlus, Copy
 } from 'lucide-react';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, getDocs } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 
 // --- 專業級預設費用數據 ---
@@ -704,7 +704,41 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             alert("✅ 匯入成功！");
         } catch (e) { alert("匯入失敗"); }
     };
+// ★ 隱藏版工具：一鍵修復舊照片標籤
+    const fixOldImages = async () => {
+        if (!db || !appId) return;
+        if (!confirm("確定要修復以前匯入的舊照片嗎？\n系統會自動尋找丟失的照片並重新連結到智能圖庫。")) return;
+        
+        try {
+            const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
+            const snap = await getDocs(q);
+            const batch = writeBatch(db);
+            let fixCount = 0;
 
+            snap.forEach((docSnap) => {
+                const data = docSnap.data();
+                // 尋找迷路的照片：有 vehicleId 但沒有 relatedVehicleId，且狀態是 assigned
+                if (data.vehicleId && !data.relatedVehicleId && data.status === 'assigned') {
+                    batch.update(docSnap.ref, {
+                        relatedVehicleId: data.vehicleId, // 把舊的車輛 ID 複製到正確的欄位
+                        status: 'linked'                  // 把狀態改成 linked
+                    });
+                    fixCount++;
+                }
+            });
+
+            if (fixCount > 0) {
+                await batch.commit();
+                alert(`✅ 太棒了！成功修復了 ${fixCount} 張迷路的照片！\n請重整網頁，去車庫看看吧！`);
+            } else {
+                alert("💡 掃描完畢，目前沒有發現需要修復的舊照片喔！");
+            }
+        } catch (e) {
+            console.error("修復失敗", e);
+            alert("❌ 修復失敗，請打開控制台查看錯誤。");
+        }
+    };
+  
     const handleDelete = async (item: any) => {
         if (item.isLocked || item.isImported) return alert("紀錄已鎖定或已匯入，無法刪除！");
         if (confirm("確定刪除此紀錄？")) {
@@ -788,6 +822,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
                         </div>
                         <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
+                            {/* ★ 新增：修復舊照片按鈕 (修復完您可以隨時刪掉這行) */}
+                            {view === 'dashboard' && isBoss && (
+                                <button onClick={fixOldImages} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer flex items-center gap-1 transition-colors shadow-sm mr-2">
+                                    <RefreshCw size={12}/> 修復舊圖庫
+                                </button>
+                            )}
+
                             {view === 'dashboard' && (
                                 <label className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-700 text-slate-300 hover:bg-slate-600 cursor-pointer flex items-center gap-1 transition-colors border border-slate-600 shadow-inner">
                                     <FileDown size={12}/> 搬家
