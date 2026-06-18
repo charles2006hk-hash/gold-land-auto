@@ -295,7 +295,7 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                 // ★ 強制將 status 轉為字串，避開 TypeScript 嚴格型別檢查
                 const currentStatus = img.status as string;
                 const isAssigned = currentStatus === 'linked' || currentStatus === 'assigned';
-                const targetId = img.relatedVehicleId || img.vehicleId;
+                const targetId = img.relatedVehicleId || (img as any).vehicleId;
                 
                 if (isAssigned && targetId) return inventory.some((v: Vehicle) => v.id === targetId);
                 if (currentStatus === 'unassigned' || !currentStatus) return uploader === currentStaff;
@@ -315,15 +315,16 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             if (!searchQuery) return true;
             const query = searchQuery.toLowerCase();
             const aiText = `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase();
-            const targetId = i.relatedVehicleId || i.vehicleId;
+            // ★ 加上 (i as any)
+            const targetId = i.relatedVehicleId || (i as any).vehicleId;
             const car = inventory.find((v:any) => v.id === targetId);
             const regMark = car ? (car.regMark || '').toLowerCase() : '';
             return aiText.includes(query) || regMark.includes(query);
         });
 
         filteredItems.forEach(item => {
-            // ★ 升級包容度：抓取正確的關聯 ID
-            const targetId = item.relatedVehicleId || item.vehicleId;
+            // ★ 升級包容度：抓取正確的關聯 ID，並加上 (item as any)
+            const targetId = item.relatedVehicleId || (item as any).vehicleId;
             let groupKey = targetId || `${item.aiData?.year}-${item.aiData?.make}-${item.aiData?.model}`;
             let groupTitle = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類車輛';
             let status = 'Unknown';
@@ -464,7 +465,8 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             await updateDoc(docRef, { status: 'unassigned', relatedVehicleId: null, vehicleId: null, updatedAt: serverTimestamp() });
             setActiveGroupImages(prev => {
                 const newState = { ...prev };
-                delete newState[item.relatedVehicleId || item.vehicleId || ''];
+                // ★ 加上 (item as any)
+                delete newState[item.relatedVehicleId || (item as any).vehicleId || ''];
                 return newState;
             });
         } catch (err) { console.error(err); alert("退回失敗"); }
