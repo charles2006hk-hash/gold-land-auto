@@ -291,7 +291,12 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                 const currentStaff = String(staffId).toUpperCase();
                 const uploader = String(img.uploadedBy || '').toUpperCase();
                 if (currentStaff === 'BOSS') return true;
-                if (img.status === 'linked' && img.relatedVehicleId) return inventory.some((v: Vehicle) => v.id === img.relatedVehicleId);
+                
+                // ★ 升級包容度：同時承認 linked / assigned 與兩種車輛 ID
+                const isAssigned = img.status === 'linked' || img.status === 'assigned';
+                const targetId = img.relatedVehicleId || img.vehicleId;
+                
+                if (isAssigned && targetId) return inventory.some((v: Vehicle) => v.id === targetId);
                 if (img.status === 'unassigned' || !img.status) return uploader === currentStaff;
                 return false; 
             });
@@ -302,22 +307,26 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
         const filteredItems = mediaItems.filter(i => {
-            if (i.status !== 'linked') return false;
+            // ★ 升級包容度
+            if (i.status !== 'linked' && i.status !== 'assigned') return false;
             if (!searchQuery) return true;
             const query = searchQuery.toLowerCase();
             const aiText = `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase();
-            const car = inventory.find((v:any) => v.id === i.relatedVehicleId);
+            const targetId = i.relatedVehicleId || i.vehicleId;
+            const car = inventory.find((v:any) => v.id === targetId);
             const regMark = car ? (car.regMark || '').toLowerCase() : '';
             return aiText.includes(query) || regMark.includes(query);
         });
 
         filteredItems.forEach(item => {
-            let groupKey = item.relatedVehicleId || `${item.aiData?.year}-${item.aiData?.make}-${item.aiData?.model}`;
+            // ★ 升級包容度：抓取正確的關聯 ID
+            const targetId = item.relatedVehicleId || item.vehicleId;
+            let groupKey = targetId || `${item.aiData?.year}-${item.aiData?.make}-${item.aiData?.model}`;
             let groupTitle = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類車輛';
             let status = 'Unknown';
 
-            if (item.relatedVehicleId) {
-                const car = inventory.find((v:any) => v.id === item.relatedVehicleId);
+            if (targetId) {
+                const car = inventory.find((v:any) => v.id === targetId);
                 if (car) { groupTitle = `${car.year} ${car.make} ${car.model} (${car.regMark || '未出牌'})`; status = car.status; }
             } else {
                 const matchCar = inventory.find((v:any) => v.make === item.aiData?.make && v.model === item.aiData?.model && v.year == item.aiData?.year);
@@ -448,10 +457,11 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         if (!db) return;
         try {
             const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
-            await updateDoc(docRef, { status: 'unassigned', relatedVehicleId: null, updatedAt: serverTimestamp() });
+            // ★ 同時將兩種 ID 清空
+            await updateDoc(docRef, { status: 'unassigned', relatedVehicleId: null, vehicleId: null, updatedAt: serverTimestamp() });
             setActiveGroupImages(prev => {
                 const newState = { ...prev };
-                delete newState[item.relatedVehicleId || ''];
+                delete newState[item.relatedVehicleId || item.vehicleId || ''];
                 return newState;
             });
         } catch (err) { console.error(err); alert("退回失敗"); }
