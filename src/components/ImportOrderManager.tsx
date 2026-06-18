@@ -686,9 +686,17 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             const docRef = await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/inventory`), vehicleData);
             if (item.photos?.length > 0) {
                 const batch = writeBatch(db);
-                item.photos.forEach((url: string) => {
+                item.photos.forEach((url: string, index: number) => {
                     const mediaRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
-                    batch.set(mediaRef, { url, vehicleId: docRef.id, source: 'Import Order', status: 'assigned', uploadedAt: serverTimestamp() });
+                    // ★ 修正：將 vehicleId 改為 relatedVehicleId，status 改為 linked，並標記首圖
+                    batch.set(mediaRef, { 
+                        url, 
+                        relatedVehicleId: docRef.id, 
+                        source: 'Import Order', 
+                        status: 'linked', 
+                        isPrimary: index === 0, 
+                        uploadedAt: serverTimestamp() 
+                    });
                 });
                 await batch.commit();
             }
