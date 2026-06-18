@@ -688,10 +688,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                 const batch = writeBatch(db);
                 item.photos.forEach((url: string, index: number) => {
                     const mediaRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
-                    // ★ 修正：將 vehicleId 改為 relatedVehicleId，status 改為 linked，並標記首圖
                     batch.set(mediaRef, { 
                         url, 
-                        relatedVehicleId: docRef.id, 
+                        vehicleId: docRef.id,          // ★ 通行證 1 (給圖庫用)
+                        relatedVehicleId: docRef.id,   // ★ 通行證 2 (給開單系統用)
                         source: 'Import Order', 
                         status: 'linked', 
                         isPrimary: index === 0, 
@@ -704,38 +704,59 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
             alert("✅ 匯入成功！");
         } catch (e) { alert("匯入失敗"); }
     };
-// ★ 隱藏版工具：一鍵修復舊照片標籤
-    const fixOldImages = async () => {
+// ★ 終極修復：強制將「庫存卡片」的照片同步到「智能圖庫」
+    const syncAllGalleryPhotos = async () => {
         if (!db || !appId) return;
-        if (!confirm("確定要修復以前匯入的舊照片嗎？\n系統會自動尋找丟失的照片並重新連結到智能圖庫。")) return;
+        if (!confirm("即將執行「終極圖庫同步」！\n系統會將所有車輛卡片上的照片，強制登錄到智能圖庫中。")) return;
         
         try {
-            const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
-            const snap = await getDocs(q);
-            const batch = writeBatch(db);
-            let fixCount = 0;
+            // 1. 抓取所有庫存車輛 (Inventory)
+            const invQuery = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/inventory`));
+            const invSnap = await getDocs(invQuery);
+            
+            // 2. 抓取圖庫中現有的照片 (Media Library)
+            const mediaQuery = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
+            const mediaSnap = await getDocs(mediaQuery);
+            const existingMedia = mediaSnap.docs.map(d => d.data());
 
-            snap.forEach((docSnap) => {
-                const data = docSnap.data();
-                // 尋找迷路的照片：有 vehicleId 但沒有 relatedVehicleId，且狀態是 assigned
-                if (data.vehicleId && !data.relatedVehicleId && data.status === 'assigned') {
-                    batch.update(docSnap.ref, {
-                        relatedVehicleId: data.vehicleId, // 把舊的車輛 ID 複製到正確的欄位
-                        status: 'linked'                  // 把狀態改成 linked
-                    });
-                    fixCount++;
-                }
+            const batch = writeBatch(db);
+            let addedCount = 0;
+
+            invSnap.forEach((carDoc) => {
+                const carData = carDoc.data();
+                const carId = carDoc.id;
+                const photos = carData.photos || [];
+
+                photos.forEach((photoUrl: string, idx: number) => {
+                    // 檢查這張照片是否已經在圖庫中
+                    const exists = existingMedia.some(m => m.url === photoUrl && (m.vehicleId === carId || m.relatedVehicleId === carId));
+                    
+                    if (!exists) {
+                        // 缺失的話，強制補進去，並帶上所有可能的通行證！
+                        const mediaRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
+                        batch.set(mediaRef, {
+                            url: photoUrl,
+                            vehicleId: carId,          // 通行證 1 (給圖庫看)
+                            relatedVehicleId: carId,   // 通行證 2 (給開單系統看)
+                            status: 'linked',          // 狀態：已連結
+                            source: 'System Sync',
+                            isPrimary: idx === 0,
+                            uploadedAt: serverTimestamp()
+                        });
+                        addedCount++;
+                    }
+                });
             });
 
-            if (fixCount > 0) {
+            if (addedCount > 0) {
                 await batch.commit();
-                alert(`✅ 太棒了！成功修復了 ${fixCount} 張迷路的照片！\n請重整網頁，去車庫看看吧！`);
+                alert(`✅ 終極同步完成！成功將 ${addedCount} 張照片強制寫入智能圖庫！\n請重整網頁看看！`);
             } else {
-                alert("💡 掃描完畢，目前沒有發現需要修復的舊照片喔！");
+                alert("💡 掃描完畢，所有卡片上的照片都已經在圖庫裡囉！");
             }
         } catch (e) {
-            console.error("修復失敗", e);
-            alert("❌ 修復失敗，請打開控制台查看錯誤。");
+            console.error("同步失敗", e);
+            alert("❌ 同步失敗，請打開控制台查看錯誤。");
         }
     };
   
@@ -822,10 +843,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
                         </div>
                         <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
-                            {/* ★ 新增：修復舊照片按鈕 (修復完您可以隨時刪掉這行) */}
+                            {/* ★ 終極同步按鈕 (修復完您可以隨時刪掉這行) */}
                             {view === 'dashboard' && isBoss && (
-                                <button onClick={fixOldImages} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer flex items-center gap-1 transition-colors shadow-sm mr-2">
-                                    <RefreshCw size={12}/> 修復舊圖庫
+                                <button onClick={syncAllGalleryPhotos} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer flex items-center gap-1 transition-colors shadow-sm mr-2">
+                                    <RefreshCw size={12}/> 終極圖庫同步
                                 </button>
                             )}
 
