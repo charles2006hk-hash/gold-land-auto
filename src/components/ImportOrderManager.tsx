@@ -690,12 +690,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                     const mediaRef = doc(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
                     batch.set(mediaRef, { 
                         url, 
-                        vehicleId: docRef.id,          // ★ 通行證 1 (給圖庫用)
-                        relatedVehicleId: docRef.id,   // ★ 通行證 2 (給開單系統用)
+                        vehicleId: docRef.id,          // 給智能圖庫
+                        relatedVehicleId: docRef.id,   // 給開單系統
                         source: 'Import Order', 
-                        status: 'linked', 
+                        status: 'assigned',            
                         isPrimary: index === 0, 
-                        uploadedAt: serverTimestamp() 
+                        uploadedAt: serverTimestamp(),
+                        createdAt: serverTimestamp()   // ★ 關鍵：補上這個！Firebase 查詢才看得到！
                     });
                 });
                 await batch.commit();
@@ -757,6 +758,39 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         } catch (e) {
             console.error("同步失敗", e);
             alert("❌ 同步失敗，請打開控制台查看錯誤。");
+        }
+    };
+
+    // ★ 救援行動：幫所有隱形照片補上 createdAt 欄位
+    const rescueInvisiblePhotos = async () => {
+        if (!db || !appId) return;
+        try {
+            // 這裡不加 orderBy，才能把隱形照片也抓出來
+            const q = query(collection(db, `artifacts/${appId}/staff/CHARLES_data/media_library`));
+            const snap = await getDocs(q);
+            const batch = writeBatch(db);
+            let count = 0;
+
+            snap.forEach((docSnap) => {
+                const data = docSnap.data();
+                // 如果照片少了 createdAt，就幫它補上
+                if (!data.createdAt) {
+                    batch.update(docSnap.ref, { 
+                        createdAt: data.uploadedAt || serverTimestamp() // 補上關鍵欄位
+                    });
+                    count++;
+                }
+            });
+
+            if (count > 0) {
+                await batch.commit();
+                alert(`✅ 破案了！成功解救 ${count} 張隱形照片！\n請回圖庫重整看看！`);
+            } else {
+                alert("💡 掃描完畢，沒有發現隱形照片。");
+            }
+        } catch (e) {
+            console.error("解救失敗", e);
+            alert("❌ 解救失敗，請檢查控制台。");
         }
     };
   
@@ -843,10 +877,10 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                             <span className="font-black text-sm md:text-lg tracking-tighter">海外訂車管家</span>
                         </div>
                         <div className="flex bg-slate-800 rounded-xl p-1 gap-1">
-                            {/* ★ 終極同步按鈕 (修復完您可以隨時刪掉這行) */}
+                            {/* ★ 解救隱形照片按鈕 (按完有出現照片就可以刪了) */}
                             {view === 'dashboard' && isBoss && (
-                                <button onClick={syncAllGalleryPhotos} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer flex items-center gap-1 transition-colors shadow-sm mr-2">
-                                    <RefreshCw size={12}/> 終極圖庫同步
+                                <button onClick={rescueInvisiblePhotos} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-amber-500 text-white hover:bg-amber-400 cursor-pointer flex items-center gap-1 transition-colors shadow-sm mr-2">
+                                    <RefreshCw size={12}/> 解救隱形照片
                                 </button>
                             )}
 
