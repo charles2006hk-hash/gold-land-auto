@@ -292,12 +292,13 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                 const uploader = String(img.uploadedBy || '').toUpperCase();
                 if (currentStaff === 'BOSS') return true;
                 
-                // ★ 升級包容度：同時承認 linked / assigned 與兩種車輛 ID
-                const isAssigned = img.status === 'linked' || img.status === 'assigned';
+                // ★ 強制將 status 轉為字串，避開 TypeScript 嚴格型別檢查
+                const currentStatus = img.status as string;
+                const isAssigned = currentStatus === 'linked' || currentStatus === 'assigned';
                 const targetId = img.relatedVehicleId || img.vehicleId;
                 
                 if (isAssigned && targetId) return inventory.some((v: Vehicle) => v.id === targetId);
-                if (img.status === 'unassigned' || !img.status) return uploader === currentStaff;
+                if (currentStatus === 'unassigned' || !currentStatus) return uploader === currentStaff;
                 return false; 
             });
             setMediaItems(myImages);
@@ -307,8 +308,10 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
         const filteredItems = mediaItems.filter(i => {
-            // ★ 升級包容度
-            if (i.status !== 'linked' && i.status !== 'assigned') return false;
+            // ★ 強制將 status 轉為字串，避開 TypeScript 嚴格型別檢查
+            const currentStatus = i.status as string;
+            if (currentStatus !== 'linked' && currentStatus !== 'assigned') return false;
+            
             if (!searchQuery) return true;
             const query = searchQuery.toLowerCase();
             const aiText = `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase();
