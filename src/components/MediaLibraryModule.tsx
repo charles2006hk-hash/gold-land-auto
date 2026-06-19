@@ -488,6 +488,19 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         setSelectedInboxIds([]); setTargetVehicleId('');
     };
 
+    // ★ 新增：一鍵切換區域函數 (專門拯救 iPhone 無法拖曳的問題)
+    const handleSwitchZone = async (item: MediaLibraryItem) => {
+        if (!db) return;
+        const newZone = item.mediaType === 'document' ? 'vehicle' : 'document';
+        try {
+            const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
+            await updateDoc(docRef, { mediaType: newZone, updatedAt: serverTimestamp() });
+        } catch (err) {
+            console.error(err); alert("切換失敗");
+        }
+    };
+
+    
     const inboxItems = mediaItems.filter(i => i.status === 'unassigned' || !i.status);
 
     return (
@@ -516,9 +529,22 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                     <div className={`flex-1 overflow-y-auto p-2 columns-2 md:columns-3 gap-2 space-y-2 ${zoneType === 'vehicle' ? 'bg-slate-100' : 'bg-indigo-50/50'}`}>
                                         {zoneItems.map(item => (
                                             <div key={item.id} draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)} onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} className={`relative rounded-lg overflow-hidden cursor-grab active:cursor-grabbing transition-all group shadow-sm break-inside-avoid inline-block w-full ${selectedInboxIds.includes(item.id) ? 'ring-4 ring-blue-500 opacity-100 scale-95' : 'opacity-90 hover:opacity-100 hover:shadow-md'}`}>
-                                                <img src={item.url} className="w-full h-auto block bg-black/5"/>
+                                                {/* ★ 解除電腦版拖曳鎖定：關閉圖片原生拖曳干擾 */}
+                                                <img src={item.url} draggable={false} className="w-full h-auto block bg-black/5 pointer-events-none select-none"/>
+                                                
                                                 {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10 rounded-bl-md"><Check size={12}/></div>}
-                                                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20"><button onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} className="p-1 rounded-full bg-black/60 hover:bg-blue-500 text-white backdrop-blur-sm" title="預覽"><Maximize2 size={12} /></button><button onClick={(e) => { e.stopPropagation(); setEditingMedia(item); }} className="p-1 rounded-full bg-black/60 hover:bg-amber-500 text-white backdrop-blur-sm" title="編輯圖片"><Edit size={12} /></button><button onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} className="p-1 rounded-full bg-black/60 hover:bg-red-500 text-white backdrop-blur-sm" title="刪除"><Trash2 size={12} /></button></div>
+                                                
+                                                {/* ★ iPhone 友善：手機端按鈕永遠顯示 (opacity-100)，電腦端保持 hover 顯示 */}
+                                                <div className="absolute top-1 right-1 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-20">
+                                                    {/* ★ 新增：一鍵互換按鈕 (解決手機無法 Drag & Drop 的問題) */}
+                                                    <button onClick={(e) => { e.stopPropagation(); handleSwitchZone(item); }} className="p-1 rounded-full bg-black/60 hover:bg-emerald-500 text-white backdrop-blur-sm shadow-sm" title={zoneType === 'vehicle' ? "移至文件區" : "移至車輛相片區"}>
+                                                        <Move size={12} className="transform rotate-90" />
+                                                    </button>
+                                                    
+                                                    <button onClick={(e) => { e.stopPropagation(); setPreviewImage(item.url); }} className="p-1 rounded-full bg-black/60 hover:bg-blue-500 text-white backdrop-blur-sm shadow-sm" title="預覽"><Maximize2 size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); setEditingMedia(item); }} className="p-1 rounded-full bg-black/60 hover:bg-amber-500 text-white backdrop-blur-sm shadow-sm" title="編輯圖片"><Edit size={12} /></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteImage(item); }} className="p-1 rounded-full bg-black/60 hover:bg-red-500 text-white backdrop-blur-sm shadow-sm" title="刪除"><Trash2 size={12} /></button>
+                                                </div>
                                             </div>
                                         ))}
                                         {zoneItems.length === 0 && <div className={`col-span-3 py-8 text-center text-xs font-bold border-2 border-dashed rounded-xl m-1 ${zoneType === 'vehicle' ? 'text-slate-400 border-slate-300' : 'text-indigo-300 border-indigo-200'}`}>拖曳 {zoneType === 'vehicle' ? '相片' : '文件或 PDF'} 至此</div>}
