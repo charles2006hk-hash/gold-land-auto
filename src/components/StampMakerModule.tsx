@@ -2,14 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckCircle } from 'lucide-react';
+import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckCircle, Type } from 'lucide-react';
 
 export default function StampMakerModule({ db, appId, staffId }: any) {
     const [history, setHistory] = useState<any[]>([]);
     
-    // 印章設定狀態
+    // 印章設定狀態 (改為 3 行獨立中文輸入)
     const [companyEn, setCompanyEn] = useState('GOLD LAND AUTO LIMITED');
-    const [companyCh, setCompanyCh] = useState('金田汽車有限公司');
+    const [chLine1, setChLine1] = useState('金田');
+    const [chLine2, setChLine2] = useState('汽車');
+    const [chLine3, setChLine3] = useState('有限公司');
     const [stampType, setStampType] = useState('round_24'); // round_24, round_22
     const [isMirrored, setIsMirrored] = useState(false); // 光敏機常需要鏡像列印
     const [isProcessing, setIsProcessing] = useState(false);
@@ -29,7 +31,10 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         try {
             await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/stamp_history`), {
                 companyEn,
-                companyCh,
+                companyCh: `${chLine1}${chLine2}${chLine3}`, // 兼容舊版資料結構
+                chLine1,
+                chLine2,
+                chLine3,
                 stampType,
                 createdAt: serverTimestamp(),
                 createdBy: staffId
@@ -48,10 +53,19 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         }
     };
 
-    // 載入歷史紀錄
+    // 載入歷史紀錄 (兼容新舊版結構)
     const loadHistory = (item: any) => {
         setCompanyEn(item.companyEn || '');
-        setCompanyCh(item.companyCh || '');
+        if (item.chLine1 !== undefined) {
+            setChLine1(item.chLine1 || '');
+            setChLine2(item.chLine2 || '');
+            setChLine3(item.chLine3 || '');
+        } else {
+            // 讀取舊資料時的防呆機制
+            setChLine1(item.companyCh || '');
+            setChLine2('');
+            setChLine3('');
+        }
         setStampType(item.stampType || 'round_24');
     };
 
@@ -74,9 +88,8 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     @page { margin: 0; size: A4 portrait; }
                     body { 
                         margin: 0; 
-                        padding: 20mm; /* 距離邊緣 20mm，方便剪裁 */
+                        padding: 20mm; 
                         background: white; 
-                        /* 強制黑白與高對比，光敏機專用 */
                         -webkit-print-color-adjust: exact; 
                         print-color-adjust: exact;
                         display: flex;
@@ -143,50 +156,9 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
 
     // ★ 核心：SVG 智能排版繪製邏輯
     const renderStampSVG = () => {
-        // --- 1. 中文名稱自動分行與排版算法 ---
-        let chLines: string[] = [];
-        const ch = companyCh.trim();
+        // 自動過濾空行，決定排版模式
+        const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         
-        if (ch.length <= 3) {
-            chLines = [ch];
-        } else if (ch.length <= 6) {
-            const mid = Math.ceil(ch.length / 2);
-            chLines = [ch.slice(0, mid), ch.slice(mid)];
-        } else {
-            // >= 7 個字，啟用 3 行模式
-            if (ch.endsWith("有限公司")) {
-                const rest = ch.slice(0, -4);
-                const mid = Math.ceil(rest.length / 2);
-                chLines = [rest.slice(0, mid), rest.slice(mid), "有限公司"];
-            } else if (ch.endsWith("公司")) {
-                const rest = ch.slice(0, -2);
-                const mid = Math.ceil(rest.length / 2);
-                chLines = [rest.slice(0, mid), rest.slice(mid), "公司"];
-            } else {
-                const third = Math.ceil(ch.length / 3);
-                chLines = [ch.slice(0, third), ch.slice(third, third * 2), ch.slice(third * 2)];
-            }
-        }
-
-        // --- 2. 針對行數動態設定字體大小與 Y 軸間距 ---
-        let fontSize = "48";
-        let startY = 165;
-        let lineGap = 0;
-
-        if (chLines.length === 2) {
-            fontSize = "40";
-            startY = 132;
-            lineGap = 50;
-        } else if (chLines.length === 3) {
-            fontSize = "32";   // 3行模式下縮小字體以防穿出第三圈
-            startY = 112;      // 向上微調起始位置
-            lineGap = 42;      // 精密行距
-        }
-
-        // --- 3. 英文長度動態調整字型大小 ---
-        const enLength = companyEn.length;
-        const enFontSize = enLength > 28 ? "18" : enLength > 22 ? "22" : "24";
-
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
                 {/* 最外層：傳統香港雙圈設計 (粗+幼) */}
@@ -196,33 +168,48 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 {/* 內部第三圈：劃分中英文區域 */}
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* 隱藏的路徑：供英文與符號沿著圓弧排列 (半徑設在 139 與 95 之間，約 117) */}
+                {/* 英文專屬軌道：半徑 98，加上 42px 字體剛好填滿 95 到 139 的空間 */}
                 <defs>
-                    <path id="top-curve" d="M 33,150 a 117,117 0 1,1 234,0" fill="none" />
-                    <path id="bottom-curve" d="M 267,150 a 117,117 0 0,1 -234,0" fill="none" />
+                    <path id="top-curve" d="M 52,150 a 98,98 0 1,1 196,0" fill="none" />
                 </defs>
 
-                {/* 英文公司名稱 (Times New Roman 類字型) */}
-                <text fill="black" fontSize={enFontSize} fontWeight="bold" fontFamily="'Times New Roman', Times, serif" letterSpacing="1">
+                {/* 英文字體 (Times New Roman，頂天立地) */}
+                <text fill="black" fontSize="42" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" letterSpacing={companyEn.length > 20 ? "1" : "3"}>
                     <textPath href="#top-curve" startOffset="50%" textAnchor="middle">
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* 底部符號 */}
-                <text fill="black" fontSize="26" fontWeight="normal" fontFamily="Arial, sans-serif">
-                    <textPath href="#bottom-curve" startOffset="50%" textAnchor="middle">
-                        ❇
-                    </textPath>
+                {/* 底部巨大星號：獨立定位，完美置中 */}
+                <text x="150" y="282" fill="black" fontSize="54" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle">
+                    ❇
                 </text>
 
-                {/* 中文公司名稱 (楷體，自動換行排版) */}
-                <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="2">
-                    {chLines.map((line, index) => (
-                        <text key={index} x="150" y={startY + (index * lineGap)} fontSize={fontSize}>
-                            {line}
+                {/* 中文智能適配排版 (楷體) */}
+                <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="4">
+                    {/* 模式 1：只有 1 行文字 */}
+                    {activeLines.length === 1 && (
+                        <text x="150" y="176" fontSize="76">
+                            {activeLines[0]}
                         </text>
-                    ))}
+                    )}
+                    
+                    {/* 模式 2：有 2 行文字 */}
+                    {activeLines.length === 2 && (
+                        <>
+                            <text x="150" y="135" fontSize="52">{activeLines[0]}</text>
+                            <text x="150" y="195" fontSize="52">{activeLines[1]}</text>
+                        </>
+                    )}
+
+                    {/* 模式 3：有 3 行文字 */}
+                    {activeLines.length === 3 && (
+                        <>
+                            <text x="150" y="112" fontSize="38">{activeLines[0]}</text>
+                            <text x="150" y="162" fontSize="38">{activeLines[1]}</text>
+                            <text x="150" y="212" fontSize="38">{activeLines[2]}</text>
+                        </>
+                    )}
                 </g>
             </svg>
         );
@@ -244,10 +231,13 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         <input value={companyEn} onChange={e => setCompanyEn(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 uppercase" placeholder="例如: GOLD LAND AUTO LIMITED" />
                     </div>
                     
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">公司中文名稱 (中心)</label>
-                        <input value={companyCh} onChange={e => setCompanyCh(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="例如: 金田汽車有限公司" />
-                        <p className="text-[10px] text-slate-400 mt-1">系統將自動根據字數適配 1 至 3 行排版，確保不穿出內圈。</p>
+                    {/* ★ 中文改為 3 個獨立輸入框 */}
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 space-y-2">
+                        <label className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1"><Type size={14}/> 公司中文名稱 (內圈自動適配)</label>
+                        <input value={chLine1} onChange={e => setChLine1(e.target.value)} placeholder="第一行 (例如: 金田)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
+                        <input value={chLine2} onChange={e => setChLine2(e.target.value)} placeholder="第二行 (例如: 汽車)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
+                        <input value={chLine3} onChange={e => setChLine3(e.target.value)} placeholder="第三行 (例如: 有限公司)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
+                        <p className="text-[10px] text-blue-600 font-bold text-center pt-1">💡 留空即自動隱藏，字體將智能貼服內圈</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pt-2">
@@ -296,7 +286,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         {renderStampSVG()}
                     </div>
                     
-                    <div className="absolute bottom-4 text-[10px] text-slate-400 font-mono tracking-widest uppercase">
+                    <div className="absolute bottom-4 text-[10px] text-slate-400 font-mono tracking-widest uppercase mt-4">
                         Physical Output Size: {stampType === 'round_24' ? '24mm x 24mm' : '22mm x 22mm'}
                     </div>
                 </div>
@@ -315,7 +305,9 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                                 <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">{item.stampType === 'round_24' ? '24mm' : '22mm'}</span>
                                 <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
                             </div>
-                            <div className="font-black text-xs text-slate-800 truncate mb-0.5">{item.companyCh}</div>
+                            <div className="font-black text-xs text-slate-800 truncate mb-0.5">
+                                {item.chLine1 || item.companyCh}
+                            </div>
                             <div className="text-[9px] text-slate-500 font-bold truncate">{item.companyEn}</div>
                         </div>
                     ))}
