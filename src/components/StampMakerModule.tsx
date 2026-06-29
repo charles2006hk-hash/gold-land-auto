@@ -79,11 +79,13 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         margin: 0; padding: 20mm; background: white; 
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important;
+                        /* ★ 加入極致對比濾鏡，強制把任何灰色邊緣轉為純黑色 */
                         filter: grayscale(100%) contrast(200%) !important;
                         display: flex; gap: 20mm; flex-wrap: wrap;
                     }
                     .stamp-container { width: ${widthMM}mm; height: ${heightMM}mm; transform: ${isMirrored ? 'scaleX(-1)' : 'none'}; }
                     svg { width: 100%; height: 100%; }
+                    /* ★ 強制鎖定所有元素為最深的 #000000 */
                     text, g { fill: #000000 !important; }
                     circle, path, line { stroke: #000000 !important; }
                 </style>
@@ -185,13 +187,12 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         const enLen = companyEn.length;
         const chLen = fullCh.length;
 
-        // ★ 英文長度適配：縮小字體至 34px，留下更多空間
-        const fSizeEn = enLen > 35 ? "28" : "34";
+        // ★ 上面的文字調整：縮小字體，上移
+        const fSizeEn = enLen > 35 ? "24" : "28";
         const enTextLen = enLen > 22 ? "600" : undefined;
         const enLAdjust = enLen > 22 ? "spacingAndGlyphs" : undefined;
 
-        // ★ 中文長度適配：縮小字體至 40px，留下更多空間
-        const fSizeCh = chLen > 15 ? "32" : "40";
+        const fSizeCh = chLen > 15 ? "26" : "32";
         const chTextLen = chLen > 12 ? "600" : undefined;
         const chLAdjust = chLen > 12 ? "spacingAndGlyphs" : undefined;
         const chSpacing = chLen <= 6 ? "20" : (chLen <= 10 ? "8" : "2");
@@ -199,27 +200,27 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         return (
             <svg id="stamp-svg" viewBox="0 0 660 240" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
                 {/* For and on behalf of (左上角，物理上移) */}
-                <text x="30" y="35" fill="black" fontSize="32" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="start">
+                <text x="30" y="25" fill="black" fontSize="32" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="start">
                     For and on behalf of
                 </text>
 
-                {/* 英文公司名 (置中，高挑修長，物理上移) */}
-                <text x="330" y="85" fill="black" fontSize={fSizeEn} fontWeight="bold" fontFamily="'Times New Roman Condensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed" textAnchor="middle" textLength={enTextLen} lengthAdjust={enLAdjust as any}>
+                {/* 英文公司名 (置中，高挑修長，物理上移，行距壓縮) */}
+                <text x="330" y="60" fill="black" fontSize={fSizeEn} fontWeight="bold" fontFamily="'Times New Roman Condensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed" textAnchor="middle" textLength={enTextLen} lengthAdjust={enLAdjust as any}>
                     {companyEn.toUpperCase()}
                 </text>
 
-                {/* 中文公司名 (置中，楷體，智能拉開間距，物理上移) */}
-                <text x="330" y="135" fill="black" fontSize={fSizeCh} fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing={chSpacing} textLength={chTextLen} lengthAdjust={chLAdjust as any}>
+                {/* 中文公司名 (置中，楷體，智能拉開間距，物理上移，行距壓縮) */}
+                <text x="330" y="85" fill="black" fontSize={fSizeCh} fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing={chSpacing} textLength={chTextLen} lengthAdjust={chLAdjust as any}>
                     {fullCh}
                 </text>
 
-                {/* ★ 打點虛線：精確鎖定在 Y=215，從而撐開中間空間 */}
-                <line x1="30" y1="215" x2="630" y2="215" stroke="black" strokeWidth="4" strokeLinecap="round" strokeDasharray="0, 9" />
+                {/* ★ 點線虛線：下移到 230，從而撐開中間巨型簽名空白空間 (中文底大約 105，空間增加至大約 115px) */}
+                <line x1="30" y1="230" x2="630" y2="230" stroke="black" strokeWidth="4" strokeLinecap="round" strokeDasharray="0, 9" />
 
-                {/* Authorized Signature(s) (右下角，物理下沉 & 修復 'g' 字切掉問題)
+                {/* Authorized Signature(s) (右下角斜體，上移到 225，修復 'g' 字切掉)
                     使用 dominantBaseline="auto" 強制文字坐在基線上，從而解決Descender被切的問題
                 */}
-                <text x="630" y="238" fill="black" fontSize="30" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="end" dominantBaseline="auto">
+                <text x="630" y="225" fill="black" fontSize="30" fontStyle="italic" fontWeight="bold" fontFamily="'Times New RomanCondensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed" textAnchor="end" dominantBaseline="auto">
                     Authorized Signature(s)
                 </text>
             </svg>
@@ -250,7 +251,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         <input value={chLine2} onChange={e => setChLine2(e.target.value)} placeholder="第二行 (例: 汽車)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <input value={chLine3} onChange={e => setChLine3(e.target.value)} placeholder="第三行 (例: 有限公司)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <p className="text-[10px] text-blue-600 font-bold text-center pt-1">
-                            {isRect ? "💡 長條章模式下，系統會自動將文字合併並置中撐滿，並預留巨型簽名空白" : "💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈"}
+                            {isRect ? "💡 長條章模式下，系統會自動將文字合併、上移、壓縮行距以釋放巨型簽名空間，並確保底部文字 Descender 完整可見" : "💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈"}
                         </p>
                     </div>
 
