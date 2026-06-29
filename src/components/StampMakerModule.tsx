@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckCircle } from 'lucide-react';
 
@@ -105,13 +105,12 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         printWindow.document.close();
     };
 
-    // 下載高解析度 PNG (方便丟入傳統磨石軟體，如果還需要的話)
+    // 下載高解析度 PNG
     const handleDownloadPNG = () => {
         const svgElement = document.getElementById('stamp-svg');
         if (!svgElement) return;
         
         const canvas = document.createElement('canvas');
-        // 匯出 1200px 高解析度，光敏機才夠清晰
         canvas.width = 1200; 
         canvas.height = 1200;
         const ctx = canvas.getContext('2d');
@@ -142,41 +141,89 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // SVG 核心繪製邏輯
+    // ★ 核心：SVG 智能排版繪製邏輯
     const renderStampSVG = () => {
+        // --- 1. 中文名稱自動分行與排版算法 ---
+        let chLines: string[] = [];
+        const ch = companyCh.trim();
+        
+        if (ch.length <= 3) {
+            chLines = [ch];
+        } else if (ch.length <= 6) {
+            const mid = Math.ceil(ch.length / 2);
+            chLines = [ch.slice(0, mid), ch.slice(mid)];
+        } else {
+            // >= 7 個字，啟用 3 行模式
+            if (ch.endsWith("有限公司")) {
+                const rest = ch.slice(0, -4);
+                const mid = Math.ceil(rest.length / 2);
+                chLines = [rest.slice(0, mid), rest.slice(mid), "有限公司"];
+            } else if (ch.endsWith("公司")) {
+                const rest = ch.slice(0, -2);
+                const mid = Math.ceil(rest.length / 2);
+                chLines = [rest.slice(0, mid), rest.slice(mid), "公司"];
+            } else {
+                const third = Math.ceil(ch.length / 3);
+                chLines = [ch.slice(0, third), ch.slice(third, third * 2), ch.slice(third * 2)];
+            }
+        }
+
+        // --- 2. 針對行數動態設定字體大小與 Y 軸間距 ---
+        let fontSize = "48";
+        let startY = 165;
+        let lineGap = 0;
+
+        if (chLines.length === 2) {
+            fontSize = "40";
+            startY = 132;
+            lineGap = 50;
+        } else if (chLines.length === 3) {
+            fontSize = "32";   // 3行模式下縮小字體以防穿出第三圈
+            startY = 112;      // 向上微調起始位置
+            lineGap = 42;      // 精密行距
+        }
+
+        // --- 3. 英文長度動態調整字型大小 ---
+        const enLength = companyEn.length;
+        const enFontSize = enLength > 28 ? "18" : enLength > 22 ? "22" : "24";
+
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
-                {/* 絕對純黑，無抗鋸齒邊緣，適合光敏機 */}
+                {/* 最外層：傳統香港雙圈設計 (粗+幼) */}
+                <circle cx="150" cy="150" r="146" fill="none" stroke="black" strokeWidth="4" />
+                <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 
-                {/* 外圈 */}
-                <circle cx="150" cy="150" r="142" fill="none" stroke="black" strokeWidth="6" />
-                {/* 內圈 (香港印章特有的雙圈設計) */}
-                <circle cx="150" cy="150" r="132" fill="none" stroke="black" strokeWidth="2" />
+                {/* 內部第三圈：劃分中英文區域 */}
+                <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* 上半部英文文字彎曲路徑 (隱藏) */}
+                {/* 隱藏的路徑：供英文與符號沿著圓弧排列 (半徑設在 139 與 95 之間，約 117) */}
                 <defs>
-                    <path id="top-curve" d="M 40,150 a 110,110 0 1,1 220,0" fill="none" />
-                    <path id="bottom-curve" d="M 260,150 a 110,110 0 0,1 -220,0" fill="none" />
+                    <path id="top-curve" d="M 33,150 a 117,117 0 1,1 234,0" fill="none" />
+                    <path id="bottom-curve" d="M 267,150 a 117,117 0 0,1 -234,0" fill="none" />
                 </defs>
 
-                {/* 英文公司名稱 (沿著圓弧) */}
-                <text fill="black" fontSize={companyEn.length > 20 ? "24" : "28"} fontWeight="bold" fontFamily="Arial, sans-serif" letterSpacing="2">
+                {/* 英文公司名稱 (Times New Roman 類字型) */}
+                <text fill="black" fontSize={enFontSize} fontWeight="bold" fontFamily="'Times New Roman', Times, serif" letterSpacing="1">
                     <textPath href="#top-curve" startOffset="50%" textAnchor="middle">
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* 中間中文公司名稱 */}
-                <text x="150" y="165" fill="black" fontSize="32" fontWeight="900" fontFamily="'Microsoft YaHei', 'PingFang SC', sans-serif" textAnchor="middle" letterSpacing="4">
-                    {companyCh}
-                </text>
-
-                {/* 底部星號或文字 */}
-                <text fill="black" fontSize="24" fontWeight="bold" fontFamily="Arial, sans-serif">
+                {/* 底部符號 */}
+                <text fill="black" fontSize="26" fontWeight="normal" fontFamily="Arial, sans-serif">
                     <textPath href="#bottom-curve" startOffset="50%" textAnchor="middle">
-                        * * *
+                        ❇
                     </textPath>
                 </text>
+
+                {/* 中文公司名稱 (楷體，自動換行排版) */}
+                <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="2">
+                    {chLines.map((line, index) => (
+                        <text key={index} x="150" y={startY + (index * lineGap)} fontSize={fontSize}>
+                            {line}
+                        </text>
+                    ))}
+                </g>
             </svg>
         );
     };
@@ -198,15 +245,16 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     </div>
                     
                     <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">公司中文名稱 (中間)</label>
-                        <input value={companyCh} onChange={e => setCompanyCh(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="例如: 金田汽車" />
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">公司中文名稱 (中心)</label>
+                        <input value={companyCh} onChange={e => setCompanyCh(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500" placeholder="例如: 金田汽車有限公司" />
+                        <p className="text-[10px] text-slate-400 mt-1">系統將自動根據字數適配 1 至 3 行排版，確保不穿出內圈。</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pt-2">
                         <div>
                             <label className="text-xs font-bold text-slate-500 mb-1 block">尺寸規格</label>
                             <select value={stampType} onChange={e => setStampType(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-700 outline-none cursor-pointer">
-                                <option value="round_24">24mm 小圓章</option>
+                                <option value="round_24">24mm 標準圓章</option>
                                 <option value="round_22">22mm 迷你圓章</option>
                             </select>
                         </div>
@@ -214,7 +262,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                             <label className="text-xs font-bold text-slate-500 mb-1 block">光敏機設定</label>
                             <button onClick={() => setIsMirrored(!isMirrored)} className={`w-full p-2 border-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-colors ${isMirrored ? 'bg-blue-100 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-600'}`}>
                                 <FlipHorizontal size={16} />
-                                {isMirrored ? '已開啟反像 (Mirror)' : '正像 (Normal)'}
+                                {isMirrored ? '已開反像 (Mirror)' : '正像 (Normal)'}
                             </button>
                         </div>
                     </div>
