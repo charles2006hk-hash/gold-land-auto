@@ -114,13 +114,10 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 智能排版與精密幾何引擎 (100% 絕對同心圓修復)
+    // ★ SVG 智能排版與精密數學引擎
     const renderStampSVG = () => {
         const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
-
-        // 如果英文字大於 10 個字，啟用均勻拉伸佈滿上半圓 (長度 440 是黃金比例)
-        const useTextLength = companyEn.length > 10;
 
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
@@ -129,39 +126,42 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* ★ 絕對同心圓軌道：
-                    半徑 R=114 (139與95的完美中心)。
-                    從左下方 (62.7, 223.2) 出發，畫一個完美跨越正上方的半圓弧到右下方 (237.3, 223.2)。
-                    這徹底解決了橢圓變形與文字倒轉的問題！ */}
+                {/* ★ 絕對黃金界線軌道：
+                    半徑 R=100。起點 (90, 230)，終點 (210, 230)。
+                    這確保了弧線起落點距離底部星星剛好是 2 個字元的空間。
+                */}
                 <defs>
-                    <path id="en-arc-path" d="M 62.7,223.2 A 114,114 0 1,1 237.3,223.2" fill="none" />
+                    <path id="en-arc-path" d="M 90,230 A 100,100 0 1,1 210,230" fill="none" />
                 </defs>
 
-                {/* ★ 英文修長排版：字體 38px 完美契合 44px 的內外圈夾縫，並自動延展至星星兩側 */}
+                {/* ★ 英文強制滿版排版：
+                    textLength="498" 對應上方路徑的完美長度。
+                    無論字數多少，都會強制均勻撐滿這條黃金軌道，起落點絕不偏移！
+                */}
                 <text 
                     fill="black" 
-                    fontSize="38" 
+                    fontSize="34" 
                     fontWeight="bold" 
-                    fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', serif" 
+                    fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Impact', 'Times New Roman', serif" 
                     fontStretch="condensed"
                 >
                     <textPath 
                         href="#en-arc-path" 
                         startOffset="50%" 
                         textAnchor="middle" 
-                        textLength={useTextLength ? "440" : undefined} 
-                        lengthAdjust={useTextLength ? "spacing" : undefined}
+                        textLength="498" 
+                        lengthAdjust="spacing"
                     >
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* ★ 底部精緻星星：縮小至 36px，並透過 dominantBaseline="central" 絕對鎖定在 Y=267 (正中央) */}
+                {/* ★ 底部精緻星星：精確鎖定在物理夾縫中心點 Y=267 */}
                 <text x="150" y="267" fill="black" fontSize="36" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
-                {/* ★ 中文自動適配引擎：1-3行自適應，文字放到最大且貼服內圈線 */}
+                {/* ★ 中文自動適配引擎：1-3行自適應 */}
                 <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="4">
                     {/* 1 行模式 */}
                     {activeLines.length === 1 && (() => {
