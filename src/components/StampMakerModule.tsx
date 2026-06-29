@@ -7,7 +7,7 @@ import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckC
 export default function StampMakerModule({ db, appId, staffId }: any) {
     const [history, setHistory] = useState<any[]>([]);
     
-    // 印章設定狀態 (3 行獨立中文輸入)
+    // 印章設定狀態
     const [companyEn, setCompanyEn] = useState('GOLD LAND AUTO LIMITED');
     const [chLine1, setChLine1] = useState('金田');
     const [chLine2, setChLine2] = useState('汽車');
@@ -114,20 +114,16 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 幾何物理級排版引擎
+    // ★ SVG 終極幾何物理級排版引擎
     const renderStampSVG = () => {
         const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
 
-        // 根據英文長度動態調整字體大小與佔用長度
+        // 根據英文字數長短，給予適當的物理擠壓長度 (textLength)
         const enLen = companyEn.length;
-        let fSizeEn = 34; // 預設最佳大小
-        let tLen = "500"; // 預設完美滿版長度
-        
-        if (enLen > 28) fSizeEn = 26;
-        else if (enLen > 22) fSizeEn = 30;
-        
-        if (enLen < 12) tLen = "360"; // 字太少時不強硬拉滿，避免間距過寬
+        let tLen = "440"; // 標準壓縮滿版
+        if (enLen > 28) tLen = "460"; // 字極多時允許稍微延長
+        else if (enLen < 15) tLen = "360"; // 字太少時縮短軌道，避免過度拉伸
 
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
@@ -136,38 +132,39 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* ★ 絕對數學軌道 (R=100)
-                    起點: 107.7, 240.6 (約 115度，星星左側)
-                    終點: 192.3, 240.6 (約 65度，星星右側)
-                    這條軌道永遠懸浮在 139 與 95 中間，絕不變形。
+                {/* ★ 絕對數學對稱軌道 (R=98)
+                    起點: 74.9, 213.0 (左下方)
+                    終點: 225.1, 213.0 (右下方)
+                    這是一條絕對不變形的圓弧。字體底部距內圈 3px，頂部距外圈 3px。
                 */}
                 <defs>
-                    <path id="en-arc-path" d="M 107.7,240.6 A 100,100 0 1,1 192.3,240.6" fill="none" />
+                    <path id="en-arc-path" d="M 74.9,213.0 A 98,98 0 1,1 225.1,213.0" fill="none" />
                 </defs>
 
-                {/* ★ 英文修長排版 (Times New Roman)
-                    使用 lengthAdjust="spacing" 只拉寬字距不拉寬字母，保持修長感
+                {/* ★ 物理壓縮引擎：
+                    字體大小設為極限 56px (強制頂天立地)。
+                    透過 lengthAdjust="spacingAndGlyphs"，強迫把文字左右壓縮擠進 tLen 軌道。
+                    這完美造就了「瘦高版 Times 字體」與「無縫貼服」！
                 */}
                 <text 
                     fill="black" 
-                    fontSize={fSizeEn} 
+                    fontSize="56" 
                     fontWeight="bold" 
                     fontFamily="'Times New Roman', Times, serif" 
-                    fontStretch="condensed"
                 >
                     <textPath 
                         href="#en-arc-path" 
                         startOffset="50%" 
                         textAnchor="middle" 
                         textLength={tLen} 
-                        lengthAdjust="spacing"
+                        lengthAdjust="spacingAndGlyphs"
                     >
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* ★ 底部置中星星：微調至 38px，Y=271 以抵銷符號自帶的頂部留白，達成視覺完美置中 */}
-                <text x="150" y="271" fill="black" fontSize="38" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
+                {/* ★ 底部精緻星星：精確鎖定在物理夾縫中心點 Y=267 */}
+                <text x="150" y="267" fill="black" fontSize="38" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
