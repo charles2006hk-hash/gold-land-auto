@@ -6,15 +6,15 @@ import {
     ChevronDown, ChevronUp, FileText, CheckCircle2, 
     Link as LinkIcon, Share2, Car, Globe, ShieldCheck,
     Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar, ArrowRight,
-    Stamp, X // ★ 新增印章與關閉圖示
+    Stamp, X
 } from 'lucide-react';
 
-import StampMakerModule from './StampMakerModule'; // ★ 引入印章製作模組
+import StampMakerModule from './StampMakerModule';
 
 export default function BusinessProcessModule(props: any) {
     const [activeCategory, setActiveCategory] = useState("香港車輛業務");
     const [expandedItem, setExpandedItem] = useState<string | null>("td25");
-    const [showStampMaker, setShowStampMaker] = useState(false); // ★ 新增：控制印章視窗開關
+    const [showStampMaker, setShowStampMaker] = useState(false);
 
     // --- 1. 車輛牌費動態試算引擎狀態 ---
     const [ownerType, setOwnerType] = useState<'hk' | 'cn' | 'overseas'>('hk'); 
@@ -33,7 +33,7 @@ export default function BusinessProcessModule(props: any) {
     const [settlementAmt, setSettlementAmt] = useState<string>('');
     const [settlementTerms, setSettlementTerms] = useState<string>('雙方同意以上和解金額已包括所有車輛損毀及醫療追討，此後互不追究。');
 
-    // --- 監聽並精確計算香港運輸署最新牌費 (已內含 $114 TAVA 基金) ---
+    // --- 監聽並精確計算香港運輸署最新牌費 ---
     useEffect(() => {
         const num = parseInt(ccOrKw) || 0;
         let fee = 0;
@@ -414,15 +414,12 @@ export default function BusinessProcessModule(props: any) {
         });
     };
 
-    // ★ 修正 1：將 currentItem 宣告移到上方，讓下面的函數可以安全讀取
     const currentItem = PROCEDURES.find(c => c.category === activeCategory)?.items.find(i => i.id === expandedItem) 
                         || PROCEDURES.find(c => c.category === activeCategory)?.items[0];
 
-    // ★ 核心修正：棄用原生 window.print()，改用強效 iframe 智能引擎，破解外層框架隱藏限制
     const handlePrintPDF = () => {
         const printContent = document.getElementById('business-process-print-root');
         if (printContent && props.triggerSmartPrint) {
-            // ★ 修正 2：加上問號 (?.) 與後備名稱，完美通過 TypeScript 嚴格檢查
             props.triggerSmartPrint(printContent.outerHTML, `指南_${currentItem?.title || '業務'} `);
         } else {
             window.print();
@@ -430,27 +427,14 @@ export default function BusinessProcessModule(props: any) {
     };
 
     return (
-        // ★ 加上 overflow-hidden 鎖定外層，讓內部區塊可以獨立滑動
         <div className="flex flex-col md:flex-row h-full bg-slate-50 relative overflow-hidden">
             
-            {/* ★ 懸浮快捷工具列：製作實體印章 */}
-            <div className="absolute top-3 right-4 z-30 no-print-area">
-                <button 
-                    onClick={() => setShowStampMaker(true)} 
-                    className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center shadow-lg transition-all active:scale-95 border border-slate-700"
-                >
-                    <Stamp size={16} className="mr-2 text-yellow-400" /> 製作實體印章
-                </button>
-            </div>
-
-            {/* ★ 內聯 CSS：新增隱藏橫向捲軸的 scrollbar-hide 魔法 */}
             <style>{`
                 .print-grid { display: grid; gap: 1.5rem; }
                 @media (min-width: 768px) { .print-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
                 .law-contract { font-family: serif; color: #0f172a; }
                 .no-print-area { display: block; }
                 
-                /* 手機版橫向滑動時隱藏醜陋的捲軸 */
                 .scrollbar-hide::-webkit-scrollbar { display: none; }
                 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
                 
@@ -463,15 +447,15 @@ export default function BusinessProcessModule(props: any) {
                 }
             `}</style>
 
-            {/* 左側欄：分類選單 (手機版變為：橫向滑動藍色膠囊) */}
-            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20 pt-12 md:pt-0">
+            {/* 左側欄：分類選單 */}
+            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20 pt-0">
                 <div className="p-3 md:p-4 border-b border-slate-100 items-center justify-between gap-2 hidden md:flex">
                     <div className="flex items-center gap-2">
                         <BookOpen className="text-blue-600" size={20} />
                         <h2 className="font-black text-slate-800">辦理指南知識庫</h2>
                     </div>
                 </div>
-                <div className="p-2 md:p-2 flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-1 scrollbar-hide shadow-inner md:shadow-none bg-slate-100/50 md:bg-transparent">
+                <div className="p-2 md:p-3 flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-2 scrollbar-hide shadow-inner md:shadow-none bg-slate-100/50 md:bg-transparent">
                     {PROCEDURES.map((cat, idx) => {
                         const Icon = cat.icon;
                         return (
@@ -488,13 +472,25 @@ export default function BusinessProcessModule(props: any) {
                             </button>
                         );
                     })}
+
+                    {/* ★ 視覺分隔線 */}
+                    <div className="hidden md:block w-full h-px bg-slate-200 my-2"></div>
+
+                    {/* ★ 獨立的印章製作按鈕 */}
+                    <button 
+                        onClick={() => setShowStampMaker(true)} 
+                        className="flex-none md:w-full text-left flex items-center px-4 py-2 md:p-3 rounded-full md:rounded-xl font-bold text-sm md:text-base transition-all whitespace-nowrap bg-indigo-600 text-white shadow-md hover:bg-indigo-700 active:scale-95 border border-indigo-700"
+                    >
+                        <Stamp size={18} className="mr-2 md:mr-3 flex-none text-indigo-200" /> 
+                        實體印章製作
+                    </button>
                 </div>
             </div>
 
             {/* 右側主要內容區 */}
             <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden pt-2 md:pt-0">
                 
-                {/* 中間欄：子業務列表 (手機版變為：橫向滑動小卡片) */}
+                {/* 中間欄：子業務列表 */}
                 <div className="w-full md:w-72 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 md:overflow-y-auto p-2 no-print flex-none z-10 shadow-sm md:shadow-none">
                     <div className="p-2 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:block">選擇業務子項目</div>
                     <div className="flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-1 scrollbar-hide pb-1 md:pb-0">
@@ -511,12 +507,12 @@ export default function BusinessProcessModule(props: any) {
                     </div>
                 </div>
 
-                {/* 右邊大區塊：看板詳情與互動工具 (手機版：佔滿下方所有空間，獨立滑動) */}
+                {/* 右邊大區塊：看板詳情與互動工具 */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white md:bg-slate-50 relative mt-2 md:mt-0">
                     {currentItem && (
                         <div id="business-process-print-root" className="max-w-3xl mx-auto space-y-5">
 
-                            {/* 看板標頭與按鈕 (手機版自動換行折疊) */}
+                            {/* 看板標頭與按鈕 */}
                             <div className="border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div>
                                     <span className="text-[10px] md:text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print-area">{activeCategory}</span>
@@ -524,7 +520,6 @@ export default function BusinessProcessModule(props: any) {
                                     <p className="text-xs md:text-sm text-slate-500 mt-1 md:mt-1">{currentItem.description}</p>
                                 </div>
                                 
-                                {/* 操作按鈕區 */}
                                 <div className="flex flex-wrap gap-2 flex-none no-print-area">
                                     <button 
                                         onClick={() => handleCopyToWhatsApp(currentItem)}
@@ -541,7 +536,7 @@ export default function BusinessProcessModule(props: any) {
                                 </div>
                             </div>
 
-                            {/* ★★★ 智能控制面板 ★★★ */}
+                            {/* 控制面板 */}
                             <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 md:p-4 no-print-area space-y-3 shadow-sm">
                                 <div className="flex items-center gap-2 text-[11px] md:text-xs font-black text-amber-800 uppercase tracking-wider">
                                     <Calculator size={14} /> 業務資料動態設定 (設定將自動注入文案中)
@@ -596,7 +591,7 @@ export default function BusinessProcessModule(props: any) {
                                 {currentItem.id === 'settlement_generator' && <span className="text-xs font-bold text-emerald-700 block">請直接在下方合約藍框欄位內填寫，填寫完點擊右上角「列印/PDF」即可輸出！</span>}
                             </div>
 
-                            {/* ★★★ 核心渲染：如果是線上和解書生成器，直接印出法律合約格式 ★★★ */}
+                            {/* 核心渲染：如果是線上和解書生成器，直接印出法律合約格式 */}
                             {currentItem.id === 'settlement_generator' ? (
                                 <div className="law-contract bg-white border border-slate-300 md:border-2 md:border-slate-800 p-4 md:p-10 font-serif text-slate-900 shadow-md space-y-6 relative rounded-lg md:rounded-sm">
                                     <div className="text-center space-y-1">
@@ -656,7 +651,7 @@ export default function BusinessProcessModule(props: any) {
                                     </div>
                                 </div>
                             ) : (
-                                /* 標準雙欄指南排版 (已優化手機與列印佈局) */
+                                /* 標準雙欄指南排版 */
                                 <div className="print-grid">
                                     {/* 左欄：文件清單 */}
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 print-col shadow-sm">
