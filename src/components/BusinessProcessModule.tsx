@@ -5,12 +5,16 @@ import {
     BookOpen, Printer, ExternalLink, Download, 
     ChevronDown, ChevronUp, FileText, CheckCircle2, 
     Link as LinkIcon, Share2, Car, Globe, ShieldCheck,
-    Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar, ArrowRight
+    Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar, ArrowRight,
+    Stamp, X // ★ 新增印章與關閉圖示
 } from 'lucide-react';
+
+import StampMakerModule from './StampMakerModule'; // ★ 引入印章製作模組
 
 export default function BusinessProcessModule(props: any) {
     const [activeCategory, setActiveCategory] = useState("香港車輛業務");
     const [expandedItem, setExpandedItem] = useState<string | null>("td25");
+    const [showStampMaker, setShowStampMaker] = useState(false); // ★ 新增：控制印章視窗開關
 
     // --- 1. 車輛牌費動態試算引擎狀態 ---
     const [ownerType, setOwnerType] = useState<'hk' | 'cn' | 'overseas'>('hk'); 
@@ -429,6 +433,16 @@ export default function BusinessProcessModule(props: any) {
         // ★ 加上 overflow-hidden 鎖定外層，讓內部區塊可以獨立滑動
         <div className="flex flex-col md:flex-row h-full bg-slate-50 relative overflow-hidden">
             
+            {/* ★ 懸浮快捷工具列：製作實體印章 */}
+            <div className="absolute top-3 right-4 z-30 no-print-area">
+                <button 
+                    onClick={() => setShowStampMaker(true)} 
+                    className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-bold flex items-center shadow-lg transition-all active:scale-95 border border-slate-700"
+                >
+                    <Stamp size={16} className="mr-2 text-yellow-400" /> 製作實體印章
+                </button>
+            </div>
+
             {/* ★ 內聯 CSS：新增隱藏橫向捲軸的 scrollbar-hide 魔法 */}
             <style>{`
                 .print-grid { display: grid; gap: 1.5rem; }
@@ -450,10 +464,12 @@ export default function BusinessProcessModule(props: any) {
             `}</style>
 
             {/* 左側欄：分類選單 (手機版變為：橫向滑動藍色膠囊) */}
-            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20">
-                <div className="p-3 md:p-4 border-b border-slate-100 items-center gap-2 hidden md:flex">
-                    <BookOpen className="text-blue-600" size={20} />
-                    <h2 className="font-black text-slate-800">辦理指南知識庫</h2>
+            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20 pt-12 md:pt-0">
+                <div className="p-3 md:p-4 border-b border-slate-100 items-center justify-between gap-2 hidden md:flex">
+                    <div className="flex items-center gap-2">
+                        <BookOpen className="text-blue-600" size={20} />
+                        <h2 className="font-black text-slate-800">辦理指南知識庫</h2>
+                    </div>
                 </div>
                 <div className="p-2 md:p-2 flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-1 scrollbar-hide shadow-inner md:shadow-none bg-slate-100/50 md:bg-transparent">
                     {PROCEDURES.map((cat, idx) => {
@@ -476,7 +492,7 @@ export default function BusinessProcessModule(props: any) {
             </div>
 
             {/* 右側主要內容區 */}
-            <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+            <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden pt-2 md:pt-0">
                 
                 {/* 中間欄：子業務列表 (手機版變為：橫向滑動小卡片) */}
                 <div className="w-full md:w-72 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 md:overflow-y-auto p-2 no-print flex-none z-10 shadow-sm md:shadow-none">
@@ -496,7 +512,7 @@ export default function BusinessProcessModule(props: any) {
                 </div>
 
                 {/* 右邊大區塊：看板詳情與互動工具 (手機版：佔滿下方所有空間，獨立滑動) */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white md:bg-slate-50 relative">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white md:bg-slate-50 relative mt-2 md:mt-0">
                     {currentItem && (
                         <div id="business-process-print-root" className="max-w-3xl mx-auto space-y-5">
 
@@ -714,6 +730,27 @@ export default function BusinessProcessModule(props: any) {
                 </div>
 
             </div>
+
+            {/* ★ 印章製作機彈出視窗 (Modal) */}
+            {showStampMaker && (
+                <div className="fixed inset-0 z-[1000] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 md:p-6 animate-in fade-in no-print-area">
+                    <div className="bg-white w-full max-w-6xl h-[95vh] rounded-2xl shadow-2xl flex flex-col relative overflow-hidden ring-4 ring-white/20">
+                        {/* 右上角關閉按鈕 */}
+                        <button 
+                            onClick={() => setShowStampMaker(false)} 
+                            className="absolute top-4 right-4 z-50 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-full shadow-sm transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                        
+                        {/* 呼叫印章模組 */}
+                        <div className="flex-1 overflow-hidden relative z-40">
+                            {/* 將頂層傳入的 Firebase 參數往下傳給 StampMakerModule */}
+                            <StampMakerModule db={props.db} appId={props.appId} staffId={props.staffId} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
