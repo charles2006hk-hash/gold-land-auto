@@ -114,15 +114,14 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 智能排版與精密幾何引擎
+    // ★ SVG 智能排版與精密幾何引擎 (修正橢圓走位問題)
     const renderStampSVG = () => {
         const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
 
-        // 根據英文長度智能微調字體大小與字母間距，確保貼服與邊界完美
+        // 動態計算英文字的軌道佔用長度，字越少則長度越短，確保不會拉得太散
         const enLen = companyEn.length;
-        const enFontSize = enLen > 26 ? "27" : enLen > 20 ? "30" : "33";
-        const enLetterSpacing = enLen > 26 ? "1.5" : "3";
+        const textLen = enLen > 25 ? "460" : enLen > 18 ? "400" : "320";
 
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
@@ -131,26 +130,27 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* ★ 英文新軌道路徑：精確修正扇形半徑為 r=114 (位於 95 到 139 中間點)，起點落點完全與下半部星星對稱 */}
+                {/* ★ 絕對正圓軌道：半徑 96 (在 95 與 139 之間)。
+                    以正圓形 (A 96 96) 取代先前的弧線，徹底根除橢圓變形問題。
+                    起點從最正下方 (150, 246) 開始，順時針畫一圈，這樣 50% 剛好在最正上方。 */}
                 <defs>
-                    <path id="en-arc-path" d="M 40,195 A 114,114 0 1,1 260,195" fill="none" />
+                    <path id="en-perfect-circle" d="M 150, 246 A 96,96 0 1,1 149.99, 246" fill="none" />
                 </defs>
 
-                {/* ★ 英文修長型排版：完美解決走位倒轉問題，高度貼服外圈與內圈線 */}
-                <text fill="black" fontSize={enFontSize} fontWeight="bold" fontFamily="'Arial Narrow', 'Impact', 'Helvetica Condensed', 'Times New Roman', serif" fontStretch="condensed" letterSpacing={enLetterSpacing}>
-                    <textPath href="#en-arc-path" startOffset="50%" textAnchor="middle">
+                {/* ★ 英文修長型排版：利用 lengthAdjust="spacing" 自動均勻散佈字元 */}
+                <text fill="black" fontSize="42" fontWeight="bold" fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', serif" fontStretch="condensed">
+                    <textPath href="#en-perfect-circle" startOffset="50%" textAnchor="middle" textLength={textLen} lengthAdjust="spacing">
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* ★ 底部置中星星：微調縮小至 44px，極致精確垂直鎖定在 Y=267.5 的雙線核心中線 */}
-                <text x="150" y="267.5" fill="black" fontSize="44" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
+                {/* ★ 底部置中星星：大小縮為 40px，精確鎖定在物理夾縫中心點 Y=267 */}
+                <text x="150" y="267" fill="black" fontSize="40" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
                 {/* ★ 中文自動適配引擎：1-3行自適應，文字放到最大且貼服內圈線 */}
                 <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="4">
-                    
                     {/* 1 行模式 */}
                     {activeLines.length === 1 && (() => {
                         const fSize = Math.min(180 / maxLen, 76);
