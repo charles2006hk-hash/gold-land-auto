@@ -7,12 +7,12 @@ import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckC
 export default function StampMakerModule({ db, appId, staffId }: any) {
     const [history, setHistory] = useState<any[]>([]);
     
-    // 印章設定狀態 (3 行獨立中文輸入)
-    const [companyEn, setCompanyEn] = useState('GOLD LAND AUTO LIMITED');
-    const [chLine1, setChLine1] = useState('金田');
-    const [chLine2, setChLine2] = useState('汽車');
+    // 印章設定狀態
+    const [companyEn, setCompanyEn] = useState('RESOURLES CAPITAL HOLDING PTE.LTD');
+    const [chLine1, setChLine1] = useState('資源資本');
+    const [chLine2, setChLine2] = useState('控股');
     const [chLine3, setChLine3] = useState('有限公司');
-    const [stampType, setStampType] = useState('round_24'); 
+    const [stampType, setStampType] = useState('rect_24x66'); 
     const [isMirrored, setIsMirrored] = useState(false); 
 
     // 監聽歷史紀錄
@@ -79,13 +79,11 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         margin: 0; padding: 20mm; background: white; 
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important;
-                        /* ★ 加入極致對比濾鏡，強制把任何灰色邊緣轉為純黑色 */
                         filter: grayscale(100%) contrast(200%) !important;
                         display: flex; gap: 20mm; flex-wrap: wrap;
                     }
                     .stamp-container { width: ${widthMM}mm; height: ${heightMM}mm; transform: ${isMirrored ? 'scaleX(-1)' : 'none'}; }
                     svg { width: 100%; height: 100%; }
-                    /* ★ 強制鎖定所有元素為最深的 #000000 */
                     text, g { fill: #000000 !important; }
                     circle, path, line { stroke: #000000 !important; }
                 </style>
@@ -127,7 +125,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 終極幾何物理級排版引擎 (保留上一版完美圓章)
+    // ★ 引擎 1：保留上一版極致完美的圓章排版
     const renderRoundStamp = (activeLines: string[], maxLen: number) => {
         const enLen = companyEn.length;
         const lAdjust = enLen > 28 ? "spacingAndGlyphs" : "spacing";
@@ -181,46 +179,44 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         );
     };
 
-    // ★ SVG 幾何物理級排版引擎 (終極長條授權章)
+    // ★ 引擎 2：嚴格 1:1 復刻版 24x66mm 授權簽名長條章
     const renderRectStamp = () => {
         const fullCh = [chLine1, chLine2, chLine3].join('');
         const enLen = companyEn.length;
         const chLen = fullCh.length;
 
-        // ★ 上面的文字調整：縮小字體，上移
-        const fSizeEn = enLen > 35 ? "24" : "28";
-        const enTextLen = enLen > 22 ? "600" : undefined;
-        const enLAdjust = enLen > 22 ? "spacingAndGlyphs" : undefined;
-
-        const fSizeCh = chLen > 15 ? "26" : "32";
-        const chTextLen = chLen > 12 ? "600" : undefined;
-        const chLAdjust = chLen > 12 ? "spacingAndGlyphs" : undefined;
-        const chSpacing = chLen <= 6 ? "20" : (chLen <= 10 ? "8" : "2");
+        // 英文長度適配 (強制 600px 左右滿版)
+        const fSizeEn = enLen > 30 ? "26" : "32";
+        
+        // 中文長度適配 (強制 600px 左右滿版散佈)
+        const fSizeCh = chLen > 15 ? "28" : "34";
 
         return (
             <svg id="stamp-svg" viewBox="0 0 660 240" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
-                {/* For and on behalf of (左上角，物理上移) */}
-                <text x="30" y="25" fill="black" fontSize="32" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="start">
+                {/* 1. For and on behalf of (左上角斜體) */}
+                <text x="30" y="35" fill="black" fontSize="30" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="start">
                     For and on behalf of
                 </text>
 
-                {/* 英文公司名 (置中，高挑修長，物理上移，行距壓縮) */}
-                <text x="330" y="60" fill="black" fontSize={fSizeEn} fontWeight="bold" fontFamily="'Times New Roman Condensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed" textAnchor="middle" textLength={enTextLen} lengthAdjust={enLAdjust as any}>
+                {/* 2. 英文公司名 (嚴格強制左右滿版拉伸，Y=75) */}
+                <text x="330" y="75" fill="black" fontSize={fSizeEn} fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="middle" textLength="600" lengthAdjust="spacingAndGlyphs">
                     {companyEn.toUpperCase()}
                 </text>
 
-                {/* 中文公司名 (置中，楷體，智能拉開間距，物理上移，行距壓縮) */}
-                <text x="330" y="85" fill="black" fontSize={fSizeCh} fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing={chSpacing} textLength={chTextLen} lengthAdjust={chLAdjust as any}>
+                {/* 3. 中文公司名 (嚴格強制左右滿版拉伸，Y=115) */}
+                <text x="330" y="115" fill="black" fontSize={fSizeCh} fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" textLength={chLen > 2 ? "600" : undefined} lengthAdjust={chLen > 2 ? "spacing" : undefined} letterSpacing={chLen <= 2 ? "20" : "0"}>
                     {fullCh}
                 </text>
 
-                {/* ★ 點線虛線：下移到 230，從而撐開中間巨型簽名空白空間 (中文底大約 105，空間增加至大約 115px) */}
-                <line x1="30" y1="230" x2="630" y2="230" stroke="black" strokeWidth="4" strokeLinecap="round" strokeDasharray="0, 9" />
+                {/* --- 巨型簽名空白區 (Y=115 到 Y=195) --- */}
 
-                {/* Authorized Signature(s) (右下角斜體，上移到 225，修復 'g' 字切掉)
-                    使用 dominantBaseline="auto" 強制文字坐在基線上，從而解決Descender被切的問題
+                {/* 4. 授權簽名打點虛線 (完美的圓點效果，Y=195) */}
+                <line x1="30" y1="195" x2="630" y2="195" stroke="black" strokeWidth="4.5" strokeLinecap="round" strokeDasharray="0, 11" />
+
+                {/* 5. Authorized Signature(s) (嚴格在虛線下方，靠右對齊，Y=232)
+                    確保 'g' 字母完美顯示，絕不越界 (畫布高度 240)
                 */}
-                <text x="630" y="225" fill="black" fontSize="30" fontStyle="italic" fontWeight="bold" fontFamily="'Times New RomanCondensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed" textAnchor="end" dominantBaseline="auto">
+                <text x="630" y="232" fill="black" fontSize="28" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="end">
                     Authorized Signature(s)
                 </text>
             </svg>
@@ -251,7 +247,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         <input value={chLine2} onChange={e => setChLine2(e.target.value)} placeholder="第二行 (例: 汽車)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <input value={chLine3} onChange={e => setChLine3(e.target.value)} placeholder="第三行 (例: 有限公司)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <p className="text-[10px] text-blue-600 font-bold text-center pt-1">
-                            {isRect ? "💡 長條章模式下，系統會自動將文字合併、上移、壓縮行距以釋放巨型簽名空間，並確保底部文字 Descender 完整可見" : "💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈"}
+                            {isRect ? "💡 長條章模式下，中英文將強制「左右滿版貼齊」，並預留巨型簽名區" : "💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈"}
                         </p>
                     </div>
 
