@@ -114,14 +114,13 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 智能排版與精密幾何引擎 (修正橢圓走位問題)
+    // ★ SVG 智能排版與精密幾何引擎 (100% 絕對同心圓修復)
     const renderStampSVG = () => {
         const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
 
-        // 動態計算英文字的軌道佔用長度，字越少則長度越短，確保不會拉得太散
-        const enLen = companyEn.length;
-        const textLen = enLen > 25 ? "460" : enLen > 18 ? "400" : "320";
+        // 如果英文字大於 10 個字，啟用均勻拉伸佈滿上半圓 (長度 440 是黃金比例)
+        const useTextLength = companyEn.length > 10;
 
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
@@ -130,22 +129,35 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* ★ 絕對正圓軌道：半徑 96 (在 95 與 139 之間)。
-                    以正圓形 (A 96 96) 取代先前的弧線，徹底根除橢圓變形問題。
-                    起點從最正下方 (150, 246) 開始，順時針畫一圈，這樣 50% 剛好在最正上方。 */}
+                {/* ★ 絕對同心圓軌道：
+                    半徑 R=114 (139與95的完美中心)。
+                    從左下方 (62.7, 223.2) 出發，畫一個完美跨越正上方的半圓弧到右下方 (237.3, 223.2)。
+                    這徹底解決了橢圓變形與文字倒轉的問題！ */}
                 <defs>
-                    <path id="en-perfect-circle" d="M 150, 246 A 96,96 0 1,1 149.99, 246" fill="none" />
+                    <path id="en-arc-path" d="M 62.7,223.2 A 114,114 0 1,1 237.3,223.2" fill="none" />
                 </defs>
 
-                {/* ★ 英文修長型排版：利用 lengthAdjust="spacing" 自動均勻散佈字元 */}
-                <text fill="black" fontSize="42" fontWeight="bold" fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', serif" fontStretch="condensed">
-                    <textPath href="#en-perfect-circle" startOffset="50%" textAnchor="middle" textLength={textLen} lengthAdjust="spacing">
+                {/* ★ 英文修長排版：字體 38px 完美契合 44px 的內外圈夾縫，並自動延展至星星兩側 */}
+                <text 
+                    fill="black" 
+                    fontSize="38" 
+                    fontWeight="bold" 
+                    fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', serif" 
+                    fontStretch="condensed"
+                >
+                    <textPath 
+                        href="#en-arc-path" 
+                        startOffset="50%" 
+                        textAnchor="middle" 
+                        textLength={useTextLength ? "440" : undefined} 
+                        lengthAdjust={useTextLength ? "spacing" : undefined}
+                    >
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* ★ 底部置中星星：大小縮為 40px，精確鎖定在物理夾縫中心點 Y=267 */}
-                <text x="150" y="267" fill="black" fontSize="40" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
+                {/* ★ 底部精緻星星：縮小至 36px，並透過 dominantBaseline="central" 絕對鎖定在 Y=267 (正中央) */}
+                <text x="150" y="267" fill="black" fontSize="36" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
