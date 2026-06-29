@@ -61,7 +61,11 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
     const handlePrint = () => {
         const svgElement = document.getElementById('stamp-svg');
         if (!svgElement) return;
-        const sizeMM = stampType === 'round_24' ? 24 : 22;
+        
+        const isRect = stampType === 'rect_24x66';
+        const widthMM = isRect ? 66 : (stampType === 'round_24' ? 24 : 22);
+        const heightMM = isRect ? 24 : widthMM;
+
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
 
@@ -75,15 +79,13 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         margin: 0; padding: 20mm; background: white; 
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important;
-                        /* ★ 終極增黑術：加入極致對比濾鏡，強制把瀏覽器產生的灰色邊緣轉為 100% 純黑色 */
                         filter: grayscale(100%) contrast(200%) !important;
-                        display: flex; gap: 20mm;
+                        display: flex; gap: 20mm; flex-wrap: wrap;
                     }
-                    .stamp-container { width: ${sizeMM}mm; height: ${sizeMM}mm; transform: ${isMirrored ? 'scaleX(-1)' : 'none'}; }
+                    .stamp-container { width: ${widthMM}mm; height: ${heightMM}mm; transform: ${isMirrored ? 'scaleX(-1)' : 'none'}; }
                     svg { width: 100%; height: 100%; }
-                    /* ★ 雙重保險：強制鎖定所有 SVG 文字與線條為最深的 #000000 */
                     text, g { fill: #000000 !important; }
-                    circle, path { stroke: #000000 !important; }
+                    circle, path, line { stroke: #000000 !important; }
                 </style>
             </head>
             <body>
@@ -99,8 +101,12 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
     const handleDownloadPNG = () => {
         const svgElement = document.getElementById('stamp-svg');
         if (!svgElement) return;
+        
+        const isRect = stampType === 'rect_24x66';
         const canvas = document.createElement('canvas');
-        canvas.width = 1200; canvas.height = 1200;
+        // 長條章依比例拉長解析度 (66/24 = 2.75)，確保高畫質
+        canvas.width = isRect ? 3300 : 1200; 
+        canvas.height = 1200;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
@@ -109,8 +115,8 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         const url = URL.createObjectURL(new Blob([data], {type: 'image/svg+xml;charset=utf-8'}));
 
         img.onload = () => {
-            if (isMirrored) { ctx.translate(1200, 0); ctx.scale(-1, 1); }
-            ctx.drawImage(img, 0, 0, 1200, 1200);
+            if (isMirrored) { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(url);
             const a = document.createElement('a');
             a.download = `Stamp_${companyEn}.png`;
@@ -120,66 +126,36 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 終極幾何物理級排版引擎 (黃金比例計算版)
-    const renderStampSVG = () => {
-        const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
-        const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
-
-        // 當文字過度長 (超過28個字) 時，啟動防爆框擠壓引擎；否則保持字母瘦長，拉伸間距
+    // ★ 引擎 1：保留上一版極致完美的圓章排版
+    const renderRoundStamp = (activeLines: string[], maxLen: number) => {
         const enLen = companyEn.length;
         const lAdjust = enLen > 28 ? "spacingAndGlyphs" : "spacing";
 
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
-                {/* 雙外圈與內圈線 */}
                 <circle cx="150" cy="150" r="146" fill="none" stroke="black" strokeWidth="4" />
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* ★ 絕對數學軌道 (R=101)
-                    起點: 112.0, 243.6 | 終點: 188.0, 243.6 
-                    這個軌道距離底部星星恰好保留了 20px (約 1 個字元的精準空間)。
-                    半徑 101 保證了上方 6px，下方 6px 的完美置中呼吸空間！
-                */}
                 <defs>
                     <path id="en-arc-path" d="M 112.0,243.6 A 101,101 0 1,1 188.0,243.6" fill="none" />
                 </defs>
 
-                {/* ★ 英文修長排版 (瘦版 Times 家族)
-                    字體縮回 36px 留下空間，並用 textLength="556" 強制撐滿軌道
-                */}
-                <text 
-                    fill="black" 
-                    fontSize="36" 
-                    fontWeight="bold" 
-                    fontFamily="'Times New Roman Condensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" 
-                    fontStretch="condensed"
-                >
-                    <textPath 
-                        href="#en-arc-path" 
-                        startOffset="50%" 
-                        textAnchor="middle" 
-                        textLength="556" 
-                        lengthAdjust={lAdjust}
-                    >
+                <text fill="black" fontSize="36" fontWeight="bold" fontFamily="'Times New Roman Condensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed">
+                    <textPath href="#en-arc-path" startOffset="50%" textAnchor="middle" textLength="556" lengthAdjust={lAdjust}>
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* ★ 底部精緻星星：精確鎖定在物理夾縫中心點 Y=267 */}
                 <text x="150" y="267" fill="black" fontSize="36" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
-                {/* ★ 中文自動適配引擎：1-3行自適應，文字放到最大且貼服內圈線 */}
                 <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="4">
-                    {/* 1 行模式 */}
                     {activeLines.length === 1 && (() => {
                         const fSize = Math.min(180 / maxLen, 76);
                         return <text x="150" y={150 + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>;
                     })()}
-                    
-                    {/* 2 行模式 */}
                     {activeLines.length === 2 && (() => {
                         const fSize = Math.min(160 / maxLen, 54);
                         return (
@@ -189,8 +165,6 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                             </>
                         );
                     })()}
-
-                    {/* 3 行模式 */}
                     {activeLines.length === 3 && (() => {
                         const fSize = Math.min(145 / maxLen, 38);
                         return (
@@ -206,6 +180,53 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         );
     };
 
+    // ★ 引擎 2：全新打造的 24x66mm 授權簽名長條章排版
+    const renderRectStamp = () => {
+        const fullCh = [chLine1, chLine2, chLine3].join('');
+        const enLen = companyEn.length;
+        const chLen = fullCh.length;
+
+        // 英文長度適配
+        const fSizeEn = enLen > 35 ? "30" : "38";
+        const enTextLen = enLen > 22 ? "600" : undefined;
+        const enLAdjust = enLen > 22 ? "spacingAndGlyphs" : undefined;
+
+        // 中文長度與間距適配
+        const fSizeCh = chLen > 15 ? "36" : "46";
+        const chTextLen = chLen > 12 ? "600" : undefined;
+        const chLAdjust = chLen > 12 ? "spacingAndGlyphs" : undefined;
+        const chSpacing = chLen <= 6 ? "20" : (chLen <= 10 ? "8" : "2");
+
+        return (
+            <svg id="stamp-svg" viewBox="0 0 660 240" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
+                {/* For and on behalf of (左上角斜體) */}
+                <text x="30" y="45" fill="black" fontSize="32" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="start">
+                    For and on behalf of
+                </text>
+
+                {/* 英文公司名 (置中，自動壓縮) */}
+                <text x="330" y="100" fill="black" fontSize={fSizeEn} fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="middle" textLength={enTextLen} lengthAdjust={enLAdjust as any}>
+                    {companyEn.toUpperCase()}
+                </text>
+
+                {/* 中文公司名 (置中，楷體，智能拉開間距) */}
+                <text x="330" y="160" fill="black" fontSize={fSizeCh} fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing={chSpacing} textLength={chTextLen} lengthAdjust={chLAdjust as any}>
+                    {fullCh}
+                </text>
+
+                {/* 授權簽名打點虛線 (完美的圓點效果) */}
+                <line x1="30" y1="200" x2="630" y2="200" stroke="black" strokeWidth="4" strokeLinecap="round" strokeDasharray="0, 9" />
+
+                {/* Authorized Signature(s) (右下角斜體) */}
+                <text x="630" y="235" fill="black" fontSize="30" fontStyle="italic" fontWeight="bold" fontFamily="'Times New Roman', Times, serif" textAnchor="end">
+                    Authorized Signature(s)
+                </text>
+            </svg>
+        );
+    };
+
+    const isRect = stampType === 'rect_24x66';
+
     return (
         <div className="flex flex-col md:flex-row h-full bg-slate-100 p-4 gap-4 overflow-hidden">
             
@@ -218,7 +239,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 
                 <div className="p-6 space-y-5 overflow-y-auto flex-1">
                     <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">公司英文名稱 (外圈)</label>
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 block">公司英文名稱 (外圈/首行)</label>
                         <input value={companyEn} onChange={e => setCompanyEn(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 uppercase" />
                     </div>
                     
@@ -227,15 +248,18 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         <input value={chLine1} onChange={e => setChLine1(e.target.value)} placeholder="第一行 (例: 金田)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <input value={chLine2} onChange={e => setChLine2(e.target.value)} placeholder="第二行 (例: 汽車)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <input value={chLine3} onChange={e => setChLine3(e.target.value)} placeholder="第三行 (例: 有限公司)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
-                        <p className="text-[10px] text-blue-600 font-bold text-center pt-1">💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈</p>
+                        <p className="text-[10px] text-blue-600 font-bold text-center pt-1">
+                            {isRect ? "💡 長條章模式下，系統會自動將文字合併並置中撐滿" : "💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈"}
+                        </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pt-2">
                         <div>
-                            <label className="text-xs font-bold text-slate-500 mb-1 block">尺寸規格</label>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">尺寸與形狀規格</label>
                             <select value={stampType} onChange={e => setStampType(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-700 outline-none cursor-pointer">
                                 <option value="round_24">24mm 標準圓章</option>
                                 <option value="round_22">22mm 迷你圓章</option>
+                                <option value="rect_24x66">24x66mm 支票/授權印章</option>
                             </select>
                         </div>
                         <div>
@@ -268,12 +292,13 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     <CheckCircle size={14} /> 即時向量預覽 (Live Vector Preview)
                 </div>
                 
-                <div className="bg-slate-50 p-12 md:p-20 rounded-full shadow-inner border border-slate-200 relative flex flex-col items-center justify-center">
-                    <div className={`w-[220px] h-[220px] md:w-[260px] md:h-[260px] transition-transform duration-300 ${isMirrored ? 'scale-x-[-1]' : 'scale-x-100'}`}>
-                        {renderStampSVG()}
+                <div className={`bg-slate-50 rounded-[40px] shadow-inner border border-slate-200 relative flex flex-col items-center justify-center transition-all duration-500 ${isRect ? 'p-8 md:p-12' : 'p-12 md:p-20'}`}>
+                    {/* 動態調整預覽視窗大小 */}
+                    <div className={`transition-all duration-500 ${isMirrored ? 'scale-x-[-1]' : 'scale-x-100'} ${isRect ? 'w-[280px] h-[102px] md:w-[440px] md:h-[160px]' : 'w-[220px] h-[220px] md:w-[260px] md:h-[260px]'}`}>
+                        {isRect ? renderRectStamp() : renderRoundStamp([chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0), [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0).length > 0 ? Math.max(...[chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0).map(l => l.length)) : 1)}
                     </div>
                     <div className="absolute bottom-4 text-[10px] text-slate-400 font-mono tracking-widest uppercase bg-white px-2 py-0.5 rounded-full border border-slate-200">
-                        Output: {stampType === 'round_24' ? '24mm' : '22mm'}
+                        Output: {isRect ? '24mm x 66mm' : (stampType === 'round_24' ? '24mm' : '22mm')}
                     </div>
                 </div>
             </div>
@@ -288,7 +313,9 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     {history.map((item) => (
                         <div key={item.id} className="bg-white p-3 border border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group" onClick={() => loadHistory(item)}>
                             <div className="flex justify-between items-start mb-1">
-                                <span className="text-[10px] bg-slate-800 text-white px-2 py-0.5 rounded font-bold">{item.stampType === 'round_24' ? '24mm' : '22mm'}</span>
+                                <span className={`text-[10px] text-white px-2 py-0.5 rounded font-bold ${item.stampType === 'rect_24x66' ? 'bg-indigo-600' : 'bg-slate-800'}`}>
+                                    {item.stampType === 'rect_24x66' ? '長條章' : (item.stampType === 'round_24' ? '24mm' : '22mm')}
+                                </span>
                                 <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
                             </div>
                             <div className="font-black text-xs text-slate-800 truncate mb-0.5">{item.chLine1 || item.companyCh}{item.chLine2}{item.chLine3}</div>
