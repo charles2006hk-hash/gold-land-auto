@@ -7,7 +7,7 @@ import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckC
 export default function StampMakerModule({ db, appId, staffId }: any) {
     const [history, setHistory] = useState<any[]>([]);
     
-    // 印章設定狀態 (3 行獨立中文輸入)
+    // 印章設定狀態 (3 行獨立中文輸入，完美預覽)
     const [companyEn, setCompanyEn] = useState('GOLD LAND AUTO LIMITED');
     const [chLine1, setChLine1] = useState('金田');
     const [chLine2, setChLine2] = useState('汽車');
@@ -29,7 +29,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         try {
             await addDoc(collection(db, `artifacts/${appId}/staff/CHARLES_data/stamp_history`), {
                 companyEn,
-                companyCh: `${chLine1}${chLine2}${chLine3}`, // 兼容舊版
+                companyCh: `${chLine1}${chLine2}${chLine3}`, 
                 chLine1, chLine2, chLine3, stampType,
                 createdAt: serverTimestamp(), createdBy: staffId
             });
@@ -114,63 +114,68 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ 終極核心：SVG 智能排版與幾何引擎
+    // ★ SVG 智能排版與精密幾何引擎
     const renderStampSVG = () => {
         const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
 
+        // 根據英文長度智能微調字體大小與字母間距，確保貼服與邊界完美
+        const enLen = companyEn.length;
+        const enFontSize = enLen > 26 ? "27" : enLen > 20 ? "30" : "33";
+        const enLetterSpacing = enLen > 26 ? "1.5" : "3";
+
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
-                {/* 雙外圈與內圈 */}
+                {/* 雙外圈與內圈線 */}
                 <circle cx="150" cy="150" r="146" fill="none" stroke="black" strokeWidth="4" />
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* ★ 英文軌道：精算半徑 R=98。這能讓 42px 的字體頂部剛好切齊 139 外圈，底部切齊 95 內圈 */}
+                {/* ★ 英文新軌道路徑：精確修正扇形半徑為 r=114 (位於 95 到 139 中間點)，起點落點完全與下半部星星對稱 */}
                 <defs>
-                    <path id="en-path" d="M 150,248 A 98,98 0 1,1 149.99,248" fill="none" />
+                    <path id="en-arc-path" d="M 40,195 A 114,114 0 1,1 260,195" fill="none" />
                 </defs>
 
-                {/* ★ 英文滿版排版：textLength="510" 強制將文字延伸，左右剛好距離底部星星約 2 個字元 */}
-                <text fill="black" fontSize="42" fontWeight="bold" fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed">
-                    <textPath href="#en-path" startOffset="50%" textAnchor="middle" textLength="510" lengthAdjust="spacing">
+                {/* ★ 英文修長型排版：完美解決走位倒轉問題，高度貼服外圈與內圈線 */}
+                <text fill="black" fontSize={enFontSize} fontWeight="bold" fontFamily="'Arial Narrow', 'Impact', 'Helvetica Condensed', 'Times New Roman', serif" fontStretch="condensed" letterSpacing={enLetterSpacing}>
+                    <textPath href="#en-arc-path" startOffset="50%" textAnchor="middle">
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* ★ 底部巨型星星：放棄 baseline 排版，改用 dominantBaseline="central" 絕對鎖定在 Y=267 幾何中心 */}
-                <text x="150" y="267" fill="black" fontSize="56" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
+                {/* ★ 底部置中星星：微調縮小至 44px，極致精確垂直鎖定在 Y=267.5 的雙線核心中線 */}
+                <text x="150" y="267.5" fill="black" fontSize="44" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
-                {/* ★ 中文智能貼服內圈排版 */}
+                {/* ★ 中文自動適配引擎：1-3行自適應，文字放到最大且貼服內圈線 */}
                 <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="4">
                     
-                    {/* 1 行模式：字體極大化 (最大100px) */}
+                    {/* 1 行模式 */}
                     {activeLines.length === 1 && (() => {
-                        const fSize = Math.min(180 / maxLen, 100);
-                        return <text x="150" y={150 + fSize*0.35} fontSize={fSize}>{activeLines[0]}</text>;
+                        const fSize = Math.min(180 / maxLen, 76);
+                        return <text x="150" y={150 + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>;
                     })()}
                     
-                    {/* 2 行模式：上下均分 (最大65px) */}
+                    {/* 2 行模式 */}
                     {activeLines.length === 2 && (() => {
-                        const fSize = Math.min(160 / maxLen, 65);
+                        const fSize = Math.min(160 / maxLen, 54);
                         return (
                             <>
-                                <text x="150" y={150 - fSize*0.6 + fSize*0.35} fontSize={fSize}>{activeLines[0]}</text>
-                                <text x="150" y={150 + fSize*0.6 + fSize*0.35} fontSize={fSize}>{activeLines[1]}</text>
+                                <text x="150" y={150 - fSize * 0.55 + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>
+                                <text x="150" y={150 + fSize * 0.55 + fSize * 0.35} fontSize={fSize}>{activeLines[1]}</text>
                             </>
                         );
                     })()}
 
-                    {/* 3 行模式：緊湊排版 (最大44px) */}
+                    {/* 3 行模式 */}
                     {activeLines.length === 3 && (() => {
-                        const fSize = Math.min(145 / maxLen, 44);
+                        const fSize = Math.min(145 / maxLen, 38);
                         return (
                             <>
-                                <text x="150" y={150 - fSize*1.15 + fSize*0.35} fontSize={fSize}>{activeLines[0]}</text>
-                                <text x="150" y={150 + fSize*0.35} fontSize={fSize}>{activeLines[1]}</text>
-                                <text x="150" y={150 + fSize*1.15 + fSize*0.35} fontSize={fSize}>{activeLines[2]}</text>
+                                <text x="150" y={150 - fSize * 1.15 + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>
+                                <text x="150" y={150 + fSize * 0.35} fontSize={fSize}>{activeLines[1]}</text>
+                                <text x="150" y={150 + fSize * 1.15 + fSize * 0.35} fontSize={fSize}>{activeLines[2]}</text>
                             </>
                         );
                     })()}
@@ -196,11 +201,11 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     </div>
                     
                     <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 space-y-2 shadow-inner">
-                        <label className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1"><Type size={14}/> 公司中文名稱 (內圈動態貼服)</label>
+                        <label className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1"><Type size={14}/> 公司中文名稱 (獨立3行設定)</label>
                         <input value={chLine1} onChange={e => setChLine1(e.target.value)} placeholder="第一行 (例: 金田)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <input value={chLine2} onChange={e => setChLine2(e.target.value)} placeholder="第二行 (例: 汽車)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
                         <input value={chLine3} onChange={e => setChLine3(e.target.value)} placeholder="第三行 (例: 有限公司)" className="w-full border-2 border-white rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 text-center shadow-sm" />
-                        <p className="text-[10px] text-blue-600 font-bold text-center pt-1">💡 留空即自動隱藏，系統會將字體暴增至完全貼滿內圈</p>
+                        <p className="text-[10px] text-blue-600 font-bold text-center pt-1">💡 留空行即自動隱藏，字體會動態放大充盈貼服內圈</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pt-2">
@@ -264,7 +269,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                                 <span className="text-[10px] bg-slate-800 text-white px-2 py-0.5 rounded font-bold">{item.stampType === 'round_24' ? '24mm' : '22mm'}</span>
                                 <button onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button>
                             </div>
-                            <div className="font-black text-xs text-slate-800 truncate mb-0.5">{item.chLine1}{item.chLine2}{item.chLine3}</div>
+                            <div className="font-black text-xs text-slate-800 truncate mb-0.5">{item.chLine1 || item.companyCh}{item.chLine2}{item.chLine3}</div>
                             <div className="text-[9px] text-slate-500 font-bold truncate">{item.companyEn}</div>
                         </div>
                     ))}
