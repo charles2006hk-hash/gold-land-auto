@@ -73,11 +73,17 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     @page { margin: 0; size: A4 portrait; }
                     body { 
                         margin: 0; padding: 20mm; background: white; 
-                        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                        -webkit-print-color-adjust: exact !important; 
+                        print-color-adjust: exact !important;
+                        /* ★ 終極增黑術：加入極致對比濾鏡，強制把瀏覽器產生的灰色邊緣轉為 100% 純黑色 */
+                        filter: grayscale(100%) contrast(200%) !important;
                         display: flex; gap: 20mm;
                     }
                     .stamp-container { width: ${sizeMM}mm; height: ${sizeMM}mm; transform: ${isMirrored ? 'scaleX(-1)' : 'none'}; }
                     svg { width: 100%; height: 100%; }
+                    /* ★ 雙重保險：強制鎖定所有 SVG 文字與線條為最深的 #000000 */
+                    text, g { fill: #000000 !important; }
+                    circle, path { stroke: #000000 !important; }
                 </style>
             </head>
             <body>
