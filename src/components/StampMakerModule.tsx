@@ -7,7 +7,7 @@ import { Save, Printer, Download, FlipHorizontal, History, Trash2, Stamp, CheckC
 export default function StampMakerModule({ db, appId, staffId }: any) {
     const [history, setHistory] = useState<any[]>([]);
     
-    // 印章設定狀態
+    // 印章設定狀態 (3 行獨立中文輸入)
     const [companyEn, setCompanyEn] = useState('GOLD LAND AUTO LIMITED');
     const [chLine1, setChLine1] = useState('金田');
     const [chLine2, setChLine2] = useState('汽車');
@@ -114,34 +114,20 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         img.src = url;
     };
 
-    // ★ SVG 終極數學與幾何排版引擎
+    // ★ SVG 幾何物理級排版引擎
     const renderStampSVG = () => {
         const activeLines = [chLine1, chLine2, chLine3].map(l => l.trim()).filter(l => l.length > 0);
         const maxLen = activeLines.length > 0 ? Math.max(...activeLines.map(l => l.length)) : 1;
 
-        // --- 英文動態自適應邏輯 ---
+        // 根據英文長度動態調整字體大小與佔用長度
         const enLen = companyEn.length;
-        const isSuperLong = enLen > 30;
+        let fSizeEn = 34; // 預設最佳大小
+        let tLen = "500"; // 預設完美滿版長度
         
-        // 1. 動態字體大小 (太長就縮小字體)
-        const fSizeEn = isSuperLong ? 24 : (enLen > 22 ? 28 : 34);
+        if (enLen > 28) fSizeEn = 26;
+        else if (enLen > 22) fSizeEn = 30;
         
-        // 2. 絕對垂直置中算法：117是內外圈中心點。減去字體高度的35%作為 baseline，保證上下等距。
-        const pathR = 117 + (fSizeEn * 0.35); 
-        
-        // 3. 計算左右 1 個字符的缺口位置 (100度到80度)
-        const radStart = 100 * (Math.PI / 180);
-        const radEnd = 80 * (Math.PI / 180);
-        const startX = 150 + pathR * Math.cos(radStart);
-        const startY = 150 + pathR * Math.sin(radStart);
-        const endX = 150 + pathR * Math.cos(radEnd);
-        const endY = 150 + pathR * Math.sin(radEnd);
-        
-        const enPathD = `M ${startX.toFixed(1)},${startY.toFixed(1)} A ${pathR},${pathR} 0 1,1 ${endX.toFixed(1)},${endY.toFixed(1)}`;
-        
-        // 4. 路徑長度與防重疊機制 (spacingAndGlyphs 可以壓縮字體寬度，防止重疊)
-        const textLen = isSuperLong ? "690" : (enLen > 15 ? "620" : "400");
-        const lAdjust = isSuperLong ? "spacingAndGlyphs" : "spacing";
+        if (enLen < 12) tLen = "360"; // 字太少時不強硬拉滿，避免間距過寬
 
         return (
             <svg id="stamp-svg" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
@@ -150,36 +136,42 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                 <circle cx="150" cy="150" r="139" fill="none" stroke="black" strokeWidth="1.5" />
                 <circle cx="150" cy="150" r="95" fill="none" stroke="black" strokeWidth="1.5" />
 
-                {/* 動態幾何軌道 */}
+                {/* ★ 絕對數學軌道 (R=100)
+                    起點: 107.7, 240.6 (約 115度，星星左側)
+                    終點: 192.3, 240.6 (約 65度，星星右側)
+                    這條軌道永遠懸浮在 139 與 95 中間，絕不變形。
+                */}
                 <defs>
-                    <path id="en-dynamic-path" d={enPathD} fill="none" />
+                    <path id="en-arc-path" d="M 107.7,240.6 A 100,100 0 1,1 192.3,240.6" fill="none" />
                 </defs>
 
-                {/* 英文完美貼服排版 */}
+                {/* ★ 英文修長排版 (Times New Roman)
+                    使用 lengthAdjust="spacing" 只拉寬字距不拉寬字母，保持修長感
+                */}
                 <text 
                     fill="black" 
                     fontSize={fSizeEn} 
                     fontWeight="bold" 
-                    fontFamily="'Arial Narrow', 'Helvetica Condensed', 'Impact', 'Times New Roman', serif" 
+                    fontFamily="'Times New Roman', Times, serif" 
                     fontStretch="condensed"
                 >
                     <textPath 
-                        href="#en-dynamic-path" 
+                        href="#en-arc-path" 
                         startOffset="50%" 
                         textAnchor="middle" 
-                        textLength={textLen} 
-                        lengthAdjust={lAdjust as any}
+                        textLength={tLen} 
+                        lengthAdjust="spacing"
                     >
                         {companyEn.toUpperCase()}
                     </textPath>
                 </text>
 
-                {/* 底部星星：精確鎖定在物理夾縫中心點 Y=267 */}
-                <text x="150" y="267" fill="black" fontSize="36" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
+                {/* ★ 底部置中星星：微調至 38px，Y=271 以抵銷符號自帶的頂部留白，達成視覺完美置中 */}
+                <text x="150" y="271" fill="black" fontSize="38" fontWeight="normal" fontFamily="Arial, sans-serif" textAnchor="middle" dominantBaseline="central">
                     ❇
                 </text>
 
-                {/* 中文自動適配引擎：1-3行自適應 */}
+                {/* ★ 中文自動適配引擎：1-3行自適應，文字放到最大且貼服內圈線 */}
                 <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="4">
                     {/* 1 行模式 */}
                     {activeLines.length === 1 && (() => {
