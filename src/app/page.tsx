@@ -781,7 +781,7 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
-    const [customRemark, setCustomRemark] = useState('');
+    const [customRemark, setCustomRemark] = useState(vehicle.salesRemarks || '');
 
     useEffect(() => {
         if (!db || !vehicle.id) return;
@@ -2162,6 +2162,7 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             
             previousOwners: formData.get('previousOwners') || '', 
             remarks: formData.get('remarks') || '', 
+            salesRemarks: formData.get('salesRemarks') as string || '', // 👈 新增這行：抓取賣點資料存入資料庫
             seating: Number(formData.get('seating') || 5), 
             priceA1: valA1, 
             priceTax: valTax,
