@@ -1023,6 +1023,22 @@ const VehicleFormModal = ({
                             {displayPhotos.length === 0 && (<div className="col-span-full py-8 text-center text-slate-400 text-sm md:text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
                         </div>
                     </div>
+
+                          <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-4 mt-4 relative group hover:border-amber-300 transition-colors">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h3 className="font-bold text-amber-800 text-sm flex items-center">
+                                        <Star size={16} className="mr-1.5 text-amber-500"/> 車輛專屬賣點 (Sales Remarks)
+                                    </h3>
+                                    <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-bold shadow-sm">連動推介單</span>
+                                </div>
+                                <textarea 
+                                    name="salesRemarks"
+                                    defaultValue={v.salesRemarks}
+                                    placeholder="在這裡輸入車輛亮點、優勢或給客戶的話 (例如：直版任驗、原廠保養、送一年牌費)..."
+                                    className="w-full h-24 p-3 bg-white border border-amber-200 rounded-lg text-sm text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none shadow-sm font-medium leading-relaxed transition-all"
+                                />
+                            </div>
+                  
                  </div>
             </div>
             
