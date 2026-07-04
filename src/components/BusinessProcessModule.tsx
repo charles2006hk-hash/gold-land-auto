@@ -6,7 +6,7 @@ import {
     ChevronDown, ChevronUp, FileText, CheckCircle2, 
     Link as LinkIcon, Share2, Car, Globe, ShieldCheck,
     Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar, ArrowRight,
-    Stamp, X, Radar, ChevronLeft, ChevronRight // ★ 加入左右箭頭圖標
+    Stamp, X, Radar, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 import StampMakerModule from './StampMakerModule'; 
@@ -17,7 +17,7 @@ export default function BusinessProcessModule(props: any) {
     const [expandedItem, setExpandedItem] = useState<string | null>("td25");
     const [showStampMaker, setShowStampMaker] = useState(false); 
     
-    // ★ 新增：控制側邊欄折疊狀態
+    // ★ 控制側邊欄折疊狀態 (完美釋放畫面空間)
     const [isMenuCollapsed, setIsMenuCollapsed] = useState(false);
 
     // --- 1. 車輛牌費動態試算引擎狀態 ---
@@ -552,7 +552,7 @@ export default function BusinessProcessModule(props: any) {
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white md:bg-slate-50 relative mt-2 md:mt-0">
                     {expandedItem === 'market_radar' ? (
                         <div className="h-full">
-                            <MarketRadarModule />
+                            <MarketRadarModule db={props.db} appId={props.appId} />
                         </div>
                     ) : (
                         currentItem && (
