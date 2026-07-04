@@ -6,16 +6,19 @@ import {
     ChevronDown, ChevronUp, FileText, CheckCircle2, 
     Link as LinkIcon, Share2, Car, Globe, ShieldCheck,
     Calculator, HelpCircle, Scale, AlertTriangle, User, MapPin, Calendar, ArrowRight,
-    Stamp, X, Radar // ★ 新增 Radar 圖標
+    Stamp, X, Radar, ChevronLeft, ChevronRight // ★ 加入左右箭頭圖標
 } from 'lucide-react';
 
 import StampMakerModule from './StampMakerModule'; 
-import MarketRadarModule from './MarketRadarModule'; // ★ 引入大數據雷達模組
+import MarketRadarModule from './MarketRadarModule'; 
 
 export default function BusinessProcessModule(props: any) {
     const [activeCategory, setActiveCategory] = useState("香港車輛業務");
     const [expandedItem, setExpandedItem] = useState<string | null>("td25");
     const [showStampMaker, setShowStampMaker] = useState(false); 
+    
+    // ★ 新增：控制側邊欄折疊狀態
+    const [isMenuCollapsed, setIsMenuCollapsed] = useState(false);
 
     // --- 1. 車輛牌費動態試算引擎狀態 ---
     const [ownerType, setOwnerType] = useState<'hk' | 'cn' | 'overseas'>('hk'); 
@@ -447,15 +450,27 @@ export default function BusinessProcessModule(props: any) {
                 }
             `}</style>
 
-            {/* 左側欄：分類選單 */}
-            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20 pt-0">
-                <div className="p-3 md:p-4 border-b border-slate-100 items-center justify-between gap-2 hidden md:flex">
-                    <div className="flex items-center gap-2">
-                        <BookOpen className="text-blue-600" size={20} />
-                        <h2 className="font-black text-slate-800">辦理指南知識庫</h2>
-                    </div>
+            {/* ★ 左側欄：分類選單 (加入 isMenuCollapsed 控制寬度與內容) */}
+            <div className={`${isMenuCollapsed ? 'w-full md:w-20' : 'w-full md:w-64'} bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20 pt-0 transition-all duration-300 flex flex-col`}>
+                
+                {/* 頂部標題與折疊按鈕 */}
+                <div className="p-3 md:p-4 border-b border-slate-100 flex items-center justify-between gap-2 hidden md:flex min-h-[4rem]">
+                    {!isMenuCollapsed && (
+                        <div className="flex items-center gap-2 animate-fade-in truncate">
+                            <BookOpen className="text-blue-600 flex-none" size={20} />
+                            <h2 className="font-black text-slate-800 truncate">知識庫</h2>
+                        </div>
+                    )}
+                    <button 
+                        onClick={() => setIsMenuCollapsed(!isMenuCollapsed)} 
+                        className={`p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors flex-none ${isMenuCollapsed ? 'mx-auto' : ''}`}
+                        title={isMenuCollapsed ? "展開選單" : "收起選單"}
+                    >
+                        {isMenuCollapsed ? <ChevronRight size={20}/> : <ChevronLeft size={20}/>}
+                    </button>
                 </div>
-                <div className="p-2 md:p-3 flex flex-row md:flex-col overflow-x-auto md:overflow-y-visible gap-2 md:gap-2 scrollbar-hide shadow-inner md:shadow-none bg-slate-100/50 md:bg-transparent">
+
+                <div className="p-2 md:p-3 flex flex-row md:flex-col overflow-x-auto md:overflow-y-auto gap-2 md:gap-2 scrollbar-hide shadow-inner md:shadow-none bg-slate-100/50 md:bg-transparent flex-1 pb-6">
                     {PROCEDURES.map((cat, idx) => {
                         const Icon = cat.icon;
                         return (
@@ -465,36 +480,48 @@ export default function BusinessProcessModule(props: any) {
                                     setActiveCategory(cat.category);
                                     setExpandedItem(cat.items[0].id);
                                 }}
-                                className={`flex-none md:w-full text-left flex items-center px-4 py-2 md:p-3 rounded-full md:rounded-lg font-bold text-sm md:text-base transition-all whitespace-nowrap ${activeCategory === cat.category ? 'bg-blue-600 text-white shadow-md md:bg-blue-50 md:text-blue-700 md:shadow-sm md:border-transparent' : 'bg-white text-slate-600 border border-slate-200 md:bg-transparent md:border-transparent hover:bg-slate-100'}`}
+                                title={isMenuCollapsed ? cat.category : ""}
+                                className={`flex-none md:w-full text-left flex items-center p-2 md:p-3 rounded-full md:rounded-lg font-bold text-sm md:text-base transition-all whitespace-nowrap group relative
+                                    ${activeCategory === cat.category ? 'bg-blue-600 text-white shadow-md md:bg-blue-50 md:text-blue-700 md:shadow-sm md:border-transparent' : 'bg-white text-slate-600 border border-slate-200 md:bg-transparent md:border-transparent hover:bg-slate-100'}
+                                    ${isMenuCollapsed ? 'justify-center px-0' : 'px-4'}`}
                             >
-                                <Icon size={16} className={`mr-2 md:mr-3 flex-none ${activeCategory === cat.category ? 'text-blue-100 md:text-blue-600' : 'text-slate-400 md:text-slate-500'}`} />
-                                {cat.category}
+                                <Icon size={18} className={`flex-none ${isMenuCollapsed ? 'mx-auto' : 'mr-3'} ${activeCategory === cat.category ? 'text-blue-100 md:text-blue-600' : 'text-slate-400 md:text-slate-500'}`} />
+                                {!isMenuCollapsed && <span className="animate-fade-in truncate">{cat.category}</span>}
+                                
+                                {/* Hover 提示 (折疊狀態時) */}
+                                {isMenuCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap shadow-lg hidden md:block">{cat.category}</div>}
                             </button>
                         );
                     })}
 
-                    {/* ★ 視覺分隔線 */}
                     <div className="hidden md:block w-full h-px bg-slate-200 my-2"></div>
 
-                    {/* ★ 大數據市場情報 (28Car) 按鈕 */}
+                    {/* 大數據市場情報按鈕 */}
                     <button 
                         onClick={() => {
                             setActiveCategory(''); 
                             setExpandedItem('market_radar'); 
                         }} 
-                        className={`flex-none md:w-full text-left flex items-center px-4 py-2 md:p-3 rounded-full md:rounded-xl font-bold text-sm md:text-base transition-all whitespace-nowrap shadow-sm border ${expandedItem === 'market_radar' ? 'bg-blue-800 text-white border-blue-900 shadow-md' : 'bg-slate-800 text-white border-slate-700 hover:bg-slate-700'}`}
+                        title={isMenuCollapsed ? "大數據市場情報" : ""}
+                        className={`flex-none md:w-full text-left flex items-center p-2 md:p-3 rounded-full md:rounded-xl font-bold text-sm md:text-base transition-all whitespace-nowrap shadow-sm border group relative
+                            ${expandedItem === 'market_radar' ? 'bg-blue-800 text-white border-blue-900 shadow-md' : 'bg-slate-800 text-white border-slate-700 hover:bg-slate-700'}
+                            ${isMenuCollapsed ? 'justify-center px-0' : 'px-4'}`}
                     >
-                        <Radar size={18} className="mr-2 md:mr-3 flex-none text-blue-300" /> 
-                        大數據市場情報
+                        <Radar size={18} className={`flex-none ${isMenuCollapsed ? 'mx-auto' : 'mr-3'} text-blue-300`} /> 
+                        {!isMenuCollapsed && <span className="animate-fade-in truncate">大數據情報</span>}
+                        {isMenuCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-blue-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap shadow-lg hidden md:block">大數據情報</div>}
                     </button>
 
-                    {/* ★ 獨立的印章製作按鈕 */}
+                    {/* 實體印章製作按鈕 */}
                     <button 
                         onClick={() => setShowStampMaker(true)} 
-                        className="flex-none md:w-full text-left flex items-center px-4 py-2 md:p-3 rounded-full md:rounded-xl font-bold text-sm md:text-base transition-all whitespace-nowrap bg-indigo-600 text-white shadow-md hover:bg-indigo-700 active:scale-95 border border-indigo-700"
+                        title={isMenuCollapsed ? "實體印章製作" : ""}
+                        className={`flex-none md:w-full text-left flex items-center p-2 md:p-3 rounded-full md:rounded-xl font-bold text-sm md:text-base transition-all whitespace-nowrap bg-indigo-600 text-white shadow-md hover:bg-indigo-700 active:scale-95 border border-indigo-700 mt-2 group relative
+                            ${isMenuCollapsed ? 'justify-center px-0' : 'px-4'}`}
                     >
-                        <Stamp size={18} className="mr-2 md:mr-3 flex-none text-indigo-200" /> 
-                        實體印章製作
+                        <Stamp size={18} className={`flex-none ${isMenuCollapsed ? 'mx-auto' : 'mr-3'} text-indigo-200`} /> 
+                        {!isMenuCollapsed && <span className="animate-fade-in truncate">實體印章製作</span>}
+                        {isMenuCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-indigo-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap shadow-lg hidden md:block">印章製作</div>}
                     </button>
                 </div>
             </div>
@@ -760,7 +787,6 @@ export default function BusinessProcessModule(props: any) {
                         
                         {/* 呼叫印章模組 */}
                         <div className="flex-1 overflow-hidden relative z-40">
-                            {/* 將頂層傳入的 Firebase 參數往下傳給 StampMakerModule */}
                             <StampMakerModule db={props.db} appId={props.appId} staffId={props.staffId} />
                         </div>
                     </div>
