@@ -2,54 +2,59 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Flame, TrendingDown, Clock, CheckCircle2, ExternalLink, Star, Car, Filter, Loader2 } from 'lucide-react';
+import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
 
-export default function MarketRadarModule() {
+// 記得從您的主件傳入 db 實例
+export default function MarketRadarModule({ db, appId }: { db: any, appId: string }) {
     const [cars, setCars] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'ai_picks' | 'new_arrivals' | 'price_drops' | 'sold'>('ai_picks');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedBrand, setSelectedBrand] = useState('All');
 
-    // ★ 實時連接本地 NAS API 讀取 28car.db
+    // ★★★ 核心：實時監聽 Firestore 中的 28Car 數據庫 ★★★
     useEffect(() => {
-        const fetchMarketData = async () => {
-            try {
-                const res = await fetch('/api/28car');
-                const json = await res.json();
-                if (json.success && json.data) {
-                    setCars(json.data);
-                }
-            } catch (err) {
-                console.error("無法取得市場數據:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchMarketData();
-    }, []);
+        if (!db || !appId) return;
+
+        const q = query(
+            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', '28car_market_data'),
+            orderBy('last_updated', 'desc'),
+            limit(1000) // 限制抓取最新 1000 筆維持效能
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list: any[] = [];
+            snapshot.forEach(doc => {
+                list.push({ dbId: doc.id, ...doc.data() });
+            });
+            setCars(list);
+            setLoading(false);
+        }, (err) => {
+            console.error("實時讀取市場數據庫失敗:", err);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [db, appId]);
 
     const brands = ['All', ...Array.from(new Set(cars.map(c => c.brand)))].filter(b => b && b !== 'Unknown');
 
-    // ★★★ 核心 AI 評分引擎 (根據真實 DB 結構) ★★★
+    // ★★★ 核心 AI 評分引擎 ★★★
     const calculateAIScore = (car: any, marketAvgPrice: number) => {
         if (car.status === 'Sold') return 0; 
         let score = 50; 
         
-        // 1. 價格優勢 (最高佔 35 分)：比市場均價便宜越多，分數越高
         if (car.price > 0 && marketAvgPrice > 0 && car.price < marketAvgPrice) {
             const discountRatio = (marketAvgPrice - car.price) / marketAvgPrice;
             score += Math.min(discountRatio * 150, 35); 
         }
 
-        // 2. 熱度優勢 (最高佔 15 分)：日均瀏覽量
         const listedDate = new Date(car.listedAt || car.site_date || new Date());
         const daysListed = Math.max((new Date().getTime() - listedDate.getTime()) / (1000 * 3600 * 24), 1);
         const viewsPerDay = (car.views || 0) / daysListed;
         score += Math.min(viewsPerDay / 10, 15); 
 
-        // 3. 降價觸發 (額外加分)
         if (car.isPriceDrop === 1) score += 5;
-
         return Math.min(Math.round(score), 99); 
     };
 
@@ -92,7 +97,7 @@ export default function MarketRadarModule() {
     }, [processedCars, activeTab, searchQuery, selectedBrand]);
 
     const renderCarCard = (car: any) => (
-        <div key={car.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 flex flex-col group relative overflow-hidden">
+        <div key={car.id || car.dbId} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 flex flex-col group relative overflow-hidden">
             {activeTab === 'ai_picks' && car.aiScore >= 80 && <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/10 rounded-bl-full pointer-events-none"></div>}
 
             <div className="flex justify-between items-start mb-3">
@@ -147,7 +152,7 @@ export default function MarketRadarModule() {
                     </div>
                     <div>
                         <h2 className="font-black text-lg text-slate-800">28Car 市場大數據雷達</h2>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">實時同步 NAS 數據庫</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">實時同步雲端數據庫</p>
                     </div>
                 </div>
 
@@ -171,7 +176,7 @@ export default function MarketRadarModule() {
 
             <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin px-1 pb-4">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center h-40 mt-4"><Loader2 size={32} className="animate-spin text-blue-500 mb-2" /><p className="text-sm font-bold text-slate-500">正在讀取 NAS 數據庫...</p></div>
+                    <div className="flex flex-col items-center justify-center h-40 mt-4"><Loader2 size={32} className="animate-spin text-blue-500 mb-2" /><p className="text-sm font-bold text-slate-500">正在讀取雲端數據庫...</p></div>
                 ) : (
                     <>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
