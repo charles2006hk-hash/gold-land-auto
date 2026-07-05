@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Flame, TrendingDown, Clock, CheckCircle2, ExternalLink, Star, Car, Filter, Loader2 } from 'lucide-react';
+import { Search, Flame, TrendingDown, Clock, CheckCircle2, ExternalLink, Star, Car, Filter, Loader2, Database } from 'lucide-react';
 import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
 
-// 記得從您的主件傳入 db 實例
 export default function MarketRadarModule({ db, appId }: { db: any, appId: string }) {
     const [cars, setCars] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -12,14 +11,14 @@ export default function MarketRadarModule({ db, appId }: { db: any, appId: strin
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedBrand, setSelectedBrand] = useState('All');
 
-    // ★★★ 核心：實時監聽 Firestore 中的 28Car 數據庫 ★★★
+    // ★ 實時監聽 Firestore 中的 28Car 數據庫
     useEffect(() => {
         if (!db || !appId) return;
 
         const q = query(
             collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', '28car_market_data'),
             orderBy('last_updated', 'desc'),
-            limit(1000) // 限制抓取最新 1000 筆維持效能
+            limit(1000)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -39,7 +38,7 @@ export default function MarketRadarModule({ db, appId }: { db: any, appId: strin
 
     const brands = ['All', ...Array.from(new Set(cars.map(c => c.brand)))].filter(b => b && b !== 'Unknown');
 
-    // ★★★ 核心 AI 評分引擎 ★★★
+    // ★ 核心 AI 評分引擎
     const calculateAIScore = (car: any, marketAvgPrice: number) => {
         if (car.status === 'Sold') return 0; 
         let score = 50; 
@@ -88,17 +87,22 @@ export default function MarketRadarModule({ db, appId }: { db: any, appId: strin
         }
 
         switch (activeTab) {
-            case 'ai_picks': return result.filter(c => c.status === 'Available' && c.aiScore >= 60).sort((a, b) => b.aiScore - a.aiScore);
-            case 'new_arrivals': return result.filter(c => c.status === 'Available').sort((a, b) => new Date(b.listedAt || 0).getTime() - new Date(a.listedAt || 0).getTime());
-            case 'price_drops': return result.filter(c => c.status === 'Available' && c.isPriceDrop === 1).sort((a, b) => new Date(b.last_updated || 0).getTime() - new Date(a.last_updated || 0).getTime());
-            case 'sold': return result.filter(c => c.status === 'Sold').sort((a, b) => new Date(b.last_updated || 0).getTime() - new Date(a.last_updated || 0).getTime());
+            case 'ai_picks': 
+                // ★ 改為直接顯示評分最高的前 50 台，避免沒車顯示
+                return result.filter(c => c.status === 'Available').sort((a, b) => b.aiScore - a.aiScore).slice(0, 50);
+            case 'new_arrivals': 
+                return result.filter(c => c.status === 'Available').sort((a, b) => new Date(b.listedAt || 0).getTime() - new Date(a.listedAt || 0).getTime());
+            case 'price_drops': 
+                return result.filter(c => c.status === 'Available' && c.isPriceDrop === 1).sort((a, b) => new Date(b.last_updated || 0).getTime() - new Date(a.last_updated || 0).getTime());
+            case 'sold': 
+                return result.filter(c => c.status === 'Sold').sort((a, b) => new Date(b.last_updated || 0).getTime() - new Date(a.last_updated || 0).getTime());
             default: return result;
         }
     }, [processedCars, activeTab, searchQuery, selectedBrand]);
 
     const renderCarCard = (car: any) => (
         <div key={car.id || car.dbId} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 flex flex-col group relative overflow-hidden">
-            {activeTab === 'ai_picks' && car.aiScore >= 80 && <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/10 rounded-bl-full pointer-events-none"></div>}
+            {activeTab === 'ai_picks' && car.aiScore >= 75 && <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-400/10 rounded-bl-full pointer-events-none"></div>}
 
             <div className="flex justify-between items-start mb-3">
                 <div className="flex-1 pr-4">
@@ -106,7 +110,7 @@ export default function MarketRadarModule({ db, appId }: { db: any, appId: strin
                     <h3 className="font-bold text-sm text-slate-800 leading-tight line-clamp-2">{car.title}</h3>
                 </div>
                 {activeTab === 'ai_picks' && (
-                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-full border-4 shadow-sm flex-none ${car.aiScore >= 80 ? 'border-yellow-400 bg-yellow-50 text-yellow-700' : 'border-emerald-400 bg-emerald-50 text-emerald-700'}`}>
+                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-full border-4 shadow-sm flex-none ${car.aiScore >= 75 ? 'border-yellow-400 bg-yellow-50 text-yellow-700' : 'border-emerald-400 bg-emerald-50 text-emerald-700'}`}>
                         <span className="text-sm font-black leading-none">{car.aiScore}</span>
                         <span className="text-[8px] font-bold">分</span>
                     </div>
@@ -148,11 +152,15 @@ export default function MarketRadarModule({ db, appId }: { db: any, appId: strin
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-none">
                 <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl text-white shadow-md">
-                        {loading ? <Loader2 size={20} className="animate-spin" /> : <Filter size={20} />}
+                        {loading ? <Loader2 size={20} className="animate-spin" /> : <Database size={20} />}
                     </div>
                     <div>
-                        <h2 className="font-black text-lg text-slate-800">28Car 市場大數據雷達</h2>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">實時同步雲端數據庫</p>
+                        <div className="flex items-center gap-2">
+                            <h2 className="font-black text-lg text-slate-800">28Car 市場大數據雷達</h2>
+                            {/* ★ 顯示目前成功載入的車盤數量 */}
+                            {!loading && <span className="bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-bold shadow-sm">已連線: {cars.length} 筆</span>}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">實時同步雲端數據庫</p>
                     </div>
                 </div>
 
