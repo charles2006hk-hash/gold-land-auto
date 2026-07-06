@@ -116,49 +116,74 @@ const VehicleFormModal = ({
         setSearchingTransfer(false);
     };
 
-    // ★★★ 中港指標轉移：一鍵轉移執行 ★★★
+    // ★★★ 中港指標轉移：一鍵轉移執行 (允許覆蓋版) ★★★
     const executeTransfer = async (targetVehicle: any) => {
-        // 👇 新增：終極防呆保護鎖，防止覆蓋別人已有的指標 👇
+        // ★ 升級：防呆保護鎖改為「警告並允許覆蓋」
         const hasExistingQuota = targetVehicle.crossBorder?.quotaNumber || targetVehicle.crossBorder?.mainlandPlate;
+        
         if (hasExistingQuota) {
-            alert(`⚠️ 轉移被拒絕：目標車輛 [${targetVehicle.regMark || '未出牌'}] 目前已經綁定了其他中港指標 (${targetVehicle.crossBorder.quotaNumber || targetVehicle.crossBorder.mainlandPlate})！\n\n為避免資料覆蓋遺失，請先前往該車輛，將其原有指標「除名」或轉移給其他車輛後，再執行此操作。`);
-            return; // 立刻終止執行
+            const confirmOverride = confirm(`⚠️ 警告：目標車輛 [${targetVehicle.regMark || '未出牌'}] 目前已經綁定了其他中港指標 (${targetVehicle.crossBorder.quotaNumber || targetVehicle.crossBorder.mainlandPlate})！\n\n如果繼續轉移，該新車原本的指標資料將會被【直接覆蓋遺失】。\n\n您確定要強制轉移並覆蓋嗎？`);
+            if (!confirmOverride) return;
+        } else {
+            const confirmNormal = confirm(`確定要將中港指標轉移給 [${targetVehicle.regMark || '未出牌'}] 嗎？\n\n⚠️ 舊車的中港「財務及收費紀錄」將會保留，但「所有提醒日期、指標號、內地車牌、司機及公司資料」都會轉移至新車並從舊車中清空。`);
+            if (!confirmNormal) return;
         }
-        // 👆 防護鎖結束 👆
-
-        if (!confirm(`確定要將中港指標轉移給 [${targetVehicle.regMark || '未出牌'}] 嗎？\n\n⚠️ 舊車的中港財務紀錄將會保留，但指標號、內地車牌及司機資料將轉移至新車。`)) return;
 
         try {
             const getVal = (name: string) => (document.querySelector(`[name="${name}"]`) as HTMLInputElement)?.value || '';
 
-            // 1. 打包當前車輛的指標核心資料
-            const cbDataToTransfer = {
+            // 中港提醒日期的所有 Key (對齊系統設定)
+            const cbDateKeys = ['HkInsurance', 'ReservedPlate', 'Br', 'LicenseFee', 'MainlandJqx', 'MainlandSyx', 'ClosedRoad', 'Approval', 'MainlandLicense', 'HkInspection'];
+            
+            // ★ 核心 1：將舊車的 crossBorder 拆分，tasks (財務) 留給舊車，其餘 (基本資料與日期) 給新車
+            const { tasks: oldTasks, ...oldCbData } = (v.crossBorder || {}) as any;
+
+            // 打包當前車輛的指標核心資料與「所有提醒日期」
+            const cbDataToTransfer: any = {
+                ...oldCbData, // 繼承原本所有的日期跟資料
                 isEnabled: true,
-                mainlandPlate: getVal('cb_mainlandPlate'),
-                quotaNumber: getVal('cb_quotaNumber'),
-                hkCompany: getVal('cb_hkCompany'),
-                mainlandCompany: getVal('cb_mainlandCompany'),
-                driver1: getVal('cb_driver1'),
-                driver2: getVal('cb_driver2'),
-                driver3: getVal('cb_driver3'),
-                insuranceAgent: getVal('cb_insuranceAgent'),
-                ports: ALL_CB_PORTS.filter(p => (document.querySelector(`[name="cb_port_${p}"]`) as HTMLInputElement)?.checked)
+                mainlandPlate: getVal('cb_mainlandPlate') || oldCbData.mainlandPlate || '',
+                quotaNumber: getVal('cb_quotaNumber') || oldCbData.quotaNumber || '',
+                hkCompany: getVal('cb_hkCompany') || oldCbData.hkCompany || '',
+                mainlandCompany: getVal('cb_mainlandCompany') || oldCbData.mainlandCompany || '',
+                driver1: getVal('cb_driver1') || oldCbData.driver1 || '',
+                driver2: getVal('cb_driver2') || oldCbData.driver2 || '',
+                driver3: getVal('cb_driver3') || oldCbData.driver3 || '',
+                insuranceAgent: getVal('cb_insuranceAgent') || oldCbData.insuranceAgent || '',
+                ports: ALL_CB_PORTS.filter(p => {
+                    const el = document.querySelector(`[name="cb_port_${p}"]`) as HTMLInputElement;
+                    return el ? el.checked : (oldCbData.ports || []).includes(p);
+                })
             };
 
-            // 2. 將指標資料覆寫到目標新車 (Target Vehicle)
+            // 確保畫面上如果剛剛有修改日期，也能抓到最新版一起轉移過去
+            cbDateKeys.forEach(key => {
+                const dateVal = getVal(`cb_${key}`);
+                if (dateVal) cbDataToTransfer[key] = dateVal;
+            });
+
+            // ★ 核心 2：將打包好的指標資料與日期，覆寫到目標新車 (Target Vehicle)
             const targetDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetVehicle.id);
             await updateDoc(targetDocRef, {
                 crossBorder: {
-                    ...(targetVehicle.crossBorder || {}),
-                    ...cbDataToTransfer
+                    ...(targetVehicle.crossBorder || {}), // 保留目標車輛可能有的其他非衝突資料
+                    ...cbDataToTransfer // 強制覆寫指標資料與日期
                 }
             });
 
-            // 3. 清空當前這台舊車的畫面欄位
-            const fieldsToClear = ['cb_mainlandPlate', 'cb_quotaNumber', 'cb_hkCompany', 'cb_mainlandCompany', 'cb_driver1', 'cb_driver2', 'cb_driver3', 'cb_insuranceAgent'];
+            // ★ 核心 3：徹底清空當前這台舊車的畫面欄位 (包含日期)
+            const fieldsToClear = [
+                'cb_mainlandPlate', 'cb_quotaNumber', 'cb_hkCompany', 'cb_mainlandCompany', 
+                'cb_driver1', 'cb_driver2', 'cb_driver3', 'cb_insuranceAgent', 
+                ...cbDateKeys.map(k => `cb_${k}`)
+            ];
+            
             fieldsToClear.forEach(name => {
                 const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement;
-                if (el) el.value = '';
+                if (el) {
+                    if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+                    else el.value = '';
+                }
             });
 
             ALL_CB_PORTS.forEach(p => {
@@ -166,14 +191,37 @@ const VehicleFormModal = ({
                 if (el) el.checked = false;
             });
 
-            setCbEnabled(false); // 關閉模組
+            // ★ 核心 4：立即更新舊車的資料庫：只保留 tasks (財務紀錄)，其餘完全清空
+            if (v.id) {
+                const currentDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', v.id);
+                await updateDoc(currentDocRef, {
+                    crossBorder: {
+                        isEnabled: false,
+                        tasks: oldTasks || [] // 👈 完美：只留下財務紀錄
+                    }
+                });
+            }
+
+            // 更新當前 React State，讓畫面立刻反應，不需要重整
+            setEditingVehicle((prev: any) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    crossBorder: {
+                        isEnabled: false,
+                        tasks: oldTasks || []
+                    }
+                };
+            });
+
+            setCbEnabled(false); // 關閉中港模組 UI
             setShowTransferModal(false);
 
             if (addSystemLog) {
-                addSystemLog('Quota Transfer', `Transferred Quota ${cbDataToTransfer.quotaNumber} from ${v.regMark} to ${targetVehicle.regMark}`);
+                addSystemLog('Quota Transfer', `Transferred Quota ${cbDataToTransfer.quotaNumber} & all reminder dates from ${v.regMark} to ${targetVehicle.regMark} (Overwrite: ${hasExistingQuota ? 'Yes' : 'No'})`);
             }
 
-            alert('✅ 指標轉移成功！\n\n新車已成功掛上指標。請記得點擊右下角「儲存變更」來更新這台舊車的狀態。');
+            alert('✅ 指標及所有提醒日期轉移成功！\n\n新車已完整繼承中港牌與到期日。\n舊車的指標資料已清空，但【財務及收費紀錄】已為您完美保留！');
         } catch(e) {
             alert('轉移失敗: ' + e);
         }
