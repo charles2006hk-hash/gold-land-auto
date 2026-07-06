@@ -88,19 +88,28 @@ const VehicleFormModal = ({
     const [transferResults, setTransferResults] = useState<any[]>([]);
     const [searchingTransfer, setSearchingTransfer] = useState(false);
 
-    // ★★★ 中港指標轉移：搜尋新車 ★★★
+    // ★★★ 中港指標轉移：搜尋新車 (升級版) ★★★
     const handleSearchTransfer = async () => {
         if (!transferSearch || !db) return;
         setSearchingTransfer(true);
         try {
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
             const snap = await getDocs(q);
-            const term = transferSearch.toLowerCase();
+            // 加上 trim() 去除前後空白防呆
+            const term = transferSearch.toLowerCase().trim(); 
+            
             const res = snap.docs.map(d => ({id: d.id, ...d.data()}))
                 .filter((c: any) => 
-                    c.id !== v.id && 
-                    (c.status === 'In Stock' || c.status === 'Reserved') && 
-                    ((c.regMark || '').toLowerCase().includes(term) || (c.chassisNo || '').toLowerCase().includes(term))
+                    c.id !== v.id && // 排除自己
+                    // ★ 升級 1：放寬狀態，讓「已售 (Sold)」的車也能被搜出來繼承指標！
+                    (c.status === 'In Stock' || c.status === 'Reserved' || c.status === 'Sold') && 
+                    // ★ 升級 2：擴大搜尋範圍，現在搜車牌、底盤、廠牌、型號都可以！
+                    (
+                        (c.regMark || '').toLowerCase().includes(term) || 
+                        (c.chassisNo || '').toLowerCase().includes(term) ||
+                        (c.make || '').toLowerCase().includes(term) ||
+                        (c.model || '').toLowerCase().includes(term)
+                    )
                 );
             setTransferResults(res);
         } catch(e) { console.error(e); }
@@ -109,6 +118,14 @@ const VehicleFormModal = ({
 
     // ★★★ 中港指標轉移：一鍵轉移執行 ★★★
     const executeTransfer = async (targetVehicle: any) => {
+        // 👇 新增：終極防呆保護鎖，防止覆蓋別人已有的指標 👇
+        const hasExistingQuota = targetVehicle.crossBorder?.quotaNumber || targetVehicle.crossBorder?.mainlandPlate;
+        if (hasExistingQuota) {
+            alert(`⚠️ 轉移被拒絕：目標車輛 [${targetVehicle.regMark || '未出牌'}] 目前已經綁定了其他中港指標 (${targetVehicle.crossBorder.quotaNumber || targetVehicle.crossBorder.mainlandPlate})！\n\n為避免資料覆蓋遺失，請先前往該車輛，將其原有指標「除名」或轉移給其他車輛後，再執行此操作。`);
+            return; // 立刻終止執行
+        }
+        // 👆 防護鎖結束 👆
+
         if (!confirm(`確定要將中港指標轉移給 [${targetVehicle.regMark || '未出牌'}] 嗎？\n\n⚠️ 舊車的中港財務紀錄將會保留，但指標號、內地車牌及司機資料將轉移至新車。`)) return;
 
         try {
