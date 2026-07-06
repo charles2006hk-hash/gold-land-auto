@@ -7,7 +7,7 @@ import {
     Database, Search, Link, Bell, Eye, Share2, Trash2, User as UserIcon, Check, 
     CalendarDays, MapPin, Loader2, Image as ImageIcon, Edit, ShieldCheck, ArrowRight, UserCircle, History, 
     ChevronDown, ChevronUp, Save, Calculator, AlertTriangle, Building2, Ship, 
-    Star
+    Star, ArrowRightLeft
 } from 'lucide-react';
 import { query, collection, where, onSnapshot, getDocs } from "firebase/firestore";
 
@@ -2008,7 +2008,20 @@ const VehicleFormModal = ({
                     <div className={`${rightTab === 'cb' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
                         <div className="border-2 border-blue-200 rounded-2xl overflow-hidden bg-white shadow-md w-full">
                             <div className="bg-blue-50/80 p-4 md:p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center border-b border-blue-200 gap-3">
-                                <div className="flex items-center gap-2"><Globe size={24} className="text-blue-600"/><span className="font-black text-lg text-blue-900">中港車管家 (Cross-Border)</span></div>
+                                <div className="flex items-center gap-2">
+                                    <Globe size={24} className="text-blue-600"/>
+                                    <span className="font-black text-lg text-blue-900">中港車管家 (Cross-Border)</span>
+                                    {/* 👇 新增：轉移按鈕 👇 */}
+                                    {cbEnabled && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowTransferModal(true)}
+                                            className="ml-2 text-[10px] bg-purple-100 text-purple-700 border border-purple-300 px-2 py-1 rounded shadow-sm hover:bg-purple-200 flex items-center font-bold transition-colors"
+                                        >
+                                            <ArrowRightLeft size={12} className="mr-1"/> 一鍵轉移指標
+                                        </button>
+                                    )}
+                                </div>
                                 <label className="flex items-center justify-center text-sm font-bold text-blue-700 cursor-pointer bg-white px-4 py-2.5 md:py-1.5 rounded-xl md:rounded-lg border-2 border-blue-300 shadow-sm hover:bg-blue-50 active:scale-95 transition-transform w-full sm:w-auto">
                                     <input type="checkbox" name="cb_isEnabled" checked={cbEnabled} onChange={e => setCbEnabled(e.target.checked)} className="mr-2 accent-blue-600 w-5 h-5 md:w-4 md:h-4"/> 
                                     啟用中港資料模組
@@ -2375,6 +2388,55 @@ const VehicleFormModal = ({
                 </div>
             </div>
 
+{/* ★ 中港指標轉移彈出視窗 */}
+            {showTransferModal && (
+                <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh] overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center bg-purple-50">
+                            <h3 className="font-bold text-purple-800 flex items-center"><ArrowRightLeft size={18} className="mr-2"/> 轉移中港指標至新車</h3>
+                            <button type="button" onClick={() => setShowTransferModal(false)} className="p-1 hover:bg-purple-100 rounded-full text-purple-600"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="p-4 border-b bg-white">
+                            <p className="text-xs text-slate-500 mb-3 font-bold">請搜尋並選擇要繼承此指標的【新車】：</p>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text" 
+                                    value={transferSearch}
+                                    onChange={e => setTransferSearch(e.target.value)}
+                                    placeholder="搜尋新車的車牌或底盤號..."
+                                    className="flex-1 p-2 border rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-purple-400 font-bold"
+                                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSearchTransfer())}
+                                />
+                                <button type="button" onClick={handleSearchTransfer} disabled={searchingTransfer} className="bg-purple-600 text-white px-4 rounded-lg font-bold hover:bg-purple-700 text-sm shadow-sm flex items-center">
+                                    {searchingTransfer ? <Loader2 size={16} className="animate-spin"/> : '搜尋'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2 bg-slate-50">
+                            {transferResults.map(res => (
+                                <div key={res.id} className="bg-white p-3 rounded-lg border border-slate-200 mb-2 hover:border-purple-400 hover:shadow-md transition-all">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <div className="font-black text-slate-800 text-lg mb-0.5">{res.regMark || '未出牌'}</div>
+                                            <div className="text-xs text-slate-500 font-bold">{res.year} {res.make} {res.model}</div>
+                                            <div className="text-[10px] text-slate-400 font-mono mt-1">底盤: {res.chassisNo || '-'}</div>
+                                        </div>
+                                        <button type="button" onClick={() => executeTransfer(res)} className="bg-purple-100 text-purple-700 border border-purple-200 px-3 py-2 rounded-lg font-black text-xs hover:bg-purple-600 hover:text-white transition-colors shadow-sm">
+                                            套入此車
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            {transferResults.length === 0 && !searchingTransfer && (
+                                <div className="text-center text-slate-400 py-8 text-xs font-bold">請輸入關鍵字搜尋庫存中 (在庫/已訂) 的車輛</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+           
             {/* 圖片放大預覽 Modal */}
             {previewImage && (
                 <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in" onClick={() => setPreviewImage(null)}>
