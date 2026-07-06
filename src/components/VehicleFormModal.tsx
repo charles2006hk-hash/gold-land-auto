@@ -9,7 +9,7 @@ import {
     ChevronDown, ChevronUp, Save, Calculator, AlertTriangle, Building2, Ship, 
     Star, ArrowRightLeft
 } from 'lucide-react';
-import { query, collection, where, onSnapshot, getDocs } from "firebase/firestore";
+import { query, collection, where, onSnapshot, getDocs, updateDoc, doc } from "firebase/firestore";
 
 // 匯入您的常數與型別
 import { COMPANY_INFO, ALL_CB_PORTS, PORTS_HK_GD, PORTS_MO_GD } from '@/config/constants';
@@ -81,6 +81,87 @@ const VehicleFormModal = ({
     const [selectedMake, setSelectedMake] = useState(v.make || '');
     const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
+
+    // ★ 中港指標轉移 (套牌) 專用狀態
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [transferSearch, setTransferSearch] = useState('');
+    const [transferResults, setTransferResults] = useState<any[]>([]);
+    const [searchingTransfer, setSearchingTransfer] = useState(false);
+
+    // ★★★ 中港指標轉移：搜尋新車 ★★★
+    const handleSearchTransfer = async () => {
+        if (!transferSearch || !db) return;
+        setSearchingTransfer(true);
+        try {
+            const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
+            const snap = await getDocs(q);
+            const term = transferSearch.toLowerCase();
+            const res = snap.docs.map(d => ({id: d.id, ...d.data()}))
+                .filter((c: any) => 
+                    c.id !== v.id && 
+                    (c.status === 'In Stock' || c.status === 'Reserved') && 
+                    ((c.regMark || '').toLowerCase().includes(term) || (c.chassisNo || '').toLowerCase().includes(term))
+                );
+            setTransferResults(res);
+        } catch(e) { console.error(e); }
+        setSearchingTransfer(false);
+    };
+
+    // ★★★ 中港指標轉移：一鍵轉移執行 ★★★
+    const executeTransfer = async (targetVehicle: any) => {
+        if (!confirm(`確定要將中港指標轉移給 [${targetVehicle.regMark || '未出牌'}] 嗎？\n\n⚠️ 舊車的中港財務紀錄將會保留，但指標號、內地車牌及司機資料將轉移至新車。`)) return;
+
+        try {
+            const getVal = (name: string) => (document.querySelector(`[name="${name}"]`) as HTMLInputElement)?.value || '';
+
+            // 1. 打包當前車輛的指標核心資料
+            const cbDataToTransfer = {
+                isEnabled: true,
+                mainlandPlate: getVal('cb_mainlandPlate'),
+                quotaNumber: getVal('cb_quotaNumber'),
+                hkCompany: getVal('cb_hkCompany'),
+                mainlandCompany: getVal('cb_mainlandCompany'),
+                driver1: getVal('cb_driver1'),
+                driver2: getVal('cb_driver2'),
+                driver3: getVal('cb_driver3'),
+                insuranceAgent: getVal('cb_insuranceAgent'),
+                ports: ALL_CB_PORTS.filter(p => (document.querySelector(`[name="cb_port_${p}"]`) as HTMLInputElement)?.checked)
+            };
+
+            // 2. 將指標資料覆寫到目標新車 (Target Vehicle)
+            const targetDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetVehicle.id);
+            await updateDoc(targetDocRef, {
+                crossBorder: {
+                    ...(targetVehicle.crossBorder || {}),
+                    ...cbDataToTransfer
+                }
+            });
+
+            // 3. 清空當前這台舊車的畫面欄位
+            const fieldsToClear = ['cb_mainlandPlate', 'cb_quotaNumber', 'cb_hkCompany', 'cb_mainlandCompany', 'cb_driver1', 'cb_driver2', 'cb_driver3', 'cb_insuranceAgent'];
+            fieldsToClear.forEach(name => {
+                const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement;
+                if (el) el.value = '';
+            });
+
+            ALL_CB_PORTS.forEach(p => {
+                const el = document.querySelector(`[name="cb_port_${p}"]`) as HTMLInputElement;
+                if (el) el.checked = false;
+            });
+
+            setCbEnabled(false); // 關閉模組
+            setShowTransferModal(false);
+
+            if (addSystemLog) {
+                addSystemLog('Quota Transfer', `Transferred Quota ${cbDataToTransfer.quotaNumber} from ${v.regMark} to ${targetVehicle.regMark}`);
+            }
+
+            alert('✅ 指標轉移成功！\n\n新車已成功掛上指標。請記得點擊右下角「儲存變更」來更新這台舊車的狀態。');
+        } catch(e) {
+            alert('轉移失敗: ' + e);
+        }
+    };
+ 
     // ★★★ 升級：智能狀態日期追蹤 ★★★
     const [statusDates, setStatusDates] = useState({
         'In Stock': v.stockInDate || new Date().toISOString().split('T')[0],
