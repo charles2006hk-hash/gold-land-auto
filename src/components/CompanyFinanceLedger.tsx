@@ -364,7 +364,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser }
                             <label className="block text-xs font-bold text-slate-500 mb-1">選擇開支科目</label>
                             <select 
                                 value={newExpense.category} 
-                                onChange={e => handleExpenseTypeChange(e.target.value)}
+                                onChange={e => setNewExpense({...newExpense, category: e.target.value})}
                                 className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700"
                             >
                                 {LEDGER_CATEGORIES.map(cat => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
