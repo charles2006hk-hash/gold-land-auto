@@ -36,6 +36,34 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
     // 從 settings 拿取分類，若無則用預設
     const ledgerCategories = settings?.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
 
+    // ★ 修復 1：當系統設定的分類更新時，自動重新對齊目前選擇的科目
+    useEffect(() => {
+        if (ledgerCategories && ledgerCategories.length > 0) {
+            const currentCatExists = ledgerCategories.some((c: any) => c.name === newExpense.category);
+            if (!currentCatExists) {
+                setNewExpense(prev => ({
+                    ...prev,
+                    category: ledgerCategories[0].name,
+                    flow: ledgerCategories[0].defaultFlow || 'OUT',
+                    amount: ledgerCategories[0].defaultAmount ? String(ledgerCategories[0].defaultAmount) : '',
+                    chequeNo: ''
+                }));
+            }
+        }
+    }, [settings?.ledgerCategories]);
+
+    // ★ 修復 2：把選擇科目時「自動帶入預設值」的功能加回來
+    const handleCategoryChange = (catName: string) => {
+        const setting = ledgerCategories.find((c: any) => c.name === catName);
+        setNewExpense({
+            ...newExpense,
+            category: catName,
+            flow: setting?.defaultFlow || 'OUT',
+            amount: setting?.defaultAmount ? String(setting.defaultAmount) : '',
+            chequeNo: ''
+        });
+    };
+    
     // 表單狀態
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newExpense, setNewExpense] = useState({
@@ -359,7 +387,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             <label className="block text-xs font-bold text-slate-500 mb-1">科目分類</label>
                             <select 
                                 value={newExpense.category} 
-                                onChange={e => handleCategoryChange(e.target.value)}
+                                onChange={e => handleCategoryChange(e.target.value)} {/* 👈 改成這樣 */}
                                 className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700 outline-none"
                             >
                                 {ledgerCategories.map((cat:any) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
