@@ -6,12 +6,26 @@ import {
     LayoutDashboard, BellRing, Car, DollarSign, Globe, Users, Database, 
     Bell, FileText, DownloadCloud, Plus, ChevronUp, ChevronDown, Trash2, 
     ShieldCheck, Info, X, Palette, Armchair, Wrench, Receipt, BarChart3, 
-    Upload, Key, CheckCircle, AlertTriangle, Search, ArrowLeft, Building2
+    Upload, Key, CheckCircle, AlertTriangle, Search, ArrowLeft, Building2,
+    ArrowDownToLine, ArrowUpFromLine
 } from 'lucide-react';
 import { doc, setDoc, collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
 import { ref, uploadString } from 'firebase/storage';
 
 import { SystemSettings, Vehicle } from '@/types';
+
+// ★ 補上系統預設大內總帳分類 (當設定檔沒有時墊底)
+const DEFAULT_LEDGER_CATEGORIES = [
+    { name: '公司租金', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '水電網絡', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '員工薪資/佣金', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '交際應酬/茶水', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '市場廣告/行銷', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '文具雜項/軟體訂閱', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '政府資助/補貼', defaultFlow: 'IN', defaultAmount: '' },
+    { name: '其他收入', defaultFlow: 'IN', defaultAmount: '' },
+    { name: '其他雜支', defaultFlow: 'OUT', defaultAmount: '' }
+];
 
 const SettingsManager = ({ 
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
@@ -27,6 +41,7 @@ const SettingsManager = ({
         { key: 'business', label: '業務辦理流程' }, 
         { key: 'database', label: '資料庫中心' },
         { key: 'media_center', label: '智能圖庫' },
+        { key: 'company_ledger', label: '公司營運總帳' },
         { key: 'settings', label: '系統設置' }
     ];
 
@@ -34,7 +49,7 @@ const SettingsManager = ({
         { key: 'general', label: '一般設定', icon: <LayoutDashboard size={16}/> },
         { key: 'notifications', label: '推送通知', icon: <BellRing size={16}/> },
         { key: 'vehicle_setup', label: '車輛參數', icon: <Car size={16}/> },    
-        { key: 'expenses_setup', label: '財務參數', icon: <DollarSign size={16}/> }, 
+        { key: 'expenses_setup', label: '財務與總帳參數', icon: <DollarSign size={16}/> }, 
         { key: 'crossborder_setup', label: '中港參數', icon: <Globe size={16}/> }, 
         { key: 'users', label: '用戶與權限', icon: <Users size={16}/> },
         { key: 'database_config', label: '資料庫分類', icon: <Database size={16}/> },
@@ -49,12 +64,13 @@ const SettingsManager = ({
         { key: 'import_orders', label: '海外訂車 (Import)' },
         { key: 'business', label: '中港/流程業務 (Business)' },
         { key: 'reports', label: '財務報表 (Reports)' },
+        { key: 'company_ledger', label: '公司總帳 (Ledger)' },
         { key: 'database', label: '資料庫/客戶 (Database)' },
         { key: 'settings', label: '系統設置 (Admin)' }
     ];
 
     // =========================================================
-    // ★★★ 核心修復區：所有 useState 必須放在最外層，絕對不能放在條件式內 ★★★
+    // ★★★ 核心狀態區 ★★★
     // =========================================================
     const [showMobileMenu, setShowMobileMenu] = useState(true); 
     const [activeTab, setActiveTab] = useState('general');
@@ -328,11 +344,29 @@ const SettingsManager = ({
         setNewSetupCode('');
     };
 
-    // --- 其他操作函數 ---
+    // --- 財務參數修改函數 ---
     const handleExpenseTypeChange = (idx: number, field: string, val: any) => {
         const newTypes = [...(settings.expenseTypes || [])];
         newTypes[idx] = { ...newTypes[idx] as any, [field]: val };
         updateSettings('expenseTypes', newTypes);
+    };
+
+    // --- ★ 新增：公司營運總帳分類參數修改函數 ---
+    const handleLedgerCatChange = (idx: number, field: string, val: any) => {
+        const currentCats = settings.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
+        const newCats = [...currentCats];
+        newCats[idx] = { ...newCats[idx] as any, [field]: val };
+        updateSettings('ledgerCategories', newCats as any);
+    };
+    const removeLedgerCat = (idx: number) => {
+        const currentCats = settings.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
+        const newCats = [...currentCats];
+        newCats.splice(idx, 1);
+        updateSettings('ledgerCategories', newCats as any);
+    };
+    const addLedgerCat = () => {
+        const currentCats = settings.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
+        updateSettings('ledgerCategories', [...currentCats, { name: '新會計科目', defaultFlow: 'OUT', defaultAmount: '' }] as any);
     };
 
     const handleCbItemChange = (idx: number, field: string, val: any) => {
@@ -523,7 +557,7 @@ const SettingsManager = ({
     return (
         <div className="flex h-full gap-6">
         {/* 左側選單：手機上根據 showMobileMenu 顯示/隱藏 */}
-        <div className={`w-full md:w-48 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full ${showMobileMenu ? 'block' : 'hidden md:block'}`}>
+        <div className={`w-full md:w-56 flex-none bg-slate-50 border-r border-slate-200 p-4 space-y-2 h-full ${showMobileMenu ? 'block' : 'hidden md:block'}`}>
             <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 px-2">Config Menu</h3>
             {settingsInternalMenu.map(tab => (
                 <button key={tab.key} onClick={() => { 
@@ -550,7 +584,7 @@ const SettingsManager = ({
                 {activeTab === 'general' && (
                     <div className="space-y-6">
                         
-                        {/* ★ 新增：28car 大數據比對開關 ★ */}
+                        {/* 28car 大數據比對開關 */}
                         <div className="flex items-center justify-between p-5 bg-white rounded-xl border border-slate-200 shadow-sm">
                             <div>
                                 <div className="font-bold text-slate-800 text-sm flex items-center">
@@ -564,7 +598,7 @@ const SettingsManager = ({
                                 <input 
                                     type="checkbox" 
                                     className="sr-only peer" 
-                                    checked={settings.enable28carSync !== false} // 預設為 true
+                                    checked={settings.enable28carSync !== false} 
                                     onChange={(e) => updateSettings('enable28carSync', e.target.checked)} 
                                 />
                                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -663,7 +697,7 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 2. 車輛資料 / 全域數據字典 (三級聯動修復版) */}
+                {/* 2. 車輛資料 / 全域數據字典 */}
                 {activeTab === 'vehicle_setup' && (
                     <div className="space-y-6 animate-fade-in pb-10">
                         <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-2">
@@ -671,14 +705,12 @@ const SettingsManager = ({
                             <p className="text-xs text-blue-600">在此統一管理全系統各處的基礎下拉選項。車輛採用「品牌 ➔ 型號 ➔ 海關代號」三層聯動架構。</p>
                         </div>
 
-                        {/* ★ 限制高度為畫面的 50% (h-[50vh])，確保下方的萬能折疊選單能露出來 */}
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:flex-row h-[450px] md:h-[50vh] min-h-[400px]">
                             
                             {/* 1. 品牌欄 */}
                             <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-slate-50 flex flex-col">
                                 <div className="p-3 border-b border-slate-200 bg-slate-100 font-bold text-slate-700"><span className="flex items-center"><Car size={16} className="mr-2 text-blue-500"/> 1. 品牌 (Makes)</span></div>
                                 <div className="p-2 border-b border-slate-200 bg-white flex gap-1">
-                                    {/* ★ 已經完美綁定 handleAddMake */}
                                     <input value={newSetupMake} onChange={e => setNewSetupMake(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddMake(); }} className="border rounded px-2 py-1 text-xs flex-1 outline-none focus:border-blue-400" placeholder="新增品牌..."/>
                                     <button onClick={handleAddMake} className="bg-slate-800 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                 </div>
@@ -702,7 +734,6 @@ const SettingsManager = ({
                             <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-slate-200 bg-white flex flex-col">
                                 <div className="p-3 border-b border-slate-200 bg-slate-50 font-bold text-slate-700"><span className="flex items-center"><CheckCircle size={16} className="mr-2 text-indigo-500"/> 2. 型號 (Models)</span></div>
                                 {activeSetupMake ? (() => {
-                                    // ★ 智能排序引擎：計算型號在真實庫存中的使用頻率
                                     const freqMap: Record<string, number> = {};
                                     inventory.forEach((v: any) => {
                                         if (v.make?.toLowerCase() === activeSetupMake.toLowerCase() && v.model) {
@@ -710,7 +741,6 @@ const SettingsManager = ({
                                             freqMap[m] = (freqMap[m] || 0) + 1;
                                         }
                                     });
-                                    // 排序邏輯：有使用量的排前面 (多到少)，沒用過或同頻率的按 A-Z 排列
                                     const sortedModels = [...(settings.models[activeSetupMake] || [])].sort((a, b) => {
                                         const freqA = freqMap[a.trim()] || 0;
                                         const freqB = freqMap[b.trim()] || 0;
@@ -721,7 +751,6 @@ const SettingsManager = ({
                                     return (
                                         <>
                                             <div className="p-2 border-b border-slate-200 bg-indigo-50/30 flex gap-1">
-                                                {/* ★ 已經完美綁定 handleAddModel */}
                                                 <input value={newSetupModel} onChange={e => setNewSetupModel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddModel(); }} className="border border-indigo-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-indigo-400" placeholder={`為 ${activeSetupMake} 新增...`}/>
                                                 <button onClick={handleAddModel} className="bg-indigo-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                             </div>
@@ -733,7 +762,6 @@ const SettingsManager = ({
                                                         <div key={model} onClick={() => setActiveSetupModel(model)} className={`group flex justify-between items-center p-1.5 rounded border transition-colors cursor-pointer ${activeSetupModel === model ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-100 hover:border-indigo-200'}`}>
                                                             <div className="flex items-center flex-1 mr-1">
                                                                 <input type="text" defaultValue={model} onBlur={e => handleEditModel(activeSetupMake, originalIdx, model, e.target.value)} onClick={e => e.stopPropagation()} className="bg-transparent border-b border-transparent focus:border-indigo-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" />
-                                                                {/* ★ 自動顯示頻率徽章 */}
                                                                 {usageCount > 0 && <span className="text-[9px] text-indigo-600 font-mono ml-2 bg-indigo-100 px-1.5 py-0.5 rounded shadow-sm flex-none font-black flex items-center" title={`在庫使用中: ${usageCount}台`}>🔥 {usageCount}</span>}
                                                             </div>
                                                             <div className="flex items-center gap-0.5 opacity-30 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
@@ -757,7 +785,6 @@ const SettingsManager = ({
                                 {activeSetupModel ? (
                                     <>
                                         <div className="p-2 border-b border-slate-200 bg-emerald-50/30 flex gap-1">
-                                            {/* ★ 已經完美綁定 handleAddCode */}
                                             <input value={newSetupCode} onChange={e => setNewSetupCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddCode(); }} className="border border-emerald-200 rounded px-2 py-1 text-xs flex-1 outline-none focus:border-emerald-400 uppercase font-mono" placeholder={`為 ${activeSetupModel} 新增代號...`}/>
                                             <button onClick={handleAddCode} className="bg-emerald-600 text-white px-2 rounded text-xs font-bold"><Plus size={14}/></button>
                                         </div>
@@ -835,30 +862,64 @@ const SettingsManager = ({
                     </div>
                 )}
 
-                {/* 3. 財務與費用 (完整功能) */}
+                {/* 3. 財務參數設定 (加入大內總帳分類) */}
                 {activeTab === 'expenses_setup' && (
-                    <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        <div>
-                            <h3 className="font-bold text-lg mb-3 pb-2 border-b">財務費用預設值 (Financial Defaults)</h3>
-                            <table className="w-full text-sm">
-                                <thead><tr className="text-left bg-gray-50"><th className="p-2">項目名稱</th><th className="p-2">預設金額 ($)</th><th className="p-2">預設公司</th><th className="p-2">操作</th></tr></thead>
-                                <tbody>
-                                    {(settings.expenseTypes || []).map((type: any, idx: number) => (
-                                        <tr key={idx} className="border-b hover:bg-slate-50">
-                                            <td className="p-2"><input type="text" value={type.name || type} onChange={e => handleExpenseTypeChange(idx, 'name', e.target.value)} className="border rounded p-1 w-full bg-transparent"/></td>
-                                            <td className="p-2"><input type="number" value={type.defaultAmount || 0} onChange={e => handleExpenseTypeChange(idx, 'defaultAmount', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
-                                            <td className="p-2">
-                                                <select value={type.defaultCompany || ''} onChange={e => handleExpenseTypeChange(idx, 'defaultCompany', e.target.value)} className="border rounded p-1 w-full bg-transparent">
-                                                    <option value="">-- 選擇 --</option>
-                                                    {settings.expenseCompanies?.map((c: string) => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                            </td>
-                                            <td className="p-2"><button onClick={() => removeItem('expenseTypes', idx)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <button onClick={() => updateSettings('expenseTypes', [...(settings.expenseTypes||[]), { name: '新費用', defaultAmount: 0, defaultCompany: '', defaultDays: '0' }] as any)} className="mt-2 text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200 flex items-center w-fit"><Plus size={12} className="mr-1"/> 新增費用類型</button>
+                    <div className="space-y-6">
+                        
+                        {/* A. 總帳科目設定 */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-lg mb-1">公司營運總帳科目 (Company Ledger)</h3>
+                            <p className="text-xs text-slate-500 mb-4">設定公司日常水電、租金、薪資等記帳科目與預設收支方向。</p>
+                            
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead><tr className="text-left bg-gray-50"><th className="p-2 min-w-[120px]">科目名稱</th><th className="p-2 w-32">預設方向</th><th className="p-2 w-28">預設金額 ($)</th><th className="p-2 w-12 text-center">操作</th></tr></thead>
+                                    <tbody>
+                                        {(settings.ledgerCategories || DEFAULT_LEDGER_CATEGORIES).map((cat: any, idx: number) => (
+                                            <tr key={idx} className="border-b hover:bg-slate-50">
+                                                <td className="p-2"><input type="text" value={cat.name || ''} onChange={e => handleLedgerCatChange(idx, 'name', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full bg-white font-bold text-slate-700 outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2">
+                                                    <select value={cat.defaultFlow || 'OUT'} onChange={e => handleLedgerCatChange(idx, 'defaultFlow', e.target.value)} className={`border border-slate-200 rounded p-1.5 w-full outline-none font-bold ${cat.defaultFlow === 'IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                                        <option value="OUT">支出 (OUT)</option>
+                                                        <option value="IN">存入 (IN)</option>
+                                                    </select>
+                                                </td>
+                                                <td className="p-2"><input type="number" placeholder="無" value={cat.defaultAmount || ''} onChange={e => handleLedgerCatChange(idx, 'defaultAmount', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full font-mono text-right outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2 text-center"><button onClick={() => removeLedgerCat(idx)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button onClick={addLedgerCat} className="mt-4 text-xs bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold shadow-sm transition-colors"><Plus size={14} className="mr-1"/> 新增會計科目</button>
+                        </div>
+
+                        {/* B. 車輛維修/進貨成本設定 */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h3 className="font-bold text-lg mb-1">車輛綁定費用預設值 (Vehicle Expenses)</h3>
+                            <p className="text-xs text-slate-500 mb-4">設定綁定在每台車輛上的進貨、維修、翻新成本預設值。</p>
+                            
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead><tr className="text-left bg-gray-50"><th className="p-2 min-w-[120px]">項目名稱</th><th className="p-2 w-28">預設金額 ($)</th><th className="p-2 min-w-[150px]">預設車房/公司</th><th className="p-2 w-12 text-center">操作</th></tr></thead>
+                                    <tbody>
+                                        {(settings.expenseTypes || []).map((type: any, idx: number) => (
+                                            <tr key={idx} className="border-b hover:bg-slate-50">
+                                                <td className="p-2"><input type="text" value={type.name || type} onChange={e => handleExpenseTypeChange(idx, 'name', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full bg-white font-bold text-slate-700 outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2"><input type="number" value={type.defaultAmount || 0} onChange={e => handleExpenseTypeChange(idx, 'defaultAmount', Number(e.target.value))} className="border border-slate-200 rounded p-1.5 w-full font-mono text-right outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2">
+                                                    <select value={type.defaultCompany || ''} onChange={e => handleExpenseTypeChange(idx, 'defaultCompany', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full bg-white font-bold text-slate-600 outline-none focus:border-blue-400">
+                                                        <option value="">-- 手動選擇 --</option>
+                                                        {settings.expenseCompanies?.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </td>
+                                                <td className="p-2 text-center"><button onClick={() => removeItem('expenseTypes', idx)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button onClick={() => updateSettings('expenseTypes', [...(settings.expenseTypes||[]), { name: '新費用', defaultAmount: 0, defaultCompany: '', defaultDays: '0' }] as any)} className="mt-4 text-xs bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold shadow-sm transition-colors"><Plus size={14} className="mr-1"/> 新增車輛費用</button>
                         </div>
                     </div>
                 )}
@@ -868,26 +929,28 @@ const SettingsManager = ({
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                         <div>
                             <h3 className="font-bold text-lg mb-3 pb-2 border-b">中港代辦項目預設值 (CB Defaults)</h3>
-                            <table className="w-full text-sm">
-                                <thead><tr className="text-left bg-gray-50"><th className="p-2">項目名稱</th><th className="p-2">預設收費 ($)</th><th className="p-2">預設天數</th><th className="p-2">預設機構</th><th className="p-2">操作</th></tr></thead>
-                                <tbody>
-                                    {(settings.cbItems || []).map((item: any, idx: number) => (
-                                        <tr key={idx} className="border-b hover:bg-slate-50">
-                                            <td className="p-2"><input type="text" value={item.name || item} onChange={e => handleCbItemChange(idx, 'name', e.target.value)} className="border rounded p-1 w-full bg-transparent"/></td>
-                                            <td className="p-2"><input type="number" value={item.defaultFee || 0} onChange={e => handleCbItemChange(idx, 'defaultFee', Number(e.target.value))} className="border rounded p-1 w-24"/></td>
-                                            <td className="p-2"><input type="number" value={item.defaultDays || '7'} onChange={e => handleCbItemChange(idx, 'defaultDays', e.target.value)} className="border rounded p-1 w-16"/></td>
-                                            <td className="p-2">
-                                                <select value={item.defaultInst || ''} onChange={e => handleCbItemChange(idx, 'defaultInst', e.target.value)} className="border rounded p-1 w-full bg-transparent">
-                                                    <option value="">-- 選擇 --</option>
-                                                    {settings.cbInstitutions?.map((inst: string) => <option key={inst} value={inst}>{inst}</option>)}
-                                                </select>
-                                            </td>
-                                            <td className="p-2"><button onClick={() => removeItem('cbItems', idx)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <button onClick={() => updateSettings('cbItems', [...(settings.cbItems||[]), { name: '新服務', defaultFee: 0, defaultDays: '7', defaultInst: '' }] as any)} className="mt-2 text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded hover:bg-blue-200 flex items-center w-fit"><Plus size={12} className="mr-1"/> 新增服務項目</button>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead><tr className="text-left bg-gray-50"><th className="p-2 min-w-[120px]">項目名稱</th><th className="p-2 w-28">預設收費 ($)</th><th className="p-2 w-24">預設天數</th><th className="p-2 min-w-[150px]">預設機構</th><th className="p-2 w-12 text-center">操作</th></tr></thead>
+                                    <tbody>
+                                        {(settings.cbItems || []).map((item: any, idx: number) => (
+                                            <tr key={idx} className="border-b hover:bg-slate-50">
+                                                <td className="p-2"><input type="text" value={item.name || item} onChange={e => handleCbItemChange(idx, 'name', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full bg-white font-bold text-slate-700 outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2"><input type="number" value={item.defaultFee || 0} onChange={e => handleCbItemChange(idx, 'defaultFee', Number(e.target.value))} className="border border-slate-200 rounded p-1.5 w-full font-mono text-right outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2"><input type="number" value={item.defaultDays || '7'} onChange={e => handleCbItemChange(idx, 'defaultDays', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full font-mono text-center outline-none focus:border-blue-400"/></td>
+                                                <td className="p-2">
+                                                    <select value={item.defaultInst || ''} onChange={e => handleCbItemChange(idx, 'defaultInst', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full bg-white font-bold text-slate-600 outline-none focus:border-blue-400">
+                                                        <option value="">-- 手動選擇 --</option>
+                                                        {settings.cbInstitutions?.map((inst: string) => <option key={inst} value={inst}>{inst}</option>)}
+                                                    </select>
+                                                </td>
+                                                <td className="p-2 text-center"><button onClick={() => removeItem('cbItems', idx)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button onClick={() => updateSettings('cbItems', [...(settings.cbItems||[]), { name: '新服務', defaultFee: 0, defaultDays: '7', defaultInst: '' }] as any)} className="mt-4 text-xs bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold shadow-sm transition-colors"><Plus size={14} className="mr-1"/> 新增代辦項目</button>
                         </div>
                     </div>
                 )}
