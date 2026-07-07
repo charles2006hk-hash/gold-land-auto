@@ -8,7 +8,7 @@ import {
     TrendingUp, ArrowUpRight, ArrowDownRight, FileSpreadsheet, RefreshCw,
     ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark
 } from 'lucide-react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy } from 'firebase/firestore';
 
 // 預設日常收支科目 (如果系統設置裡沒有，就用這個墊底)
 const DEFAULT_LEDGER_CATEGORIES = [
@@ -17,11 +17,21 @@ const DEFAULT_LEDGER_CATEGORIES = [
     { name: '員工薪資/佣金', defaultFlow: 'OUT', defaultAmount: '' },
     { name: '交際應酬/茶水', defaultFlow: 'OUT', defaultAmount: '' },
     { name: '市場廣告/行銷', defaultFlow: 'OUT', defaultAmount: '' },
-    { name: '文具雜項/軟體', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '文具雜項/軟體訂閱', defaultFlow: 'OUT', defaultAmount: '' },
     { name: '政府資助/補貼', defaultFlow: 'IN', defaultAmount: '' },
     { name: '其他收入', defaultFlow: 'IN', defaultAmount: '' },
     { name: '其他雜支', defaultFlow: 'OUT', defaultAmount: '' }
 ];
+
+// 取得本月第一天與最後一天作為預設值
+const getFirstDay = () => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+};
+const getLastDay = () => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+};
 
 export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, settings }: any) {
     // 🔒 核心權限防護鎖
@@ -30,13 +40,30 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
     const [ledgerItems, setLedgerItems] = useState<any[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]); 
     const [loading, setLoading] = useState(true);
-    const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
-    const [filterMonth, setFilterMonth] = useState((new Date().getMonth() + 1).toString().padStart(2, '0'));
+    
+    // ★ 升級：日期區間鎖定狀態
+    const [startDate, setStartDate] = useState(getFirstDay());
+    const [endDate, setEndDate] = useState(getLastDay());
     
     // 從 settings 拿取分類，若無則用預設
     const ledgerCategories = settings?.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
 
-    // ★ 修復 1：當系統設定的分類更新時，自動重新對齊目前選擇的科目
+    // 表單狀態
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [newExpense, setNewExpense] = useState({
+        category: ledgerCategories[0]?.name || '公司租金',
+        flow: ledgerCategories[0]?.defaultFlow || 'OUT', 
+        type: 'Fixed', 
+        title: '',
+        amount: ledgerCategories[0]?.defaultAmount || '',
+        dueDate: new Date().toISOString().split('T')[0],
+        status: 'Unpaid', 
+        paymentDate: '',
+        paymentMethod: 'Transfer', 
+        chequeNo: '' 
+    });
+
+    // ★ 修復：當系統設定的分類更新時，自動重新對齊目前選擇的科目
     useEffect(() => {
         if (ledgerCategories && ledgerCategories.length > 0) {
             const currentCatExists = ledgerCategories.some((c: any) => c.name === newExpense.category);
@@ -52,54 +79,22 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         }
     }, [settings?.ledgerCategories]);
 
-    // ★ 修復 2：把選擇科目時「自動帶入預設值」的功能加回來
-    const handleCategoryChange = (catName: string) => {
-        const setting = ledgerCategories.find((c: any) => c.name === catName);
-        setNewExpense({
-            ...newExpense,
-            category: catName,
-            flow: setting?.defaultFlow || 'OUT',
-            amount: setting?.defaultAmount ? String(setting.defaultAmount) : '',
-            chequeNo: ''
-        });
-    };
-    
-    // 表單狀態
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [newExpense, setNewExpense] = useState({
-        category: ledgerCategories[0]?.name || '公司租金',
-        flow: ledgerCategories[0]?.defaultFlow || 'OUT', // 'IN'=存入, 'OUT'=支出
-        type: 'Fixed', // Fixed = 固定(按月), Variable = 浮動/臨時
-        title: '',
-        amount: ledgerCategories[0]?.defaultAmount || '',
-        dueDate: new Date().toISOString().split('T')[0],
-        status: 'Unpaid', 
-        paymentDate: '',
-        paymentMethod: 'Transfer', // 'Cash', 'Transfer', 'Cheque'
-        chequeNo: '' // 支票號碼
-    });
-
     // 1. 實時監聽公司日常費用總帳
     useEffect(() => {
         if (!db || !appId || !isManager) return;
-
         const q = query(
             collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'),
             orderBy('dueDate', 'desc')
         );
-
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list: any[] = [];
-            snapshot.forEach(doc => {
-                list.push({ id: doc.id, ...doc.data() });
-            });
+            snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
             setLedgerItems(list);
             setLoading(false);
         }, (err) => {
             console.error("監聽日常總帳失敗:", err);
             setLoading(false);
         });
-
         return () => unsubscribe();
     }, [db, appId, isManager]);
 
@@ -115,23 +110,27 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         return () => unsubscribe();
     }, [db, appId, isManager]);
 
-    const currentMonthItems = useMemo(() => {
-        const prefix = `${filterYear}-${filterMonth}`;
-        return ledgerItems.filter(item => (item.dueDate || '').startsWith(prefix));
-    }, [ledgerItems, filterYear, filterMonth]);
+    // ★ 升級：根據指定的日期區間過濾資料
+    const filteredItems = useMemo(() => {
+        if (!startDate || !endDate) return ledgerItems;
+        return ledgerItems.filter(item => {
+            const date = item.dueDate || '';
+            return date >= startDate && date <= endDate;
+        });
+    }, [ledgerItems, startDate, endDate]);
 
-    // 計算本月待繳費紅綠燈指標 (只抓支出的欠款)
+    // 待繳費預警：所有「未結清」的支出都會顯示，不受日期區間限制（因為欠款永遠是欠款）
     const unpaidItems = useMemo(() => {
         return ledgerItems.filter(item => item.status === 'Unpaid' && item.flow === 'OUT').sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     }, [ledgerItems]);
 
-    // 財務做數摘要計算面板
+    // 財務做數摘要計算面板 (根據日期區間)
     const summary = useMemo(() => {
         let totalOutPaid = 0;
         let totalInPaid = 0;
         let totalUnpaidOut = 0;
 
-        currentMonthItems.forEach(item => {
+        filteredItems.forEach(item => {
             const amt = Number(item.amount) || 0;
             if (item.status === 'Unpaid') {
                 if (item.flow === 'OUT') totalUnpaidOut += amt;
@@ -141,13 +140,12 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             }
         });
 
-        // 計算車輛銷售帶來的總毛利
         let totalCarProfit = 0;
-        const targetMonthPrefix = `${filterYear}-${filterMonth}`;
         
         vehicles.forEach(v => {
             const outDate = v.stockOutDate || '';
-            if (outDate.startsWith(targetMonthPrefix) && v.status === 'Sold') {
+            // ★ 升級：判斷售出日期是否落在選定的區間內
+            if (outDate >= startDate && outDate <= endDate && v.status === 'Sold') {
                 const sellPrice = Number(v.price) || 0;
                 const costPrice = Number(v.costPrice) || 0;
                 const addonsTotal = (v.salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
@@ -157,19 +155,22 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             }
         });
 
-        // 淨利 = 賣車利潤 + 其他日常收入 - 日常支出
         const netProfit = totalCarProfit + totalInPaid - totalOutPaid;
 
-        return {
-            totalOutPaid,
-            totalInPaid,
-            unpaidOut: totalUnpaidOut,
-            carProfit: totalCarProfit,
-            netProfit: netProfit
-        };
-    }, [currentMonthItems, vehicles, filterYear, filterMonth]);
+        return { totalOutPaid, totalInPaid, unpaidOut: totalUnpaidOut, carProfit: totalCarProfit, netProfit };
+    }, [filteredItems, vehicles, startDate, endDate]);
 
-    
+    // ★ 把選擇科目時「自動帶入預設值」的功能接回
+    const handleCategoryChange = (catName: string) => {
+        const setting = ledgerCategories.find((c: any) => c.name === catName);
+        setNewExpense({
+            ...newExpense,
+            category: catName,
+            flow: setting?.defaultFlow || 'OUT',
+            amount: setting?.defaultAmount ? String(setting.defaultAmount) : '',
+            chequeNo: ''
+        });
+    };
 
     const handleAddExpense = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -180,8 +181,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         try {
             const id = Date.now().toString();
             const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id);
-            
-            // 如果剛建立就標記已繳，自動押上付款日
             const finalPaymentDate = newExpense.status === 'Paid' ? new Date().toISOString().split('T')[0] : '';
 
             await setDoc(docRef, {
@@ -192,12 +191,9 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 updatedBy: currentUser?.email || staffId
             });
 
-            // 儲存後清空標題與金額，保留其他設定方便連續輸入
             setNewExpense(prev => ({ ...prev, title: '', amount: '', chequeNo: '' }));
             alert('✅ 帳目已成功登錄！');
-        } catch (err) {
-            alert('記帳失敗: ' + err);
-        }
+        } catch (err) { alert('記帳失敗: ' + err); }
         setIsSubmitting(false);
     };
 
@@ -218,15 +214,19 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         catch (err) { alert('刪除失敗: ' + err); }
     };
 
+    // ★ 升級：基於區間起點日期，複製上個月的固定帳目
     const handleCopyLastMonthFixed = async () => {
-        if (!confirm('系統將自動搜尋上個月設定為「固定(按月)」的項目，並一鍵複製為本月的「待處理」清單，是否執行？')) return;
+        if (!confirm('系統將自動搜尋「起點日期」上個月的固定項目，並複製到「起點日期」所在的月份。是否執行？')) return;
         
         setLoading(true);
         try {
-            let lastM = Number(filterMonth) - 1;
-            let lastY = Number(filterYear);
-            if (lastM === 0) { lastM = 12; lastY -= 1; }
-            const lastMonthPrefix = `${lastY}-${lastM.toString().padStart(2, '0')}`;
+            const startD = new Date(startDate);
+            const currentYear = startD.getFullYear();
+            const currentMonth = (startD.getMonth() + 1).toString().padStart(2, '0');
+
+            // 抓上個月的年月份
+            startD.setMonth(startD.getMonth() - 1);
+            const lastMonthPrefix = startD.toISOString().slice(0, 7);
 
             const lastMonthFixedItems = ledgerItems.filter(item => item.type === 'Fixed' && (item.dueDate || '').startsWith(lastMonthPrefix));
 
@@ -238,39 +238,41 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             for (const item of lastMonthFixedItems) {
                 const id = (Date.now() + Math.random()).toString();
                 const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id);
-                const newDueDate = `${filterYear}-${filterMonth}-${item.dueDate?.split('-')[2] || '01'}`;
+                const day = item.dueDate?.split('-')[2] || '01';
+                const newDueDate = `${currentYear}-${currentMonth}-${day}`;
 
                 await setDoc(docRef, {
                     category: item.category, type: 'Fixed', flow: item.flow || 'OUT',
-                    title: `${item.title} (續期)`, amount: item.amount, dueDate: newDueDate,
+                    title: `${item.title.replace(' (續期)', '')} (續期)`, amount: item.amount, dueDate: newDueDate,
                     status: 'Unpaid', paymentDate: '', paymentMethod: item.paymentMethod || 'Transfer', chequeNo: '',
                     createdAt: new Date().toISOString(), updatedBy: staffId
                 });
             }
-            alert(`✅ 成功複製 ${lastMonthFixedItems.length} 筆固定帳目至本月！`);
+            alert(`✅ 成功複製 ${lastMonthFixedItems.length} 筆固定帳目至 ${currentYear}-${currentMonth}！`);
         } catch (err) { alert('複製失敗: ' + err); }
         setLoading(false);
     };
 
+    // ★ 升級：匯出包含日期區間與存入支出
     const handleExportCSV = () => {
         let csvContent = "\uFEFF"; 
-        csvContent += "會計年度,會計月份,帳目方向,費用科目,帳目屬性,項目名稱,交易金額(HKD),到期日,交易狀態,實際付款/收款日,金流方式,支票號碼,最後經手人\n";
+        csvContent += "到期日,帳目方向,費用科目,帳目屬性,項目名稱,交易金額(HKD),交易狀態,實際收款/付款日,金流方式,支票號碼,最後經手人\n";
 
-        currentMonthItems.forEach(item => {
+        filteredItems.forEach(item => {
             const flowStr = item.flow === 'IN' ? '收入(IN)' : '支出(OUT)';
             const typeStr = item.type === 'Fixed' ? '固定' : '浮動';
             const statusStr = item.status === 'Paid' ? '已結清' : '🔴待處理';
             const methodMap: any = { 'Cash': '現金', 'Transfer': '轉帳', 'Cheque': '支票' };
             const methodStr = methodMap[item.paymentMethod] || item.paymentMethod;
             
-            csvContent += `${filterYear},${filterMonth},${flowStr},${item.category},${typeStr},"${item.title.replace(/"/g, '""')}",${item.amount},${item.dueDate},${statusStr},${item.paymentDate || '-'},${methodStr},${item.chequeNo || '-'},${item.updatedBy || '-'}\n`;
+            csvContent += `${item.dueDate},${flowStr},${item.category},${typeStr},"${item.title.replace(/"/g, '""')}",${item.amount},${statusStr},${item.paymentDate || '-'},${methodStr},${item.chequeNo || '-'},${item.updatedBy || '-'}\n`;
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.setAttribute("href", url);
-        link.setAttribute("download", `金田汽車_營運總帳_${filterYear}年${filterMonth}月.csv`);
+        link.setAttribute("download", `金田汽車_營運總帳_${startDate}_至_${endDate}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -296,7 +298,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">本月車輛售出利潤</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間車輛售出毛利</span>
                         <span className="text-xl font-black font-mono text-emerald-600 mt-1 block">${summary.carProfit.toLocaleString()}</span>
                     </div>
                     <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg"><TrendingUp size={20}/></div>
@@ -305,24 +307,24 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">本月營運已付支出 (OUT)</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間已付支出 (OUT)</span>
                         <span className="text-xl font-black font-mono text-red-600 mt-1 block">${summary.totalOutPaid.toLocaleString()}</span>
                     </div>
                     <div className="p-2.5 bg-red-50 text-red-600 rounded-lg"><ArrowUpRight size={20}/></div>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-2 h-full bg-amber-500"></div>
+                    <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">本月待繳支出紅燈</span>
-                        <span className="text-xl font-black font-mono text-amber-600 mt-1 block">${summary.unpaidOut.toLocaleString()}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間其他存入 (IN)</span>
+                        <span className="text-xl font-black font-mono text-blue-600 mt-1 block">${summary.totalInPaid.toLocaleString()}</span>
                     </div>
-                    <div className="p-2.5 bg-amber-50 text-amber-600 rounded-lg animate-pulse"><AlertTriangle size={20}/></div>
+                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg"><ArrowDownToLine size={20}/></div>
                 </div>
 
                 <div className={`p-4 rounded-xl border shadow-sm flex items-center justify-between relative overflow-hidden ${summary.netProfit >= 0 ? 'bg-blue-900 border-blue-950 text-white' : 'bg-rose-950 border-red-950 text-white'}`}>
                     <div>
-                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest block">公司真實淨利 (Net)</span>
+                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest block">區間公司真實淨利 (Net)</span>
                         <span className="text-2xl font-black font-mono mt-1 block tracking-tight">${summary.netProfit.toLocaleString()}</span>
                     </div>
                     <div className={`p-2.5 rounded-lg ${summary.netProfit >= 0 ? 'bg-blue-800 text-blue-200' : 'bg-rose-800 text-rose-200'}`}>
@@ -454,23 +456,32 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
                 {/* 右側：會計總帳主清單 */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 lg:col-span-2 space-y-4">
-                    <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 border-b pb-3 flex-none">
-                        <div className="flex items-center gap-2">
-                            <CalendarDays size={18} className="text-slate-400" />
-                            <select value={filterYear} onChange={e => setFilterYear(e.target.value)} className="p-1.5 border rounded-md text-xs font-bold text-slate-700 outline-none bg-slate-50 cursor-pointer">
-                                {['2026', '2027', '2025'].map(y => <option key={y} value={y}>{y} 年</option>)}
-                            </select>
-                            <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="p-1.5 border rounded-md text-xs font-bold text-slate-700 outline-none bg-slate-50 cursor-pointer">
-                                {Array.from({length: 12}, (_, i) => (i+1).toString().padStart(2, '0')).map(m => <option key={m} value={m}>{m} 月</option>)}
-                            </select>
+                    <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 border-b pb-3 flex-none">
+                        
+                        {/* ★ 升級：日期區間鎖定過濾器 */}
+                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                            <CalendarDays size={16} className="text-slate-400 ml-1" />
+                            <input 
+                                type="date" 
+                                value={startDate} 
+                                onChange={e => setStartDate(e.target.value)} 
+                                className="p-1 border rounded text-xs font-mono font-bold text-slate-700 outline-none bg-white cursor-pointer"
+                            />
+                            <span className="text-slate-400 font-bold text-xs">至</span>
+                            <input 
+                                type="date" 
+                                value={endDate} 
+                                onChange={e => setEndDate(e.target.value)} 
+                                className="p-1 border rounded text-xs font-mono font-bold text-slate-700 outline-none bg-white cursor-pointer"
+                            />
                         </div>
                         
                         <div className="flex gap-2">
-                            <button type="button" onClick={handleCopyLastMonthFixed} className="flex-1 sm:flex-none text-[11px] bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
-                                <Copy size={12}/> 一鍵套用上月固定帳目
+                            <button type="button" onClick={handleCopyLastMonthFixed} className="flex-1 md:flex-none text-[11px] bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold px-3 py-2 md:py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
+                                <Copy size={12}/> 一鍵複製前期固定帳目
                             </button>
-                            <button type="button" onClick={handleExportCSV} className="flex-1 sm:flex-none text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
-                                <FileSpreadsheet size={12}/> 匯出會計 Excel
+                            <button type="button" onClick={handleExportCSV} className="flex-1 md:flex-none text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-3 py-2 md:py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
+                                <FileSpreadsheet size={12}/> 匯出區間 Excel
                             </button>
                         </div>
                     </div>
@@ -488,7 +499,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                 </tr>
                             </thead>
                             <tbody>
-                                {currentMonthItems.map(item => (
+                                {filteredItems.map(item => (
                                     <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors font-medium text-slate-700">
                                         <td className="p-3 font-mono tracking-tight">{item.dueDate}</td>
                                         <td className="p-3">
@@ -524,8 +535,8 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                         </td>
                                     </tr>
                                 ))}
-                                {currentMonthItems.length === 0 && (
-                                    <tr><td colSpan={6} className="text-center text-slate-400 py-16 font-bold border-2 border-dashed rounded-xl bg-slate-50/50">📬 本月無帳目紀錄。點擊右上方「一鍵套用」可快速從上月複製！</td></tr>
+                                {filteredItems.length === 0 && (
+                                    <tr><td colSpan={6} className="text-center text-slate-400 py-16 font-bold border-2 border-dashed rounded-xl bg-slate-50/50">📬 該日期區間無帳目紀錄。</td></tr>
                                 )}
                             </tbody>
                         </table>
