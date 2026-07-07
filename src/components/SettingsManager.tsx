@@ -369,6 +369,17 @@ const SettingsManager = ({
         updateSettings('ledgerCategories', [...currentCats, { name: '新會計科目', defaultFlow: 'OUT', defaultAmount: '' }] as any);
     };
 
+    const moveLedgerCat = (idx: number, direction: 'up' | 'down') => {
+        const currentCats = settings.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
+        const newCats = [...currentCats];
+        if (direction === 'up' && idx > 0) {
+            [newCats[idx - 1], newCats[idx]] = [newCats[idx], newCats[idx - 1]];
+        } else if (direction === 'down' && idx < newCats.length - 1) {
+            [newCats[idx + 1], newCats[idx]] = [newCats[idx], newCats[idx + 1]];
+        }
+        updateSettings('ledgerCategories', newCats as any);
+    };
+    
     const handleCbItemChange = (idx: number, field: string, val: any) => {
         const newItems = [...(settings.cbItems || [])];
         newItems[idx] = { ...newItems[idx] as any, [field]: val };
@@ -885,7 +896,13 @@ const SettingsManager = ({
                                                     </select>
                                                 </td>
                                                 <td className="p-2"><input type="number" placeholder="無" value={cat.defaultAmount || ''} onChange={e => handleLedgerCatChange(idx, 'defaultAmount', e.target.value)} className="border border-slate-200 rounded p-1.5 w-full font-mono text-right outline-none focus:border-blue-400"/></td>
-                                                <td className="p-2 text-center"><button onClick={() => removeLedgerCat(idx)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button></td>
+                                                <td className="p-2 text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button onClick={() => moveLedgerCat(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronUp size={16}/></button>
+                                                        <button onClick={() => moveLedgerCat(idx, 'down')} disabled={idx === (settings.ledgerCategories || DEFAULT_LEDGER_CATEGORIES).length - 1} className="p-1 text-slate-400 hover:text-blue-600 disabled:opacity-30"><ChevronDown size={16}/></button>
+                                                        <button onClick={() => removeLedgerCat(idx)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14}/></button>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
