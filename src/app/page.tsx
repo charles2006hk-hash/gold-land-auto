@@ -35,6 +35,7 @@ import { compressImage } from '@/utils/imageHelpers';
 import ImportOrderManager from '@/components/ImportOrderManager';
 import DocumentTemplate from '@/components/DocumentTemplate';
 import CreateDocModule from '@/components/CreateDocModule';
+import CompanyFinanceLedger from '@/components/CompanyFinanceLedger';
 import VehicleFormModal from '@/components/VehicleFormModal';
 import SettingsManager from '@/components/SettingsManager';
 import FinanceModule from '@/components/FinanceModule';
@@ -523,6 +524,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
         { id: 'import_orders', label: '海外訂車管家', icon: Ship, permission: 'import_orders' },
         { id: 'create_doc', label: '開單系統', icon: FileText, permission: 'inventory' }, 
         { id: 'reports', label: '財務總覽', icon: Briefcase, permission: 'reports' },
+        { id: 'company_ledger', label: '公司營運總帳', icon: Receipt, permission: 'company_ledger' },
         { id: 'cross_border', label: '中港業務', icon: Globe, permission: 'business' }, 
         { id: 'business', label: '業務辦理流程', icon: Briefcase, permission: 'business' },
         { id: 'database', label: '資料庫中心', icon: Database, permission: 'database' },
@@ -1038,7 +1040,7 @@ export default function GoldLandAutoDMS() {
   const [staffId, setStaffId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[], dataAccess?: string } | null>(null);
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database' | 'media_center' | 'import_orders'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database' | 'media_center' | 'import_orders' | 'company_ledger'>('dashboard');
   const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
   const [isDataSyncing, setIsDataSyncing] = useState(true);
@@ -4133,6 +4135,17 @@ const DatabaseSelector = ({
                     inventory={visibleInventory}
                     settings={settings}
                     systemUsers={systemUsers}
+                />
+            </div>
+        )}
+
+        {activeTab === 'company_ledger' && (
+            <div className="h-full animate-fade-in flex-1 overflow-y-auto">
+                <CompanyFinanceLedger 
+                    db={db}
+                    appId={appId}
+                    staffId={staffId}
+                    currentUser={currentUser}
                 />
             </div>
         )}
