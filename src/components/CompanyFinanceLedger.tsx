@@ -387,7 +387,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             <label className="block text-xs font-bold text-slate-500 mb-1">科目分類</label>
                             <select 
                                 value={newExpense.category} 
-                                onChange={e => handleCategoryChange(e.target.value)} {/* 👈 改成這樣 */}
+                                onChange={e => handleCategoryChange(e.target.value)}
                                 className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700 outline-none"
                             >
                                 {ledgerCategories.map((cat:any) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
