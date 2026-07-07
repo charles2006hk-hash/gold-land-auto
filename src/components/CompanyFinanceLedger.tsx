@@ -169,18 +169,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         };
     }, [currentMonthItems, vehicles, filterYear, filterMonth]);
 
-    // 選擇科目時自動載入預設值
-    const handleCategoryChange = (catName: string) => {
-        const setting = ledgerCategories.find((c: any) => c.name === catName);
-        setNewExpense({
-            ...newExpense,
-            category: catName,
-            flow: setting?.defaultFlow || 'OUT',
-            amount: setting?.defaultAmount ? String(setting.defaultAmount) : '',
-            // 清空支票號碼防呆
-            chequeNo: ''
-        });
-    };
+    
 
     const handleAddExpense = async (e: React.FormEvent) => {
         e.preventDefault();
