@@ -4139,6 +4139,7 @@ const DatabaseSelector = ({
             </div>
         )}
 
+        {/* 公司營運總帳模塊 */}
         {activeTab === 'company_ledger' && (
             <div className="h-full animate-fade-in flex-1 overflow-y-auto">
                 <CompanyFinanceLedger 
@@ -4146,6 +4147,7 @@ const DatabaseSelector = ({
                     appId={appId}
                     staffId={staffId}
                     currentUser={currentUser}
+                    settings={settings} {/* 👈 關鍵：這一行必須確保有傳入 settings！ */}
                 />
             </div>
         )}
