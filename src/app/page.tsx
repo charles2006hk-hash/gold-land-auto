@@ -1159,6 +1159,19 @@ export default function GoldLandAutoDMS() {
     } catch (e) { console.error("Log error:", e); }
     };
 
+  // ★ 新增：首頁實時監聽「公司營運總帳」未付項目，為了在卡片上顯示提醒
+  const [unpaidCompanyExpenses, setUnpaidCompanyExpenses] = useState<any[]>([]);
+  useEffect(() => {
+      if (!db || !appId) return;
+      const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), where('status', '==', 'Unpaid'));
+      const unsub = onSnapshot(q, (snapshot) => {
+          const list: any[] = [];
+          snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+          setUnpaidCompanyExpenses(list);
+      });
+      return () => unsub();
+  }, [db, appId]);
+  
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
   // 1. 定義預設設定 (修正版：補回 dbCategories 與 dbRoles)
@@ -1208,6 +1221,8 @@ export default function GoldLandAutoDMS() {
         backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
     };
 
+  
+  
   // 1. ★★★ 定義資料權限過濾器 ★★★
   const getVisibleInventory = () => {
       // 1. 管理員看全部
@@ -3136,6 +3151,28 @@ const DatabaseSelector = ({
                           }
                       }
                   });
+
+                  // ★ 新增：把公司營運總帳的待繳項目也塞進這個卡片！
+                  unpaidCompanyExpenses.forEach(exp => {
+                      if (exp.dueDate && exp.flow === 'OUT') { // 只提醒要付錢的
+                          const days = getDaysRemaining(exp.dueDate);
+                          // 只要是過期，或者未來 30 天內的都提醒
+                          if (days !== null && days <= 30) {
+                              docAlerts.push({
+                                  id: exp.id,
+                                  title: exp.title || '日常營運開支',
+                                  desc: `[財務] ${exp.category}`,
+                                  date: exp.dueDate,
+                                  days,
+                                  status: days < 0 ? 'expired' : 'soon',
+                                  raw: exp,
+                                  source: 'ledger' // 標記來源為總帳
+                              });
+                          }
+                      }
+                  });
+                
+              
                   docAlerts.sort((a, b) => a.days - b.days);
 
                   const cbAlerts: any[] = [];
@@ -3229,6 +3266,7 @@ const DatabaseSelector = ({
                               <div className="hidden md:block flex-1 min-w-0">
                                   <AlertList items={docAlerts} onItemClick={(item:any) => { 
                                       if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); } 
+                                      else if (item.source === 'ledger') { setActiveTab('company_ledger'); }
                                       else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
                                   }} />
                               </div>
