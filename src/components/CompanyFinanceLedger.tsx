@@ -6,11 +6,10 @@ import {
     DollarSign, CalendarDays, Plus, CheckCircle2, AlertTriangle, 
     Download, Copy, Trash2, Loader2, ShieldAlert, Building2, 
     TrendingUp, ArrowUpRight, ArrowDownRight, FileSpreadsheet, RefreshCw,
-    ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark, Edit
+    ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark, Edit, Lock
 } from 'lucide-react';
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy } from 'firebase/firestore';
 
-// 預設日常收支科目
 const DEFAULT_LEDGER_CATEGORIES = [
     { name: '公司租金', defaultFlow: 'OUT', defaultAmount: '' },
     { name: '水電網絡', defaultFlow: 'OUT', defaultAmount: '' },
@@ -32,38 +31,47 @@ const getLastDay = () => {
     return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
 };
 
-// ★ 輔助函數：格式化金額（支援千分位與最多2位小數）
 const formatInputAmount = (val: string) => {
-    let cleanVal = val.replace(/[^0-9.]/g, ''); // 只允許數字與小數點
+    let cleanVal = val.replace(/[^0-9.]/g, ''); 
     const parts = cleanVal.split('.');
-    if (parts.length > 2) cleanVal = parts[0] + '.' + parts.slice(1).join(''); // 防呆：防止多個小數點
-    if (parts.length > 1 && parts[1].length > 2) cleanVal = parts[0] + '.' + parts[1].substring(0, 2); // 限制兩位小數
+    if (parts.length > 2) cleanVal = parts[0] + '.' + parts.slice(1).join(''); 
+    if (parts.length > 1 && parts[1].length > 2) cleanVal = parts[0] + '.' + parts[1].substring(0, 2); 
     
     const p = cleanVal.split('.');
     const integerPart = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     return p.length > 1 ? `${integerPart}.${p[1]}` : integerPart;
 };
 
-// ★ 輔助函數：顯示為帶2位小數的貨幣格式
 const formatDisplayAmount = (num: number) => {
     return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, settings }: any) {
-    // 🔒 核心權限防護鎖
     const isManager = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.role === 'admin';
 
     const [ledgerItems, setLedgerItems] = useState<any[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]); 
     const [loading, setLoading] = useState(true);
     
-    // 日期區間鎖定狀態
-    const [startDate, setStartDate] = useState(getFirstDay());
-    const [endDate, setEndDate] = useState(getLastDay());
+    // ★ 升級 1：讀取與寫入 Local Storage，實現日期區間「鎖定」
+    const [startDate, setStartDate] = useState(() => {
+        if (typeof window !== 'undefined') return localStorage.getItem('gla_finance_start') || getFirstDay();
+        return getFirstDay();
+    });
+    const [endDate, setEndDate] = useState(() => {
+        if (typeof window !== 'undefined') return localStorage.getItem('gla_finance_end') || getLastDay();
+        return getLastDay();
+    });
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('gla_finance_start', startDate);
+            localStorage.setItem('gla_finance_end', endDate);
+        }
+    }, [startDate, endDate]);
     
     const ledgerCategories = settings?.ledgerCategories || DEFAULT_LEDGER_CATEGORIES;
 
-    // ★ 升級：編輯模式狀態
     const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
@@ -77,11 +85,11 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         status: 'Unpaid', 
         paymentDate: '',
         paymentMethod: 'Transfer', 
-        chequeNo: '' 
+        chequeNo: '',
+        recurring: 'none' // ★ 升級 2：週期設定 (none, monthly, quarterly, yearly)
     };
     const [newExpense, setNewExpense] = useState(initialFormState);
 
-    // ★ 升級：萃取歷史項目名稱，提供自動建議填充 (Autocomplete)
     const uniqueTitles = useMemo(() => {
         const titles = ledgerItems.map(item => item.title).filter(Boolean);
         return Array.from(new Set(titles));
@@ -102,26 +110,18 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         }
     }, [settings?.ledgerCategories, editingExpenseId]);
 
-    // 1. 實時監聽公司日常費用總帳
     useEffect(() => {
         if (!db || !appId || !isManager) return;
-        const q = query(
-            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'),
-            orderBy('dueDate', 'desc')
-        );
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), orderBy('dueDate', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list: any[] = [];
             snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
             setLedgerItems(list);
             setLoading(false);
-        }, (err) => {
-            console.error("監聽日常總帳失敗:", err);
-            setLoading(false);
         });
         return () => unsubscribe();
     }, [db, appId, isManager]);
 
-    // 2. 實時監聽車輛庫存
     useEffect(() => {
         if (!db || !appId || !isManager) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
@@ -135,22 +135,15 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
     const filteredItems = useMemo(() => {
         if (!startDate || !endDate) return ledgerItems;
-        return ledgerItems.filter(item => {
-            const date = item.dueDate || '';
-            return date >= startDate && date <= endDate;
-        });
+        return ledgerItems.filter(item => item.dueDate >= startDate && item.dueDate <= endDate);
     }, [ledgerItems, startDate, endDate]);
 
     const unpaidItems = useMemo(() => {
         return ledgerItems.filter(item => item.status === 'Unpaid' && item.flow === 'OUT').sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     }, [ledgerItems]);
 
-    // 財務做數摘要計算面板 (加入浮點數保護)
     const summary = useMemo(() => {
-        let totalOutPaid = 0;
-        let totalInPaid = 0;
-        let totalUnpaidOut = 0;
-
+        let totalOutPaid = 0, totalInPaid = 0, totalUnpaidOut = 0;
         filteredItems.forEach(item => {
             const amt = Number(item.amount) || 0;
             if (item.status === 'Unpaid') {
@@ -162,7 +155,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         });
 
         let totalCarProfit = 0;
-        
         vehicles.forEach(v => {
             const outDate = v.stockOutDate || '';
             if (outDate >= startDate && outDate <= endDate && v.status === 'Sold') {
@@ -170,14 +162,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 const costPrice = Number(v.costPrice) || 0;
                 const addonsTotal = (v.salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
                 const expensesTotal = (v.expenses || []).reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-                
                 totalCarProfit += (sellPrice + addonsTotal) - (costPrice + expensesTotal);
             }
         });
-
-        const netProfit = totalCarProfit + totalInPaid - totalOutPaid;
-
-        return { totalOutPaid, totalInPaid, unpaidOut: totalUnpaidOut, carProfit: totalCarProfit, netProfit };
+        return { totalOutPaid, totalInPaid, unpaidOut: totalUnpaidOut, carProfit: totalCarProfit, netProfit: totalCarProfit + totalInPaid - totalOutPaid };
     }, [filteredItems, vehicles, startDate, endDate]);
 
     const handleCategoryChange = (catName: string) => {
@@ -191,7 +179,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         });
     };
 
-    // ★ 升級：提交表單 (支援新增與編輯)
     const handleAddExpense = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newExpense.title || !newExpense.amount) return alert('請填寫帳目名稱與金額！');
@@ -202,19 +189,23 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             const id = editingExpenseId || Date.now().toString();
             const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id);
             
-            // 如果原本是未繳，修改時切換成已繳，自動押上當日日期
             const finalPaymentDate = newExpense.status === 'Paid' 
                 ? (newExpense.paymentDate || new Date().toISOString().split('T')[0]) 
                 : '';
 
             await setDoc(docRef, {
                 ...newExpense,
-                amount: Number(newExpense.amount.replace(/,/g, '')), // 存入純數字
+                amount: Number(newExpense.amount.replace(/,/g, '')),
                 paymentDate: finalPaymentDate,
                 updatedAt: new Date().toISOString(),
                 updatedBy: currentUser?.email || staffId,
-                ...(!editingExpenseId && { createdAt: new Date().toISOString() }) // 只有新增時才寫入 createdAt
+                ...(!editingExpenseId && { createdAt: new Date().toISOString() })
             }, { merge: true });
+
+            // ★ 升級 2：如果在新增時直接標記為 Paid 且設定了週期，自動產生下一期
+            if (!editingExpenseId && newExpense.status === 'Paid' && newExpense.recurring && newExpense.recurring !== 'none') {
+                await generateNextRecurringItem(newExpense);
+            }
 
             setNewExpense({ ...initialFormState, category: newExpense.category, flow: newExpense.flow });
             setEditingExpenseId(null);
@@ -223,23 +214,35 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         setIsSubmitting(false);
     };
 
-    // ★ 升級：啟動編輯模式
-    const handleEditItem = (item: any) => {
-        setEditingExpenseId(item.id);
-        setNewExpense({
-            category: item.category || '公司租金',
-            flow: item.flow || 'OUT',
-            type: item.type || 'Fixed',
-            title: item.title || '',
-            amount: formatInputAmount(String(item.amount || '')), // 轉換回帶千分位的字串
-            dueDate: item.dueDate || new Date().toISOString().split('T')[0],
-            status: item.status || 'Unpaid',
-            paymentDate: item.paymentDate || '',
-            paymentMethod: item.paymentMethod || 'Transfer',
-            chequeNo: item.chequeNo || ''
+    // ★ 自動生成下一期循環帳目的核心函數
+    const generateNextRecurringItem = async (itemData: any) => {
+        const oldDate = new Date(itemData.dueDate);
+        if (itemData.recurring === 'monthly') oldDate.setMonth(oldDate.getMonth() + 1);
+        if (itemData.recurring === 'quarterly') oldDate.setMonth(oldDate.getMonth() + 3);
+        if (itemData.recurring === 'yearly') oldDate.setFullYear(oldDate.getFullYear() + 1);
+        
+        const nextDueDate = oldDate.toISOString().split('T')[0];
+        const newId = Date.now().toString() + Math.random().toString().slice(2, 6);
+        const newDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', newId);
+        
+        await setDoc(newDocRef, {
+            ...itemData,
+            amount: Number(itemData.amount.toString().replace(/,/g, '')),
+            dueDate: nextDueDate,
+            status: 'Unpaid',
+            paymentDate: '',
+            chequeNo: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         });
-        // 畫面滾動到頂部表單
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        showGlobalToast(`系統已為您自動產生下一期帳單：${nextDueDate}`, 'success');
+    };
+    
+    // 全域 Toast 支援
+    const showGlobalToast = (text: string, type: 'success' | 'error' = 'success') => {
+        if (typeof window !== 'undefined' && (window as any).alert) {
+            (window as any).alert(text);
+        }
     };
 
     const handleToggleStatus = async (item: any) => {
@@ -250,7 +253,30 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 status: nextStatus,
                 paymentDate: nextStatus === 'Paid' ? new Date().toISOString().split('T')[0] : ''
             }, { merge: true });
+
+            // ★ 升級 2：如果標記為結清，且設定了週期，自動產生下一期
+            if (nextStatus === 'Paid' && item.recurring && item.recurring !== 'none') {
+                await generateNextRecurringItem(item);
+            }
         } catch (err) { alert('更新狀態失敗: ' + err); }
+    };
+
+    const handleEditItem = (item: any) => {
+        setEditingExpenseId(item.id);
+        setNewExpense({
+            category: item.category || '公司租金',
+            flow: item.flow || 'OUT',
+            type: item.type || 'Fixed',
+            title: item.title || '',
+            amount: formatInputAmount(String(item.amount || '')),
+            dueDate: item.dueDate || new Date().toISOString().split('T')[0],
+            status: item.status || 'Unpaid',
+            paymentDate: item.paymentDate || '',
+            paymentMethod: item.paymentMethod || 'Transfer',
+            chequeNo: item.chequeNo || '',
+            recurring: item.recurring || 'none'
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleDeleteItem = async (id: string) => {
@@ -259,55 +285,19 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         catch (err) { alert('刪除失敗: ' + err); }
     };
 
-    const handleCopyLastMonthFixed = async () => {
-        if (!confirm('系統將自動搜尋「起點日期」上個月的固定項目，並複製到「起點日期」所在的月份。是否執行？')) return;
-        
-        setLoading(true);
-        try {
-            const startD = new Date(startDate);
-            const currentYear = startD.getFullYear();
-            const currentMonth = (startD.getMonth() + 1).toString().padStart(2, '0');
-
-            startD.setMonth(startD.getMonth() - 1);
-            const lastMonthPrefix = startD.toISOString().slice(0, 7);
-
-            const lastMonthFixedItems = ledgerItems.filter(item => item.type === 'Fixed' && (item.dueDate || '').startsWith(lastMonthPrefix));
-
-            if (lastMonthFixedItems.length === 0) {
-                alert(`上個月 (${lastMonthPrefix}) 沒有設定任何「固定(按月)」紀錄可供複製。`);
-                setLoading(false); return;
-            }
-
-            for (const item of lastMonthFixedItems) {
-                const id = (Date.now() + Math.random()).toString();
-                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id);
-                const day = item.dueDate?.split('-')[2] || '01';
-                const newDueDate = `${currentYear}-${currentMonth}-${day}`;
-
-                await setDoc(docRef, {
-                    category: item.category, type: 'Fixed', flow: item.flow || 'OUT',
-                    title: `${item.title.replace(' (續期)', '')} (續期)`, amount: item.amount, dueDate: newDueDate,
-                    status: 'Unpaid', paymentDate: '', paymentMethod: item.paymentMethod || 'Transfer', chequeNo: '',
-                    createdAt: new Date().toISOString(), updatedBy: staffId
-                });
-            }
-            alert(`✅ 成功複製 ${lastMonthFixedItems.length} 筆固定帳目至 ${currentYear}-${currentMonth}！`);
-        } catch (err) { alert('複製失敗: ' + err); }
-        setLoading(false);
-    };
-
     const handleExportCSV = () => {
         let csvContent = "\uFEFF"; 
-        csvContent += "到期日,帳目方向,費用科目,帳目屬性,項目名稱,交易金額(HKD),交易狀態,實際收款/付款日,金流方式,支票號碼,最後經手人\n";
+        csvContent += "到期日,週期,帳目方向,費用科目,項目名稱,交易金額(HKD),交易狀態,實際收款/付款日,金流方式,支票號碼,最後經手人\n";
 
         filteredItems.forEach(item => {
             const flowStr = item.flow === 'IN' ? '收入(IN)' : '支出(OUT)';
-            const typeStr = item.type === 'Fixed' ? '固定' : '浮動';
+            const recurringMap: any = { 'none': '單次', 'monthly': '每月', 'quarterly': '每季', 'yearly': '每年' };
+            const recurringStr = recurringMap[item.recurring] || '單次';
             const statusStr = item.status === 'Paid' ? '已結清' : '🔴待處理';
             const methodMap: any = { 'Cash': '現金', 'Transfer': '轉帳', 'Cheque': '支票' };
             const methodStr = methodMap[item.paymentMethod] || item.paymentMethod;
             
-            csvContent += `${item.dueDate},${flowStr},${item.category},${typeStr},"${item.title.replace(/"/g, '""')}",${item.amount},${statusStr},${item.paymentDate || '-'},${methodStr},${item.chequeNo || '-'},${item.updatedBy || '-'}\n`;
+            csvContent += `${item.dueDate},${recurringStr},${flowStr},${item.category},"${item.title.replace(/"/g, '""')}",${item.amount},${statusStr},${item.paymentDate || '-'},${methodStr},${item.chequeNo || '-'},${item.updatedBy || '-'}\n`;
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -318,6 +308,21 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+
+    // ★ 升級 1：快捷日期區間設定
+    const setQuickDate = (type: string) => {
+        const d = new Date();
+        if (type === 'thisMonth') {
+            setStartDate(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]);
+            setEndDate(new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]);
+        } else if (type === 'lastMonth') {
+            setStartDate(new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString().split('T')[0]);
+            setEndDate(new Date(d.getFullYear(), d.getMonth(), 0).toISOString().split('T')[0]);
+        } else if (type === 'thisYear') {
+            setStartDate(new Date(d.getFullYear(), 0, 1).toISOString().split('T')[0]);
+            setEndDate(new Date(d.getFullYear(), 11, 31).toISOString().split('T')[0]);
+        }
     };
 
     if (!isManager) {
@@ -345,7 +350,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                     </div>
                     <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg"><TrendingUp size={20}/></div>
                 </div>
-
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
                     <div>
@@ -354,7 +358,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                     </div>
                     <div className="p-2.5 bg-red-50 text-red-600 rounded-lg"><ArrowUpRight size={20}/></div>
                 </div>
-
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
                     <div>
@@ -363,7 +366,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                     </div>
                     <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg"><ArrowDownToLine size={20}/></div>
                 </div>
-
                 <div className={`p-4 rounded-xl border shadow-sm flex items-center justify-between relative overflow-hidden ${summary.netProfit >= 0 ? 'bg-blue-900 border-blue-950 text-white' : 'bg-rose-950 border-red-950 text-white'}`}>
                     <div>
                         <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest block">區間公司真實淨利 (Net)</span>
@@ -375,34 +377,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 </div>
             </div>
 
-            {/* 2. 紅綠燈日常繳費催繳預警區 */}
-            {unpaidItems.length > 0 && (
-                <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-4 shadow-sm animate-in fade-in">
-                    <div className="flex items-center gap-2 text-xs font-black text-amber-800 uppercase tracking-wider mb-3">
-                        <AlertTriangle size={16} className="text-amber-600 animate-bounce" /> 
-                        🚨 待繳費看板：有 {unpaidItems.length} 筆跨期支出尚未結清！
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {unpaidItems.slice(0,6).map(item => (
-                            <div key={item.id} className="bg-white p-3 rounded-lg border border-amber-200 shadow-sm flex justify-between items-center group hover:border-amber-400 transition-all">
-                                <div className="min-w-0 pr-2">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="text-[9px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded">{item.category}</span>
-                                        <span className="text-[9px] text-slate-400 font-mono font-bold">{item.dueDate}</span>
-                                    </div>
-                                    <h4 className="font-bold text-xs text-slate-700 mt-1 truncate">{item.title}</h4>
-                                </div>
-                                <div className="flex items-center gap-2 flex-none">
-                                    <span className="font-mono font-black text-sm text-red-600">${formatDisplayAmount(Number(item.amount))}</span>
-                                    <button type="button" onClick={() => handleToggleStatus(item)} className="p-1.5 bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-600 hover:text-white rounded-md transition-colors" title="標記為已結清"><CheckCircle2 size={14}/></button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* 3. 中間主要區塊：記帳與清單 */}
+            {/* 2. 中間主要區塊：記帳與清單 */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 
                 {/* 左側：記帳表單 */}
@@ -411,38 +386,39 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                         {editingExpenseId ? <><Edit size={18} className="text-amber-600"/> 編輯日常帳目</> : <><Plus size={18} className="text-blue-600"/> 日常帳目登錄</>}
                     </h3>
                     
-                    {/* ★ 隱藏的 datalist，供 Autocomplete 使用 */}
                     <datalist id="expense-titles">
                         {uniqueTitles.map((t, idx) => <option key={idx} value={t} />)}
                     </datalist>
 
                     <form onSubmit={handleAddExpense} className="space-y-4">
-                        
-                        {/* 帳目方向 (IN / OUT) */}
                         <div className="flex bg-slate-100 p-1 rounded-lg">
                             <button type="button" onClick={() => setNewExpense({...newExpense, flow: 'OUT'})} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${newExpense.flow === 'OUT' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500'}`}><ArrowUpFromLine size={14}/> 支出 (OUT)</button>
                             <button type="button" onClick={() => setNewExpense({...newExpense, flow: 'IN'})} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${newExpense.flow === 'IN' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500'}`}><ArrowDownToLine size={14}/> 存入 (IN)</button>
                         </div>
 
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">科目分類</label>
-                            <select 
-                                value={newExpense.category} 
-                                onChange={e => handleCategoryChange(e.target.value)}
-                                className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700 outline-none"
-                            >
-                                {ledgerCategories.map((cat:any) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
-                            </select>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">科目分類</label>
+                                <select value={newExpense.category} onChange={e => handleCategoryChange(e.target.value)} className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700 outline-none">
+                                    {ledgerCategories.map((cat:any) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                {/* ★ 升級 2：週期提醒設定 */}
+                                <label className="block text-xs font-bold text-slate-500 mb-1">週期設定 (自動下一期)</label>
+                                <select value={newExpense.recurring} onChange={e => setNewExpense({...newExpense, recurring: e.target.value})} className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-blue-700 outline-none">
+                                    <option value="none">單次 (不重複)</option>
+                                    <option value="monthly">每月重複</option>
+                                    <option value="quarterly">每季重複</option>
+                                    <option value="yearly">每年重複</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">金流方式</label>
-                                <select 
-                                    value={newExpense.paymentMethod} 
-                                    onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})}
-                                    className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700 outline-none"
-                                >
+                                <select value={newExpense.paymentMethod} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-slate-700 outline-none">
                                     <option value="Transfer">🏦 銀行轉帳</option>
                                     <option value="Cheque">🧾 支票</option>
                                     <option value="Cash">💵 現金</option>
@@ -450,18 +426,13 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">入帳狀態</label>
-                                <select 
-                                    value={newExpense.status} 
-                                    onChange={e => setNewExpense({...newExpense, status: e.target.value})}
-                                    className={`w-full text-xs p-2.5 border rounded-lg font-bold outline-none ${newExpense.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-red-700 border-red-200'}`}
-                                >
+                                <select value={newExpense.status} onChange={e => setNewExpense({...newExpense, status: e.target.value})} className={`w-full text-xs p-2.5 border rounded-lg font-bold outline-none ${newExpense.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-red-700 border-red-200'}`}>
                                     <option value="Unpaid">🔴 待處理 / 未找數</option>
                                     <option value="Paid">🟢 已結清 / 已收付</option>
                                 </select>
                             </div>
                         </div>
 
-                        {/* 如果選支票，強制顯示支票號碼 */}
                         {newExpense.paymentMethod === 'Cheque' && (
                             <div className="animate-fade-in">
                                 <label className="block text-xs font-bold text-purple-600 mb-1">🧾 支票號碼 (必填)</label>
@@ -471,16 +442,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
                         <div>
                             <label className="block text-xs font-bold text-slate-500 mb-1">項目名稱/備註</label>
-                            {/* ★ 升級：綁定 datalist 實現自動填充建議 */}
-                            <input 
-                                type="text" 
-                                list="expense-titles" 
-                                placeholder="例如：7月份地舖租金..." 
-                                value={newExpense.title} 
-                                onChange={e => setNewExpense({...newExpense, title: e.target.value})} 
-                                className="w-full p-2.5 border rounded-lg text-xs font-bold outline-none focus:border-blue-500 bg-slate-50 focus:bg-white"
-                                autoComplete="off"
-                            />
+                            <input type="text" list="expense-titles" placeholder="例如：7月份地舖租金..." value={newExpense.title} onChange={e => setNewExpense({...newExpense, title: e.target.value})} className="w-full p-2.5 border rounded-lg text-xs font-bold outline-none focus:border-blue-500 bg-slate-50 focus:bg-white" autoComplete="off"/>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -490,20 +452,8 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1">金額 (HKD)</label>
-                                <input type="text" placeholder="$ 0.00" value={newExpense.amount} onChange={e => {
-                                    setNewExpense({...newExpense, amount: formatInputAmount(e.target.value)});
-                                }} className="w-full p-2.5 border rounded-lg text-sm font-black font-mono bg-slate-50 text-right text-blue-700 outline-none focus:border-blue-500"/>
+                                <input type="text" placeholder="$ 0.00" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: formatInputAmount(e.target.value)})} className="w-full p-2.5 border rounded-lg text-sm font-black font-mono bg-slate-50 text-right text-blue-700 outline-none focus:border-blue-500"/>
                             </div>
-                        </div>
-
-                        {/* 固定/浮動 屬性 */}
-                        <div className="flex items-center gap-3 pt-2">
-                            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 cursor-pointer">
-                                <input type="radio" name="expenseType" checked={newExpense.type === 'Fixed'} onChange={() => setNewExpense({...newExpense, type: 'Fixed'})} className="accent-blue-600 w-4 h-4"/> 🏢 固定(按月)
-                            </label>
-                            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 cursor-pointer">
-                                <input type="radio" name="expenseType" checked={newExpense.type === 'Variable'} onChange={() => setNewExpense({...newExpense, type: 'Variable'})} className="accent-blue-600 w-4 h-4"/> 🎈 浮動/臨時
-                            </label>
                         </div>
 
                         <div className="flex gap-2 mt-2">
@@ -512,9 +462,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                 {editingExpenseId ? '儲存修改' : '立即登錄帳目'}
                             </button>
                             {editingExpenseId && (
-                                <button type="button" onClick={() => { setEditingExpenseId(null); setNewExpense(initialFormState); }} className="px-4 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 font-bold text-sm transition-colors shadow-sm">
-                                    取消
-                                </button>
+                                <button type="button" onClick={() => { setEditingExpenseId(null); setNewExpense(initialFormState); }} className="px-4 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 font-bold text-sm transition-colors shadow-sm">取消</button>
                             )}
                         </div>
                     </form>
@@ -524,28 +472,24 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 lg:col-span-2 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 border-b pb-3 flex-none">
                         
-                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                            <CalendarDays size={16} className="text-slate-400 ml-1" />
-                            <input 
-                                type="date" 
-                                value={startDate} 
-                                onChange={e => setStartDate(e.target.value)} 
-                                className="p-1 border rounded text-xs font-mono font-bold text-slate-700 outline-none bg-white cursor-pointer"
-                            />
-                            <span className="text-slate-400 font-bold text-xs">至</span>
-                            <input 
-                                type="date" 
-                                value={endDate} 
-                                onChange={e => setEndDate(e.target.value)} 
-                                className="p-1 border rounded text-xs font-mono font-bold text-slate-700 outline-none bg-white cursor-pointer"
-                            />
+                        {/* ★ 升級 1：快捷鎖定日期區間 UI */}
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 relative">
+                                <Lock size={14} className="absolute -top-2 -right-2 text-yellow-500 bg-white rounded-full" />
+                                <CalendarDays size={16} className="text-slate-400 ml-1" />
+                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="p-1 border rounded text-xs font-mono font-bold text-slate-700 outline-none bg-white cursor-pointer"/>
+                                <span className="text-slate-400 font-bold text-xs">至</span>
+                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="p-1 border rounded text-xs font-mono font-bold text-slate-700 outline-none bg-white cursor-pointer"/>
+                            </div>
+                            <div className="hidden lg:flex gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                                <button onClick={() => setQuickDate('thisMonth')} className="text-[10px] px-2 py-1 rounded bg-white shadow-sm font-bold text-slate-700">本月</button>
+                                <button onClick={() => setQuickDate('lastMonth')} className="text-[10px] px-2 py-1 rounded hover:bg-white hover:shadow-sm font-bold text-slate-500 transition-all">上月</button>
+                                <button onClick={() => setQuickDate('thisYear')} className="text-[10px] px-2 py-1 rounded hover:bg-white hover:shadow-sm font-bold text-slate-500 transition-all">本年</button>
+                            </div>
                         </div>
                         
                         <div className="flex gap-2">
-                            <button type="button" onClick={handleCopyLastMonthFixed} className="flex-1 md:flex-none text-[11px] bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold px-3 py-2 md:py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
-                                <Copy size={12}/> 一鍵複製前期固定帳目
-                            </button>
-                            <button type="button" onClick={handleExportCSV} className="flex-1 md:flex-none text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-3 py-2 md:py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
+                            <button type="button" onClick={handleExportCSV} className="flex-1 md:flex-none text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-4 py-2 md:py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
                                 <FileSpreadsheet size={12}/> 匯出區間 Excel
                             </button>
                         </div>
@@ -566,7 +510,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             <tbody>
                                 {filteredItems.map(item => (
                                     <tr key={item.id} className={`border-b hover:bg-slate-50/80 transition-colors font-medium text-slate-700 ${editingExpenseId === item.id ? 'bg-amber-50/50 border-amber-200' : 'border-slate-100'}`}>
-                                        <td className="p-3 font-mono tracking-tight">{item.dueDate}</td>
+                                        <td className="p-3 font-mono tracking-tight">
+                                            {item.dueDate}
+                                            {item.recurring !== 'none' && <div className="text-[8px] bg-blue-100 text-blue-700 mt-1 rounded text-center font-bold px-1 py-0.5">🔄 週期提醒</div>}
+                                        </td>
                                         <td className="p-3">
                                             <div className="flex flex-col gap-1 items-start">
                                                 <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600">{item.category}</span>
@@ -597,7 +544,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                         </td>
                                         <td className="p-3 text-center">
                                             <div className="flex items-center justify-center gap-1">
-                                                {/* ★ 升級：編輯按鈕 */}
                                                 <button type="button" onClick={() => handleEditItem(item)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"><Edit size={14}/></button>
                                                 <button type="button" onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14}/></button>
                                             </div>
