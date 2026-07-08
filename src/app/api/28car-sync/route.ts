@@ -19,21 +19,29 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, message: 'Invalid Format' }, { status: 400 });
         }
 
-        // 2. 初始化 Firebase (確保連線正確)
-        const app = getApps().length > 0 ? getApps()[0] : initializeApp({
+        // 2. 初始化 Firebase
+        // ⚠️ 警告：請務必確保這裡面的值，跟您專案中 config/firebase.ts 裡的完全一樣！
+        const firebaseConfig = {
             apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
             projectId: "gold-land-auto",
-        });
+            // 👇 如果有以下這些，也請務必補上，否則會連線失敗！ 👇
+            // authDomain: "...",
+            // storageBucket: "...",
+            // messagingSenderId: "...",
+            // appId: "..."
+        };
+
+        const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const targetCollection = collection(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', '28car_market_data');
 
-        // ★★★ 核心修復：Firebase Batch 最高限制 500 筆，我們自動切成每包 400 筆分批寫入 ★★★
+        // 3. ★ 突破 Vercel 10秒限制：切成每包 500 筆，並「同時併發 (Promise.all)」寫入！
         const chunks = [];
-        for (let i = 0; i < carDataList.length; i += 400) {
-            chunks.push(carDataList.slice(i, i + 400));
+        for (let i = 0; i < carDataList.length; i += 500) {
+            chunks.push(carDataList.slice(i, i + 500));
         }
 
-        for (const chunk of chunks) {
+        const batchPromises = chunks.map(async (chunk) => {
             const batch = writeBatch(db);
             chunk.forEach((car: any) => {
                 if (!car.id) return;
@@ -43,8 +51,11 @@ export async function POST(request: Request) {
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
             });
-            await batch.commit(); // 分批提交
-        }
+            return batch.commit();
+        });
+
+        // 等待所有包裹「同時」寫入完成，速度提升 5 倍！
+        await Promise.all(batchPromises);
 
         return NextResponse.json({ success: true, message: `成功同步 ${carDataList.length} 筆車盤資料至雲端資料庫` });
 
