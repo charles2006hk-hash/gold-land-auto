@@ -1046,6 +1046,9 @@ export default function GoldLandAutoDMS() {
   const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
   const [isDataSyncing, setIsDataSyncing] = useState(true);
   const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
+  // ★★★ 新增：控制右下角選單與 T牌彈窗的狀態 ★★★
+  const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
+  const [isTPlateModalOpen, setIsTPlateModalOpen] = useState(false);
   const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock'); // ★ 新增：手機版儀表板分頁狀態
   const [dashSearchInStock, setDashSearchInStock] = useState('');
@@ -3071,8 +3074,6 @@ const DatabaseSelector = ({
                 </div>
               </div>
 
-              {/* ★★★ 插入這裡！T牌極速打卡模塊 ★★★ */}
-              <TradePlateWidget db={db} appId={appId} staffId={staffId!} />
               
               {/* 提醒中心 */}
               {(() => {
@@ -4195,18 +4196,77 @@ const DatabaseSelector = ({
          </div>       
       </main>
 
-      {/* ★★★ 新增：右下角全域懸浮按鈕 (FAB) ★★★ */}
+      {/* ========================================================= */}
+      {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
+      {/* ========================================================= */}
       {staffId && (
-          <button 
-              onClick={() => setIsTeamHubOpen(true)}
-              className="fixed bottom-6 right-6 z-[9000] w-14 h-14 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95 group"
-              title="打開團隊協作中心"
-          >
-              <MessageCircle size={24} className="group-hover:animate-pulse"/>
-              {/* 這裡可以做一個小紅點提示，目前先放靜態裝飾 */}
-              <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full"></span>
-          </button>
+          <div className="fixed bottom-6 right-4 md:right-6 z-[9000] flex flex-col items-end gap-3">
+              
+              {/* 彈出的選項清單 (點擊主按鈕後向上展開) */}
+              <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
+                  
+                  {/* 選項 2: T牌打卡 */}
+                  <div className="flex items-center gap-3 group">
+                      <span className="bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold">試車牌 (T牌) 打卡</span>
+                      <button 
+                          onClick={() => { setIsTPlateModalOpen(true); setIsFabMenuOpen(false); }}
+                          className="w-12 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+                      >
+                          <Car size={20} />
+                      </button>
+                  </div>
+
+                  {/* 選項 1: 團隊協作中心 (原來的對話模塊) */}
+                  <div className="flex items-center gap-3 group">
+                      <span className="bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold">團隊協作 / 對話</span>
+                      <button 
+                          onClick={() => { setIsTeamHubOpen(true); setIsFabMenuOpen(false); }}
+                          className="w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+                      >
+                          <MessageCircle size={20} />
+                      </button>
+                  </div>
+              </div>
+
+              {/* 主按鈕 (點擊旋轉切換 X) */}
+              <button 
+                  onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
+                  className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 ${isFabMenuOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-110'}`}
+                  title="系統功能表"
+              >
+                  {isFabMenuOpen ? <Plus size={28} className="text-white" /> : (
+                      <>
+                          <Menu size={24} className="text-white" />
+                          <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
+                      </>
+                  )}
+              </button>
+          </div>
       )}
+
+      {/* ========================================================= */}
+      {/* ★★★ 掛載 T牌打卡專屬彈窗 Modal ★★★ */}
+      {/* ========================================================= */}
+      {isTPlateModalOpen && (
+          <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 md:p-6 animate-fade-in">
+              <div className="bg-slate-50 w-full max-w-4xl max-h-[95vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+                  <div className="p-4 md:px-6 md:py-4 bg-white border-b border-slate-100 flex justify-between items-center z-10 flex-none">
+                      <h2 className="text-lg md:text-xl font-black text-slate-800 flex items-center gap-2">
+                          <Car className="text-emerald-600"/> 試車牌 (T牌) 智能管理
+                      </h2>
+                      <button onClick={() => setIsTPlateModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
+                          <X size={20}/>
+                      </button>
+                  </div>
+                  <div className="p-2 md:p-4 overflow-y-auto flex-1 scrollbar-thin">
+                      {/* 直接把組件包在這裡面 */}
+                      <TradePlateWidget db={db} appId={appId} staffId={staffId!} />
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* 以下接續您原本的 ChangePasswordModal 與 TeamHubDrawer */}
 
       {/* ★★★ 新增：掛載修改密碼彈窗 ★★★ */}
       <ChangePasswordModal 
