@@ -4231,7 +4231,7 @@ const DatabaseSelector = ({
               {/* 主按鈕 (點擊旋轉切換 X) */}
               <button 
                   onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
-                  className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 ${isFabMenuOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-110'}`}
+                  className={`relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 ${isFabMenuOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-110'}`}
                   title="系統功能表"
               >
                   {isFabMenuOpen ? <Plus size={28} className="text-white" /> : (
