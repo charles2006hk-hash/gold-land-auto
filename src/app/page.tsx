@@ -49,6 +49,7 @@ import BusinessProcessModule from '@/components/BusinessProcessModule';
 import SmartNewsTicker from '@/components/SmartNewsTicker';
 import InfoWidget from '@/components/InfoWidget';
 import SmartNotificationCenter from '@/components/SmartNotificationCenter';
+import TradePlateWidget from '@/components/TradePlateWidget'; // 請確認路徑是否正確
 
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
@@ -3070,7 +3071,8 @@ const DatabaseSelector = ({
                 </div>
               </div>
 
-              
+              {/* ★★★ 插入這裡！T牌極速打卡模塊 ★★★ */}
+              <TradePlateWidget db={db} appId={appId} staffId={staffId!} />
               
               {/* 提醒中心 */}
               {(() => {
