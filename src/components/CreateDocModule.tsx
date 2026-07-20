@@ -58,6 +58,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         overseasTotalFee: '', localTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         contractPhotos: [] as string[],
         isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
+
+        // ★ 新增：代收款授權書欄位
+        enablePaymentAuth: false,
+        authPayeeName: '',
+        authPayeeId: ''
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -385,6 +390,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             contractPhotos: [],
             isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
+
+            // ★ 新增：代收款授權書欄位
+                enablePaymentAuth: false,
+                authPayeeName: '',
+                authPayeeId: ''
         });
 
         const autoPayments: any[] = [];
@@ -1387,6 +1397,37 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     </div>
                                 )}
                             </div>
+
+                            {/* ★ 新增：代收款委託授權設定 (主要用於收車/寄賣) */}
+                            {(selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') && (
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mb-3">
+                                    <label className="flex items-center space-x-2 cursor-pointer group mb-2">
+                                        <input 
+                                            type="checkbox" 
+                                            name="enablePaymentAuth" 
+                                            checked={formData.enablePaymentAuth || false} 
+                                            onChange={e => setFormData(prev => ({...prev, enablePaymentAuth: e.target.checked}))} 
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-colors accent-blue-600"
+                                        />
+                                        <span className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                                            啟用第三方代收款授權 (Third-Party Payment Auth)
+                                        </span>
+                                    </label>
+                                    
+                                    {formData.enablePaymentAuth && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 pt-3 border-t border-slate-200 animate-fade-in">
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 mb-1 uppercase">指定受款人/公司名稱 (Payee Name)</label>
+                                                <input type="text" name="authPayeeName" value={formData.authPayeeName || ''} onChange={handleChange} placeholder="例：CHAN TAI MAN" className="w-full px-2 py-1.5 border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs bg-white font-bold"/>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[9px] font-bold text-slate-500 mb-1 uppercase">證件 / 商登號碼 (ID/BR No.)</label>
+                                                <input type="text" name="authPayeeId" value={formData.authPayeeId || ''} onChange={handleChange} placeholder="例：Z123456(7)" className="w-full px-2 py-1.5 border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs bg-white font-mono"/>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             
                             {/* ★★★ 新增：上會計數機區塊 (收據/服務發票自動隱藏) ★★★ */}
                             {selectedDocType !== 'service_invoice' && selectedDocType !== 'receipt' && (
