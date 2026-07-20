@@ -450,19 +450,26 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                         </div>
                     )}
 
-                    {/* ★ 實際列印：代收款委託授權書 */}
+                    {/* ★ 實際列印：代收款委託授權書 (極致緊湊版) */}
                     {(activeVehicle as any).enablePaymentAuth && (
-                        <div className="mb-3 p-2 border-2 border-slate-800 bg-slate-50 break-inside-avoid no-break">
-                            <h3 className="text-[10px] font-black text-slate-800 uppercase border-b border-slate-300 pb-1 mb-2">代收款委託授權書 / Third-Party Payment Authorization</h3>
-                            <div className="text-[8.5px] text-slate-700 leading-relaxed text-justify space-y-1.5 font-serif">
-                                <p><strong>1. 授權聲明：</strong> 賣方（即授權人）現正式授權並不可撤銷地指示買方（{companyCh}），將本合約項下之所有或部分車款餘額支付予以下指定受款人。<br/><span className="italic text-slate-500">The Vendor (Authorizer) hereby formally and irrevocably authorizes and instructs the Purchaser ({companyEn}) to pay all or part of the vehicle purchase balance under this Agreement to the designated Payee below.</span></p>
+                        <div className="mb-2 p-1.5 border-2 border-slate-800 bg-slate-50 break-inside-avoid no-break">
+                            <h3 className="text-[9px] font-black text-slate-800 uppercase border-b border-slate-300 pb-0.5 mb-1">代收款委託授權書 / Third-Party Payment Auth.</h3>
+                            <div className="text-[8px] text-slate-700 leading-tight text-justify font-serif">
+                                <p><strong>1. 授權聲明：</strong> 賣方（授權人）現正式並不可撤銷地指示買方（{companyCh}），將本合約項下之車款餘額支付予以下指定受款人。<br/><span className="italic text-slate-500 text-[7.5px]">The Vendor irrevocably authorizes the Purchaser ({companyEn}) to pay the vehicle purchase balance to the designated Payee below.</span></p>
                                 
-                                <div className="flex flex-col gap-1 p-2 bg-white border border-slate-300 my-1 font-sans">
-                                    <div className="flex items-end"><span className="w-28 font-bold">受款方名稱 Payee Name:</span><span className="font-bold border-b border-slate-400 flex-1 px-2 text-[10px]">{(activeVehicle as any).authPayeeName || '________________________'}</span></div>
-                                    <div className="flex items-end mt-1"><span className="w-28 font-bold">證件/商登號碼 ID/BR No.:</span><span className="font-bold border-b border-slate-400 flex-1 px-2 text-[10px]">{(activeVehicle as any).authPayeeId || '________________________'}</span></div>
+                                {/* 橫向並排，極度壓縮上下空間 */}
+                                <div className="flex gap-3 px-1.5 py-1 bg-white border border-slate-300 my-1 font-sans">
+                                    <div className="flex items-end flex-[1.2] min-w-0">
+                                        <span className="font-bold whitespace-nowrap shrink-0">受款方名稱 Payee Name:</span>
+                                        <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[9px] text-center truncate">{(activeVehicle as any).authPayeeName || '\u00A0'}</span>
+                                    </div>
+                                    <div className="flex items-end flex-[0.8] min-w-0">
+                                        <span className="font-bold whitespace-nowrap shrink-0">證件號碼 ID/BR No.:</span>
+                                        <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[9px] text-center truncate">{(activeVehicle as any).authPayeeId || '\u00A0'}</span>
+                                    </div>
                                 </div>
 
-                                <p><strong>2. 免責條款：</strong> 買方一經將款項支付予上述指定受款人，即視為買方已完全履行本合約下對賣方之付款義務。賣方承擔因代收款項所引起之任何法律及財務責任，與買方無涉。<br/><span className="italic text-slate-500">Payment made by the Purchaser to the designated Payee shall be deemed as full and absolute discharge of the Purchaser's payment obligations to the Vendor. The Vendor assumes all legal and financial liabilities arising from this arrangement, holding the Purchaser harmless.</span></p>
+                                <p><strong>2. 免責條款：</strong> 買方一經將款項支付予上述受款人，即視為已完全履行付款義務。賣方承擔因此引起之任何法律及財務責任，與買方無涉。<br/><span className="italic text-slate-500 text-[7.5px]">Payment made to the Payee shall be deemed as full discharge of Purchaser's payment obligations. The Vendor assumes all liabilities arising from this arrangement.</span></p>
                             </div>
                         </div>
                     )}
