@@ -883,6 +883,23 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </div>
                             )}
 
+                            {/* ★ 實時預覽：代收款委託授權書 */}
+                            {formData.enablePaymentAuth && (
+                                <div className="mb-3 p-2 border-2 border-slate-800 bg-slate-50 break-inside-avoid no-break">
+                                    <h3 className="text-[10px] font-black text-slate-800 uppercase border-b border-slate-300 pb-1 mb-2">代收款委託授權書 / Third-Party Payment Authorization</h3>
+                                    <div className="text-[8.5px] text-slate-700 leading-relaxed text-justify space-y-1.5 font-serif">
+                                        <p><strong>1. 授權聲明：</strong> 賣方（即授權人）現正式授權並不可撤銷地指示買方（{formData.companyNameCh}），將本合約項下之所有或部分車款餘額支付予以下指定受款人。<br/><span className="italic text-slate-500">The Vendor (Authorizer) hereby formally and irrevocably authorizes and instructs the Purchaser ({formData.companyNameEn}) to pay all or part of the vehicle purchase balance under this Agreement to the designated Payee below.</span></p>
+                                        
+                                        <div className="flex flex-col gap-1 p-2 bg-white border border-slate-300 my-1 font-sans">
+                                            <div className="flex items-end"><span className="w-28 font-bold">受款方名稱 Payee Name:</span><span className="font-bold border-b border-slate-400 flex-1 px-2 text-[10px]">{formData.authPayeeName || '________________________'}</span></div>
+                                            <div className="flex items-end mt-1"><span className="w-28 font-bold">證件/商登號碼 ID/BR No.:</span><span className="font-bold border-b border-slate-400 flex-1 px-2 text-[10px]">{formData.authPayeeId || '________________________'}</span></div>
+                                        </div>
+
+                                        <p><strong>2. 免責條款：</strong> 買方一經將款項支付予上述指定受款人，即視為買方已完全履行本合約下對賣方之付款義務。賣方承擔因代收款項所引起之任何法律及財務責任，與買方無涉。<br/><span className="italic text-slate-500">Payment made by the Purchaser to the designated Payee shall be deemed as full and absolute discharge of the Purchaser's payment obligations to the Vendor. The Vendor assumes all legal and financial liabilities arising from this arrangement, holding the Purchaser harmless.</span></p>
+                                    </div>
+                                </div>
+                            )}
+
                             {formData.remarks && (
                                 <div className="mb-3 border border-dashed border-slate-300 p-2 text-[10px] font-mono leading-relaxed bg-slate-50">
                                     <span className="font-bold text-slate-500">Remarks:</span><p className="mt-1 whitespace-pre-wrap">{formData.remarks}</p>
