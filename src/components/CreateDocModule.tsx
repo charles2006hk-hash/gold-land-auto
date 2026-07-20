@@ -384,7 +384,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             // 👇 補上這三行，確保符合 TypeScript 型別
             enablePaymentAuth: false,
             authPayeeName: '',
-            authPayeeId: ''
+            authPayeeId: '',
             paymentMethod: 'Cheque',
             
             orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None', 
