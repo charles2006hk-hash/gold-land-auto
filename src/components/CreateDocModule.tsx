@@ -57,7 +57,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         orderType: 'None', overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: '',
         overseasTotalFee: '', localTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         contractPhotos: [] as string[],
-        isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
+        isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
 
         // ★ 新增：代收款授權書欄位
         enablePaymentAuth: false,
@@ -389,7 +389,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
             
             contractPhotos: [],
-            isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP'
+            isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
 
             // ★ 新增：代收款授權書欄位
                 enablePaymentAuth: false,
