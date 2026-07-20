@@ -434,10 +434,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const handleSelectBlank = () => {
         setSelectedCarId('BLANK');
-        setCarPhotos([]); // ★ 核心修復：重置表單時，徹底清空底下的圖片畫廊
+        setCarPhotos([]); 
         setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true);
         
-        // ★ 終極修復：補上 paymentMethod: 'Cheque'，100% 符合系統型別結構
+        // ★ 終極修復：補上所有必填型別結構，包含代收款授權欄位
         setFormData({ 
             companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
             companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
@@ -447,14 +447,20 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             regMark: '', make: '', model: '', chassisNo: '', engineNo: '', year: '', color: '', colorInterior: '', seat: '', price: '', deposit: '', balance: '', customerName: '', customerId: '', customerAddress: '', customerPhone: '', 
             transmission: 'Automatic', engineSize: '', mileage: '', previousOwners: '', contractPhotos: [], docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), orderType: 'None', overseasCountry: 'Japan', overseasTotalFee: '', localTotalFee: '',
-            paymentMethod: 'Cheque', // 👈 補上這個關鍵屬性，解除編譯報錯
+            paymentMethod: 'Cheque', 
             chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, etaFormat: 'date', etaDays: '', etaDate: '',
             isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
-            remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : ''
+            remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : '',
+            
+            // 👇 補上這三行，確保符合 TypeScript 型別要求
+            enablePaymentAuth: false,
+            authPayeeName: '',
+            authPayeeId: ''
         });
+        
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
         setDocItems([]); setDepositItems([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
-        setIsVehicleLocked(false); // ★ 開新空白單時解鎖，方便自由選車
+        setIsVehicleLocked(false); 
         setMobileStep('edit');
     };
 
