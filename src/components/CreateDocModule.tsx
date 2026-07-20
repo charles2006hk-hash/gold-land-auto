@@ -381,6 +381,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
             remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : '', 
+            // 👇 補上這三行，確保符合 TypeScript 型別
+            enablePaymentAuth: false,
+            authPayeeName: '',
+            authPayeeId: ''
             paymentMethod: 'Cheque',
             
             orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None', 
