@@ -394,11 +394,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             contractPhotos: [],
             isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
-
-            // ★ 新增：代收款授權書欄位
-                enablePaymentAuth: false,
-                authPayeeName: '',
-                authPayeeId: ''
+            
         });
 
         const autoPayments: any[] = [];
