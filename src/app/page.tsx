@@ -583,38 +583,43 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                 )}
             </div>
 
-            {/* 導航列表 */}
+            {/* 導航列表與工具區合體 */}
             <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
                 <style>{`
                     .sidebar-no-scroll::-webkit-scrollbar { display: none; }
                     .sidebar-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
                 `}</style>
                 
-                <nav className="sidebar-no-scroll relative z-10 flex-1 p-2 space-y-1 overflow-y-auto overflow-x-hidden pb-10">
-                  {visibleMenuItems.map(item => {
-                     // 🍏 核心修復：大寫宣告動態 Icon 組件，徹底斬殺 SWC 語法死鎖！
-                     const IconComponent = item.icon;
-                     return (
-                        <button 
-                            key={item.id} 
-                            onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                            // 🍏 核心修復：收起時強制使用 justify-center px-0，將圖標牢牢鎖死在 w-16 的中軸線上
-                            className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-[0_4px_15px_rgba(234,179,8,0.25)] font-black' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-3'}`} 
-                            title={isSidebarCollapsed ? item.label : ''}
-                        >
-                            <IconComponent size={18} className={`flex-shrink-0 ${isSidebarCollapsed ? 'mx-auto' : 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
-                            {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide animate-fade-in">{item.label}</span>}
-                            
-                            {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-2xl border border-white/10 transition-opacity font-bold">{item.label}</div>}
-                        </button>
-                     );
-                  })}
-                </nav>
+                {/* 🍏 Apple 級修復：將導航與 InfoWidget 一同包進滾動區 */}
+                <div className="sidebar-no-scroll relative z-10 flex-1 p-2 overflow-y-auto overflow-x-hidden pb-4 flex flex-col">
+                    <nav className="space-y-1 flex-none">
+                      {visibleMenuItems.map(item => {
+                         const IconComponent = item.icon;
+                         return (
+                            <button 
+                                key={item.id} 
+                                onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
+                                className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-[0_4px_15px_rgba(234,179,8,0.25)] font-black' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-3'}`} 
+                                title={isSidebarCollapsed ? item.label : ''}
+                            >
+                                <IconComponent size={18} className={`flex-shrink-0 ${isSidebarCollapsed ? 'mx-auto' : 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
+                                {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide animate-fade-in">{item.label}</span>}
+                                
+                                {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-2xl border border-white/10 transition-opacity font-bold">{item.label}</div>}
+                            </button>
+                         );
+                      })}
+                    </nav>
+
+                    {/* 🍏 智能判斷：把 InfoWidget 移入滾動區，徹底解決橫屏 (Landscape) 高度擠壓問題 */}
+                    {!isSidebarCollapsed && (
+                        <div className="mt-4 flex-none">
+                            <InfoWidget />
+                        </div>
+                    )}
+                </div>
                 <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-[#090E17] to-transparent pointer-events-none z-10"></div>
             </div>
-            
-            {/* 智能判斷：收起時自動藏匿小工具，防止垂直溢出 */}
-            {!isSidebarCollapsed && <InfoWidget />}
             
             {/* 🍏 底部登出資訊區：收起時全自動收縮為置中大底膠囊 */}
             <div className="relative z-10 p-3 bg-transparent border-t border-white/5 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col items-center justify-center">
@@ -3034,9 +3039,10 @@ const DatabaseSelector = ({
           )}
 
           
-          {/* Dashboard Tab (v16.2: 修復滾動穿透與表格列高問題) */}
+          {/* Dashboard Tab (v16.3: 修復橫屏滾動穿透與卡片擠壓問題) */}
           {activeTab === 'dashboard' && (
-            <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in relative">
+            // 🍏 Apple 級修復 1：解除高度鎖死，改為 overflow-y-auto，讓整個儀表板在橫屏時可上下滑動
+            <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden space-y-4 animate-fade-in relative pb-10 scrollbar-thin">
 
                 {/* 儀表板頂部：標題、快訊、鈴鐺 */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -3050,27 +3056,31 @@ const DatabaseSelector = ({
                         />
                     </div>
                     <div className="hidden md:block">
-    <SmartNotificationCenter inventory={inventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} />
-</div>
+                        <SmartNotificationCenter inventory={inventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} />
+                    </div>
                 </div>
               
-              {/* 卡片統計 (Apple Glassmorphism 質感) */}
-              <div className="hidden md:grid grid-cols-1 md:grid-cols-4 gap-5 flex-none">
-                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+              {/* 🍏 Apple 級修復 2：橫屏卡片改為 2x2 排列 (md:grid-cols-2)，大螢幕再恢復 4x1 (xl:grid-cols-4)，並加入 truncate 防文字撐破 */}
+              <div className="hidden md:grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 lg:gap-5 flex-none">
+                <div className="bg-white/60 backdrop-blur-xl p-4 lg:p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all min-w-0">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-yellow-500"></div>
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">庫存總值</p><p className="text-3xl font-black text-slate-800 tracking-tight">{formatCurrency(stats.totalStockValue)}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1 truncate">庫存總值</p>
+                    <p className="text-xl lg:text-3xl font-black text-slate-800 tracking-tight truncate">{formatCurrency(stats.totalStockValue)}</p>
                 </div>
-                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                <div className="bg-white/60 backdrop-blur-xl p-4 lg:p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all min-w-0">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">未付費用</p><p className="text-3xl font-black text-red-600 tracking-tight">{formatCurrency(stats.totalPayable)}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1 truncate">未付費用</p>
+                    <p className="text-xl lg:text-3xl font-black text-red-600 tracking-tight truncate">{formatCurrency(stats.totalPayable)}</p>
                 </div>
-                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                <div className="bg-white/60 backdrop-blur-xl p-4 lg:p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all min-w-0">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">應收尾數</p><p className="text-3xl font-black text-blue-600 tracking-tight">{formatCurrency(stats.totalReceivable)}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1 truncate">應收尾數</p>
+                    <p className="text-xl lg:text-3xl font-black text-blue-600 tracking-tight truncate">{formatCurrency(stats.totalReceivable)}</p>
                 </div>
-                <div className="bg-white/60 backdrop-blur-xl p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all">
+                <div className="bg-white/60 backdrop-blur-xl p-4 lg:p-5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white relative overflow-hidden group hover:bg-white/80 transition-all min-w-0">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-green-500"></div>
-                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">本月銷售額</p><p className="text-3xl font-black text-green-600 tracking-tight">{formatCurrency(stats.totalSoldThisMonth)}</p>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1 truncate">本月銷售額</p>
+                    <p className="text-xl lg:text-3xl font-black text-green-600 tracking-tight truncate">{formatCurrency(stats.totalSoldThisMonth)}</p>
                 </div>
               </div>
 
@@ -3773,7 +3783,8 @@ const DatabaseSelector = ({
                               </div>
                           )}
 
-                          <div className="flex flex-col lg:flex-row gap-0 lg:gap-5 flex-1 min-h-0 overflow-hidden">
+                          {/* 🍏 Apple 級修復 3：橫屏(md)時給予最低高度 500px 強制撐開父層滾動，大桌面(lg)恢復 min-h-0 填滿螢幕 */}
+                          <div className="flex flex-col lg:flex-row gap-0 lg:gap-5 flex-1 min-h-[500px] lg:min-h-0 shrink-0 overflow-hidden">
                               
                               {/* 🍏 Apple Style: 左側看板 - 移除實心白底，換上純淨玻璃底板 */}
                               <div className={`flex-1 flex-col bg-transparent md:bg-white/30 md:backdrop-blur-2xl md:rounded-3xl border-0 md:border md:border-white/60 md:shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden min-h-0 relative ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
