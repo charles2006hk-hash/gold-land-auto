@@ -1,7 +1,5 @@
 /**
- * 專為海外訂車、報價單與文件設計的高相容性列印引擎
- * @param elementId 你要列印的內容容器 ID (例如：'print-area' 或 'quotation-content')
- * @param title 列印 PDF 的預設檔案名稱
+ * 專為海外訂車、報價單與文件設計的高相容性列印引擎 (解決 Blob URL 樣式遺失與空白頁問題)
  */
 export const triggerDocumentPrint = (elementId: string, title: string = 'Document') => {
   const contentElement = document.getElementById(elementId);
@@ -10,12 +8,24 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     return;
   }
 
-  // 1. 抓取目前頁面所有應用的 CSS Style 與 Tailwind CSS 規則
+  // 1. 抓取現有樣式，並強制將相對路徑轉為絕對路徑，防止 Blob 環境下 404
+  const currentOrigin = window.location.origin;
   const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-    .map(el => el.outerHTML)
+    .map(el => {
+        if (el.tagName.toLowerCase() === 'link') {
+            const href = el.getAttribute('href');
+            if (href && href.startsWith('/')) {
+                return `<link rel="stylesheet" href="${currentOrigin}${href}">`;
+            }
+        }
+        return el.outerHTML;
+    })
     .join('\n');
 
-  // 2. 組裝純淨的 HTML 結構，強行覆蓋可能造成白屏的 CSS Layout 規則
+  // 2. 注入 base 標籤確保所有靜態資源 (如圖片、字體) 能夠正確讀取
+  const baseTag = `<base href="${currentOrigin}/">`;
+
+  // 3. 組合 HTML
   const fullHtml = `
     <!DOCTYPE html>
     <html lang="zh-HK">
@@ -23,12 +33,14 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${title}</title>
+      ${baseTag}
       ${styles}
+      <!-- 終極保險：注入 Tailwind CDN，確保即使 Next.js CSS chunk 遺失也能完美渲染 -->
+      <script src="https://cdn.tailwindcss.com"></script>
       <style>
-        /* [核心修復] 強制重設頁面配置，禁止截斷 */
         @page {
           size: A4 portrait;
-          margin: 10mm !important;
+          margin: 8mm !important; 
         }
         
         html, body {
@@ -42,39 +54,29 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
           print-color-adjust: exact !important;
         }
 
-        /* 消除 Modal 的 absolute/fixed/overflow 屬性影響 */
-        body * {
-          box-sizing: border-box;
-        }
-
+        /* 核心修復：強制將 Flex 佈局改為 Block，避免瀏覽器列印引擎分頁計算崩潰導致空白頁 */
         .print-container {
+          display: block !important;
           width: 100% !important;
-          max-width: 100% !important;
-          margin: 0 auto !important;
-          padding: 0 !important;
-          background: #ffffff !important;
-          overflow: visible !important;
-          position: static !important;
-          transform: none !important;
-          box-shadow: none !important;
-        }
-
-        /* [關鍵] 解除 Tailwind 造成的滾動條限制與捲動死鎖 */
-        .max-h-[90vh], .max-h-screen, .overflow-y-auto, .overflow-hidden {
-          max-height: none !important;
           height: auto !important;
           overflow: visible !important;
+          position: static !important;
+          background: #ffffff !important;
+        }
+        
+        .print-container .flex-col {
+            display: block !important;
         }
 
-        /* 隱藏不想印出的介面元素 */
-        .no-print, button {
-          display: none !important;
-        }
-
-        /* 防止圖片或卡片在換頁時被被硬生生切開 */
+        /* 防止區塊在換頁時被硬生生切半 */
         .break-inside-avoid {
           break-inside: avoid;
           page-break-inside: avoid;
+          margin-bottom: 20px;
+        }
+
+        .no-print, button {
+          display: none !important;
         }
       </style>
     </head>
@@ -84,22 +86,23 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
       </div>
 
       <script>
-        // [核心修復] 等待所有圖片資源完整載入後，才開啟列印對話框
+        // 等待圖片與 Tailwind CDN 載入完畢後再觸發列印
         window.addEventListener('DOMContentLoaded', () => {
           const images = Array.from(document.images);
           const imageLoadPromises = images.map(img => {
             if (img.complete) return Promise.resolve();
             return new Promise(resolve => {
               img.onload = resolve;
-              img.onerror = resolve; // 即使破圖也不要卡死列印程序
+              img.onerror = resolve; 
             });
           });
 
           Promise.all(imageLoadPromises).then(() => {
+            // 給予 Tailwind CDN 800ms 的編譯緩衝時間，確保畫面 100% 準備就緒
             setTimeout(() => {
               window.focus();
               window.print();
-            }, 300); // 緩衝渲染時間
+            }, 800); 
           });
         });
       </script>
@@ -107,13 +110,12 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     </html>
   `;
 
-  // 3. 透過 Blob 建立獨立的 Context，不會受到外部 React 父節點的樣式影響
+  // 4. 建立 Blob 並開啟新視窗
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   
-  // 打開新視窗並執行列印
-  const printWindow = window.open(url, '_blank');
+  window.open(url, '_blank');
   
-  // 回收資源，防禦記憶體洩漏
+  // 回收記憶體
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
