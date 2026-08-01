@@ -1,6 +1,6 @@
 /**
  * 專為海外訂車、報價單與文件設計的高相容性列印引擎 
- * (隱藏 Iframe 模式：不彈出新視窗、解決白屏、自動回收資源)
+ * (隱藏 Iframe 模式：極淨化隔離、解決白屏、強化資源回收)
  */
 export const triggerDocumentPrint = (elementId: string, title: string = 'Document') => {
   const contentElement = document.getElementById(elementId);
@@ -9,7 +9,7 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     return;
   }
 
-  // 1. 建立隱藏的 Iframe (切勿使用 display: none，否則瀏覽器會拒絕列印)
+  // 1. 建立隱藏的 Iframe (置於畫面外)
   const iframe = document.createElement('iframe');
   iframe.id = `print-iframe-${Date.now()}`;
   iframe.style.position = 'fixed';
@@ -24,12 +24,7 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
   const iframeDoc = iframe.contentWindow?.document;
   if (!iframeDoc) return;
 
-  // 2. 獲取當前頁面所有的樣式 (因為同網域，路徑完全不需要修改)
-  const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
-    .map(el => el.outerHTML)
-    .join('\n');
-
-  // 3. 寫入純淨 HTML 內容與列印專屬 CSS 覆蓋
+  // 2. 寫入純淨 HTML 內容 (刻意不複製父層的 <style>，避免干擾)
   iframeDoc.open();
   iframeDoc.write(`
     <!DOCTYPE html>
@@ -37,7 +32,8 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     <head>
       <meta charset="utf-8">
       <title>${title}</title>
-      ${styles}
+      <!-- 依賴獨立的 CDN 重新渲染，保證環境最乾淨 -->
+      <script src="https://cdn.tailwindcss.com"></script>
       <style>
         /* 列印頁面設定 */
         @page {
@@ -55,22 +51,14 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
           print-color-adjust: exact !important;
         }
 
-        /* 核心修復：強制將 Flex 佈局改為 Block，避免分頁計算崩潰導致白紙 */
-        .print-container {
-          display: block !important;
-          width: 100% !important;
-          height: auto !important;
-          overflow: visible !important;
-          position: static !important;
-          background: #ffffff !important;
-        }
-        
-        /* 強制展開所有可能被 Tailwind 截斷的容器 */
-        .print-container * {
+        /* 核心修復：強制所有元素可見並解除滾動鎖定，破解所有的白屏陷阱 */
+        * {
+          visibility: visible !important;
           overflow: visible !important;
         }
 
-        .print-container .flex-col {
+        /* 強制將 Flex 佈局改為 Block，避免跨頁計算崩潰 */
+        .flex-col {
           display: block !important;
         }
 
@@ -82,44 +70,55 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
         }
 
         /* 隱藏不想印出的元素 */
-        .no-print, button {
+        .print\\:hidden, .no-print, button {
           display: none !important;
         }
       </style>
     </head>
     <body>
-      <div class="print-container">
-        ${contentElement.innerHTML}
-      </div>
+      <!-- 使用 outerHTML 保持原有 ID 與 HTML 結構 -->
+      ${contentElement.outerHTML}
     </body>
     </html>
   `);
   iframeDoc.close();
 
-  // 4. 等待 Iframe 內的資源 (圖片、字體、CSS) 載入完畢
-  iframe.onload = () => {
-    // 給予額外 800ms 緩衝，確保 Tailwind 樣式渲染及圖片繪製完成
+  // 3. 等待資源載入與執行列印
+  const executePrint = () => {
+    // 給予 Tailwind CDN 1200ms 的編譯緩衝時間，確保樣式 100% 套用
     setTimeout(() => {
       if (iframe.contentWindow) {
         iframe.contentWindow.focus();
         iframe.contentWindow.print();
       }
-    }, 800);
+    }, 1200);
   };
 
-  // 5. 自動清理機制：監聽列印結束或取消
-  if (iframe.contentWindow) {
-    iframe.contentWindow.onafterprint = () => {
-      if (document.body.contains(iframe)) {
-        document.body.removeChild(iframe);
-      }
-    };
-  }
+  iframe.onload = () => {
+    const images = Array.from(iframeDoc.images);
+    if (images.length === 0) {
+      executePrint();
+    } else {
+      // 確保圖片載入完畢
+      Promise.all(images.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(res => { img.onload = res; img.onerror = res; });
+      })).then(executePrint);
+    }
+  };
 
-  // 終極防呆：以防部分舊版瀏覽器不支援 onafterprint，3分鐘後強制回收記憶體
-  setTimeout(() => {
+  // 4. 清理機制 (Garbage Collection)
+  const cleanup = () => {
     if (document.body.contains(iframe)) {
       document.body.removeChild(iframe);
     }
-  }, 180000);
+  };
+
+  // 原生列印結束事件 (部分瀏覽器點擊「取消」不會觸發)
+  if (iframe.contentWindow) {
+    iframe.contentWindow.onafterprint = cleanup;
+  }
+  
+  // 終極防呆：無論使用者印完還是按了取消，3分鐘後強制將 iframe 拔除，絕不留痕跡
+  setTimeout(cleanup, 180000); 
 };
