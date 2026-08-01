@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, getDocs } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
+import { triggerDocumentPrint } from '@/utils/printHelper';
 
 // --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
@@ -189,11 +190,18 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center print:hidden">
                     <div className="flex items-center gap-2"><Printer size={20}/><span className="font-bold">報價單預覽 (PDF Preview)</span></div>
                     <div className="flex gap-2">
-                        <button onClick={() => window.print()} className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">正式列印 / 輸出 PDF</button>
-                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full"><X/></button>
+                        {/* ★ 核心修改：替換為獨立的 Blob 智慧列印引擎，並自動帶入動態檔名 */}
+                        <button 
+                            onClick={() => triggerDocumentPrint('print-area', `海外訂車報價單_QT-${item.id.slice(0,8).toUpperCase()}`)} 
+                            className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
+                        >
+                            正式列印 / 輸出 PDF
+                        </button>
+                        <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X/></button>
                     </div>
                 </div>
                 
+                {/* 這裡的 id="print-area" 會被 triggerDocumentPrint 抓取 */}
                 <div id="print-area" className="flex-1 overflow-y-auto p-10 text-slate-900 bg-white flex flex-col">
                     <div className="flex justify-between items-start border-b-4 border-slate-800 pb-6 mb-8 shrink-0 break-inside-avoid">
                         <div>
@@ -268,6 +276,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 </div>
             </div>
             
+            {/* 這裡的 global style 可以保留也可以刪除，因為 Blob 列印引擎已經包含完整的樣式重置 */}
             <style jsx global>{`
                 @media print {
                     @page { size: A4 portrait; margin: 10mm; }
