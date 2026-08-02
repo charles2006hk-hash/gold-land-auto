@@ -2527,9 +2527,23 @@ const VehicleFormModal = ({
                         </div>
                     )}
 
-                    <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-2 md:mt-0 flex-none">
-                        <button type="button" onClick={handleClose} className="w-full md:w-auto px-6 py-3 md:py-2.5 text-sm font-bold text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 rounded-xl transition-colors">取消</button>
-                        <button type="submit" className="w-full md:w-auto px-8 py-3 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white font-black text-sm md:text-base rounded-xl shadow-lg hover:shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center whitespace-nowrap"><Save size={20} className="mr-2"/> 儲存變更</button>
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-2 md:mt-0 flex-none relative z-20">
+                        <button 
+                            type="button" 
+                            onClick={handleClose} 
+                            className="w-full md:w-auto px-6 py-3 md:py-2.5 text-sm font-bold text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer select-none"
+                        >
+                            取消
+                        </button>
+                        
+                        {/* ★ 修正「儲存變更」藍色按鈕：擴大感應層、圖示事件穿透、防止被旁邊元素覆蓋 */}
+                        <button 
+                            type="submit" 
+                            className="w-full md:w-auto px-8 py-3 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white font-black text-sm md:text-base rounded-xl shadow-lg hover:shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center whitespace-nowrap cursor-pointer select-none relative z-20"
+                        >
+                            <Save size={20} className="mr-2 pointer-events-none flex-shrink-0" />
+                            <span className="pointer-events-none">儲存變更</span>
+                        </button>
                     </div>
                 </div>
             </div>
