@@ -459,32 +459,43 @@ export default function DashboardModule({
         </div>
       </div>
 
-      {/* 🚨 整合式戰情通報橫幅 (替代原先厚重的 3 張提醒卡片) */}
+      {/* 🚨 整合式戰情通報橫幅 (雙狀態呈現 + 無限Rolling捲動) */}
       {(totalUrgentAlerts > 0 || totalSoonAlerts > 0) && (
         <div className="w-full bg-slate-900 text-white rounded-2xl border border-slate-800 overflow-hidden shadow-sm flex-none transition-all duration-300">
+          
+          {/* 1. 頂部狀態列：清晰標示「已過期」與「即將到期」 */}
           <div 
             onClick={() => setIsAlertExpanded(!isAlertExpanded)}
             className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors"
           >
-            <div className="flex items-center gap-3 overflow-hidden">
-              <div className="flex items-center gap-1.5 bg-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full border border-red-500/30 font-bold text-xs shrink-0 animate-pulse">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="flex items-center gap-1.5 bg-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full border border-red-500/30 font-bold text-xs shrink-0">
                 <span>🚨 待辦預警</span>
-                <span className="bg-red-500 text-white px-1.5 py-0.2 rounded-full text-[10px]">
+                <span className="bg-red-600 text-white px-1.5 py-0.2 rounded-full text-[10px]">
                   {totalUrgentAlerts + totalSoonAlerts}
                 </span>
               </div>
 
-              <div className="hidden md:flex items-center gap-2 text-xs text-slate-300 font-medium truncate">
+              {/* 橫向膠囊摘要：完整展示「已過期」及「即將到期」數量 */}
+              <div className="hidden md:flex items-center gap-2 text-xs font-medium truncate">
                 {loopReminders.length > 0 && (
                   <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                    🔄 兜圈即將到期 ({loopReminders.length})
+                    🔄 兜圈死線 ({loopReminders.length})
                   </span>
                 )}
-                {cbExpiredCount > 0 && (
-                  <span className="text-red-400">🌐 中港過期 ({cbExpiredCount})</span>
+                {(cbExpiredCount > 0 || cbSoonCount > 0) && (
+                  <span className="bg-white/5 px-2 py-0.5 rounded border border-white/10 flex items-center gap-1.5">
+                    <span className="text-slate-300">🌐 中港:</span>
+                    {cbExpiredCount > 0 && <span className="text-red-400 font-bold">過期 {cbExpiredCount}</span>}
+                    {cbSoonCount > 0 && <span className="text-amber-400">臨期 {cbSoonCount}</span>}
+                  </span>
                 )}
-                {docExpiredCount > 0 && (
-                  <span className="text-red-400">📄 文件/牌費過期 ({docExpiredCount})</span>
+                {(docExpiredCount > 0 || docSoonCount > 0) && (
+                  <span className="bg-white/5 px-2 py-0.5 rounded border border-white/10 flex items-center gap-1.5">
+                    <span className="text-slate-300">📄 牌費/文件:</span>
+                    {docExpiredCount > 0 && <span className="text-red-400 font-bold">過期 {docExpiredCount}</span>}
+                    {docSoonCount > 0 && <span className="text-amber-400">臨期 {docSoonCount}</span>}
+                  </span>
                 )}
               </div>
             </div>
@@ -495,90 +506,115 @@ export default function DashboardModule({
             </div>
           </div>
 
-          {/* 點擊展開的：分類戰情明細面板 */}
+          {/* 2. 展開面板：啟用滾動區域 (Rolling List)，移除 .slice 限制 */}
           {isAlertExpanded && (
-            <div className="p-4 bg-slate-950/80 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4 max-h-[280px] overflow-y-auto scrollbar-thin">
-              {/* 1. 兜圈死線 */}
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-amber-400 flex items-center justify-between border-b border-white/10 pb-1">
+            <div className="p-4 bg-slate-950/80 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* --- 區塊 1: 粵港車兜圈死線 --- */}
+              <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
+                <div className="text-xs font-bold text-amber-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>🔄 粵港車兜圈死線</span>
-                  <span>{loopReminders.length} 台</span>
+                  <span className="font-mono bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">{loopReminders.length} 台</span>
                 </div>
-                {loopReminders.map((car: any) => (
-                  <div key={car.id} className="flex justify-between items-center text-xs p-1.5 rounded bg-white/5 hover:bg-white/10">
-                    <span className="font-bold text-white">{car.regMark || '未出牌'}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-amber-400 font-mono">剩 {car.diffDays} 天</span>
-                      <button 
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (!confirm(`確定 [${car.regMark || '未出牌'}] 已成功回港打卡嗎？`)) return;
-                          try {
-                            await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', car.id), { lastOutboundDate: '' });
-                            alert('✅ 已重置兜圈時間。');
-                          } catch { alert('更新失敗'); }
-                        }}
-                        className="p-1 bg-white/10 hover:bg-emerald-600/30 text-emerald-400 rounded"
-                        title="標記為已回港"
-                      >
-                        <Check size={12}/>
-                      </button>
+                {/* 滾動容器 (Rolling Container) */}
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                  {loopReminders.map((car: any) => (
+                    <div key={car.id} className="flex justify-between items-center text-xs p-2 rounded bg-white/5 hover:bg-white/10 transition-colors">
+                      <span className="font-bold text-white truncate pr-2">{car.regMark || '未出牌'}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-amber-400 font-mono text-[11px]">剩 {car.diffDays} 天</span>
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!confirm(`確定 [${car.regMark || '未出牌'}] 已成功回港打卡嗎？`)) return;
+                            try {
+                              await updateDoc(doc(db!, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', car.id), { lastOutboundDate: '' });
+                              alert('✅ 已重置兜圈時間。');
+                            } catch { alert('更新失敗'); }
+                          }}
+                          className="p-1 bg-white/10 hover:bg-emerald-600/50 text-emerald-400 rounded transition-colors"
+                          title="標記為已回港"
+                        >
+                          <Check size={12}/>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {loopReminders.length === 0 && <p className="text-slate-500 text-xs">暫無到期項目</p>}
+                  ))}
+                  {loopReminders.length === 0 && <p className="text-slate-500 text-xs text-center py-6">暫無到期項目</p>}
+                </div>
               </div>
 
-              {/* 2. 中港牌/批文到期 */}
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-blue-400 flex items-center justify-between border-b border-white/10 pb-1">
+              {/* --- 區塊 2: 中港業務到期 (包含過期與臨期，全量滾動展示) --- */}
+              <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
+                <div className="text-xs font-bold text-blue-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>🌐 中港業務到期</span>
-                  <span>{cbAlerts.length} 筆</span>
-                </div>
-                {cbAlerts.slice(0, 5).map((item: any, idx: number) => (
-                  <div 
-                    key={idx} 
-                    onClick={() => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }}
-                    className="flex justify-between items-center text-xs p-1.5 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
-                  >
-                    <div className="truncate pr-2">
-                      <span className="font-bold text-white">{item.title}</span>
-                      <span className="text-slate-400 text-[10px] ml-1">({item.desc})</span>
-                    </div>
-                    <span className={item.status === 'expired' ? 'text-red-400 font-bold' : 'text-amber-400'}>
-                      {item.status === 'expired' ? `過期 ${Math.abs(item.days)}天` : `剩 ${item.days}天`}
-                    </span>
+                  <div className="flex gap-1 text-[10px] font-mono">
+                    {cbExpiredCount > 0 && <span className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">過期 {cbExpiredCount}</span>}
+                    {cbSoonCount > 0 && <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">臨期 {cbSoonCount}</span>}
                   </div>
-                ))}
-                {cbAlerts.length === 0 && <p className="text-slate-500 text-xs">暫無到期項目</p>}
+                </div>
+                {/* 滾動容器 (Rolling Container) - 移除 .slice() 限制 */}
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                  {cbAlerts.map((item: any, idx: number) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => { setActiveTab('cross_border'); setActiveCbVehicleId(item.id); }}
+                      className={`flex justify-between items-center text-xs p-2 rounded cursor-pointer transition-colors border-l-2 ${
+                        item.status === 'expired' 
+                          ? 'bg-red-500/10 hover:bg-red-500/20 border-red-500' 
+                          : 'bg-white/5 hover:bg-white/10 border-amber-400'
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <span className="font-bold text-white">{item.title}</span>
+                        <span className="text-slate-400 text-[10px] ml-1">({item.desc})</span>
+                      </div>
+                      <span className={`shrink-0 font-mono text-[11px] ${item.status === 'expired' ? 'text-red-400 font-bold' : 'text-amber-400'}`}>
+                        {item.status === 'expired' ? `過期 ${Math.abs(item.days)}天` : `剩 ${item.days}天`}
+                      </span>
+                    </div>
+                  ))}
+                  {cbAlerts.length === 0 && <p className="text-slate-500 text-xs text-center py-6">暫無到期項目</p>}
+                </div>
               </div>
 
-              {/* 3. 牌費與保險到期 */}
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-emerald-400 flex items-center justify-between border-b border-white/10 pb-1">
+              {/* --- 區塊 3: 牌費 & 文件到期 (包含過期與臨期，全量滾動展示) --- */}
+              <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
+                <div className="text-xs font-bold text-emerald-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>📄 牌費 & 文件到期</span>
-                  <span>{docAlerts.length} 筆</span>
-                </div>
-                {docAlerts.slice(0, 5).map((item: any, idx: number) => (
-                  <div 
-                    key={idx}
-                    onClick={() => {
-                      if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); }
-                      else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
-                    }}
-                    className="flex justify-between items-center text-xs p-1.5 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
-                  >
-                    <div className="truncate pr-2">
-                      <span className="font-bold text-white">{item.title}</span>
-                      <span className="text-slate-400 text-[10px] ml-1">({item.desc})</span>
-                    </div>
-                    <span className={item.status === 'expired' ? 'text-red-400 font-bold' : 'text-amber-400'}>
-                      {item.status === 'expired' ? `過期 ${Math.abs(item.days)}天` : `剩 ${item.days}天`}
-                    </span>
+                  <div className="flex gap-1 text-[10px] font-mono">
+                    {docExpiredCount > 0 && <span className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">過期 {docExpiredCount}</span>}
+                    {docSoonCount > 0 && <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">臨期 {docSoonCount}</span>}
                   </div>
-                ))}
-                {docAlerts.length === 0 && <p className="text-slate-500 text-xs">暫無到期項目</p>}
+                </div>
+                {/* 滾動容器 (Rolling Container) - 移除 .slice() 限制 */}
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
+                  {docAlerts.map((item: any, idx: number) => (
+                    <div 
+                      key={idx}
+                      onClick={() => {
+                        if (item.source === 'vehicle') { setActiveTab('inventory'); setEditingVehicle(item.raw); }
+                        else { setActiveTab('database'); setEditingEntry(item.raw); setIsDbEditing(true); }
+                      }}
+                      className={`flex justify-between items-center text-xs p-2 rounded cursor-pointer transition-colors border-l-2 ${
+                        item.status === 'expired' 
+                          ? 'bg-red-500/10 hover:bg-red-500/20 border-red-500' 
+                          : 'bg-white/5 hover:bg-white/10 border-amber-400'
+                      }`}
+                    >
+                      <div className="truncate pr-2">
+                        <span className="font-bold text-white">{item.title}</span>
+                        <span className="text-slate-400 text-[10px] ml-1">({item.desc})</span>
+                      </div>
+                      <span className={`shrink-0 font-mono text-[11px] ${item.status === 'expired' ? 'text-red-400 font-bold' : 'text-amber-400'}`}>
+                        {item.status === 'expired' ? `過期 ${Math.abs(item.days)}天` : `剩 ${item.days}天`}
+                      </span>
+                    </div>
+                  ))}
+                  {docAlerts.length === 0 && <p className="text-slate-500 text-xs text-center py-6">暫無到期項目</p>}
+                </div>
               </div>
+
             </div>
           )}
         </div>
