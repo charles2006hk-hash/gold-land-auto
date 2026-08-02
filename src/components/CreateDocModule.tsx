@@ -1599,30 +1599,70 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                 </div>
 
-                {/* --- 右欄：即時預覽 --- */}
-                <div className={`flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center p-4 ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
+                {/* --- 右欄：即時預覽 (整合手機版第 3 步專屬輸出/列印控制) --- */}
+                <div className={`flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center p-4 relative ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
                     
-                    {/* ★ 頂部控制列：預覽標籤 與 印章開關 */}
+                    {/* ★ 桌面版 & 手機版通用：頂部狀態與印章/簽名控制列 */}
                     <div className="w-full max-w-[800px] flex justify-between items-center mb-3 flex-none">
-                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center bg-white/60 px-3 py-1.5 rounded-full shadow-sm">
-                            <Eye size={14} className="mr-1.5"/> Live Preview 實時預覽
+                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center bg-white/80 px-3 py-1.5 rounded-full shadow-sm">
+                            <Eye size={14} className="mr-1.5 text-blue-600"/> Live Preview 實時預覽
                         </div>
                         
-                        {/* ★ 新增：電子印章/簽名 隱藏開關 */}
-                        <button 
-                            type="button"
-                            onClick={() => setShowStampAndSig(!showStampAndSig)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm border ${showStampAndSig ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
-                            title="切換顯示或隱藏單據上的電子印章與簽名"
-                        >
-                            {showStampAndSig ? <Check size={14} className="text-indigo-500" /> : <X size={14} className="text-slate-400" />}
-                            {showStampAndSig ? '電子印章：顯示' : '電子印章：隱藏'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {/* ★ 新增：電子印章/簽名 隱藏開關 */}
+                            <button 
+                                type="button"
+                                onClick={() => setShowStampAndSig(!showStampAndSig)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm border cursor-pointer select-none ${showStampAndSig ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                                title="切換顯示或隱藏單據上的電子印章與簽名"
+                            >
+                                {showStampAndSig ? <Check size={14} className="text-indigo-500 pointer-events-none" /> : <X size={14} className="text-slate-400 pointer-events-none" />}
+                                <span>{showStampAndSig ? '電子印章：顯示' : '電子印章：隱藏'}</span>
+                            </button>
+
+                            {/* ★ 新增：手機版專屬頂部「輸出 PDF」快捷按鈕 */}
+                            <button 
+                                type="button"
+                                onClick={handlePrint}
+                                className="md:hidden bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer select-none"
+                            >
+                                <Printer size={14} className="pointer-events-none" />
+                                <span>列印 / 輸出 PDF</span>
+                            </button>
+                        </div>
                     </div>
 
+                    {/* 預覽主體 */}
                     <div className="w-full h-full flex justify-center overflow-hidden">
                         <LivePreview />
                     </div>
+
+                    {/* ★★★ 新增：手機版第 3 步專屬「底部懸浮操作列 (Sticky Bottom Bar)」 ★★★ */}
+                    {/* 解決使用者查看長篇 A4 預覽到底部後，必須往上滾動尋找操作按鈕的問題 */}
+                    <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between print:hidden animate-fade-in">
+                        <div className="flex flex-col pl-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Action Required</span>
+                            <span className="text-xs font-black text-white">確認單據內容無誤？</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setMobileStep('edit')}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer select-none transition-colors"
+                            >
+                                返回修改
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePrint}
+                                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg cursor-pointer select-none active:scale-95 transition-transform"
+                            >
+                                <Printer size={14} className="pointer-events-none" />
+                                <span>確認並列印 PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
