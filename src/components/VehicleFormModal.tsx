@@ -771,9 +771,11 @@ const VehicleFormModal = ({
                 </div>
             `;
 
-            // 支援傳入或內建的獨立列印
-            if (typeof triggerSmartPrint === 'function') {
-                triggerSmartPrint(htmlContent, `Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}`);
+            // ★ 修正 TS 報錯：安全呼叫全域列印函數，或降級使用原生列印
+            const globalPrintFn = (window as any).triggerSmartPrint || (window as any).triggerDocumentPrint;
+            
+            if (typeof globalPrintFn === 'function') {
+                globalPrintFn(htmlContent, `Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}`);
             } else {
                 const printWin = window.open('', '_blank');
                 if (printWin) {
