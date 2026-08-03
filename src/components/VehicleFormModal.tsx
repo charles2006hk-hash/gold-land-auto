@@ -339,9 +339,6 @@ const VehicleFormModal = ({
     const totalRevenue = currentRealTimePrice + salesAddonsTotal;
     const balance = totalRevenue - totalReceived;
 
-    const currentRealTimePrice = Number(priceStr.replace(/,/g, '')) || 0;
-    const totalRevenue = currentRealTimePrice + salesAddonsTotal;
-    const balance = totalRevenue - totalReceived;
 
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
