@@ -644,7 +644,7 @@ const VehicleFormModal = ({
         
         const items = [];
 
-        // 1. 動態拆分應付項目 (Payables)
+        // 1. 動態拆分應付項目 (Payables) - ★ 移除了 A1 費用
         if (acqType === 'Import') {
             const fp = Number(acqForeignPrice.replace(/,/g, '')) || 0;
             const localCharges = Number(acqLocalChargesForeign.replace(/,/g, '')) || 0;
@@ -652,19 +652,17 @@ const VehicleFormModal = ({
             // 解決浮點數誤差
             const arrivalPrice = Math.round((fp + localCharges) * er * 100) / 100;
             const port = Number(acqPortFee.replace(/,/g, '')) || 0;
-            const a1 = Number(acqA1Price.replace(/,/g, '')) || 0;
             const frt = Number(acqFrtTax.replace(/,/g, '')) || 0;
 
             if (arrivalPrice > 0) items.push({ id: 'arr', desc: '車輛到港價 (外幣車價+當地費用)', amount: arrivalPrice, type: 'payable' });
             if (port > 0) items.push({ id: 'port', desc: '本地費用 / 到港雜費 (Port Fee)', amount: port, type: 'payable' });
-            if (a1 > 0) items.push({ id: 'a1', desc: '海關 PRP 費用 (A1)', amount: a1, type: 'payable' });
             if (frt > 0) items.push({ id: 'frt', desc: '入口稅 (FRT)', amount: frt, type: 'payable' });
         } else {
             const baseCost = Number(costStr.replace(/,/g, '')) || 0;
             if (baseCost > 0) items.push({ id: 'base', desc: '進貨本金 (Purchase Price)', amount: baseCost, type: 'payable' });
         }
 
-        // 加入維修與雜費成本 (自動彙整所有非「併入車價」的支出)
+        // 加入維修與雜費成本
         if (totalExpenses > 0) {
             items.push({ id: 'exp', desc: '車輛維修與其他雜費 (Maintenance & Expenses)', amount: totalExpenses, type: 'payable' });
         }
@@ -691,8 +689,11 @@ const VehicleFormModal = ({
         const isReceivable = netBalance < 0;
         const absBalance = Math.abs(netBalance);
 
-        // ★ 核心修復：先關閉彈窗，再觸發列印。避免瀏覽器的 print dialog 凍結主線程導致 Modal 卡住
+        // ★ 先關閉彈窗再列印，避免主線程凍結
         setShowReconModal(false);
+
+        // ★ 智能生成報表檔名：Year Make Model (例如: Reconciliation_2023 Porsche 991)
+        const reportTitle = `Reconciliation_${v.year || ''} ${v.make || ''} ${v.model || ''}`.replace(/\s+/g, ' ').trim() || `Reconciliation_${v.regMark || 'Vehicle'}`;
 
         setTimeout(() => {
             const htmlContent = `
@@ -704,13 +705,14 @@ const VehicleFormModal = ({
                     </div>
 
                     <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 12px;">
-                        <table style="width: 45%; border-collapse: collapse;">
-                            <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 80px;">代訂方/行家:</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0;">${reconVendor}</td></tr>
-                            <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">結算日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
+                        <table style="width: 48%; border-collapse: collapse;">
+                            <!-- ★ 修復：加入 white-space: nowrap 防止中文字被強行換行 -->
+                            <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; white-space: nowrap; width: 100px;">代訂方/行家:</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">${reconVendor}</td></tr>
+                            <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px; white-space: nowrap;">結算日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
                         </table>
-                        <table style="width: 45%; border-collapse: collapse;">
-                            <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 60px;">車型:</td><td style="font-weight: bold; border-bottom: 1px solid #e2e8f0;">${v.make || ''} ${v.model || ''} (${v.year || ''})</td></tr>
-                            <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">車身號碼:</td><td style="padding-top: 5px; font-family: monospace; font-weight: bold;">${v.chassisNo || v.regMark || 'TBC'}</td></tr>
+                        <table style="width: 48%; border-collapse: collapse;">
+                            <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; white-space: nowrap; width: 80px;">車型:</td><td style="font-weight: bold; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">${v.make || ''} ${v.model || ''} (${v.year || ''})</td></tr>
+                            <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px; white-space: nowrap;">車身號碼:</td><td style="padding-top: 5px; font-family: monospace; font-weight: bold;">${v.chassisNo || v.regMark || 'TBC'}</td></tr>
                         </table>
                     </div>
 
@@ -771,23 +773,30 @@ const VehicleFormModal = ({
                 </div>
             `;
 
-            // ★ 修正 TS 報錯：安全呼叫全域列印函數，或降級使用原生列印
             const globalPrintFn = (window as any).triggerSmartPrint || (window as any).triggerDocumentPrint;
             
             if (typeof globalPrintFn === 'function') {
-                globalPrintFn(htmlContent, `Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}`);
+                globalPrintFn(htmlContent, reportTitle);
             } else {
                 const printWin = window.open('', '_blank');
                 if (printWin) {
-                    printWin.document.write(`<html><head><title>Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${htmlContent}</body></html>`);
+                    printWin.document.write(`<html><head><title>${reportTitle}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${htmlContent}</body></html>`);
                     printWin.document.close();
                     printWin.focus();
-                    setTimeout(() => printWin.print(), 250);
+                    
+                    // ★ 確保列印完成後或取消後自動銷毀視窗
+                    printWin.onafterprint = () => printWin.close();
+                    
+                    setTimeout(() => {
+                        printWin.print();
+                        // 防呆機制：若 onafterprint 未觸發，此處確保視窗關閉 (在 Chrome 中 print() 會阻塞直到對話框關閉)
+                        printWin.close();
+                    }, 250);
                 } else {
                     alert("⚠️ 瀏覽器阻擋了彈出視窗，請允許彈出視窗以進行列印！");
                 }
             }
-        }, 150); // 給 React 150ms 讓彈窗完全消失
+        }, 150); 
     };
 
     useEffect(() => { const size = Number(engineSizeStr.replace(/,/g, '')); setAutoLicenseFee(calculateLicenseFee(fuelType, size)); }, [fuelType, engineSizeStr]);
