@@ -632,6 +632,121 @@ const VehicleFormModal = ({
     };
     const handleDeleteAcqPayment = (id: string) => { setAcqPayments(acqPayments.filter(p => p.id !== id)); };
 
+    // ★★★ 升級：對數單動態編輯與匯出 (B2B Reconciliation) ★★★
+    const [showReconModal, setShowReconModal] = useState(false);
+    const [reconVendor, setReconVendor] = useState('');
+    const [reconItems, setReconItems] = useState<any[]>([]);
+
+    const handleOpenReconModal = () => {
+        const vendorName = acqVendor || '未指定供應商';
+        const baseCost = Number(costStr.replace(/,/g, '')) || 0;
+        const offsetAmt = Number(acqOffsetStr.replace(/,/g, '')) || 0;
+        const advAmt = Number(acqAdvanceStr.replace(/,/g, '')) || 0;
+        
+        const items = [];
+        if (baseCost > 0) items.push({ id: 'base', desc: '進貨本金 / 當地車價結算', amount: baseCost, type: 'payable' });
+        if (advAmt > 0) items.push({ id: 'adv', desc: '代支費用 (Advance Fee)', amount: advAmt, type: 'payable' });
+        
+        acqPayments.forEach(p => {
+            items.push({ id: p.id, desc: `[付款] ${p.date} - ${p.method} ${p.note ? `(${p.note})` : ''}`, amount: Number(p.amount) || 0, type: 'paid' });
+        });
+        if (offsetAmt > 0) items.push({ id: 'offset', desc: '對數抵銷 (Trade-in / 關聯單)', amount: offsetAmt, type: 'paid' });
+
+        setReconVendor(vendorName);
+        setReconItems(items);
+        setShowReconModal(true);
+    };
+
+    const executeReconPrint = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const totalPayable = Math.round(reconItems.filter(i => i.type === 'payable').reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+        const totalPaid = Math.round(reconItems.filter(i => i.type === 'paid').reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+        const netBalance = Math.round((totalPayable - totalPaid) * 100) / 100;
+        const isReceivable = netBalance < 0;
+        const absBalance = Math.abs(netBalance);
+
+        const printFn = typeof window !== 'undefined' ? (window as any).triggerDocumentPrint || triggerSmartPrint : null;
+        if (!printFn) return alert("列印模組未載入");
+
+        const htmlContent = `
+            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b;">
+                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px;">
+                    <h1 style="margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: 2px;">GOLD LAND AUTO</h1>
+                    <h2 style="margin: 0 0 10px 0; font-size: 16px; color: #475569; letter-spacing: 5px;">金田汽車</h2>
+                    <p style="margin: 0; font-size: 16px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 4px 12px; border-radius: 4px; border: 1px solid #cbd5e1;">進貨對數單 (RECONCILIATION STATEMENT)</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 12px;">
+                    <table style="width: 45%; border-collapse: collapse;">
+                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 80px;">代訂方/行家:</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0;">${reconVendor}</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">結算日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
+                    </table>
+                    <table style="width: 45%; border-collapse: collapse;">
+                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 60px;">車型:</td><td style="font-weight: bold; border-bottom: 1px solid #e2e8f0;">${v.make || ''} ${v.model || ''} (${v.year || ''})</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">車身號碼:</td><td style="padding-top: 5px; font-family: monospace; font-weight: bold;">${v.chassisNo || v.regMark || 'TBC'}</td></tr>
+                    </table>
+                </div>
+
+                <h3 style="font-size: 14px; color: #b91c1c; border-bottom: 1px solid #fca5a5; padding-bottom: 5px; margin-bottom: 15px;">A. 應付款項 (Payables / Costs)</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
+                    <tr style="background-color: #fef2f2; text-align: left;">
+                        <th style="padding: 8px; border: 1px solid #fca5a5;">項目描述</th>
+                        <th style="padding: 8px; border: 1px solid #fca5a5; text-align: right; width: 150px;">金額 (HKD)</th>
+                    </tr>
+                    ${reconItems.filter(i => i.type === 'payable').map(i => `
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #e2e8f0;">${i.desc}</td>
+                        <td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${formatCurrency(i.amount)}</td>
+                    </tr>
+                    `).join('')}
+                    <tr style="background-color: #f8fafc; font-weight: bold;">
+                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right;">應付總計 (Total Payable):</td>
+                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #b91c1c; font-size: 14px;">${formatCurrency(totalPayable)}</td>
+                    </tr>
+                </table>
+
+                <h3 style="font-size: 14px; color: #1d4ed8; border-bottom: 1px solid #93c5fd; padding-bottom: 5px; margin-bottom: 15px;">B. 已付/抵銷紀錄 (Payments & Offsets)</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
+                    <tr style="background-color: #eff6ff; text-align: left;">
+                        <th style="padding: 8px; border: 1px solid #93c5fd;">項目描述</th>
+                        <th style="padding: 8px; border: 1px solid #93c5fd; text-align: right; width: 150px;">金額 (HKD)</th>
+                    </tr>
+                    ${reconItems.filter(i => i.type === 'paid').map(i => `
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #e2e8f0;">${i.desc}</td>
+                        <td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #1d4ed8;">${formatCurrency(i.amount)}</td>
+                    </tr>
+                    `).join('')}
+                    ${reconItems.filter(i => i.type === 'paid').length === 0 ? `<tr><td colspan="2" style="padding: 15px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">尚無紀錄</td></tr>` : ''}
+                    <tr style="background-color: #f8fafc; font-weight: bold;">
+                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right;">已付總計 (Total Paid):</td>
+                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #1d4ed8; font-size: 14px;">${formatCurrency(totalPaid)}</td>
+                    </tr>
+                </table>
+
+                <div style="background-color: ${isReceivable ? '#f0fdf4' : (netBalance === 0 ? '#f8fafc' : '#fef2f2')}; border: 2px solid ${isReceivable ? '#86efac' : (netBalance === 0 ? '#cbd5e1' : '#fca5a5')}; border-radius: 8px; padding: 20px; text-align: right;">
+                    <span style="font-size: 14px; font-weight: bold; color: #334155; margin-right: 15px;">
+                        ${isReceivable ? '最終應收帳款 (Net Receivable):' : (netBalance === 0 ? '已結清 (Settled):' : '最終應付尾數 (Net Payable):')}
+                    </span>
+                    <span style="font-size: 24px; font-weight: 900; font-family: monospace; color: ${isReceivable ? '#16a34a' : (netBalance === 0 ? '#475569' : '#dc2626')};">
+                        ${formatCurrency(absBalance)}
+                    </span>
+                </div>
+                
+                <div style="margin-top: 60px; display: flex; justify-content: space-between;">
+                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                        Prepared By (經手人)<br/><b>${staffId}</b>
+                    </div>
+                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                        Vendor Signature (代訂方簽署)
+                    </div>
+                </div>
+            </div>
+        `;
+        printFn(htmlContent, `Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}`);
+        setShowReconModal(false);
+    };
+
     useEffect(() => { const size = Number(engineSizeStr.replace(/,/g, '')); setAutoLicenseFee(calculateLicenseFee(fuelType, size)); }, [fuelType, engineSizeStr]);
     const calcRegisteredPrice = () => { const a1 = Number(priceA1Str.replace(/,/g, '')) || 0; const tax = Number(priceTaxStr.replace(/,/g, '')) || 0; return formatNumberInput(String(a1 + tax)); };
 
@@ -1719,14 +1834,16 @@ const VehicleFormModal = ({
                             {/* ★★★ 進貨付款紀錄 (Outgoing Payments) ★★★ */}
                             <div className="mt-6 border-t border-red-200 pt-5 md:pt-4 w-full">
                                 <h4 className="font-bold text-base md:text-xs text-red-800 mb-4 md:mb-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                                    <span>付款紀錄 (Acquisition Payments)</span>
-                                    <div className="flex gap-3 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-red-100">
-                                        <span className="text-slate-600 font-mono text-sm md:text-xs font-bold" title={`車價已付: ${formatCurrency(totalAcqPaid)} + 雜費已付: ${formatCurrency(totalExpensesPaid)}`}>
-                                            總已付: {formatCurrency(totalPaidAll)}
-                                        </span>
-                                        <span className={`font-black font-mono text-sm md:text-xs ${acqBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                            總欠款尾數: {formatCurrency(acqBalance)}
-                                        </span>
+                                    <div className="flex items-center gap-3">
+                                        <span>進貨付款紀錄 (Acquisition Payments)</span>
+                                        <button 
+                                            type="button" 
+                                            onClick={handleOpenReconModal}
+                                            className="bg-red-100 hover:bg-red-200 text-red-800 border border-red-300 px-3 py-1 rounded-md text-[10px] font-black shadow-sm flex items-center transition-colors cursor-pointer select-none"
+                                        >
+                                            <Printer size={12} className="mr-1 pointer-events-none"/>
+                                            <span className="pointer-events-none">📝 編輯與匯出對數單</span>
+                                        </button>
                                     </div>
                                 </h4>
                                 
@@ -2620,6 +2737,115 @@ const VehicleFormModal = ({
                     </div>
                 </div>
             </div>
+
+{/* 👇---------- 從這裡開始複製插入 ----------👇 */}
+            {/* ★ 編輯與匯出對數單 Modal (Reconciliation) */}
+            {showReconModal && (
+                <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center bg-slate-900 text-white">
+                            <h3 className="font-bold flex items-center"><FileText size={18} className="mr-2"/> 編輯進貨對數單 (Reconciliation)</h3>
+                            <button type="button" onClick={() => setShowReconModal(false)} className="p-1 hover:bg-white/20 rounded-full cursor-pointer select-none"><X size={20}/></button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-5 space-y-5 bg-slate-50">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">代訂方 / 行家名稱</label>
+                                <input type="text" value={reconVendor} onChange={e => setReconVendor(e.target.value)} className="w-full p-2 border border-slate-300 rounded outline-none font-bold text-slate-800 focus:border-blue-500 shadow-sm" />
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                                <div className="flex justify-between items-center p-3 border-b bg-slate-100">
+                                    <span className="font-bold text-sm text-slate-700">對數項目明細 <span className="text-xs font-normal text-slate-500 ml-2">(可自由修改金額與描述)</span></span>
+                                    <button type="button" onClick={() => setReconItems([...reconItems, { id: Date.now().toString(), desc: '', amount: 0, type: 'payable' }])} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 font-bold shadow-sm transition-colors cursor-pointer select-none">
+                                        + 新增自訂項目
+                                    </button>
+                                </div>
+                                <div className="p-2 space-y-2">
+                                    {reconItems.map((item, idx) => (
+                                        <div key={item.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded border border-slate-200 focus-within:border-blue-400 transition-colors">
+                                            <select 
+                                                value={item.type} 
+                                                onChange={e => {
+                                                    const newItems = [...reconItems];
+                                                    newItems[idx].type = e.target.value;
+                                                    setReconItems(newItems);
+                                                }}
+                                                className={`p-1.5 text-xs font-bold rounded border outline-none cursor-pointer shadow-sm ${item.type === 'payable' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}
+                                            >
+                                                <option value="payable">應付 (+)</option>
+                                                <option value="paid">已付/抵銷 (-)</option>
+                                            </select>
+                                            <input 
+                                                type="text" 
+                                                value={item.desc} 
+                                                onChange={e => {
+                                                    const newItems = [...reconItems];
+                                                    newItems[idx].desc = e.target.value;
+                                                    setReconItems(newItems);
+                                                }}
+                                                className="flex-1 p-1.5 text-sm outline-none bg-white font-medium border border-slate-200 rounded focus:border-blue-400 shadow-sm"
+                                                placeholder="項目描述..."
+                                            />
+                                            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded px-2 shadow-sm focus-within:border-blue-400">
+                                                <span className="text-slate-400 font-bold">$</span>
+                                                <input 
+                                                    type="text" 
+                                                    value={formatNumberInput(String(item.amount))}
+                                                    onChange={e => {
+                                                        const newItems = [...reconItems];
+                                                        newItems[idx].amount = Number(e.target.value.replace(/,/g, '')) || 0;
+                                                        setReconItems(newItems);
+                                                    }}
+                                                    className="w-24 p-1.5 text-right font-mono font-black outline-none text-slate-800"
+                                                    placeholder="0"
+                                                />
+                                            </div>
+                                            <button type="button" onClick={() => setReconItems(reconItems.filter(i => i.id !== item.id))} className="text-slate-400 hover:text-red-500 p-1.5 cursor-pointer select-none"><Trash2 size={16}/></button>
+                                        </div>
+                                    ))}
+                                    {reconItems.length === 0 && <div className="text-center py-6 text-slate-400 text-xs">無對數項目</div>}
+                                </div>
+                            </div>
+
+                            {/* 即時試算結果 */}
+                            <div className="bg-slate-800 text-white p-5 rounded-xl shadow-inner flex flex-col sm:flex-row justify-between items-center gap-4">
+                                <div className="flex gap-6 text-xs font-mono font-bold text-slate-300">
+                                    <div>應付總額: <span className="text-red-400 text-sm ml-1">${formatCurrency(Math.round(reconItems.filter(i => i.type === 'payable').reduce((sum, i) => sum + i.amount, 0) * 100) / 100)}</span></div>
+                                    <div>已付/抵銷: <span className="text-blue-400 text-sm ml-1">${formatCurrency(Math.round(reconItems.filter(i => i.type === 'paid').reduce((sum, i) => sum + i.amount, 0) * 100) / 100)}</span></div>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">
+                                        {(() => {
+                                            const bal = reconItems.filter(i => i.type === 'payable').reduce((sum, i) => sum + i.amount, 0) - reconItems.filter(i => i.type === 'paid').reduce((sum, i) => sum + i.amount, 0);
+                                            if (bal > 0) return '最終應付尾數 (Net Payable)';
+                                            if (bal < 0) return '最終應收帳款 (Net Receivable)';
+                                            return '已結清 (Settled)';
+                                        })()}
+                                    </span>
+                                    <span className={`text-2xl font-black font-mono tracking-tighter ${(() => {
+                                        const bal = reconItems.filter(i => i.type === 'payable').reduce((sum, i) => sum + i.amount, 0) - reconItems.filter(i => i.type === 'paid').reduce((sum, i) => sum + i.amount, 0);
+                                        if (bal > 0) return 'text-red-500 drop-shadow-md';
+                                        if (bal < 0) return 'text-green-400 drop-shadow-md';
+                                        return 'text-slate-300';
+                                    })()}`}>
+                                        ${formatCurrency(Math.abs(Math.round((reconItems.filter(i => i.type === 'payable').reduce((sum, i) => sum + i.amount, 0) - reconItems.filter(i => i.type === 'paid').reduce((sum, i) => sum + i.amount, 0)) * 100) / 100))}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 bg-white flex justify-end gap-3 flex-none">
+                            <button type="button" onClick={() => setShowReconModal(false)} className="px-6 py-2.5 rounded-lg text-sm font-bold text-slate-600 border hover:bg-slate-50 transition-colors cursor-pointer select-none">取消</button>
+                            <button type="button" onClick={executeReconPrint} className="px-8 py-2.5 rounded-lg text-sm font-black text-white bg-blue-600 hover:bg-blue-700 shadow-md transition-all active:scale-95 flex items-center cursor-pointer select-none">
+                                <Printer size={16} className="mr-2 pointer-events-none"/> <span className="pointer-events-none">確認無誤並匯出 PDF</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+
 
 {/* ★ 中港指標轉移彈出視窗 */}
             {showTransferModal && (
