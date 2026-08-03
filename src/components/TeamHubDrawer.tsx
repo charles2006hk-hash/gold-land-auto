@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     X, MessageCircle, Send, Check, Trash2, 
-    FileText, ListTodo, Car, Search, Loader2 
+    FileText, ListTodo, Car, Search, Loader2, Calendar, Clock
 } from 'lucide-react';
 import { 
     collection, addDoc, query, orderBy, onSnapshot, 
@@ -41,15 +41,17 @@ export default function TeamHubDrawer({
     const [newMessage, setNewMessage] = useState('');
     const [chatLinkedCar, setChatLinkedCar] = useState(''); 
     
+    // --- ★ 任務專屬狀態 (新增 dueDate) ---
     const [tasks, setTasks] = useState<any[]>([]);
     const [newTask, setNewTask] = useState('');
     const [assignee, setAssignee] = useState('');
     const [taskLinkedCar, setTaskLinkedCar] = useState(''); 
+    const [taskDueDate, setTaskDueDate] = useState(''); // ★ 新增到期日
 
     const [isAiThinking, setIsAiThinking] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // ★ 自動插入時間戳魔法
+    // ★ 自動插入時間戳魔法[cite: 9]
     useEffect(() => {
         if (isOpen && activeTab === 'notes' && newNote === '') {
             const now = new Date();
@@ -58,7 +60,7 @@ export default function TeamHubDrawer({
         }
     }, [isOpen, activeTab]);
 
-    // 1. 監聽隨手記 (Notes)
+    // 1. 監聽隨手記 (Notes)[cite: 9]
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_notes'), orderBy('timestamp', 'desc'));
@@ -68,7 +70,7 @@ export default function TeamHubDrawer({
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // 2. 監聽對話庫 (Chat)
+    // 2. 監聽對話庫 (Chat)[cite: 9]
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_messages'), orderBy('timestamp', 'asc'), limit(100));
@@ -79,7 +81,7 @@ export default function TeamHubDrawer({
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // 3. 監聽任務庫 (Tasks)
+    // 3. 監聽任務庫 (Tasks)[cite: 9]
     useEffect(() => {
         if (!db || !isOpen) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), orderBy('timestamp', 'desc'));
@@ -89,7 +91,7 @@ export default function TeamHubDrawer({
         return () => unsub();
     }, [db, appId, isOpen]);
 
-    // ★★★ 核心升級：動態資料過濾邏輯 (權限隔離 + 搜尋) ★★★
+    // ★★★ 核心升級：動態資料過濾邏輯 (權限隔離 + 搜尋) ★★★[cite: 9]
     const isAdmin = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
 
     const filteredNotes = notes.filter(note => {
@@ -124,7 +126,7 @@ export default function TeamHubDrawer({
         return task.assigner === staffId || task.assignee === staffId || task.assignee === 'ALL';
     });
 
-    // --- 處理儲存隨手記 ---
+    // --- 處理儲存隨手記 ---[cite: 9]
     const handleAddNote = async (e: React.FormEvent) => {
         e.preventDefault();
         const text = newNote.trim();
@@ -161,7 +163,7 @@ export default function TeamHubDrawer({
         setExpandedNotes(prev => ({ ...prev, [noteId]: !prev[noteId] }));
     };
 
-    // --- 處理發送對話與 AI 處理邏輯 ---
+    // --- 處理發送對話與 AI 處理邏輯 ---[cite: 9]
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         const msgText = newMessage.trim();
@@ -240,7 +242,7 @@ export default function TeamHubDrawer({
         }
     };
 
-    // --- 處理新增任務 ---
+    // --- ★ 新增任務 (帶入 dueDate) ---
     const handleAddTask = async (e: React.FormEvent) => {
         e.preventDefault();
         const taskText = newTask.trim();
@@ -257,7 +259,8 @@ export default function TeamHubDrawer({
 
         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tasks'), {
             assigner: staffId, assignee: assignee, content: taskText, linkedRegMark: finalLinkedCar || null, 
-            status: 'pending', timestamp: serverTimestamp()
+            status: 'pending', timestamp: serverTimestamp(),
+            dueDate: taskDueDate || null // ★ 儲存到期日
         });
 
         if (sendPushNotification) {
@@ -275,7 +278,7 @@ export default function TeamHubDrawer({
             }
         }
 
-        setNewTask(''); setTaskLinkedCar('');
+        setNewTask(''); setTaskLinkedCar(''); setTaskDueDate('');
     };
 
     const toggleTask = async (task: any) => {
@@ -312,7 +315,7 @@ export default function TeamHubDrawer({
                     <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
                 </div>
 
-                {/* ★ 3個分頁按鈕 */}
+                {/* 3個分頁按鈕 */}
                 <div className="flex border-b border-slate-200 bg-white flex-none">
                     <button onClick={() => setActiveTab('notes')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'notes' ? 'border-b-2 border-yellow-500 text-yellow-700 bg-yellow-50/50' : 'text-slate-500 hover:bg-slate-50'}`}><FileText size={16} className="mr-1.5"/> 隨手記</button>
                     <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-bold flex items-center justify-center transition-colors ${activeTab === 'chat' ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50/50' : 'text-slate-500 hover:bg-slate-50'}`}><MessageCircle size={16} className="mr-1.5"/> 內部對話</button>
@@ -325,7 +328,7 @@ export default function TeamHubDrawer({
                         {/* 輸入區 (黃色便條紙風格) */}
                         <div className="p-3 bg-yellow-50/80 border-b border-yellow-200 shadow-sm flex-none z-10">
                             <form onSubmit={handleAddNote} className="flex flex-col gap-2">
-                                <select value={noteLinkedCar} onChange={e => setNoteLinkedCar(e.target.value)} className="w-full bg-white border border-yellow-200 text-xs p-2 rounded-lg outline-none text-slate-600 shadow-sm">
+                                <select value={noteLinkedCar} onChange={e => setNoteLinkedCar(e.target.value)} className="w-full bg-white border border-yellow-200 text-xs p-2 rounded-lg outline-none text-slate-600 shadow-sm cursor-pointer">
                                     <option value="">🔗 關聯車輛 (選填，或輸入 @車牌)</option>
                                     {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
                                 </select>
@@ -336,7 +339,7 @@ export default function TeamHubDrawer({
                                     className="w-full h-20 bg-white border border-yellow-300 rounded-lg p-3 text-sm outline-none focus:ring-2 ring-yellow-200 resize-none shadow-inner" 
                                 />
                                 <div className="flex justify-end">
-                                    <button type="submit" disabled={!newNote.trim()} className="bg-yellow-500 text-yellow-950 px-6 py-2 rounded-lg text-sm font-black disabled:opacity-50 hover:bg-yellow-400 transition-colors shadow-sm active:scale-95">儲存筆記</button>
+                                    <button type="submit" disabled={!newNote.trim()} className="bg-yellow-500 text-yellow-950 px-6 py-2 rounded-lg text-sm font-black disabled:opacity-50 hover:bg-yellow-400 transition-colors shadow-sm active:scale-95 cursor-pointer">儲存筆記</button>
                                 </div>
                             </form>
                             
@@ -373,7 +376,7 @@ export default function TeamHubDrawer({
                                                 )}
                                             </div>
                                             {(note.author === staffId || isAdmin) && (
-                                                <button onClick={() => deleteNote(note.id)} className="text-slate-300 hover:text-red-500 p-1 flex-none ml-2"><Trash2 size={14}/></button>
+                                                <button onClick={() => deleteNote(note.id)} className="text-slate-300 hover:text-red-500 p-1 flex-none ml-2 cursor-pointer"><Trash2 size={14}/></button>
                                             )}
                                         </div>
                                         
@@ -384,7 +387,7 @@ export default function TeamHubDrawer({
                                         {isLong && (
                                             <button 
                                                 onClick={() => toggleNoteExpand(note.id)} 
-                                                className="text-blue-500 hover:text-blue-700 text-xs font-bold mt-2 flex items-center"
+                                                className="text-blue-500 hover:text-blue-700 text-xs font-bold mt-2 flex items-center cursor-pointer"
                                             >
                                                 {isExpanded ? '收起內容' : '顯示更多...'}
                                             </button>
@@ -429,46 +432,90 @@ export default function TeamHubDrawer({
                         
                         <div className="bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] p-3">
                             <div className="flex gap-2 mb-2">
-                                <select value={chatLinkedCar} onChange={e => setChatLinkedCar(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600">
+                                <select value={chatLinkedCar} onChange={e => setChatLinkedCar(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600 cursor-pointer">
                                     <option value="">🔗 不關聯車輛 (可輸入 @車牌)</option>
                                     {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make})</option>)}
                                 </select>
-                                <button onClick={() => setNewMessage(prev => prev + '@AI ')} className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-200 transition-colors">呼叫 @AI</button>
+                                <button onClick={() => setNewMessage(prev => prev + '@AI ')} className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-200 transition-colors cursor-pointer">呼叫 @AI</button>
                             </div>
                             <form onSubmit={handleSendMessage} className="flex gap-2">
                                 <input value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="輸入訊息... (如: @AI @VELLFIRE 收咗幾多錢？)" className="flex-1 bg-slate-100 border border-transparent focus:border-blue-300 focus:bg-white rounded-lg px-3 py-2 text-sm outline-none transition-colors" />
-                                <button type="submit" disabled={!newMessage.trim() || isAiThinking} className="bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"><Send size={16}/></button>
+                                <button type="submit" disabled={!newMessage.trim() || isAiThinking} className="bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm cursor-pointer"><Send size={16}/></button>
                             </form>
                         </div>
                     </div>
                 )}
 
-                {/* ===== Tab 3: 任務指派 (Tasks) ===== */}
+                {/* --- Tab 3: 任務指派 (Tasks) --- */}
                 {activeTab === 'tasks' && (
                     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+                        {/* ★ 升級版任務建立表單 */}
                         <form onSubmit={handleAddTask} className="p-3 bg-white border-b border-slate-200 flex flex-col gap-2 flex-none shadow-sm z-10">
-                            <select value={taskLinkedCar} onChange={e => setTaskLinkedCar(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600 mb-1">
+                            <select value={taskLinkedCar} onChange={e => setTaskLinkedCar(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-xs p-1.5 rounded outline-none text-slate-600 mb-1 cursor-pointer">
                                 <option value="">🔗 選擇關聯車輛 (選填，或輸入 @車牌)</option>
                                 {(inventory || []).filter((v:any)=>v.status!=='Withdrawn').map((v:any) => <option key={v.id} value={v.regMark}>{v.regMark} ({v.make} {v.model})</option>)}
                             </select>
                             
                             <input value={newTask} onChange={e => setNewTask(e.target.value)} placeholder="任務內容 (例如: @VELLFIRE 聯絡車主收尾數)" className="w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:ring-2 ring-blue-100" />
-                            <div className="flex gap-2">
-                                <select value={assignee} onChange={e => setAssignee(e.target.value)} className="flex-1 border border-slate-200 rounded-lg p-2 text-sm outline-none bg-slate-50">
+                            
+                            <div className="flex gap-2 items-center">
+                                {/* ★ 新增：預期完成日期 */}
+                                <div className="relative w-1/2">
+                                    <Clock size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input 
+                                        type="date" 
+                                        value={taskDueDate} 
+                                        onChange={e => setTaskDueDate(e.target.value)} 
+                                        className="w-full border border-slate-200 rounded-lg py-2 pl-6 pr-2 text-xs outline-none bg-slate-50 text-slate-700 font-mono cursor-pointer" 
+                                        title="設定任務死線"
+                                    />
+                                </div>
+                                <select value={assignee} onChange={e => setAssignee(e.target.value)} className="flex-1 border border-slate-200 rounded-lg p-2 text-xs outline-none bg-slate-50 cursor-pointer">
                                     <option value="">-- 指派給 --</option>
                                     {(systemUsers || []).map((u:any) => <option key={u.email} value={u.email}>{u.email}</option>)}
                                     <option value="ALL">所有人 (All)</option>
                                 </select>
-                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-purple-800 transition-colors shadow-sm">發佈</button>
+                                <button type="submit" disabled={!newTask.trim() || !assignee} className="bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-purple-800 transition-colors shadow-sm shrink-0 cursor-pointer">發佈</button>
                             </div>
                         </form>
                         
+                        {/* 任務列表渲染 */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin">
                             {filteredTasks.map(task => {
                                 const isCompleted = task.status === 'completed';
+                                
+                                // ★★★ 時間流逝運算邏輯 ★★★
+                                let progress = 0;
+                                let isOverdue = false;
+                                let isUrgent = false;
+                                let daysRemaining = 0;
+
+                                if (task.dueDate && task.timestamp) {
+                                    // 確保抓取正確的時間戳 (相容 Firebase Timestamp)
+                                    const createdTime = task.timestamp.toDate ? task.timestamp.toDate().getTime() : Date.now();
+                                    // 到期日設定為當天 23:59:59
+                                    const dueTime = new Date(task.dueDate).getTime() + 86400000 - 1; 
+                                    const now = Date.now();
+                                    
+                                    const totalDuration = dueTime - createdTime;
+                                    const elapsed = now - createdTime;
+
+                                    if (isCompleted) {
+                                        progress = 100;
+                                    } else if (now > dueTime) {
+                                        progress = 100;
+                                        isOverdue = true;
+                                        daysRemaining = Math.ceil((now - dueTime) / 86400000);
+                                    } else {
+                                        progress = Math.max(0, Math.min(100, (elapsed / totalDuration) * 100));
+                                        daysRemaining = Math.ceil((dueTime - now) / 86400000);
+                                        if (daysRemaining <= 2) isUrgent = true; // 小於兩天變黃色
+                                    }
+                                }
+
                                 return (
-                                    <div key={task.id} className={`p-3 rounded-xl border flex gap-3 shadow-sm transition-all ${isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : 'bg-white border-blue-200 hover:shadow-md'}`}>
-                                        <button onClick={() => toggleTask(task)} className={`mt-0.5 flex-none rounded-full w-5 h-5 flex items-center justify-center border transition-colors ${isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-blue-500 text-transparent hover:text-blue-200'}`}>
+                                    <div key={task.id} className={`p-3 rounded-xl border flex gap-3 shadow-sm transition-all ${isCompleted ? 'bg-slate-100 border-slate-200 opacity-60' : (isOverdue ? 'bg-red-50/50 border-red-200' : 'bg-white border-blue-200 hover:shadow-md')}`}>
+                                        <button onClick={() => toggleTask(task)} className={`mt-0.5 flex-none rounded-full w-5 h-5 flex items-center justify-center border transition-colors cursor-pointer select-none ${isCompleted ? 'bg-green-500 border-green-500 text-white' : 'border-slate-300 hover:border-blue-500 text-transparent hover:text-blue-200'}`}>
                                             <Check size={12}/>
                                         </button>
                                         <div className="flex-1 min-w-0">
@@ -478,13 +525,34 @@ export default function TeamHubDrawer({
                                                 </div>
                                             )}
                                             <p className={`text-sm font-bold break-words ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`} style={{ wordBreak: 'break-word' }}>{task.content}</p>
-                                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
-                                                <div className="text-[10px] text-slate-400 font-medium">
+                                            
+                                            {/* ★★★ 任務時間進度條 UI ★★★ */}
+                                            {task.dueDate && (
+                                                <div className="mt-2.5 pt-2 border-t border-slate-100/80">
+                                                    <div className="flex justify-between items-center text-[9px] mb-1.5 font-bold">
+                                                        <span className="text-slate-400 flex items-center gap-1">
+                                                            <Calendar size={10}/> 期限: {task.dueDate}
+                                                        </span>
+                                                        <span className={isCompleted ? 'text-green-600' : (isOverdue ? 'text-red-500 animate-pulse' : (isUrgent ? 'text-amber-500' : 'text-blue-500'))}>
+                                                            {isCompleted ? '✅ 任務已結案' : (isOverdue ? `⚠️ 逾期 ${daysRemaining} 天` : `⏳ 剩餘 ${daysRemaining} 天`)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden shadow-inner relative">
+                                                        <div 
+                                                            className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-out ${isCompleted ? 'bg-green-500' : (isOverdue ? 'bg-red-500' : (isUrgent ? 'bg-amber-500' : 'bg-blue-500'))}`}
+                                                            style={{ width: `${progress}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className={`flex justify-between items-center mt-2 pt-2 border-t ${task.dueDate ? 'border-slate-50' : 'border-slate-100'}`}>
+                                                <div className="text-[9px] text-slate-400 font-medium">
                                                     <span className="text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mr-1">@{task.assignee}</span>
                                                     由 {task.assigner} 指派
                                                 </div>
                                                 {(task.assigner === staffId || isAdmin) && (
-                                                    <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={12}/></button>
+                                                    <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-red-500 cursor-pointer"><Trash2 size={12}/></button>
                                                 )}
                                             </div>
                                         </div>
