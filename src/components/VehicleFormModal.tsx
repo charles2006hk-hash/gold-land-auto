@@ -7,7 +7,7 @@ import {
     Database, Search, Link, Bell, Eye, Share2, Trash2, User as UserIcon, Check, 
     CalendarDays, MapPin, Loader2, Image as ImageIcon, Edit, ShieldCheck, ArrowRight, UserCircle, History, 
     ChevronDown, ChevronUp, Save, Calculator, AlertTriangle, Building2, Ship, 
-    Star, ArrowRightLeft
+    Star, ArrowRightLeft, Printer
 } from 'lucide-react';
 import { query, collection, where, onSnapshot, getDocs, updateDoc, doc } from "firebase/firestore";
 
