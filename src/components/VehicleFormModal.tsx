@@ -665,8 +665,23 @@ const VehicleFormModal = ({
         const isReceivable = netBalance < 0;
         const absBalance = Math.abs(netBalance);
 
-        const printFn = typeof window !== 'undefined' ? (window as any).triggerDocumentPrint || triggerSmartPrint : null;
-        if (!printFn) return alert("列印模組未載入");
+        // ★ 獨立列印模組：支援全域調用或自動建立 A4 列印視窗
+        const printFn = (html: string, title: string) => {
+            if (typeof window !== 'undefined' && (window as any).triggerDocumentPrint) {
+                (window as any).triggerDocumentPrint(html, title);
+            } else {
+                const printWin = window.open('', '_blank');
+                if (printWin) {
+                    printWin.document.write(`<html><head><title>${title}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${html}</body></html>`);
+                    printWin.document.close();
+                    printWin.focus();
+                    // 確保 DOM 渲染完成後再觸發列印
+                    setTimeout(() => printWin.print(), 250);
+                } else {
+                    alert("⚠️ 瀏覽器阻擋了彈出視窗，請允許彈出視窗以進行列印！");
+                }
+            }
+        };
 
         const htmlContent = `
             <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b;">
