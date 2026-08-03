@@ -639,14 +639,40 @@ const VehicleFormModal = ({
 
     const handleOpenReconModal = () => {
         const vendorName = acqVendor || '未指定供應商';
-        const baseCost = Number(costStr.replace(/,/g, '')) || 0;
         const offsetAmt = Number(acqOffsetStr.replace(/,/g, '')) || 0;
         const advAmt = Number(acqAdvanceStr.replace(/,/g, '')) || 0;
         
         const items = [];
-        if (baseCost > 0) items.push({ id: 'base', desc: '進貨本金 / 當地車價結算', amount: baseCost, type: 'payable' });
+
+        // 1. 動態拆分應付項目 (Payables)
+        if (acqType === 'Import') {
+            const fp = Number(acqForeignPrice.replace(/,/g, '')) || 0;
+            const localCharges = Number(acqLocalChargesForeign.replace(/,/g, '')) || 0;
+            const er = Number(acqExchangeRate) || 1;
+            // 解決浮點數誤差
+            const arrivalPrice = Math.round((fp + localCharges) * er * 100) / 100;
+            const port = Number(acqPortFee.replace(/,/g, '')) || 0;
+            const a1 = Number(acqA1Price.replace(/,/g, '')) || 0;
+            const frt = Number(acqFrtTax.replace(/,/g, '')) || 0;
+
+            if (arrivalPrice > 0) items.push({ id: 'arr', desc: '車輛到港價 (外幣車價+當地費用)', amount: arrivalPrice, type: 'payable' });
+            if (port > 0) items.push({ id: 'port', desc: '本地費用 / 到港雜費 (Port Fee)', amount: port, type: 'payable' });
+            if (a1 > 0) items.push({ id: 'a1', desc: '海關 PRP 費用 (A1)', amount: a1, type: 'payable' });
+            if (frt > 0) items.push({ id: 'frt', desc: '入口稅 (FRT)', amount: frt, type: 'payable' });
+        } else {
+            const baseCost = Number(costStr.replace(/,/g, '')) || 0;
+            if (baseCost > 0) items.push({ id: 'base', desc: '進貨本金 (Purchase Price)', amount: baseCost, type: 'payable' });
+        }
+
+        // 加入維修與雜費成本 (自動彙整所有非「併入車價」的支出)
+        if (totalExpenses > 0) {
+            items.push({ id: 'exp', desc: '車輛維修與其他雜費 (Maintenance & Expenses)', amount: totalExpenses, type: 'payable' });
+        }
+
+        // 加入代支費用
         if (advAmt > 0) items.push({ id: 'adv', desc: '代支費用 (Advance Fee)', amount: advAmt, type: 'payable' });
         
+        // 2. 載入已付與抵銷紀錄 (Paid)
         acqPayments.forEach(p => {
             items.push({ id: p.id, desc: `[付款] ${p.date} - ${p.method} ${p.note ? `(${p.note})` : ''}`, amount: Number(p.amount) || 0, type: 'paid' });
         });
@@ -665,101 +691,101 @@ const VehicleFormModal = ({
         const isReceivable = netBalance < 0;
         const absBalance = Math.abs(netBalance);
 
-        // ★ 獨立列印模組：支援全域調用或自動建立 A4 列印視窗
-        const printFn = (html: string, title: string) => {
-            if (typeof window !== 'undefined' && (window as any).triggerDocumentPrint) {
-                (window as any).triggerDocumentPrint(html, title);
+        // ★ 核心修復：先關閉彈窗，再觸發列印。避免瀏覽器的 print dialog 凍結主線程導致 Modal 卡住
+        setShowReconModal(false);
+
+        setTimeout(() => {
+            const htmlContent = `
+                <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b;">
+                    <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px;">
+                        <h1 style="margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: 2px;">GOLD LAND AUTO</h1>
+                        <h2 style="margin: 0 0 10px 0; font-size: 16px; color: #475569; letter-spacing: 5px;">金田汽車</h2>
+                        <p style="margin: 0; font-size: 16px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 4px 12px; border-radius: 4px; border: 1px solid #cbd5e1;">進貨對數單 (RECONCILIATION STATEMENT)</p>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 12px;">
+                        <table style="width: 45%; border-collapse: collapse;">
+                            <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 80px;">代訂方/行家:</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0;">${reconVendor}</td></tr>
+                            <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">結算日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
+                        </table>
+                        <table style="width: 45%; border-collapse: collapse;">
+                            <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 60px;">車型:</td><td style="font-weight: bold; border-bottom: 1px solid #e2e8f0;">${v.make || ''} ${v.model || ''} (${v.year || ''})</td></tr>
+                            <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">車身號碼:</td><td style="padding-top: 5px; font-family: monospace; font-weight: bold;">${v.chassisNo || v.regMark || 'TBC'}</td></tr>
+                        </table>
+                    </div>
+
+                    <h3 style="font-size: 14px; color: #b91c1c; border-bottom: 1px solid #fca5a5; padding-bottom: 5px; margin-bottom: 15px;">A. 應付款項 (Payables / Costs)</h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
+                        <tr style="background-color: #fef2f2; text-align: left;">
+                            <th style="padding: 8px; border: 1px solid #fca5a5;">項目描述</th>
+                            <th style="padding: 8px; border: 1px solid #fca5a5; text-align: right; width: 150px;">金額 (HKD)</th>
+                        </tr>
+                        ${reconItems.filter(i => i.type === 'payable').map(i => `
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0;">${i.desc}</td>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${formatCurrency(i.amount)}</td>
+                        </tr>
+                        `).join('')}
+                        <tr style="background-color: #f8fafc; font-weight: bold;">
+                            <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right;">應付總計 (Total Payable):</td>
+                            <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #b91c1c; font-size: 14px;">${formatCurrency(totalPayable)}</td>
+                        </tr>
+                    </table>
+
+                    <h3 style="font-size: 14px; color: #1d4ed8; border-bottom: 1px solid #93c5fd; padding-bottom: 5px; margin-bottom: 15px;">B. 已付/抵銷紀錄 (Payments & Offsets)</h3>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
+                        <tr style="background-color: #eff6ff; text-align: left;">
+                            <th style="padding: 8px; border: 1px solid #93c5fd;">項目描述</th>
+                            <th style="padding: 8px; border: 1px solid #93c5fd; text-align: right; width: 150px;">金額 (HKD)</th>
+                        </tr>
+                        ${reconItems.filter(i => i.type === 'paid').map(i => `
+                        <tr>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0;">${i.desc}</td>
+                            <td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #1d4ed8;">${formatCurrency(i.amount)}</td>
+                        </tr>
+                        `).join('')}
+                        ${reconItems.filter(i => i.type === 'paid').length === 0 ? `<tr><td colspan="2" style="padding: 15px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">尚無紀錄</td></tr>` : ''}
+                        <tr style="background-color: #f8fafc; font-weight: bold;">
+                            <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right;">已付總計 (Total Paid):</td>
+                            <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #1d4ed8; font-size: 14px;">${formatCurrency(totalPaid)}</td>
+                        </tr>
+                    </table>
+
+                    <div style="background-color: ${isReceivable ? '#f0fdf4' : (netBalance === 0 ? '#f8fafc' : '#fef2f2')}; border: 2px solid ${isReceivable ? '#86efac' : (netBalance === 0 ? '#cbd5e1' : '#fca5a5')}; border-radius: 8px; padding: 20px; text-align: right;">
+                        <span style="font-size: 14px; font-weight: bold; color: #334155; margin-right: 15px;">
+                            ${isReceivable ? '最終應收帳款 (Net Receivable):' : (netBalance === 0 ? '已結清 (Settled):' : '最終應付尾數 (Net Payable):')}
+                        </span>
+                        <span style="font-size: 24px; font-weight: 900; font-family: monospace; color: ${isReceivable ? '#16a34a' : (netBalance === 0 ? '#475569' : '#dc2626')};">
+                            ${formatCurrency(absBalance)}
+                        </span>
+                    </div>
+                    
+                    <div style="margin-top: 60px; display: flex; justify-content: space-between;">
+                        <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                            Prepared By (經手人)<br/><b>${staffId}</b>
+                        </div>
+                        <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                            Vendor Signature (代訂方簽署)
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 支援傳入或內建的獨立列印
+            if (typeof triggerSmartPrint === 'function') {
+                triggerSmartPrint(htmlContent, `Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}`);
             } else {
                 const printWin = window.open('', '_blank');
                 if (printWin) {
-                    printWin.document.write(`<html><head><title>${title}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${html}</body></html>`);
+                    printWin.document.write(`<html><head><title>Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${htmlContent}</body></html>`);
                     printWin.document.close();
                     printWin.focus();
-                    // 確保 DOM 渲染完成後再觸發列印
                     setTimeout(() => printWin.print(), 250);
                 } else {
                     alert("⚠️ 瀏覽器阻擋了彈出視窗，請允許彈出視窗以進行列印！");
                 }
             }
-        };
-
-        const htmlContent = `
-            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b;">
-                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px;">
-                    <h1 style="margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: 2px;">GOLD LAND AUTO</h1>
-                    <h2 style="margin: 0 0 10px 0; font-size: 16px; color: #475569; letter-spacing: 5px;">金田汽車</h2>
-                    <p style="margin: 0; font-size: 16px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 4px 12px; border-radius: 4px; border: 1px solid #cbd5e1;">進貨對數單 (RECONCILIATION STATEMENT)</p>
-                </div>
-
-                <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 12px;">
-                    <table style="width: 45%; border-collapse: collapse;">
-                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 80px;">代訂方/行家:</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0;">${reconVendor}</td></tr>
-                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">結算日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
-                    </table>
-                    <table style="width: 45%; border-collapse: collapse;">
-                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 60px;">車型:</td><td style="font-weight: bold; border-bottom: 1px solid #e2e8f0;">${v.make || ''} ${v.model || ''} (${v.year || ''})</td></tr>
-                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">車身號碼:</td><td style="padding-top: 5px; font-family: monospace; font-weight: bold;">${v.chassisNo || v.regMark || 'TBC'}</td></tr>
-                    </table>
-                </div>
-
-                <h3 style="font-size: 14px; color: #b91c1c; border-bottom: 1px solid #fca5a5; padding-bottom: 5px; margin-bottom: 15px;">A. 應付款項 (Payables / Costs)</h3>
-                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
-                    <tr style="background-color: #fef2f2; text-align: left;">
-                        <th style="padding: 8px; border: 1px solid #fca5a5;">項目描述</th>
-                        <th style="padding: 8px; border: 1px solid #fca5a5; text-align: right; width: 150px;">金額 (HKD)</th>
-                    </tr>
-                    ${reconItems.filter(i => i.type === 'payable').map(i => `
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #e2e8f0;">${i.desc}</td>
-                        <td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace;">${formatCurrency(i.amount)}</td>
-                    </tr>
-                    `).join('')}
-                    <tr style="background-color: #f8fafc; font-weight: bold;">
-                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right;">應付總計 (Total Payable):</td>
-                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #b91c1c; font-size: 14px;">${formatCurrency(totalPayable)}</td>
-                    </tr>
-                </table>
-
-                <h3 style="font-size: 14px; color: #1d4ed8; border-bottom: 1px solid #93c5fd; padding-bottom: 5px; margin-bottom: 15px;">B. 已付/抵銷紀錄 (Payments & Offsets)</h3>
-                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
-                    <tr style="background-color: #eff6ff; text-align: left;">
-                        <th style="padding: 8px; border: 1px solid #93c5fd;">項目描述</th>
-                        <th style="padding: 8px; border: 1px solid #93c5fd; text-align: right; width: 150px;">金額 (HKD)</th>
-                    </tr>
-                    ${reconItems.filter(i => i.type === 'paid').map(i => `
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #e2e8f0;">${i.desc}</td>
-                        <td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #1d4ed8;">${formatCurrency(i.amount)}</td>
-                    </tr>
-                    `).join('')}
-                    ${reconItems.filter(i => i.type === 'paid').length === 0 ? `<tr><td colspan="2" style="padding: 15px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">尚無紀錄</td></tr>` : ''}
-                    <tr style="background-color: #f8fafc; font-weight: bold;">
-                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right;">已付總計 (Total Paid):</td>
-                        <td style="padding: 10px 8px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #1d4ed8; font-size: 14px;">${formatCurrency(totalPaid)}</td>
-                    </tr>
-                </table>
-
-                <div style="background-color: ${isReceivable ? '#f0fdf4' : (netBalance === 0 ? '#f8fafc' : '#fef2f2')}; border: 2px solid ${isReceivable ? '#86efac' : (netBalance === 0 ? '#cbd5e1' : '#fca5a5')}; border-radius: 8px; padding: 20px; text-align: right;">
-                    <span style="font-size: 14px; font-weight: bold; color: #334155; margin-right: 15px;">
-                        ${isReceivable ? '最終應收帳款 (Net Receivable):' : (netBalance === 0 ? '已結清 (Settled):' : '最終應付尾數 (Net Payable):')}
-                    </span>
-                    <span style="font-size: 24px; font-weight: 900; font-family: monospace; color: ${isReceivable ? '#16a34a' : (netBalance === 0 ? '#475569' : '#dc2626')};">
-                        ${formatCurrency(absBalance)}
-                    </span>
-                </div>
-                
-                <div style="margin-top: 60px; display: flex; justify-content: space-between;">
-                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
-                        Prepared By (經手人)<br/><b>${staffId}</b>
-                    </div>
-                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
-                        Vendor Signature (代訂方簽署)
-                    </div>
-                </div>
-            </div>
-        `;
-        printFn(htmlContent, `Reconciliation_${v.chassisNo || v.regMark || 'Vehicle'}`);
-        setShowReconModal(false);
+        }, 150); // 給 React 150ms 讓彈窗完全消失
     };
 
     useEffect(() => { const size = Number(engineSizeStr.replace(/,/g, '')); setAutoLicenseFee(calculateLicenseFee(fuelType, size)); }, [fuelType, engineSizeStr]);
