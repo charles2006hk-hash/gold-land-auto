@@ -516,7 +516,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             </div>
 
             <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
-                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isReceipt ? "Received By" : "Customer Signature"} />
+                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={activeType === 'receipt' ? "Received By" : "Customer Signature"} />
             </div>
         </div>
     );
