@@ -206,7 +206,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
     const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
     
-    const basePrice = ((activeVehicle as any).orderType === 'Overseas') ? orderFeesTotal : price;
+    // ★ 智能防呆：如果海外費用為 0，強制退回使用填寫的車輛售價
+    const basePrice = ((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
     const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
     const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
     
@@ -491,7 +492,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
                     <tbody>
                         {/* ★ 修復點：發票第一行強制顯示車價本金，並加上計算 */}
-                        <tr className="border-b"><td className="p-2 font-bold">{((activeVehicle as any).orderType === 'Overseas') ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${activeVehicle.make} ${activeVehicle.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px]">{formatCurrency(basePrice)}</td></tr>
+                        <tr><td className="border p-1.5 font-bold w-1/2">{((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="p-2 text-right font-mono font-bold text-[12px]">{formatCurrency(basePrice)}</td></tr>
                         {itemsToRender.map((item: any, i: number) => (<tr key={`addon-${i}`} className="border-b text-slate-600"><td className="p-2 font-medium pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>))}
                         {depositItems.map((item: any, idx: number) => (<tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-2 font-bold pl-4">Less: {item.label}</td><td className="p-2 text-right font-mono font-bold text-[12px]">- {formatCurrency(item.amount)}</td></tr>))}
                     </tbody>
