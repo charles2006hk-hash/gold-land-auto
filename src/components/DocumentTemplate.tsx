@@ -225,7 +225,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     else if (activeType === 'invoice') { docTitleEn = "INVOICE"; docTitleCh = "發票"; } 
     else if (activeType === 'receipt') { docTitleEn = "OFFICIAL RECEIPT"; docTitleCh = "正式收據"; }
 
-    // ★ 終極列印樣式解鎖：徹底打破 iOS Safari 的外層限制
     const PrintStyle = () => (
         <style dangerouslySetInnerHTML={{ __html: `
             @media print {
@@ -258,7 +257,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         `}} />
     );
 
-    // ★ 加入 min-w-0 與 truncate 防止標題撐破，字體稍微調細以適應 A4
     const HeaderSection = () => (
         <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2 gap-4 overflow-hidden">
             <div className="flex items-center gap-3 shrink-0 min-w-0">
@@ -308,7 +306,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             </div>
             <div className="pt-1 border-t border-slate-800 text-center">
                 <p className="font-bold text-[10px] uppercase mt-1 leading-none">{labelRight}</p>
-                {/* 保留您原本的 ID 顯示 */}
                 {curCustomer.hkid && labelRight !== "Received By" && <p className="text-[9px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>}
             </div>
         </div>
@@ -320,11 +317,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         const etaDisplay = (activeVehicle as any).etaFormat === 'days' ? `${(activeVehicle as any).etaDays || '___'} Days (天)` : ((activeVehicle as any).etaDate || 'TBC (待定)');
 
         return (
-            // ★ 外殼：絕對鎖定 794x1123
             <div id="print-root" className="w-[794px] h-[1123px] mx-auto bg-white text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
                 <PrintStyle />
-                
-                {/* ★ 內層：保留四周安全白邊 (p-8)，加大底端內距防擠壓 */}
                 <div className="p-8 pb-[45mm] print:pb-[45mm] h-full box-border">
                     <HeaderSection />
                     
@@ -418,7 +412,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                     <p>I, <b>{curCustomer.name || '___________'}</b>, agree to <b>{isPurchase ? 'sell' : isConsignment ? 'consign' : 'purchase'}</b> the vehicle {isPurchase || isConsignment ? 'to' : 'from'} <b>{companyEn}</b> at HKD <b>{formatCurrency(balance + totalPaid)}</b> (Total) on <b>{soldDate}</b> at <b>{handoverTime}</b>. Responsibilities for traffic contraventions transfer at this time.<br/>
                                     本人 <b>{curCustomer.name || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + totalPaid)}</b> {isPurchase ? '將上述車輛售予' : isConsignment ? '將上述車輛委託寄賣予' : '向'} <b>{companyCh}</b> {isPurchase || isConsignment ? '' : '購買上述車輛'}，交車時間為 <b>{soldDate} {handoverTime}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                     
-                                    {/* ★ 收車專屬保障條款 */}
                                     {activeType === 'purchase_contract' && (activeVehicle as any).showPurchaseGuarantees !== false && (
                                         <div className="mt-2 pt-2 border-t border-slate-300">
                                             <p className="font-bold mb-1 text-slate-800">Seller's Warranties and Guarantees 賣方保證條款：</p>
@@ -430,7 +423,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         </div>
                                     )}
 
-                                    {/* ★ 賣車與訂車終極免責/殺訂條款 */}
                                     {activeType === 'sales_contract' && (activeVehicle as any).showSalesGuarantees !== false && (
                                         <div className="mt-2 pt-2 border-t border-slate-300">
                                             <p className="font-bold mb-1 text-slate-800">Purchaser's Acknowledgements and Terms 買方確認及合約條款：</p>
@@ -450,14 +442,11 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                         </div>
                     )}
 
-                    {/* ★ 實際列印：代收款委託授權書 (極致緊湊版) */}
                     {(activeVehicle as any).enablePaymentAuth && (
                         <div className="mb-2 p-1.5 border-2 border-slate-800 bg-slate-50 break-inside-avoid no-break">
                             <h3 className="text-[9px] font-black text-slate-800 uppercase border-b border-slate-300 pb-0.5 mb-1">代收款委託授權書 / Third-Party Payment Auth.</h3>
                             <div className="text-[8px] text-slate-700 leading-tight text-justify font-serif">
                                 <p><strong>1. 授權聲明：</strong> 賣方（授權人）現正式並不可撤銷地指示買方（{companyCh}），將本合約項下之車款餘額支付予以下指定受款人。<br/><span className="italic text-slate-500 text-[7.5px]">The Vendor irrevocably authorizes the Purchaser ({companyEn}) to pay the vehicle purchase balance to the designated Payee below.</span></p>
-                                
-                                {/* 橫向並排，極度壓縮上下空間 */}
                                 <div className="flex gap-3 px-1.5 py-1 bg-white border border-slate-300 my-1 font-sans">
                                     <div className="flex items-end flex-[1.2] min-w-0">
                                         <span className="font-bold whitespace-nowrap shrink-0">受款方名稱 Payee Name:</span>
@@ -468,7 +457,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[9px] text-center truncate">{(activeVehicle as any).authPayeeId || '\u00A0'}</span>
                                     </div>
                                 </div>
-
                                 <p><strong>2. 免責條款：</strong> 買方一經將款項支付予上述受款人，即視為已完全履行付款義務。賣方承擔因此引起之任何法律及財務責任，與買方無涉。<br/><span className="italic text-slate-500 text-[7.5px]">Payment made to the Payee shall be deemed as full discharge of Purchaser's payment obligations. The Vendor assumes all liabilities arising from this arrangement.</span></p>
                             </div>
                         </div>
@@ -481,7 +469,6 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                     )}
                 </div>
                 
-                {/* ★ 透明圖層暴力覆蓋：從最左側開始，寬度 100%，並內縮 8 級白邊 */}
                 <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
                     <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
                 </div>
@@ -490,12 +477,10 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     }
 
     return (
-        // ★ 外殼：絕對鎖定 794x1123
         <div id="print-root" className="w-[794px] h-[1123px] mx-auto bg-white text-slate-900 font-sans relative shadow-lg box-border overflow-hidden">
             <PrintStyle />
             
-            {/* ★ 內層：保留四周安全白邊 (p-8)，加大底端內距防擠壓 */}
-                <div className="p-8 pb-[45mm] print:pb-[45mm] h-full box-border">
+            <div className="p-8 pb-[45mm] print:pb-[45mm] h-full box-border">
                 <HeaderSection />
                 <div className="flex justify-between mb-6 border p-3 rounded bg-slate-50">
                     <div className="text-[10px]"><p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p><p className="text-sm font-bold">{curCustomer.name}</p><p>{curCustomer.address}</p><p className="font-mono">{curCustomer.phone}</p></div>
@@ -505,22 +490,33 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 <table className="w-full text-[10px] border-collapse mb-6">
                     <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
                     <tbody>
+                        {/* ★ 修復點：發票第一行強制顯示車價本金，並加上計算 */}
                         <tr className="border-b"><td className="p-2 font-bold">{((activeVehicle as any).orderType === 'Overseas') ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${activeVehicle.make} ${activeVehicle.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px]">{formatCurrency(basePrice)}</td></tr>
                         {itemsToRender.map((item: any, i: number) => (<tr key={`addon-${i}`} className="border-b text-slate-600"><td className="p-2 font-medium pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>))}
-                        {depositItems.map((item: any, idx: number) => (<tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-2 font-bold pl-4">Less: {item.label}</td><td className="p-2 text-right font-mono font-bold text-[12px]">{formatCurrency(item.amount)}</td></tr>))}
+                        {depositItems.map((item: any, idx: number) => (<tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-2 font-bold pl-4">Less: {item.label}</td><td className="p-2 text-right font-mono font-bold text-[12px]">- {formatCurrency(item.amount)}</td></tr>))}
                     </tbody>
-                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Balance Due (餘額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr></tfoot>
+                    {/* ★ 修復點：發票總計 = (車價 + 附加費) - 已付，若小於 0 顯示 Refund */}
+                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">{balance < 0 ? 'Refund Due (應退款項)' : 'Balance Due (應付尾數)'}</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(Math.abs(balance))}</td></tr></tfoot>
                 </table>
 
                 {activeType === 'receipt' && (activeVehicle as any).paymentMethod && (<div className="mb-6 p-2 border border-slate-300 bg-slate-50 rounded"><p className="text-[10px] font-bold">Payment Method (收款方式): <span className="text-sm font-mono ml-2">{(activeVehicle as any).paymentMethod}</span></p></div>)}
                 {activeVehicle.remarks && (<div className="mb-6 border-t border-slate-200 pt-2"><p className="text-[9px] font-bold text-slate-500 mb-1">Remarks:</p><p className="text-[10px] whitespace-pre-wrap font-mono leading-relaxed">{activeVehicle.remarks}</p></div>)}
                 
-                <div className="text-[9px] text-slate-500 mt-6"><p className="font-bold">Terms:</p><p>1. Cheques should be crossed and made payable to "{companyEn}".</p><p>2. Official receipt will only be issued upon clearance of cheque.</p></div>
+                {/* ★ 修復點：發票也需要顯示條款與條件 */}
+                {showTerms && (
+                    <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
+                        <p className="font-bold mb-1 text-slate-800">Invoice Terms & Conditions 發票條款：</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
+                            <li><b>Title of Goods:</b> The title and ownership of the vehicle(s) and goods remain with the Seller until all payments are cleared in full. <br/><span className="text-slate-700"><b>貨物擁有權：</b>在所有款項全數結清之前，車輛及相關貨品之擁有權仍歸賣方所有。</span></li>
+                            <li><b>"As-Is" Condition:</b> The goods are sold strictly on an "As-Is" basis. <br/><span className="text-slate-700"><b>現狀買賣：</b>所有貨物及車輛均以「現狀」出售，賣方不作任何明示或暗示之保證。</span></li>
+                            <li><b>Payment:</b> Cheques should be crossed and made payable to "{companyEn}". Official receipt will only be issued upon clearance of cheque.<br/><span className="text-slate-700"><b>付款方式：</b>支票請劃線並抬頭註明「{companyEn}」。正式收據須待支票兌現後方為有效。</span></li>
+                        </ol>
+                    </div>
+                )}
             </div>
 
-            {/* ★ 透明圖層暴力覆蓋：從最左側開始，寬度 100%，並內縮 8 級白邊 */}
             <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
-                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight="Received By" />
+                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isReceipt ? "Received By" : "Customer Signature"} />
             </div>
         </div>
     );
