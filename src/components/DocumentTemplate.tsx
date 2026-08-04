@@ -201,9 +201,10 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const companyCh = COMPANY_INFO?.name_ch || '金田汽車';
     const curCustomer = { name: activeVehicle.customerName || '', phone: activeVehicle.customerPhone || '', hkid: activeVehicle.customerID || '', address: activeVehicle.customerAddress || '' };
 
-    const price = Number(activeVehicle.price) || 0;
-    const ovFee = Number((activeVehicle as any).overseasTotalFee) || 0;
-    const hkFee = Number((activeVehicle as any).localTotalFee) || 0;
+    // ★ 修復：清除千分位逗號，避免 Number() 解析失敗變成 0
+    const price = Number(String(activeVehicle.price).replace(/,/g, '')) || 0;
+    const ovFee = Number(String((activeVehicle as any).overseasTotalFee).replace(/,/g, '')) || 0;
+    const hkFee = Number(String((activeVehicle as any).localTotalFee).replace(/,/g, '')) || 0;
     const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
     
     // ★ 智能防呆：如果海外費用為 0，強制退回使用填寫的車輛售價
