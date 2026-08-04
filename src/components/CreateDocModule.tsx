@@ -492,7 +492,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const handlePrint = async () => {
         const finalId = await saveDocRecord();
         const dummyVehicle: any = {
-            id: finalId || docId || 'DRAFT', ...formData, photos: formData.contractPhotos || [], price: Number(formData.price), deposit: depositItems.reduce((sum: number, item: any) => sum + item.amount, 0),
+            id: finalId || docId || 'DRAFT', ...formData, photos: formData.contractPhotos || [], 
+            price: Number(String(formData.price).replace(/,/g, '')) || 0, // ★ 修復逗號
+            deposit: depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0),
             customerID: formData.customerId, soldDate: formData.deliveryDate, handoverTime: formData.handoverTime, checklist: checklist, selectedItems: docItems.filter((i: any) => i.isSelected),
             depositItems: depositItems, 
             showTerms: showTerms, 
@@ -509,7 +511,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     };
 
     const handleCalculateLoan = () => {
-        const price = Number(formData.price) || 0;
+        // ★ 修復：清除千分位逗號，確保貸款計算正確
+        const price = Number(String(formData.price).replace(/,/g, '')) || 0;
         const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + i.amount, 0);
         const dep = depositItems.reduce((sum, item) => sum + item.amount, 0);
         
@@ -555,12 +558,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const isBill = isSalesInvoice || isServiceInvoice || isReceipt;
         const isQuotation = selectedDocType === 'quotation';
         
-        const price = Number(formData.price) || 0;
-        const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0);
+        // ★ 修復：清除千分位逗號，確保預覽金額正確
+        const price = Number(String(formData.price).replace(/,/g, '')) || 0;
+        const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
+        const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0);
         
-        const ovFee = Number(formData.overseasTotalFee) || 0;
-        const hkFee = Number(formData.localTotalFee) || 0;
+        const ovFee = Number(String(formData.overseasTotalFee).replace(/,/g, '')) || 0;
+        const hkFee = Number(String(formData.localTotalFee).replace(/,/g, '')) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
         
         // ★ 核心修復：統一車價基礎計算
