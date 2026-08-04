@@ -201,16 +201,15 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const companyCh = COMPANY_INFO?.name_ch || '金田汽車';
     const curCustomer = { name: activeVehicle.customerName || '', phone: activeVehicle.customerPhone || '', hkid: activeVehicle.customerID || '', address: activeVehicle.customerAddress || '' };
 
-    // ★ 修復：清除千分位逗號，避免 Number() 解析失敗變成 0
     const price = Number(String(activeVehicle.price).replace(/,/g, '')) || 0;
     const ovFee = Number(String((activeVehicle as any).overseasTotalFee).replace(/,/g, '')) || 0;
     const hkFee = Number(String((activeVehicle as any).localTotalFee).replace(/,/g, '')) || 0;
     const orderFeesTotal = ((activeVehicle as any).orderType === 'Overseas') ? (ovFee + hkFee) : 0;
     
-    // ★ 智能防呆：如果海外費用為 0，強制退回使用填寫的車輛售價
+    // ★ 核心修復：防呆，如果海外費用為 0，強制退回使用填寫的車輛售價
     const basePrice = ((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
-    const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
-    const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+    const extrasTotal = itemsToRender.filter((i:any) => !i.isFree).reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
+    const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
     
     const balance = (basePrice + extrasTotal) - totalPaid;
     
