@@ -702,7 +702,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">{partPaymentLabel}</div>
                                         <table className="w-full text-[10px] border-collapse border border-slate-300">
                                             <tbody>
-                                                <tr><td className="border p-1.5 font-bold w-1/2">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(basePrice)}</td></tr>
+                                                <tr><td className="border p-1.5 font-bold w-1/2">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(basePrice)}</td></tr>
                                                 {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
                                                     <tr key={i} className="border-b"><td className="border p-1.5 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1.5 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
                                                 ))}
@@ -799,7 +799,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
                                                     <tbody>
                                                         {/* ★ 預覽模式下的發票，同樣加上車價項目與精確扣減 */}
-                                                        <tr className="border-b"><td className="p-2 font-bold text-purple-800">{formData.orderType === 'Overseas' ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
+                                                        <tr className="border-b"><td className="p-2 font-bold text-purple-800">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
                                                             <tr key={i} className="border-b"><td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
                                                         ))}
