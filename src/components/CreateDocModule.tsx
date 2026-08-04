@@ -558,7 +558,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const isBill = isSalesInvoice || isServiceInvoice || isReceipt;
         const isQuotation = selectedDocType === 'quotation';
         
-        // ★ 修復：清除千分位逗號，確保預覽金額正確
         const price = Number(String(formData.price).replace(/,/g, '')) || 0;
         const deposit = depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
         const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0);
@@ -567,8 +566,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const hkFee = Number(String(formData.localTotalFee).replace(/,/g, '')) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
         
-        // ★ 核心修復：統一車價基礎計算
-        const basePrice = formData.orderType === 'Overseas' ? orderFeesTotal : price;
+        // ★ 核心修復：防呆，如果海外費用為 0，強制退回使用填寫的車輛售價
+        const basePrice = (formData.orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
         const balance = (basePrice + extrasTotal) - deposit;
 
         const numberToEnglishWords = (n: number) => {
