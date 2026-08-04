@@ -1008,14 +1008,17 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     
                                     const docDateStr = doc.formData?.docDate || (doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : 'N/A');
 
-                                    const price = Number(doc.formData?.price) || 0;
-                                    const ovFee = Number(doc.formData?.overseasTotalFee) || 0;
-                                    const hkFee = Number(doc.formData?.localTotalFee) || 0;
+                                    // ★ 修復：清除千分位逗號，確保列表總金額讀取正確
+                                    const price = Number(String(doc.formData?.price || '').replace(/,/g, '')) || 0;
+                                    const ovFee = Number(String(doc.formData?.overseasTotalFee || '').replace(/,/g, '')) || 0;
+                                    const hkFee = Number(String(doc.formData?.localTotalFee || '').replace(/,/g, '')) || 0;
                                     const orderFeesTotal = doc.formData?.orderType === 'Overseas' ? (ovFee + hkFee) : 0;
-                                    const basePrice = doc.formData?.orderType === 'Overseas' ? orderFeesTotal : price;
-                                    const extrasTotal = (doc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
+                                    
+                                    // ★ 同樣補上智能防呆：若無海外費用，強制使用車價本金
+                                    const basePrice = (doc.formData?.orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
+                                    const extrasTotal = (doc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0);
+                                    
                                     const totalAmt = basePrice + extrasTotal;
-
                                     return (
                                         <tr key={doc.id} className="hover:bg-blue-50/50 cursor-pointer text-xs transition-colors" onClick={() => editDoc(doc)}>
                                             <td className="p-3 font-mono text-slate-500">{docDateStr}</td>
