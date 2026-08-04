@@ -899,7 +899,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         </div>
 
                         <div className="absolute bottom-8 left-8 right-8 bg-transparent pointer-events-none">
-                            <SignatureSection labelLeft={`For and on behalf of ${formData.companyNameEn}`} labelRight={isQuotation ? "Customer Confirmation" : (isBill ? "Received By" : "Customer Signature")} />
+                            <div className="grid grid-cols-2 gap-12 w-full">
+                                <div className="relative pt-1 border-t border-slate-800 text-center">
+                                    {showStampAndSig && (
+                                        <div className="absolute bottom-full left-1/2 -translate-x-[62%] translate-y-3 flex items-center justify-center">
+                                            <div className="relative">
+                                                <div className="opacity-90"><CompanyStamp nameEn={formData.companyNameEn} nameCh={formData.companyNameCh} /></div>
+                                                <div className="absolute top-1/2 left-[65%] transform -translate-y-[60%] -rotate-[5deg] z-20 pointer-events-none">
+                                                    <SignatureImg />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <p className="font-bold text-[10px] uppercase mt-1 leading-none">For and on behalf of {formData.companyNameEn}</p>
+                                </div>
+                                <div className="pt-1 border-t border-slate-800 text-center">
+                                    <p className="font-bold text-[10px] uppercase mt-1 leading-none">{isQuotation ? "Customer Confirmation" : (isBill ? "Received By" : "Customer Signature")}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
