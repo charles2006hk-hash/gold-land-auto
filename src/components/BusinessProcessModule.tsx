@@ -58,6 +58,12 @@ export default function BusinessProcessModule(props: any) {
     const [qPartPayment, setQPartPayment] = useState<string>('');
     const [qPartPaymentDate, setQPartPaymentDate] = useState<string>('');
 
+    // ★ 新增：合約標題與付款條件的動態狀態
+    const [qContractTitle, setQContractTitle] = useState('關於轉讓香港私人有限公司及中港車輛指標之買賣合約');
+    const [qDepositCondition, setQDepositCondition] = useState('(收取訂金及香港公司加入新股東時)');
+    const [qPartPaymentCondition, setQPartPaymentCondition] = useState('(安排車輛驗車及公安廳辦理換車手續時)');
+    const [qBalanceCondition, setQBalanceCondition] = useState('(完成車輛上牌、海關及司機備案手續時)');
+
     // --- 金額格式化與計算 ---
     const formatNumberInput = (val: string) => {
         let cleanVal = val.replace(/[^0-9.-]/g, '');
@@ -382,7 +388,7 @@ export default function BusinessProcessModule(props: any) {
                     description: "依據香港法律規範設計，在線填寫即可一鍵輸出 A4 專業買賣合約 (包含公司轉讓、指標及車輛)",
                     docs: ["填寫下方表單後，按下「列印 / 存為 PDF」按鈕，即可產出標準法律文本。"],
                     steps: [
-                        "與買賣雙方確認最終交易總金額、訂金及大汀(如有)的付款時間。",
+                        "與買賣雙方確認最終交易總金額、訂金及大訂(如有)的付款時間。",
                         "在下方工具中，清晰填入甲乙雙方資料、目標香港公司名稱、商業登記號(BR)及關聯車牌/批文號。",
                         "按下頂部右邊的「列印 / 存為 PDF」按鈕，系統會完美排版出一張符合香港合約法、具備完全法律約束力的買賣合約。",
                         "列印出來後，三方當場簽名作實。此合約確保了交接前後的債務隔離與法律責任劃分。"
@@ -494,6 +500,7 @@ export default function BusinessProcessModule(props: any) {
                 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
                 
                 @media print {
+                    /* ★ 確保合約列印時，只印出 .law-contract 的內容，隱藏上方標題與介面 */
                     .no-print-area { display: none !important; }
                     .print-grid { display: block !important; }
                     .print-col { width: 100% !important; margin-bottom: 20px !important; page-break-inside: avoid !important; border: 1px solid #ccc !important; padding: 15px !important; border-radius: 8px; }
@@ -610,8 +617,8 @@ export default function BusinessProcessModule(props: any) {
                         currentItem && (
                             <div id="business-process-print-root" className="max-w-4xl mx-auto space-y-5">
 
-                                {/* 看板標頭與按鈕 */}
-                                <div className="border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                {/* ★ 看板標頭與按鈕 (加入 no-print-area 控制列印隱藏) */}
+                                <div className={`border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 ${['settlement_generator', 'quota_contract_generator'].includes(currentItem.id) ? 'no-print-area' : ''}`}>
                                     <div>
                                         <span className="text-[10px] md:text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print-area">{activeCategory}</span>
                                         <h3 className="font-black text-xl md:text-2xl text-slate-800 mt-2 md:mt-1 leading-tight">{currentItem.title}</h3>
@@ -757,8 +764,15 @@ export default function BusinessProcessModule(props: any) {
                                 ) : currentItem.id === 'quota_contract_generator' ? (
                                     /* ★★★ 核心新增：中港指標及公司買賣合約生成器 ★★★ */
                                     <div className="law-contract bg-white border border-slate-300 md:border-2 md:border-slate-800 p-4 md:p-10 font-serif text-slate-900 shadow-md space-y-6 relative rounded-lg md:rounded-sm">
+                                        
+                                        {/* ★ 修復 1：合約抬頭改為可修改 */}
                                         <div className="text-center space-y-1">
-                                            <h2 className="font-black text-lg md:text-xl tracking-widest border-b-2 border-slate-900 pb-2">關於轉讓香港私人有限公司及中港車輛指標之買賣合約</h2>
+                                            <input 
+                                                type="text" 
+                                                value={qContractTitle} 
+                                                onChange={e => setQContractTitle(e.target.value)} 
+                                                className="font-black text-lg md:text-xl tracking-widest border-b-2 border-slate-900 pb-2 w-full text-center outline-none bg-transparent print:border-b-2 print:border-slate-900" 
+                                            />
                                             <p className="text-xs pt-1">(Agreement for Sale and Purchase of Hong Kong Private Company and Cross-Border Quota)</p>
                                         </div>
 
@@ -850,6 +864,7 @@ export default function BusinessProcessModule(props: any) {
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                    {/* ★ 修復 4：付款條件動態化與預設值設定 */}
                                                     <tr>
                                                         <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">第一期 (訂金 Deposit)：</td>
                                                         <td className="border border-slate-300 p-2 md:w-1/3">
@@ -859,13 +874,18 @@ export default function BusinessProcessModule(props: any) {
                                                             </div>
                                                         </td>
                                                         <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">
-                                                            <div className="flex items-center flex-wrap gap-1">
-                                                                支付日期：<input type="date" value={qDepositDate} onChange={e=>setQDepositDate(e.target.value)} className="border outline-none print:border-0 print:bg-transparent print:appearance-none cursor-pointer" /> (簽署本合約時)
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className="flex items-center">
+                                                                    <span className="whitespace-nowrap">支付日期：</span>
+                                                                    <input type="date" value={qDepositDate} onChange={e=>setQDepositDate(e.target.value)} className="border-b outline-none print:border-0 print:bg-transparent print:appearance-none cursor-pointer text-slate-800" />
+                                                                </div>
+                                                                <input type="text" value={qDepositCondition} onChange={e=>setQDepositCondition(e.target.value)} className="border-b border-dashed border-slate-300 outline-none print:border-0 print:bg-transparent w-full text-blue-700 print:text-black font-bold" />
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                    {/* ★ 修復 3：修正錯別字 大汀 -> 大訂 */}
                                                     <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">第二期 (大汀 Part Payment)：</td>
+                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">第二期 (大訂 Part Payment)：</td>
                                                         <td className="border border-slate-300 p-2">
                                                             <div className="flex items-center">
                                                                 <span className="font-bold mr-1">HK$</span>
@@ -873,8 +893,12 @@ export default function BusinessProcessModule(props: any) {
                                                             </div>
                                                         </td>
                                                         <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">
-                                                            <div className="flex items-center flex-wrap gap-1">
-                                                                支付日期：<input type="date" value={qPartPaymentDate} onChange={e=>setQPartPaymentDate(e.target.value)} className="border outline-none print:border-0 print:bg-transparent print:appearance-none cursor-pointer" /> (雙方簽署轉股文件時)
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className="flex items-center">
+                                                                    <span className="whitespace-nowrap">支付日期：</span>
+                                                                    <input type="date" value={qPartPaymentDate} onChange={e=>setQPartPaymentDate(e.target.value)} className="border-b outline-none print:border-0 print:bg-transparent print:appearance-none cursor-pointer text-slate-800" />
+                                                                </div>
+                                                                <input type="text" value={qPartPaymentCondition} onChange={e=>setQPartPaymentCondition(e.target.value)} className="border-b border-dashed border-slate-300 outline-none print:border-0 print:bg-transparent w-full text-blue-700 print:text-black font-bold" />
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -883,7 +907,12 @@ export default function BusinessProcessModule(props: any) {
                                                         <td className="border border-slate-300 p-2 font-bold text-base text-red-600 print:text-black">
                                                             HK$ <span className="font-mono underline print:no-underline">{qBalance.toLocaleString('en-US')}</span>
                                                         </td>
-                                                        <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">支付日期：完成公司註冊處董事變更及交收物品時</td>
+                                                        <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">
+                                                            <div className="flex items-center flex-wrap gap-1 mt-1">
+                                                                <span className="whitespace-nowrap">支付條件：</span>
+                                                                <input type="text" value={qBalanceCondition} onChange={e=>setQBalanceCondition(e.target.value)} className="border-b border-dashed border-slate-300 outline-none print:border-0 print:bg-transparent flex-1 min-w-[150px] text-blue-700 print:text-black font-bold" />
+                                                            </div>
+                                                        </td>
                                                     </tr>
                                                 </tbody>
                                             </table>
