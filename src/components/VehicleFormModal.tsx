@@ -2737,8 +2737,8 @@ const VehicleFormModal = ({
                         </div>
                     </div>
                 
-                {/* 底部儲存列 (吸底設計) */}
-                <div className="p-4 border-t border-slate-300 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between gap-4 items-start md:items-center flex-none w-full z-20 overflow-x-hidden">
+                {/* 底部儲存列 (吸底設計) - 加入 pb-8 避開 iOS Safe Area，並提升 z-index 到 100 */}
+                <div className="p-4 pb-8 md:pb-4 border-t border-slate-300 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between gap-4 items-start md:items-center flex-none w-full z-[100] relative overflow-x-hidden">
                     <div className="w-full md:flex-1 max-w-2xl min-w-0">
                         <input name="remarks" defaultValue={v.remarks} placeholder="內部營運備註 (Internal Remarks)..." className="w-full text-sm md:text-xs p-3 md:p-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-400 bg-slate-50 font-mono font-bold text-slate-700"/>
                     </div>
@@ -2761,7 +2761,7 @@ const VehicleFormModal = ({
                                             : (doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString('zh-HK') : 'N/A');
                                         return (
                                             <button key={doc.id} type="button" onClick={() => onJumpToDoc(doc)} className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-[10px] font-bold hover:bg-blue-100 flex items-center transition-colors flex-shrink-0 shadow-sm active:scale-95 whitespace-nowrap" title={doc.summary}>
-                                                <FileText size={12} className="mr-1 flex-shrink-0"/> {typeLabel} ({dateStr})
+                                                <FileText size={12} className="mr-1 flex-shrink-0 pointer-events-none"/> <span className="pointer-events-none">{typeLabel} ({dateStr})</span>
                                             </button>
                                         );
                                     });
@@ -2771,18 +2771,20 @@ const VehicleFormModal = ({
                     )}
 
                     {/* ★ 儲存與取消按鈕區塊修復 (Hit Area Fix) */}
-                    <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-2 md:mt-0 flex-none relative z-[60]">
+                    <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-2 md:mt-0 flex-none relative z-[100]">
+                        {/* 加入 touch-manipulation 防止 iOS 雙擊放大導致點擊延遲 */}
                         <button 
                             type="button" 
                             onClick={handleClose} 
-                            className="w-full md:w-auto px-6 py-3 md:py-2.5 text-sm font-bold text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer select-none relative z-[60]"
+                            className="w-full md:w-auto px-6 py-3.5 md:py-2.5 text-sm font-bold text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer select-none relative z-[100] touch-manipulation"
                         >
                             取消
                         </button>
                         <button 
                             type="submit" 
-                            className="w-full md:w-auto px-8 py-3 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white font-black text-sm md:text-base rounded-xl shadow-lg hover:shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center whitespace-nowrap cursor-pointer select-none relative z-[60]"
+                            className="w-full md:w-auto px-8 py-3.5 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white font-black text-sm md:text-base rounded-xl shadow-lg hover:shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center whitespace-nowrap cursor-pointer select-none relative z-[100] touch-manipulation"
                         >
+                            {/* 確保內部元素不攔截點擊 */}
                             <Save size={20} className="mr-2 pointer-events-none flex-shrink-0" />
                             <span className="pointer-events-none">儲存變更</span>
                         </button>
