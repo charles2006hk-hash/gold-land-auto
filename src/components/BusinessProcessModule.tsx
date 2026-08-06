@@ -17,7 +17,6 @@ export default function BusinessProcessModule(props: any) {
     const [expandedItem, setExpandedItem] = useState<string | null>("td25");
     const [showStampMaker, setShowStampMaker] = useState(false); 
     
-    // ★ 控制側邊欄折疊狀態 (完美釋放畫面空間)
     const [isMenuCollapsed, setIsMenuCollapsed] = useState(false);
 
     // --- 1. 車輛牌費動態試算引擎狀態 ---
@@ -58,7 +57,6 @@ export default function BusinessProcessModule(props: any) {
     const [qPartPayment, setQPartPayment] = useState<string>('');
     const [qPartPaymentDate, setQPartPaymentDate] = useState<string>('');
 
-    // ★ 新增：合約標題與付款條件的動態狀態
     const [qContractTitle, setQContractTitle] = useState('關於轉讓香港私人有限公司及中港車輛指標之買賣合約');
     const [qDepositCondition, setQDepositCondition] = useState('(收取訂金及香港公司加入新股東時)');
     const [qPartPaymentCondition, setQPartPaymentCondition] = useState('(安排車輛驗車及公安廳辦理換車手續時)');
@@ -80,7 +78,6 @@ export default function BusinessProcessModule(props: any) {
     const numQPartPayment = Number(qPartPayment.replace(/,/g, '')) || 0;
     const qBalance = Math.max(0, numQTotalPrice - numQDeposit - numQPartPayment);
 
-    // --- 監聽並精確計算香港運輸署最新牌費 ---
     useEffect(() => {
         const num = parseInt(ccOrKw) || 0;
         let fee = 0;
@@ -100,7 +97,6 @@ export default function BusinessProcessModule(props: any) {
         setCalculatedFee(fee.toString());
     }, [licenceType, ccOrKw]);
 
-    // --- 業務 SOP 數據中心 ---
     const PROCEDURES = [
         {
             category: "香港車輛業務",
@@ -381,7 +377,6 @@ export default function BusinessProcessModule(props: any) {
                     forms: [],
                     links: []
                 },
-                // ★★★ 新增：中港指標及公司買賣合約生成器 ★★★
                 {
                     id: "quota_contract_generator",
                     title: "📄 中港指標及公司買賣合約生成器",
@@ -456,7 +451,6 @@ export default function BusinessProcessModule(props: any) {
         }
     ];
 
-    // WhatsApp 轉發排版
     const handleCopyToWhatsApp = (item: any) => {
         let text = `📋 *【${item.title}】辦理指南*\n\n` +
             `📝 *所需準備文件：*\n${item.docs.map((d:string) => `• ${d}`).join('\n')}\n\n` +
@@ -499,20 +493,21 @@ export default function BusinessProcessModule(props: any) {
                 .scrollbar-hide::-webkit-scrollbar { display: none; }
                 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
                 
+                /* ★ 新增：分頁列印防截斷與自動適配排版 */
+                .print-avoid-break { page-break-inside: avoid; break-inside: avoid; }
+                
                 @media print {
-                    /* ★ 確保合約列印時，只印出 .law-contract 的內容，隱藏上方標題與介面 */
+                    @page { margin: 15mm; }
                     .no-print-area { display: none !important; }
                     .print-grid { display: block !important; }
                     .print-col { width: 100% !important; margin-bottom: 20px !important; page-break-inside: avoid !important; border: 1px solid #ccc !important; padding: 15px !important; border-radius: 8px; }
-                    .law-contract { border: 2px solid black !important; padding: 30px !important; background: white !important; margin-top: 0; box-shadow: none !important; border-radius: 0 !important; }
+                    .law-contract { border: none !important; padding: 0 !important; background: white !important; margin-top: 0; box-shadow: none !important; border-radius: 0 !important; }
                     body { background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
             `}</style>
 
-            {/* ★ 左側欄：分類選單 (加入 isMenuCollapsed 控制寬度與內容) */}
+            {/* 左側欄 */}
             <div className={`${isMenuCollapsed ? 'w-full md:w-20' : 'w-full md:w-64'} bg-white border-b md:border-b-0 md:border-r border-slate-200 flex-none md:overflow-y-auto no-print z-20 pt-0 transition-all duration-300 flex flex-col`}>
-                
-                {/* 頂部標題與折疊按鈕 */}
                 <div className="p-3 md:p-4 border-b border-slate-100 flex items-center justify-between gap-2 hidden md:flex min-h-[4rem]">
                     {!isMenuCollapsed && (
                         <div className="flex items-center gap-2 animate-fade-in truncate">
@@ -546,8 +541,6 @@ export default function BusinessProcessModule(props: any) {
                             >
                                 <Icon size={18} className={`flex-none ${isMenuCollapsed ? 'mx-auto' : 'mr-3'} ${activeCategory === cat.category ? 'text-blue-100 md:text-blue-600' : 'text-slate-400 md:text-slate-500'}`} />
                                 {!isMenuCollapsed && <span className="animate-fade-in truncate">{cat.category}</span>}
-                                
-                                {/* Hover 提示 (折疊狀態時) */}
                                 {isMenuCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap shadow-lg hidden md:block">{cat.category}</div>}
                             </button>
                         );
@@ -555,12 +548,8 @@ export default function BusinessProcessModule(props: any) {
 
                     <div className="hidden md:block w-full h-px bg-slate-200 my-2"></div>
 
-                    {/* 大數據市場情報按鈕 */}
                     <button 
-                        onClick={() => {
-                            setActiveCategory(''); 
-                            setExpandedItem('market_radar'); 
-                        }} 
+                        onClick={() => { setActiveCategory(''); setExpandedItem('market_radar'); }} 
                         title={isMenuCollapsed ? "大數據市場情報" : ""}
                         className={`flex-none md:w-full text-left flex items-center p-2 md:p-3 rounded-full md:rounded-xl font-bold text-sm md:text-base transition-all whitespace-nowrap shadow-sm border group relative
                             ${expandedItem === 'market_radar' ? 'bg-blue-800 text-white border-blue-900 shadow-md' : 'bg-slate-800 text-white border-slate-700 hover:bg-slate-700'}
@@ -571,7 +560,6 @@ export default function BusinessProcessModule(props: any) {
                         {isMenuCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-blue-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap shadow-lg hidden md:block">大數據情報</div>}
                     </button>
 
-                    {/* 實體印章製作按鈕 */}
                     <button 
                         onClick={() => setShowStampMaker(true)} 
                         title={isMenuCollapsed ? "實體印章製作" : ""}
@@ -587,8 +575,6 @@ export default function BusinessProcessModule(props: any) {
 
             {/* 右側主要內容區 */}
             <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden pt-2 md:pt-0">
-                
-                {/* 中間欄：子業務列表 (當選擇大數據情報時隱藏) */}
                 {expandedItem !== 'market_radar' && (
                     <div className="w-full md:w-72 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 md:overflow-y-auto p-2 no-print flex-none z-10 shadow-sm md:shadow-none">
                         <div className="p-2 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:block">選擇業務子項目</div>
@@ -607,45 +593,26 @@ export default function BusinessProcessModule(props: any) {
                     </div>
                 )}
 
-                {/* 右邊大區塊：看板詳情與互動工具 */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white md:bg-slate-50 relative mt-2 md:mt-0">
                     {expandedItem === 'market_radar' ? (
-                        <div className="h-full">
-                            <MarketRadarModule db={props.db} appId={props.appId} />
-                        </div>
+                        <div className="h-full"><MarketRadarModule db={props.db} appId={props.appId} /></div>
                     ) : (
                         currentItem && (
                             <div id="business-process-print-root" className="max-w-4xl mx-auto space-y-5">
-
-                                {/* ★ 看板標頭與按鈕 (加入 no-print-area 控制列印隱藏) */}
                                 <div className={`border-b border-slate-200 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 ${['settlement_generator', 'quota_contract_generator'].includes(currentItem.id) ? 'no-print-area' : ''}`}>
                                     <div>
                                         <span className="text-[10px] md:text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider no-print-area">{activeCategory}</span>
                                         <h3 className="font-black text-xl md:text-2xl text-slate-800 mt-2 md:mt-1 leading-tight">{currentItem.title}</h3>
                                         <p className="text-xs md:text-sm text-slate-500 mt-1 md:mt-1">{currentItem.description}</p>
                                     </div>
-                                    
                                     <div className="flex flex-wrap gap-2 flex-none no-print-area">
-                                        <button 
-                                            onClick={() => handleCopyToWhatsApp(currentItem)}
-                                            className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 md:py-2 bg-green-600 text-white rounded-xl text-xs md:text-sm font-bold hover:bg-green-700 transition-colors shadow-sm cursor-pointer"
-                                        >
-                                            <Share2 size={16} /> 複製文字
-                                        </button>
-                                        <button 
-                                            onClick={handlePrintPDF}
-                                            className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 md:py-2 bg-slate-800 text-white rounded-xl text-xs md:text-sm font-bold hover:bg-slate-700 transition-colors shadow-sm cursor-pointer"
-                                        >
-                                            <Printer size={16} /> 列印 / PDF
-                                        </button>
+                                        <button onClick={() => handleCopyToWhatsApp(currentItem)} className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 md:py-2 bg-green-600 text-white rounded-xl text-xs md:text-sm font-bold hover:bg-green-700 transition-colors shadow-sm cursor-pointer"><Share2 size={16} /> 複製文字</button>
+                                        <button onClick={handlePrintPDF} className="flex-1 md:flex-none flex justify-center items-center gap-1.5 px-4 py-2.5 md:py-2 bg-slate-800 text-white rounded-xl text-xs md:text-sm font-bold hover:bg-slate-700 transition-colors shadow-sm cursor-pointer"><Printer size={16} /> 列印 / PDF</button>
                                     </div>
                                 </div>
 
-                                {/* 控制面板 */}
                                 <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 md:p-4 no-print-area space-y-3 shadow-sm">
-                                    <div className="flex items-center gap-2 text-[11px] md:text-xs font-black text-amber-800 uppercase tracking-wider">
-                                        <Calculator size={14} /> 業務資料動態設定 (設定將自動注入文案中)
-                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px] md:text-xs font-black text-amber-800 uppercase tracking-wider"><Calculator size={14} /> 業務資料動態設定 (設定將自動注入文案中)</div>
                                     
                                     {currentItem.id === 'td25' && (
                                         <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-slate-700">
@@ -694,24 +661,23 @@ export default function BusinessProcessModule(props: any) {
                                     )}
 
                                     {currentItem.id === 'settlement_generator' && <span className="text-xs font-bold text-emerald-700 block">請直接在下方合約藍框欄位內填寫，填寫完點擊右上角「列印/PDF」即可輸出！</span>}
-                                    {currentItem.id === 'quota_contract_generator' && <span className="text-xs font-bold text-emerald-700 block">請直接在下方合約藍框欄位內填寫公司、指標及三方款項資料，填寫完點擊右上角「列印/PDF」即可輸出！</span>}
+                                    {currentItem.id === 'quota_contract_generator' && <span className="text-xs font-bold text-emerald-700 block">請直接在下方合約欄位內填寫公司、指標及三方款項資料，填寫完點擊右上角「列印/PDF」即可輸出純淨版合約！</span>}
                                 </div>
 
-                                {/* 核心渲染：如果是線上和解書生成器，直接印出法律合約格式 */}
                                 {currentItem.id === 'settlement_generator' ? (
                                     <div className="law-contract bg-white border border-slate-300 md:border-2 md:border-slate-800 p-4 md:p-10 font-serif text-slate-900 shadow-md space-y-6 relative rounded-lg md:rounded-sm">
-                                        <div className="text-center space-y-1">
+                                        <div className="text-center space-y-1 print-avoid-break">
                                             <h2 className="font-black text-xl md:text-2xl tracking-widest border-b-2 border-slate-900 pb-2">交 通 意 外 和 解 申 報 書</h2>
                                             <p className="text-[10px] md:text-xs font-sans text-slate-500 pt-1 no-print-area">（本和解書嚴格依照香港法律合約規範設計，簽署後具備完全約束力）</p>
                                         </div>
 
-                                        <p className="text-sm leading-relaxed md:indent-8">
+                                        <p className="text-sm leading-relaxed md:indent-8 print-avoid-break">
                                             本和解協議由以下雙方於 
                                             <input type="text" placeholder=" 填寫日期 (如2026年5月30日) " value={settlementDate} onChange={e=>setSettlementDate(e.target.value)} className="mx-1 border-b border-blue-400 outline-none text-center font-bold font-sans text-sm bg-blue-50/50 p-0.5 w-[160px] md:min-w-[180px] print:border-b-0 print:bg-transparent print:p-0 print:outline-none" /> 
                                             在自願及公平原則下共同簽署作實：
                                         </p>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans no-print-area bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-sans no-print-area bg-slate-50 p-3 rounded-lg border border-slate-200 print-avoid-break">
                                             <div className="space-y-2">
                                                 <div className="font-bold text-blue-700 border-b pb-1">甲方資料 (賠償方/過錯方)</div>
                                                 <label className="flex items-center gap-1">姓名：<input type="text" className="border px-2 py-1 rounded text-xs flex-1" value={partyAName} onChange={e=>setPartyAName(e.target.value)} /></label>
@@ -724,33 +690,32 @@ export default function BusinessProcessModule(props: any) {
                                             </div>
                                         </div>
 
-                                        <div className="space-y-4 text-sm leading-relaxed font-sans hidden print:block">
+                                        <div className="space-y-4 text-sm leading-relaxed font-sans hidden print:block print-avoid-break">
                                             <p><strong>甲方 (賠償方)：</strong> <span className="font-bold border-b border-black min-w-[150px] inline-block px-2">{partyAName}</span> <strong>車牌：</strong> <span className="font-bold border-b border-black min-w-[100px] inline-block px-2 font-mono uppercase">{partyAPlate}</span></p>
                                             <p><strong>乙方 (受害方)：</strong> <span className="font-bold border-b border-black min-w-[150px] inline-block px-2">{partyBName}</span> <strong>車牌：</strong> <span className="font-bold border-b border-black min-w-[100px] inline-block px-2 font-mono uppercase">{partyBPlate}</span></p>
                                         </div>
 
                                         <div className="space-y-4 text-sm leading-relaxed font-sans">
-                                            <div className="flex flex-wrap items-center gap-1">
+                                            <div className="flex flex-wrap items-center gap-1 print-avoid-break">
                                                 1. 事發地點位於：
                                                 <input type="text" placeholder="請輸入詳細事發路段" value={settlementLoc} onChange={e=>setSettlementLoc(e.target.value)} className="border-b border-blue-400 outline-none px-2 font-bold text-slate-800 w-full md:w-auto md:min-w-[280px] mt-1 md:mt-0 print:border-b print:border-black print:bg-transparent print:p-0" />
                                                 ，雙方車輛不幸發生輕微交通碰撞意外。
                                             </div>
-                                            <div className="leading-loose">
+                                            <div className="leading-loose print-avoid-break">
                                                 2. 經雙方友好協商，甲方同意向乙方支付合共港幣 
                                                 <input type="number" placeholder="金額" value={settlementAmt} onChange={e=>setSettlementAmt(e.target.value)} className="mx-1 border-b border-blue-400 text-center outline-none font-black text-red-600 w-20 md:w-24 print:border-0 print:bg-transparent print:text-black" /> 
                                                 元正（HK$ <span className="font-bold border-b border-slate-500 min-w-[60px] inline-block text-center font-mono">{settlementAmt || '________'}</span>），作為本宗意外之全數及最終車輛損毀與相關賠償。
                                             </div>
-                                            <div className="flex flex-col gap-1">
+                                            <div className="flex flex-col gap-1 print-avoid-break">
                                                 3. 條款與承諾：
                                                 <textarea value={settlementTerms} onChange={e=>setSettlementTerms(e.target.value)} className="w-full h-20 md:h-16 border rounded p-2 text-xs text-slate-700 bg-slate-50 font-serif resize-none outline-none focus:border-blue-400 print:border-0 print:bg-transparent print:h-auto print:p-0 print:text-sm" />
                                             </div>
-                                            <div className="text-justify">
+                                            <div className="text-justify print-avoid-break">
                                                 4. 雙方明確聲明，簽署本協議並收妥上述款項後，此事件即告徹底解決。任何一方此後均無權再向香港警務處、各保險公司或經由任何法律訴訟途徑向對方追討任何形式之經濟責任、醫療費用或進行民事索償。
                                             </div>
                                         </div>
 
-                                        {/* 簽名欄 */}
-                                        <div className="grid grid-cols-2 gap-4 md:gap-10 pt-10 md:pt-16 font-sans text-sm">
+                                        <div className="grid grid-cols-2 gap-4 md:gap-10 pt-10 md:pt-16 font-sans text-sm print-avoid-break">
                                             <div className="border-t border-slate-900 pt-3 text-center space-y-4">
                                                 <p className="font-bold text-xs md:text-sm">甲方簽署</p>
                                                 <p className="text-[10px] md:text-xs text-slate-400 pt-2 md:pt-4">車牌: {partyAPlate || '_______'}</p>
@@ -765,8 +730,7 @@ export default function BusinessProcessModule(props: any) {
                                     /* ★★★ 核心新增：中港指標及公司買賣合約生成器 ★★★ */
                                     <div className="law-contract bg-white border border-slate-300 md:border-2 md:border-slate-800 p-4 md:p-10 font-serif text-slate-900 shadow-md space-y-6 relative rounded-lg md:rounded-sm">
                                         
-                                        {/* ★ 修復 1：合約抬頭改為可修改 */}
-                                        <div className="text-center space-y-1">
+                                        <div className="text-center space-y-1 print-avoid-break">
                                             <input 
                                                 type="text" 
                                                 value={qContractTitle} 
@@ -776,7 +740,7 @@ export default function BusinessProcessModule(props: any) {
                                             <p className="text-xs pt-1">(Agreement for Sale and Purchase of Hong Kong Private Company and Cross-Border Quota)</p>
                                         </div>
 
-                                        <div className="flex justify-between items-center text-sm font-sans mt-6">
+                                        <div className="flex justify-between items-center text-sm font-sans mt-6 print-avoid-break">
                                             <div className="flex items-center">
                                                 <strong>合約日期 (Date)：</strong>
                                                 <input type="date" value={qDate} onChange={e=>setQDate(e.target.value)} className="mx-1 border-b border-blue-400 outline-none font-bold bg-blue-50/50 p-0.5 print:border-0 print:bg-transparent cursor-pointer print:appearance-none" />
@@ -789,46 +753,46 @@ export default function BusinessProcessModule(props: any) {
 
                                         {/* 一、締約各方 */}
                                         <div className="text-sm font-sans space-y-3 mt-6">
-                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 print:bg-transparent print:border-l-0 print:border-b print:pb-1">一、 締約各方 (The Parties)</div>
-                                            <table className="w-full border-collapse border border-slate-300 text-sm">
+                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1 print-avoid-break">一、 締約各方 (The Parties)</div>
+                                            <table className="w-full border-collapse border border-slate-300 text-sm print:text-xs">
                                                 <tbody>
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold w-1/4">甲方 (賣方/原股東)：</td>
-                                                        <td className="border border-slate-300 p-2 flex flex-wrap gap-2 items-center">
-                                                            <input type="text" placeholder="姓名 / 公司名" value={qPartyAName} onChange={e=>setQPartyAName(e.target.value)} className="border px-2 py-1 rounded w-full md:w-48 outline-none print:border-0 print:p-0 font-bold print:bg-transparent" />
-                                                            <div className="flex items-center gap-1 w-full md:w-auto mt-1 md:mt-0">
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/4">甲方 (賣方/原股東)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 flex flex-wrap gap-2 print:gap-1 items-center">
+                                                            <input type="text" placeholder="姓名 / 公司名" value={qPartyAName} onChange={e=>setQPartyAName(e.target.value)} className="border px-2 py-1 rounded w-full md:w-auto flex-1 min-w-[150px] outline-none print:border-0 print:p-0 font-bold print:bg-transparent print:w-auto" />
+                                                            <div className="flex items-center gap-1 whitespace-nowrap">
                                                                 <span className="text-xs text-slate-500">(ID/BR: </span>
-                                                                <input type="text" placeholder="身份證/BR" value={qPartyAId} onChange={e=>setQPartyAId(e.target.value)} className="border px-2 py-1 rounded w-32 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
+                                                                <input type="text" placeholder="身份證/BR" value={qPartyAId} onChange={e=>setQPartyAId(e.target.value)} className="border px-2 py-1 rounded w-28 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
                                                                 <span className="text-xs text-slate-500">)</span>
                                                             </div>
-                                                            <div className="flex items-center gap-1 w-full md:w-auto mt-1 md:mt-0">
-                                                                <span className="text-xs text-slate-500 ml-0 md:ml-2">TEL:</span>
-                                                                <input type="text" placeholder="聯絡電話" value={qPartyAPhone} onChange={e=>setQPartyAPhone(e.target.value)} className="border px-2 py-1 rounded w-32 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
+                                                            <div className="flex items-center gap-1 whitespace-nowrap">
+                                                                <span className="text-xs text-slate-500">TEL:</span>
+                                                                <input type="text" placeholder="聯絡電話" value={qPartyAPhone} onChange={e=>setQPartyAPhone(e.target.value)} className="border px-2 py-1 rounded w-28 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold w-1/4">乙方 (買方/新股東)：</td>
-                                                        <td className="border border-slate-300 p-2 flex flex-wrap gap-2 items-center">
-                                                            <input type="text" placeholder="姓名 / 公司名" value={qPartyBName} onChange={e=>setQPartyBName(e.target.value)} className="border px-2 py-1 rounded w-full md:w-48 outline-none print:border-0 print:p-0 font-bold print:bg-transparent" />
-                                                            <div className="flex items-center gap-1 w-full md:w-auto mt-1 md:mt-0">
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/4">乙方 (買方/新股東)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 flex flex-wrap gap-2 print:gap-1 items-center">
+                                                            <input type="text" placeholder="姓名 / 公司名" value={qPartyBName} onChange={e=>setQPartyBName(e.target.value)} className="border px-2 py-1 rounded w-full md:w-auto flex-1 min-w-[150px] outline-none print:border-0 print:p-0 font-bold print:bg-transparent print:w-auto" />
+                                                            <div className="flex items-center gap-1 whitespace-nowrap">
                                                                 <span className="text-xs text-slate-500">(ID/BR: </span>
-                                                                <input type="text" placeholder="身份證/BR" value={qPartyBId} onChange={e=>setQPartyBId(e.target.value)} className="border px-2 py-1 rounded w-32 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
+                                                                <input type="text" placeholder="身份證/BR" value={qPartyBId} onChange={e=>setQPartyBId(e.target.value)} className="border px-2 py-1 rounded w-28 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
                                                                 <span className="text-xs text-slate-500">)</span>
                                                             </div>
-                                                            <div className="flex items-center gap-1 w-full md:w-auto mt-1 md:mt-0">
-                                                                <span className="text-xs text-slate-500 ml-0 md:ml-2">TEL:</span>
-                                                                <input type="text" placeholder="聯絡電話" value={qPartyBPhone} onChange={e=>setQPartyBPhone(e.target.value)} className="border px-2 py-1 rounded w-32 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
+                                                            <div className="flex items-center gap-1 whitespace-nowrap">
+                                                                <span className="text-xs text-slate-500">TEL:</span>
+                                                                <input type="text" placeholder="聯絡電話" value={qPartyBPhone} onChange={e=>setQPartyBPhone(e.target.value)} className="border px-2 py-1 rounded w-28 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold w-1/4">丙方 (中介/見證方)：</td>
-                                                        <td className="border border-slate-300 p-2 flex flex-wrap gap-2 items-center">
-                                                            <input type="text" placeholder="車行名稱" value={qPartyCName} onChange={e=>setQPartyCName(e.target.value)} className="border px-2 py-1 rounded w-full md:w-48 outline-none print:border-0 print:p-0 font-bold print:bg-transparent" />
-                                                            <div className="flex items-center gap-1 w-full md:w-auto mt-1 md:mt-0">
-                                                                <span className="text-xs text-slate-500 ml-0 md:ml-2">TEL:</span>
-                                                                <input type="text" placeholder="聯絡電話" value={qPartyCPhone} onChange={e=>setQPartyCPhone(e.target.value)} className="border px-2 py-1 rounded w-32 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/4">丙方 (中介/見證方)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 flex flex-wrap gap-2 print:gap-1 items-center">
+                                                            <input type="text" placeholder="車行名稱" value={qPartyCName} onChange={e=>setQPartyCName(e.target.value)} className="border px-2 py-1 rounded w-full md:w-auto flex-1 min-w-[150px] outline-none print:border-0 print:p-0 font-bold print:bg-transparent print:w-auto" />
+                                                            <div className="flex items-center gap-1 whitespace-nowrap">
+                                                                <span className="text-xs text-slate-500">TEL:</span>
+                                                                <input type="text" placeholder="聯絡電話" value={qPartyCPhone} onChange={e=>setQPartyCPhone(e.target.value)} className="border px-2 py-1 rounded w-28 outline-none print:border-0 print:p-0 print:bg-transparent font-mono" />
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -838,78 +802,76 @@ export default function BusinessProcessModule(props: any) {
 
                                         {/* 二、交易標的物 */}
                                         <div className="text-sm font-sans space-y-3 mt-4">
-                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 print:bg-transparent print:border-l-0 print:border-b print:pb-1">二、 交易標的物 (Target Asset)</div>
-                                            <p className="mb-2">甲方同意出售，且乙方同意購入以下香港私人有限公司之 100% 股權（下稱「目標公司」）。該公司名下持有中港跨境行駛指標（批文）及相關車輛：</p>
-                                            <table className="w-full border-collapse border border-slate-300 text-sm">
+                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1 print-avoid-break">二、 交易標的物 (Target Asset)</div>
+                                            <p className="mb-2 print-avoid-break">甲方同意出售，且乙方同意購入以下香港私人有限公司之 100% 股權（下稱「目標公司」）。該公司名下持有中港跨境行駛指標（批文）及相關車輛：</p>
+                                            <table className="w-full border-collapse border border-slate-300 text-sm print:text-xs">
                                                 <tbody>
-                                                    <tr><td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">目標公司名稱 (HK Company Name)：</td><td className="border border-slate-300 p-2"><input type="text" value={qTargetCompany} onChange={e=>setQTargetCompany(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-bold uppercase print:bg-transparent" placeholder="輸入香港公司英文/中文名稱" /></td></tr>
-                                                    <tr><td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">商業登記證號碼 (BR No.)：</td><td className="border border-slate-300 p-2"><input type="text" value={qTargetBR} onChange={e=>setQTargetBR(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold print:bg-transparent" placeholder="輸入BR號碼" /></td></tr>
-                                                    <tr><td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">中港批文號碼 (Quota No.)：</td><td className="border border-slate-300 p-2"><input type="text" value={qQuotaNo} onChange={e=>setQQuotaNo(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold print:bg-transparent" placeholder="輸入批文號" /></td></tr>
-                                                    <tr><td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">關聯香港車牌 (HK Reg Mark)：</td><td className="border border-slate-300 p-2"><input type="text" value={qRegMark} onChange={e=>setQRegMark(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold uppercase print:bg-transparent" placeholder="輸入車牌" /></td></tr>
+                                                    <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">目標公司名稱 (HK Company Name)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qTargetCompany} onChange={e=>setQTargetCompany(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-bold print:bg-transparent" placeholder="輸入香港公司英文/中文名稱" /></td></tr>
+                                                    <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">商業登記證號碼 (BR No.)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qTargetBR} onChange={e=>setQTargetBR(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold print:bg-transparent" placeholder="輸入BR號碼" /></td></tr>
+                                                    <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">中港批文號碼 (Quota No.)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qQuotaNo} onChange={e=>setQQuotaNo(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold print:bg-transparent" placeholder="輸入批文號" /></td></tr>
+                                                    <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">關聯香港車牌 (HK Reg Mark)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qRegMark} onChange={e=>setQRegMark(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold uppercase print:bg-transparent" placeholder="輸入車牌" /></td></tr>
                                                 </tbody>
                                             </table>
                                         </div>
 
                                         {/* 三、交易金額及付款方式 */}
                                         <div className="text-sm font-sans space-y-3 mt-4">
-                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 print:bg-transparent print:border-l-0 print:border-b print:pb-1">三、 交易金額及付款方式 (Consideration and Payment Terms)</div>
-                                            <table className="w-full border-collapse border border-slate-300 text-sm">
+                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1 print-avoid-break">三、 交易金額及付款方式 (Consideration and Payment Terms)</div>
+                                            <table className="w-full border-collapse border border-slate-300 text-sm print:text-xs">
                                                 <tbody>
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">總交易金額 (Total Price)：</td>
-                                                        <td className="border border-slate-300 p-2" colSpan={2}>
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">總交易金額 (Total Price)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2" colSpan={2}>
                                                             <div className="flex items-center">
                                                                 <span className="font-bold mr-1">HK$</span>
-                                                                <input type="text" value={qTotalPrice} onChange={e=>setQTotalPrice(formatNumberInput(e.target.value))} className="border-b border-red-400 px-2 py-1 outline-none text-red-600 font-bold font-mono text-lg w-full md:w-48 print:border-0 print:p-0 print:bg-transparent" placeholder="0" />
+                                                                <input type="text" value={qTotalPrice} onChange={e=>setQTotalPrice(formatNumberInput(e.target.value))} className="border-b border-red-400 px-2 py-1 outline-none text-red-600 font-bold font-mono text-lg w-full md:w-48 print:border-0 print:p-0 print:bg-transparent print:w-auto" placeholder="0" />
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    {/* ★ 修復 4：付款條件動態化與預設值設定 */}
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">第一期 (訂金 Deposit)：</td>
-                                                        <td className="border border-slate-300 p-2 md:w-1/3">
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">第一期 (訂金 Deposit)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 md:w-1/3">
                                                             <div className="flex items-center">
                                                                 <span className="font-bold mr-1">HK$</span>
-                                                                <input type="text" value={qDeposit} onChange={e=>setQDeposit(formatNumberInput(e.target.value))} className="border-b border-slate-400 px-2 py-1 outline-none font-mono w-full md:w-32 print:border-0 print:p-0 print:bg-transparent" placeholder="0" />
+                                                                <input type="text" value={qDeposit} onChange={e=>setQDeposit(formatNumberInput(e.target.value))} className="border-b border-slate-400 px-2 py-1 outline-none font-mono w-full md:w-32 print:border-0 print:p-0 print:bg-transparent print:w-auto" placeholder="0" />
                                                             </div>
                                                         </td>
-                                                        <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">
-                                                            <div className="flex flex-col gap-1">
-                                                                <div className="flex items-center">
-                                                                    <span className="whitespace-nowrap">支付日期：</span>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 text-[10px] md:text-xs text-slate-600 print:text-black">
+                                                            <div className="flex flex-col gap-1 print:gap-0">
+                                                                <div className="flex items-center whitespace-nowrap">
+                                                                    <span>支付日期：</span>
                                                                     <input type="date" value={qDepositDate} onChange={e=>setQDepositDate(e.target.value)} className="border-b outline-none print:border-0 print:bg-transparent print:appearance-none cursor-pointer text-slate-800" />
                                                                 </div>
                                                                 <input type="text" value={qDepositCondition} onChange={e=>setQDepositCondition(e.target.value)} className="border-b border-dashed border-slate-300 outline-none print:border-0 print:bg-transparent w-full text-blue-700 print:text-black font-bold" />
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    {/* ★ 修復 3：修正錯別字 大汀 -> 大訂 */}
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold">第二期 (大訂 Part Payment)：</td>
-                                                        <td className="border border-slate-300 p-2">
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">第二期 (大訂 Part Payment)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2">
                                                             <div className="flex items-center">
                                                                 <span className="font-bold mr-1">HK$</span>
-                                                                <input type="text" value={qPartPayment} onChange={e=>setQPartPayment(formatNumberInput(e.target.value))} className="border-b border-slate-400 px-2 py-1 outline-none font-mono w-full md:w-32 print:border-0 print:p-0 print:bg-transparent" placeholder="0" />
+                                                                <input type="text" value={qPartPayment} onChange={e=>setQPartPayment(formatNumberInput(e.target.value))} className="border-b border-slate-400 px-2 py-1 outline-none font-mono w-full md:w-32 print:border-0 print:p-0 print:bg-transparent print:w-auto" placeholder="0" />
                                                             </div>
                                                         </td>
-                                                        <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">
-                                                            <div className="flex flex-col gap-1">
-                                                                <div className="flex items-center">
-                                                                    <span className="whitespace-nowrap">支付日期：</span>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 text-[10px] md:text-xs text-slate-600 print:text-black">
+                                                            <div className="flex flex-col gap-1 print:gap-0">
+                                                                <div className="flex items-center whitespace-nowrap">
+                                                                    <span>支付日期：</span>
                                                                     <input type="date" value={qPartPaymentDate} onChange={e=>setQPartPaymentDate(e.target.value)} className="border-b outline-none print:border-0 print:bg-transparent print:appearance-none cursor-pointer text-slate-800" />
                                                                 </div>
                                                                 <input type="text" value={qPartPaymentCondition} onChange={e=>setQPartPaymentCondition(e.target.value)} className="border-b border-dashed border-slate-300 outline-none print:border-0 print:bg-transparent w-full text-blue-700 print:text-black font-bold" />
                                                             </div>
                                                         </td>
                                                     </tr>
-                                                    <tr>
-                                                        <td className="border border-slate-300 p-2 bg-slate-50 print:bg-transparent font-bold text-red-700 print:text-black">第三期 (尾數 Balance)：</td>
-                                                        <td className="border border-slate-300 p-2 font-bold text-base text-red-600 print:text-black">
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold text-red-700 print:text-black">第三期 (尾數 Balance)：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 font-bold text-base text-red-600 print:text-black">
                                                             HK$ <span className="font-mono underline print:no-underline">{qBalance.toLocaleString('en-US')}</span>
                                                         </td>
-                                                        <td className="border border-slate-300 p-2 text-[10px] md:text-xs text-slate-600 print:text-black">
-                                                            <div className="flex items-center flex-wrap gap-1 mt-1">
-                                                                <span className="whitespace-nowrap">支付條件：</span>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 text-[10px] md:text-xs text-slate-600 print:text-black">
+                                                            <div className="flex items-center flex-wrap gap-1 mt-1 print:mt-0 whitespace-nowrap">
+                                                                <span>支付條件：</span>
                                                                 <input type="text" value={qBalanceCondition} onChange={e=>setQBalanceCondition(e.target.value)} className="border-b border-dashed border-slate-300 outline-none print:border-0 print:bg-transparent flex-1 min-w-[150px] text-blue-700 print:text-black font-bold" />
                                                             </div>
                                                         </td>
@@ -919,17 +881,17 @@ export default function BusinessProcessModule(props: any) {
                                         </div>
 
                                         {/* 四、條款 */}
-                                        <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 text-justify leading-relaxed print:text-[10px]">
-                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1">四、 雙方責任與保證條款 (Warranties & Conditions)</div>
-                                            <p><strong>1. 甲方保證 (Seller's Warranties)：</strong> 甲方保證目標公司於「交接日」前並無任何隱藏債務、未清繳稅項、官司訴訟或銀行貸款。甲方保證目標公司名下之車輛及中港批文狀態正常，無被扣查或吊銷之風險。交接日前所產生之任何債務或法律責任，概由甲方承擔。</p>
-                                            <p><strong>2. 乙方責任 (Buyer's Liabilities)：</strong> 自雙方確認之「交接日」起，目標公司及其持有之車輛、批文所衍生之所有運營費用、牌費、保險、交通違例罰款及任何法律責任，均由乙方全權負責。</p>
-                                            <p><strong>3. 違約條款 (Default)：</strong> 若乙方未能按期支付款項，甲方有權終止本合約並沒收已付之訂金。若甲方未能履行轉股義務或被發現隱瞞公司債務，甲方須退還所有已收款項予乙方，乙方並保留追討賠償之權利。</p>
-                                            <p><strong>4. 丙方角色 (Role of Broker)：</strong> 丙方僅作為本次交易之中介及見證方，協助雙方辦理轉讓手續。丙方不承擔目標公司過往或未來之任何財務及法律責任。</p>
-                                            <p><strong>5. 法律管轄 (Jurisdiction)：</strong> 本合約受香港特別行政區法律管轄，並按其解釋。</p>
+                                        <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 text-justify leading-relaxed print:text-[11px] print:space-y-1">
+                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1 print-avoid-break">四、 雙方責任與保證條款 (Warranties & Conditions)</div>
+                                            <p className="print-avoid-break"><strong>1. 甲方保證 (Seller's Warranties)：</strong> 甲方保證目標公司於「交接日」前並無任何隱藏債務、未清繳稅項、官司訴訟或銀行貸款。甲方保證目標公司名下之車輛及中港批文狀態正常，無被扣查或吊銷之風險。交接日前所產生之任何債務或法律責任，概由甲方承擔。</p>
+                                            <p className="print-avoid-break"><strong>2. 乙方責任 (Buyer's Liabilities)：</strong> 自雙方確認之「交接日」起，目標公司及其持有之車輛、批文所衍生之所有運營費用、牌費、保險、交通違例罰款及任何法律責任，均由乙方全權負責。</p>
+                                            <p className="print-avoid-break"><strong>3. 違約條款 (Default)：</strong> 若乙方未能按期支付款項，甲方有權終止本合約並沒收已付之訂金。若甲方未能履行轉股義務或被發現隱瞞公司債務，甲方須退還所有已收款項予乙方，乙方並保留追討賠償之權利。</p>
+                                            <p className="print-avoid-break"><strong>4. 丙方角色 (Role of Broker)：</strong> 丙方僅作為本次交易之中介及見證方，協助雙方辦理轉讓手續。丙方不承擔目標公司過往或未來之任何財務及法律責任。</p>
+                                            <p className="print-avoid-break"><strong>5. 法律管轄 (Jurisdiction)：</strong> 本合約受香港特別行政區法律管轄，並按其解釋。</p>
                                         </div>
 
                                         {/* 簽名欄 */}
-                                        <div className="grid grid-cols-3 gap-4 md:gap-6 pt-16 font-sans text-sm print:pt-24 print:break-inside-avoid">
+                                        <div className="grid grid-cols-3 gap-4 md:gap-6 pt-16 font-sans text-sm print:pt-16 print-avoid-break">
                                             <div className="border-t border-slate-900 pt-3 text-center space-y-1">
                                                 <p className="font-bold text-[10px] md:text-sm">甲方 (賣方/轉讓方) 簽署</p>
                                                 <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Seller</p>
@@ -947,7 +909,6 @@ export default function BusinessProcessModule(props: any) {
                                 ) : (
                                     /* 標準雙欄指南排版 */
                                     <div className="print-grid">
-                                        {/* 左欄：文件清單 */}
                                         <div className="bg-white p-4 rounded-xl border border-slate-200 print-col shadow-sm">
                                             <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-sm md:text-base">
                                                 <FileText size={16} className="text-amber-500 flex-none" /> 所需準備文件
@@ -978,7 +939,6 @@ export default function BusinessProcessModule(props: any) {
                                             )}
                                         </div>
 
-                                        {/* 右欄：辦理步驟及標準 SOP */}
                                         <div className="bg-white p-4 rounded-xl border border-slate-200 print-col shadow-sm">
                                             <h4 className="font-black text-slate-800 flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-2 text-sm md:text-base">
                                                 <ShieldCheck size={16} className="text-indigo-500 flex-none" /> 辦理步驟及標準 SOP
