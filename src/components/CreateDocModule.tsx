@@ -492,14 +492,20 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const handlePrint = async () => {
         const finalId = await saveDocRecord();
         const dummyVehicle: any = {
-            id: finalId || docId || 'DRAFT', ...formData, photos: formData.contractPhotos || [], 
-            price: Number(String(formData.price).replace(/,/g, '')) || 0, // ★ 修復逗號
-            deposit: depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0),
-            customerID: formData.customerId, soldDate: formData.deliveryDate, handoverTime: formData.handoverTime, checklist: checklist, selectedItems: docItems.filter((i: any) => i.isSelected),
+            id: finalId || docId || 'DRAFT', 
+            ...formData, 
+            photos: formData.contractPhotos || [], 
+            price: Number(String(formData.price).replace(/,/g, '')) || 0, 
+            deposit: Math.round(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0) * 100) / 100,
+            customerID: formData.customerId, 
+            soldDate: formData.deliveryDate, 
+            handoverTime: formData.handoverTime, 
+            checklist: checklist, 
+            selectedItems: docItems.filter((i: any) => i.isSelected),
             depositItems: depositItems, 
             showTerms: showTerms, 
-            showPurchaseGuarantees: showPurchaseGuarantees, // ★ 補上買車保證條款開關
-            showSalesGuarantees: showSalesGuarantees,       // ★ 補上賣車保證條款開關
+            showPurchaseGuarantees: showPurchaseGuarantees, 
+            showSalesGuarantees: showSalesGuarantees,       
             showAttachments: showAttachments, 
             companyNameEn: formData.companyNameEn, 
             companyNameCh: formData.companyNameCh, 
@@ -507,9 +513,35 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             companyPhone: formData.companyPhone, 
             paymentMethod: formData.paymentMethod 
         };
-        openPrintPreview(selectedDocType, dummyVehicle);
-    };
 
+        // ★ 動態修改 PDF 預設檔名 (例如: Quotation_2025 Lamborghini Urus SE)
+        const typeMap: Record<string, string> = {
+            'sales_contract': 'Sales_Contract', 
+            'purchase_contract': 'Purchase_Contract', 
+            'consignment_contract': 'Consignment', 
+            'quotation': 'Quotation', 
+            'invoice': 'Invoice', 
+            'service_invoice': 'Service_Invoice', 
+            'receipt': 'Receipt'
+        };
+        const prefix = typeMap[selectedDocType] || 'Document';
+        const fileName = `${prefix}_${formData.year || ''} ${formData.make || ''} ${formData.model || ''}`.replace(/\s+/g, ' ').trim();
+        
+        // 暫時更改網頁標題，讓瀏覽器的「儲存為 PDF」能精準抓到這個檔名
+        const originalTitle = document.title;
+        document.title = fileName;
+
+        // 若外層組件 (DocumentSystem) 支援第三個參數，一併傳入檔名
+        openPrintPreview(selectedDocType, dummyVehicle, fileName);
+
+        // 監聽列印對話框關閉事件來恢復標題，若系統未觸發則 10 秒後自動安全恢復
+        const restoreTitle = () => { 
+            document.title = originalTitle; 
+            window.removeEventListener('afterprint', restoreTitle); 
+        };
+        window.addEventListener('afterprint', restoreTitle);
+        setTimeout(restoreTitle, 10000);
+    };
     const handleCalculateLoan = () => {
         // ★ 修復：清除千分位逗號，確保貸款計算正確
         const price = Number(String(formData.price).replace(/,/g, '')) || 0;
