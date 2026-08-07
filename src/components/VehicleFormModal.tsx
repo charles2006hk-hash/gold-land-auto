@@ -388,20 +388,44 @@ const VehicleFormModal = ({
     };
 
     const handleSettleFinancing = (f: any) => {
-        // ★ 核心結息邏輯：按實際天數精準結算！
+        // ★ 核心結息邏輯升級：3 個月為一期，不足 3 個月按 3 個月計
         const endDate = new Date().toISOString().split('T')[0]; // 今天結算
-        const start = new Date(f.startDate).getTime();
-        const end = new Date(endDate).getTime();
-        const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-        const actualDays = diffDays > 0 ? diffDays : 1; // 最少算 1 天
         
-        // 公式：本金 * (年息/100) * (實際天數/365)
-        const calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (actualDays / 365));
+        const start = new Date(f.startDate);
+        const end = new Date(endDate);
+        
+        // 1. 記錄實際經過天數
+        const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+        const actualDays = diffDays > 0 ? diffDays : 1; 
 
-        const updated = { ...f, status: 'Settled', endDate: endDate, actualInterest: calculatedInterest, actualDays: actualDays };
+        // 2. 計算跨越的實際月份數
+        let diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+        
+        // 如果結算日的「日」大於起息日的「日」，代表剛好跨入了下一個月
+        if (end.getDate() > start.getDate()) {
+            diffMonths++;
+        }
+        // 防呆：如果是同一天或不足一個月，算作 1 個月起步
+        if (diffMonths === 0 && actualDays > 0) diffMonths = 1;
+
+        // 3. 階梯式收費邏輯：除以 3 並向上取整，得出「期數」
+        const billedPeriods = Math.ceil(diffMonths / 3) || 1; // 至少 1 期 (3個月)
+        const billedMonths = billedPeriods * 3;
+
+        // 4. 計算最終利息：本金 * (年息/100) * (收費月數/12)
+        const calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
+
+        const updated = { 
+            ...f, 
+            status: 'Settled', 
+            endDate: endDate, 
+            actualInterest: calculatedInterest, 
+            actualDays: actualDays,
+            billedMonths: billedMonths // 寫入資料庫留底，方便日後對數
+        };
         safeUpdateFinancing((v.financingRecords || []).map((x: any) => x.id === f.id ? updated : x));
         
-        alert(`✅ 結息完成！\n總計天數: ${actualDays} 天\n產生利息: $${calculatedInterest.toLocaleString()}`);
+        alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費週期: ${billedPeriods} 期 (按 ${billedMonths} 個月收費)\n產生利息: $${calculatedInterest.toLocaleString()}`);
     };
  
     // ★ 新增：維修保養的修改(Edit)狀態與函數
@@ -1957,7 +1981,7 @@ const VehicleFormModal = ({
                                                 <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${f.status === 'Active' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-200 text-slate-600'}`}>{f.status === 'Active' ? '計息中' : '已結算'}</span>
                                             </div>
                                             <div className="text-xs text-slate-500 font-mono">
-                                                起息日: {f.startDate} {f.status === 'Settled' && `| 結算日: ${f.endDate} (${f.actualDays}天)`}
+                                                起息日: {f.startDate} {f.status === 'Settled' && `| 結算日: ${f.endDate} (${f.actualDays}天 / 收費 ${f.billedMonths || 3}個月)`}
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4 text-right border-t md:border-t-0 pt-2 md:pt-0">
