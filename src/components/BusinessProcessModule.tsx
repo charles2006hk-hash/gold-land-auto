@@ -923,37 +923,46 @@ export default function BusinessProcessModule(props: any) {
                                         </div>
 
                                         {/* 四、條款 */}
-                                        <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 text-justify leading-relaxed print:text-[11px] print:space-y-1">
-                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1 print-avoid-break">四、 雙方責任與保證條款 (Warranties & Conditions)</div>
-                                            <p className="print-avoid-break"><strong>1. 甲方保證 (Seller's Warranties)：</strong> 甲方保證目標公司於「交接日」前並無任何隱藏債務、未清繳稅項、官司訴訟或銀行貸款。甲方保證目標公司名下之車輛及中港批文狀態正常，無被扣查或吊銷之風險。交接日前所產生之任何債務或法律責任，概由甲方承擔。</p>
-                                            <p className="print-avoid-break"><strong>2. 乙方責任 (Buyer's Liabilities)：</strong> 自雙方確認之「交接日」起，目標公司及其持有之車輛、批文所衍生之所有運營費用、牌費、保險、交通違例罰款及任何法律責任，均由乙方全權負責。</p>
-                                            <p className="print-avoid-break"><strong>3. 違約條款 (Default)：</strong> 若乙方未能按期支付款項，甲方有權終止本合約並沒收已付之訂金。若甲方未能履行轉股義務或被發現隱瞞公司債務，甲方須退還所有已收款項予乙方，乙方並保留追討賠償之權利。</p>
-                                            <p className="print-avoid-break"><strong>4. 丙方角色 (Role of Broker)：</strong> 丙方僅作為本次交易之中介及見證方，協助雙方辦理轉讓手續。丙方不承擔目標公司過往或未來之任何財務及法律責任。</p>
-                                            <p className="print-avoid-break"><strong>5. 法律管轄 (Jurisdiction)：</strong> 本合約受香港特別行政區法律管轄，並按其解釋。</p>
+                                        <div className="text-[11px] md:text-sm font-sans mt-4 text-justify leading-relaxed print:text-[11px]">
+                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-2 print-avoid-break">四、 雙方責任與保證條款 (Warranties & Conditions)</div>
+                                            
+                                            <div className="space-y-2 print:space-y-1">
+                                                <p><strong>1. 甲方保證 (Seller's Warranties)：</strong> 甲方保證目標公司於「交接日」前並無任何隱藏債務、未清繳稅項、官司訴訟或銀行貸款。甲方保證目標公司名下之車輛及中港批文狀態正常，無被扣查或吊銷之風險。交接日前所產生之任何債務或法律責任，概由甲方承擔。</p>
+                                                <p><strong>2. 乙方責任 (Buyer's Liabilities)：</strong> 自雙方確認之「交接日」起，目標公司及其持有之車輛、批文所衍生之所有運營費用、牌費、保險、交通違例罰款及任何法律責任，均由乙方全權負責。</p>
+                                                <p><strong>3. 違約條款 (Default)：</strong> 若乙方未能按期支付款項，甲方有權終止本合約並沒收已付之訂金。若甲方未能履行轉股義務或被發現隱瞞公司債務，甲方須退還所有已收款項予乙方，乙方並保留追討賠償之權利。</p>
+                                            </div>
+                                            
+                                            {/* ★ 將第 4、5 項打包，防止單獨一行被擠到下一頁 (孤兒段落) */}
+                                            <div className="space-y-2 print:space-y-1 mt-2 print:mt-1 print-avoid-break">
+                                                <p><strong>4. 丙方角色 (Role of Broker)：</strong> 丙方僅作為本次交易之中介及見證方，協助雙方辦理轉讓手續。丙方不承擔目標公司過往或未來之任何財務及法律責任。</p>
+                                                <p><strong>5. 法律管轄 (Jurisdiction)：</strong> 本合約受香港特別行政區法律管轄，並按其解釋。</p>
+                                            </div>
                                         </div>
 
-                                        {/* ★ 新增：五、備註 (Remarks) */}
-                                        <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 leading-relaxed print:text-[11px] print:space-y-1 print-avoid-break">
-                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1">五、 備註 (Remarks)</div>
-                                            <textarea value={qRemarks} onChange={e=>setQRemarks(e.target.value)} placeholder="如無備註可留空，此處輸入的內容將會原樣列印於合約上..." className="w-full min-h-[60px] p-2 text-xs border rounded outline-none print:border-0 print:p-0 print:resize-none bg-yellow-50/30 print:bg-transparent font-medium" />
-                                        </div>
+                                        {/* ★ 綑綁備註與簽名區，絕對不允許簽名欄單獨落在一頁 */}
+                                        <div className="print-avoid-break">
+                                            {/* 五、備註 (Remarks) */}
+                                            <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 leading-relaxed print:text-[11px] print:space-y-1">
+                                                <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1">五、 備註 (Remarks)</div>
+                                                <textarea value={qRemarks} onChange={e=>setQRemarks(e.target.value)} placeholder="如無備註可留空，此處輸入的內容將會原樣列印於合約上..." className="w-full min-h-[60px] p-2 text-xs border rounded outline-none print:border-0 print:p-0 print:resize-none bg-yellow-50/30 print:bg-transparent font-medium" />
+                                            </div>
 
-                                        {/* 簽名欄 */}
-                                        <div className="grid grid-cols-3 gap-4 md:gap-6 pt-16 font-sans text-sm print:pt-16 print-avoid-break">
-                                            <div className="border-t border-slate-900 pt-3 text-center space-y-1">
-                                                <p className="font-bold text-[10px] md:text-sm">甲方 (賣方/轉讓方) 簽署</p>
-                                                <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Seller</p>
-                                            </div>
-                                            <div className="border-t border-slate-900 pt-3 text-center space-y-1">
-                                                <p className="font-bold text-[10px] md:text-sm">乙方 (買方/承讓方) 簽署</p>
-                                                <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Buyer</p>
-                                            </div>
-                                            <div className="border-t border-slate-900 pt-3 text-center space-y-1">
-                                                <p className="font-bold text-[10px] md:text-sm">丙方 (中介/見證方) 簽署</p>
-                                                <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Broker</p>
+                                            {/* 簽名欄 */}
+                                            <div className="grid grid-cols-3 gap-4 md:gap-6 pt-12 font-sans text-sm print:pt-16">
+                                                <div className="border-t border-slate-900 pt-3 text-center space-y-1">
+                                                    <p className="font-bold text-[10px] md:text-sm">甲方 (賣方/轉讓方) 簽署</p>
+                                                    <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Seller</p>
+                                                </div>
+                                                <div className="border-t border-slate-900 pt-3 text-center space-y-1">
+                                                    <p className="font-bold text-[10px] md:text-sm">乙方 (買方/承讓方) 簽署</p>
+                                                    <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Buyer</p>
+                                                </div>
+                                                <div className="border-t border-slate-900 pt-3 text-center space-y-1">
+                                                    <p className="font-bold text-[10px] md:text-sm">丙方 (中介/見證方) 簽署</p>
+                                                    <p className="text-[8px] md:text-[10px] text-slate-500">For and on behalf of Broker</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
                                 ) : (
                                     /* 標準雙欄指南排版 */
                                     <div className="print-grid">
