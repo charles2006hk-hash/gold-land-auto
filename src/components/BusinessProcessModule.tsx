@@ -963,6 +963,7 @@ export default function BusinessProcessModule(props: any) {
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
                                 ) : (
                                     /* 標準雙欄指南排版 */
                                     <div className="print-grid">
