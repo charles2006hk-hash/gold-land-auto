@@ -184,6 +184,13 @@ const QuotationPreview = ({ item, onClose }: any) => {
     const row3Amount = licenseFee + insuranceFee + 1000;
     const row1Amount = (item.results?.finalPrice || 0) - row3Amount;
 
+    // 👇---------- 新增這段智能檔名邏輯 ----------👇
+    const yearStr = item.details?.year || item.carInfo?.year || '';
+    const makeStr = item.details?.make || item.details?.manufacturer || item.carInfo?.make || '';
+    const modelStr = item.details?.model || item.carInfo?.model || '';
+    const safeFileName = `Quotation_${yearStr} ${makeStr} ${modelStr}`.replace(/\s+/g, ' ').trim() || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
+    // 👆--------------------------------------👆
+
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
             <div className="bg-white w-full max-w-[210mm] h-[90vh] md:h-[297mm] md:max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl scale-95 md:scale-100 origin-center transition-transform">
@@ -192,7 +199,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                     <div className="flex gap-2">
                         {/* ★ 核心修改：替換為獨立的 Blob 智慧列印引擎，並自動帶入動態檔名 */}
                         <button 
-                            onClick={() => triggerDocumentPrint('print-area', `海外訂車報價單_QT-${item.id.slice(0,8).toUpperCase()}`)} 
+                            onClick={() => triggerDocumentPrint('print-area', safeFileName)} 
                             className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
                         >
                             正式列印 / 輸出 PDF
