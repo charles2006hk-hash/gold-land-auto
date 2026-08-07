@@ -51,7 +51,12 @@ export default function BusinessProcessModule(props: any) {
     const [qTargetBR, setQTargetBR] = useState<string>('');
     const [qQuotaNo, setQQuotaNo] = useState<string>('');
     const [qRegMark, setQRegMark] = useState<string>('');
+    
+    // ★ 新增：人民幣與匯率狀態
+    const [qPriceRMB, setQPriceRMB] = useState<string>('');
+    const [qExchangeRate, setQExchangeRate] = useState<string>('1.08');
     const [qTotalPrice, setQTotalPrice] = useState<string>('');
+    
     const [qDeposit, setQDeposit] = useState<string>('');
     const [qDepositDate, setQDepositDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [qPartPayment, setQPartPayment] = useState<string>('');
@@ -61,6 +66,10 @@ export default function BusinessProcessModule(props: any) {
     const [qDepositCondition, setQDepositCondition] = useState('(收取訂金及香港公司加入新股東時)');
     const [qPartPaymentCondition, setQPartPaymentCondition] = useState('(安排車輛驗車及公安廳辦理換車手續時)');
     const [qBalanceCondition, setQBalanceCondition] = useState('(完成車輛上牌、海關及司機備案手續時)');
+
+    // ★ 新增：收款帳戶與備註
+    const [qBankAccount, setQBankAccount] = useState<string>('匯豐銀行 HSBC: 747-057347-838\n戶名: GOLD LAND POWER LIMITED T/A GOLD LAND AUTO\n轉數快 FPS: 6134530');
+    const [qRemarks, setQRemarks] = useState<string>('');
 
     // --- 金額格式化與計算 ---
     const formatNumberInput = (val: string) => {
@@ -72,6 +81,16 @@ export default function BusinessProcessModule(props: any) {
         const formattedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         return decimal !== undefined ? formattedInteger + '.' + decimal : formattedInteger;
     };
+
+    // ★ 智能計算：當 RMB 或匯率變動時，自動計算 HKD 總價
+    useEffect(() => {
+        const rmb = Number(qPriceRMB.replace(/,/g, '')) || 0;
+        const rate = Number(qExchangeRate) || 0;
+        if (rmb > 0 && rate > 0) {
+            const hkd = Math.round(rmb * rate);
+            setQTotalPrice(formatNumberInput(String(hkd)));
+        }
+    }, [qPriceRMB, qExchangeRate]);
 
     const numQTotalPrice = Number(qTotalPrice.replace(/,/g, '')) || 0;
     const numQDeposit = Number(qDeposit.replace(/,/g, '')) || 0;
@@ -222,7 +241,7 @@ export default function BusinessProcessModule(props: any) {
                     steps: [
                         "【首次申請】: 於官方網站登記電腦抽籤。中籤後於獲分配的時段內遞交申請，並聯絡保險公司購買保險。前往中檢查驗車輛，獲批內地「電子牌證」與香港「電子批准信」。",
                         "【注意】: 自2025年10月起，車輛已無須於擋風玻璃展示實體禁區紙，只需在手機保留「電子批准信」備查即可進出廣東省。",
-                        "【每年續期機制】: 運輸署會於內地「電子牌證」屆滿前 2 至 3 個月，向車主發出通知電郵。符合資格的車主 *完全無須重新參與電腦抽籤*。",
+                        "【每年續期機制】: 運輸署會於內地「電子牌證」屆滿前 2 之間 3 個月，向車主發出通知電郵。符合資格的車主 *完全無須重新參與電腦抽籤*。",
                         "【續期手續】: 憑通知電郵內提供的密碼、身份證、車牌號碼及電子批准編號，於指定時段內登入網上續期系統，即可直接提交續期申請！"
                     ],
                     forms: [],
@@ -493,7 +512,6 @@ export default function BusinessProcessModule(props: any) {
                 .scrollbar-hide::-webkit-scrollbar { display: none; }
                 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
                 
-                /* ★ 新增：分頁列印防截斷與自動適配排版 */
                 .print-avoid-break { page-break-inside: avoid; break-inside: avoid; }
                 
                 @media print {
@@ -806,7 +824,7 @@ export default function BusinessProcessModule(props: any) {
                                             <p className="mb-2 print-avoid-break">甲方同意出售，且乙方同意購入以下香港私人有限公司之 100% 股權（下稱「目標公司」）。該公司名下持有中港跨境行駛指標（批文）及相關車輛：</p>
                                             <table className="w-full border-collapse border border-slate-300 text-sm print:text-xs">
                                                 <tbody>
-                                                    <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">目標公司名稱 (HK Company Name)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qTargetCompany} onChange={e=>setQTargetCompany(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-bold print:bg-transparent" placeholder="輸入香港公司英文/中文名稱" /></td></tr>
+                                                    <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">目標公司名稱 (HK Company Name)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qTargetCompany} onChange={e=>setQTargetCompany(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-bold uppercase print:bg-transparent" placeholder="輸入香港公司英文/中文名稱" /></td></tr>
                                                     <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">商業登記證號碼 (BR No.)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qTargetBR} onChange={e=>setQTargetBR(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold print:bg-transparent" placeholder="輸入BR號碼" /></td></tr>
                                                     <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">中港批文號碼 (Quota No.)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qQuotaNo} onChange={e=>setQQuotaNo(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold print:bg-transparent" placeholder="輸入批文號" /></td></tr>
                                                     <tr className="print-avoid-break"><td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold">關聯香港車牌 (HK Reg Mark)：</td><td className="border border-slate-300 p-2 print:py-1 print:px-2"><input type="text" value={qRegMark} onChange={e=>setQRegMark(e.target.value)} className="w-full border px-2 py-1 rounded outline-none print:border-0 print:p-0 font-mono font-bold uppercase print:bg-transparent" placeholder="輸入車牌" /></td></tr>
@@ -822,9 +840,19 @@ export default function BusinessProcessModule(props: any) {
                                                     <tr className="print-avoid-break">
                                                         <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold w-1/3 md:w-1/4">總交易金額 (Total Price)：</td>
                                                         <td className="border border-slate-300 p-2 print:py-1 print:px-2" colSpan={2}>
-                                                            <div className="flex items-center">
-                                                                <span className="font-bold mr-1">HK$</span>
-                                                                <input type="text" value={qTotalPrice} onChange={e=>setQTotalPrice(formatNumberInput(e.target.value))} className="border-b border-red-400 px-2 py-1 outline-none text-red-600 font-bold font-mono text-lg w-full md:w-48 print:border-0 print:p-0 print:bg-transparent print:w-auto" placeholder="0" />
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                <div className="flex items-center">
+                                                                    <span className="font-bold mr-1">HK$</span>
+                                                                    <input type="text" value={qTotalPrice} onChange={e=>setQTotalPrice(formatNumberInput(e.target.value))} className="border-b border-red-400 px-2 py-1 outline-none text-red-600 font-bold font-mono text-lg w-full md:w-32 print:border-0 print:p-0 print:bg-transparent print:w-auto" placeholder="0" />
+                                                                </div>
+                                                                {/* ★ 新增：人民幣與匯率換算 */}
+                                                                <span className="text-[10px] md:text-xs text-slate-500 print:text-black flex items-center gap-1 whitespace-nowrap">
+                                                                    (基於人民幣 RMB¥ 
+                                                                    <input type="text" value={qPriceRMB} onChange={e=>setQPriceRMB(formatNumberInput(e.target.value))} className="border-b outline-none w-20 text-center print:border-0 print:bg-transparent" placeholder="0" />
+                                                                    ，協議匯率: 
+                                                                    <input type="number" step="0.001" value={qExchangeRate} onChange={e=>setQExchangeRate(e.target.value)} className="border-b outline-none w-12 text-center print:border-0 print:bg-transparent" />
+                                                                    )
+                                                                </span>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -876,6 +904,20 @@ export default function BusinessProcessModule(props: any) {
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                    {/* ★ 新增：實報實銷聲明條款 */}
+                                                    <tr className="print-avoid-break bg-red-50/30 print:bg-transparent">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold text-red-800 print:text-black">實報實銷及雜費：</td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 text-xs print:text-[10px] text-slate-700 print:text-black leading-relaxed" colSpan={2}>
+                                                            上述交易總額僅為公司股權及指標轉讓之本金。<strong className="underline text-red-700 print:text-black">所有辦理轉讓過程中所衍生之第三方費用</strong>（包括但不限於：香港/內地政府規費、印花稅、兩地車輛保險、驗車費、代辦手續費等），無論是以港幣或人民幣結算，均按實際單據<strong className="text-red-700 print:text-black">由乙方（買方）實報實銷額外支付</strong>。
+                                                        </td>
+                                                    </tr>
+                                                    {/* ★ 新增：指定收款戶口 */}
+                                                    <tr className="print-avoid-break">
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2 bg-slate-50 print:bg-transparent font-bold text-slate-700 print:text-black">指定收款戶口：<br/><span className="text-[9px] font-normal text-slate-500 print:text-black">(Bank Account)</span></td>
+                                                        <td className="border border-slate-300 p-2 print:py-1 print:px-2" colSpan={2}>
+                                                            <textarea value={qBankAccount} onChange={e=>setQBankAccount(e.target.value)} className="w-full text-[11px] print:text-[10px] font-mono outline-none resize-none bg-transparent print:border-0 print:p-0 print:overflow-hidden min-h-[50px] leading-tight font-bold text-blue-800 print:text-black" />
+                                                        </td>
+                                                    </tr>
                                                 </tbody>
                                             </table>
                                         </div>
@@ -888,6 +930,12 @@ export default function BusinessProcessModule(props: any) {
                                             <p className="print-avoid-break"><strong>3. 違約條款 (Default)：</strong> 若乙方未能按期支付款項，甲方有權終止本合約並沒收已付之訂金。若甲方未能履行轉股義務或被發現隱瞞公司債務，甲方須退還所有已收款項予乙方，乙方並保留追討賠償之權利。</p>
                                             <p className="print-avoid-break"><strong>4. 丙方角色 (Role of Broker)：</strong> 丙方僅作為本次交易之中介及見證方，協助雙方辦理轉讓手續。丙方不承擔目標公司過往或未來之任何財務及法律責任。</p>
                                             <p className="print-avoid-break"><strong>5. 法律管轄 (Jurisdiction)：</strong> 本合約受香港特別行政區法律管轄，並按其解釋。</p>
+                                        </div>
+
+                                        {/* ★ 新增：五、備註 (Remarks) */}
+                                        <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 leading-relaxed print:text-[11px] print:space-y-1 print-avoid-break">
+                                            <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-1">五、 備註 (Remarks)</div>
+                                            <textarea value={qRemarks} onChange={e=>setQRemarks(e.target.value)} placeholder="如無備註可留空，此處輸入的內容將會原樣列印於合約上..." className="w-full min-h-[60px] p-2 text-xs border rounded outline-none print:border-0 print:p-0 print:resize-none bg-yellow-50/30 print:bg-transparent font-medium" />
                                         </div>
 
                                         {/* 簽名欄 */}
@@ -985,7 +1033,6 @@ export default function BusinessProcessModule(props: any) {
             {showStampMaker && (
                 <div className="fixed inset-0 z-[1000] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 md:p-6 animate-in fade-in no-print-area">
                     <div className="bg-white w-full max-w-6xl h-[95vh] rounded-2xl shadow-2xl flex flex-col relative overflow-hidden ring-4 ring-white/20">
-                        {/* 右上角關閉按鈕 */}
                         <button 
                             onClick={() => setShowStampMaker(false)} 
                             className="absolute top-4 right-4 z-50 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-full shadow-sm transition-colors cursor-pointer"
@@ -993,7 +1040,6 @@ export default function BusinessProcessModule(props: any) {
                             <X size={20} />
                         </button>
                         
-                        {/* 呼叫印章模組 */}
                         <div className="flex-1 overflow-hidden relative z-40">
                             <StampMakerModule db={props.db} appId={props.appId} staffId={props.staffId} />
                         </div>
