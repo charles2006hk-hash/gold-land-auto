@@ -922,8 +922,25 @@ export default function BusinessProcessModule(props: any) {
                                             </table>
                                         </div>
 
+                                        {/* ========================================== */}
+                                        {/* ★ 專業版分頁控制 (香港法律文件標準)        */}
+                                        {/* ========================================== */}
+                                        <div className="hidden print:block w-full border-b border-slate-400/50 mt-8 mb-2"></div>
+                                        <div className="hidden print:block text-right text-[11px] font-serif font-bold tracking-widest text-slate-600">
+                                            ... / 轉下頁 (Continued on next page)
+                                        </div>
+                                        
+                                        {/* 強制分頁符號 */}
+                                        <div style={{ pageBreakBefore: 'always', breakBefore: 'page' }}></div>
+                                        
+                                        <div className="hidden print:block text-left text-[11px] font-serif font-bold tracking-widest text-slate-600 mt-8 mb-2">
+                                            ... / 承上頁 (Continued from previous page)
+                                        </div>
+                                        <div className="hidden print:block w-full border-t border-slate-400/50 mb-6"></div>
+                                        {/* ========================================== */}
+
                                         {/* 四、條款 */}
-                                        <div className="text-[11px] md:text-sm font-sans mt-4 text-justify leading-relaxed print:text-[11px]">
+                                        <div className="text-[11px] md:text-sm font-sans space-y-2 mt-4 text-justify leading-relaxed print:text-[11px] print:space-y-1">
                                             <div className="font-bold text-base bg-slate-100 p-1.5 border-l-4 border-slate-800 mb-2 print:bg-transparent print:border-l-0 print:border-b print:pb-1 print:mb-2 print-avoid-break">四、 雙方責任與保證條款 (Warranties & Conditions)</div>
                                             
                                             <div className="space-y-2 print:space-y-1">
