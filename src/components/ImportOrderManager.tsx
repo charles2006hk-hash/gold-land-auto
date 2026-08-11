@@ -178,24 +178,66 @@ const QuotationPreview = ({ item, onClose }: any) => {
         estHKLicenseDate = new Date(license).toLocaleDateString('en-GB'); 
     }
 
-    // ★ 新增：計算新的報價單行項目金額
+    // ★ 計算金額
     const licenseFee = parseNum(item.fees?.hk_license?.fee);
     const insuranceFee = parseNum(item.fees?.finalInsurance);
     const row3Amount = licenseFee + insuranceFee + 1000;
     const row1Amount = (item.results?.finalPrice || 0) - row3Amount;
 
-    // ★ 智能檔名設定：年份 + 型號 + 地區
+    // ★ 智能檔名邏輯
     const yearStr = item.details?.year || item.carInfo?.year || '';
+    const makeStr = item.details?.make || item.details?.manufacturer || item.carInfo?.make || '';
     const modelStr = item.details?.model || item.carInfo?.model || '';
     const regionStr = item.region || '';
-   const safeFileName = `Quotation_${yearStr}_${modelStr}_${item.region || ''}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
+    const safeFileName = `Quotation_${yearStr}_${modelStr}_${regionStr}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
 
-    // ★ 終極防呆：只要預覽視窗開著，就強制霸佔網頁 Title，確保列印 100% 抓到檔名
-    useEffect(() => {
-        const originalTitle = document.title;
-        document.title = safeFileName;
-        return () => { document.title = originalTitle; };
-    }, [safeFileName]);
+    // ★ 終極列印引擎：自建視窗並寫入指定 Title，確保 100% 抓到檔名
+    const handleRobustPrint = () => {
+        const content = document.getElementById('print-area');
+        if (!content) return;
+        
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('請允許瀏覽器彈出視窗以進行列印');
+            return;
+        }
+
+        // 擷取當前頁面的 Tailwind 樣式
+        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+            .map(s => s.outerHTML)
+            .join('\n');
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <!-- 這裡就是瀏覽器存 PDF 時唯一認定的檔名來源 -->
+                    <title>${safeFileName}</title>
+                    ${styles}
+                    <style>
+                        @page { size: A4 portrait; margin: 10mm; }
+                        body { background: white !important; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+                        .print\\:hidden { display: none !important; }
+                        .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+                        /* 列印時移除外框與捲動軸 */
+                        #print-area { height: auto !important; overflow: visible !important; padding: 0 !important; }
+                    </style>
+                </head>
+                <body>
+                    ${content.outerHTML}
+                </body>
+            </html>
+        `);
+        
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // 延遲 500ms 確保圖片與樣式渲染完畢後再呼叫系統列印
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
+    };
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
@@ -203,8 +245,9 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center print:hidden">
                     <div className="flex items-center gap-2"><Printer size={20}/><span className="font-bold">報價單預覽 (PDF Preview)</span></div>
                     <div className="flex gap-2">
+                        {/* ★ 使用專屬列印引擎 */}
                         <button 
-                            onClick={() => triggerDocumentPrint('print-area', safeFileName)} 
+                            onClick={handleRobustPrint} 
                             className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
                         >
                             正式列印 / 輸出 PDF
@@ -213,9 +256,11 @@ const QuotationPreview = ({ item, onClose }: any) => {
                     </div>
                 </div>
                 
-                {/* 這裡的 id="print-area" 會被 triggerDocumentPrint 抓取 */}
-                <div id="print-area" className="flex-1 overflow-y-auto p-10 text-slate-900 bg-white flex flex-col">
-                    <div className="flex justify-between items-start border-b-4 border-slate-800 pb-6 mb-8 shrink-0 break-inside-avoid">
+                {/* ★ 排版優化：縮減 p-10 -> p-6 md:p-8，節省四周邊界空間 */}
+                <div id="print-area" className="flex-1 overflow-y-auto p-6 md:p-8 text-slate-900 bg-white flex flex-col">
+                    
+                    {/* ★ 排版優化：縮減 mb-8 -> mb-5, pb-6 -> pb-4 */}
+                    <div className="flex justify-between items-start border-b-4 border-slate-800 pb-4 mb-5 shrink-0 break-inside-avoid">
                         <div>
                             <h1 className="text-3xl font-black tracking-tighter uppercase leading-none">Gold Land Auto</h1>
                             <h2 className="text-xl font-bold tracking-widest mt-1">金田汽車</h2>
@@ -228,7 +273,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-8 mb-8 shrink-0 break-inside-avoid">
+                    {/* ★ 排版優化：縮減 mb-8 -> mb-5 */}
+                    <div className="grid grid-cols-2 gap-8 mb-5 shrink-0 break-inside-avoid">
                         <div>
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800 inline-block">Vehicle Specification</h3>
                             <div className="space-y-1 text-sm">
@@ -252,7 +298,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     </div>
                     
-                    <table className="w-full text-sm mb-8 shrink-0 break-inside-avoid">
+                    {/* ★ 排版優化：縮減 mb-8 -> mb-5 */}
+                    <table className="w-full text-sm mb-5 shrink-0 break-inside-avoid">
                         <thead className="bg-slate-800 text-white">
                             <tr><th className="p-3 text-left uppercase tracking-widest text-[10px]">Description</th><th className="p-3 text-right uppercase tracking-widest text-[10px]">Amount</th></tr>
                         </thead>
@@ -263,11 +310,11 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </tbody>
                     </table>
 
+                    {/* ★ 排版優化：縮減 mb-6 -> mb-4 */}
                     {item.photos && item.photos.length > 0 && (
-                        <div className="mb-6 shrink-0 break-inside-avoid">
+                        <div className="mb-4 shrink-0 break-inside-avoid">
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-3 border-l-4 border-slate-800 inline-block">Vehicle Photos (車況圖片)</h3>
                             <div className="bg-slate-50 border border-slate-200 rounded p-2 flex gap-2 justify-center items-center flex-wrap">
-                                {/* ★ 將限制從 5 張提升至 10 張，自動排成兩列 */}
                                 {item.photos.slice(0, 10).map((url: string, idx: number) => (
                                     <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0">
                                         <img src={url} className="w-full h-full object-cover" alt="Vehicle Photo" />
@@ -277,14 +324,15 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     )}
 
-                    {/* ★ 將聲明與簽名欄打包，保證它們絕對不會被切開到兩頁 */}
-                    <div className="mt-auto shrink-0 break-inside-avoid pt-6">
-                        <div className="text-[9px] text-slate-400 leading-relaxed mb-8">
+                    {/* ★ 簽名與備註區塊強制綁定 (break-inside-avoid) */}
+                    <div className="mt-auto shrink-0 break-inside-avoid pt-4 border-t-2 border-slate-200">
+                        <div className="text-[9px] text-slate-400 leading-relaxed mb-6">
                             <p>* This quotation is valid for 21 days. Prices are subject to local tax and exchange rate fluctuations.</p>
                             <p>* 本報價單有效期為發出日起計 21 天。預估費用或因當地稅率及匯率變動而作適度調整。</p>
                         </div>
 
-                        <div className="border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20">
+                        {/* ★ 排版優化：縮減 pt-10 -> pt-8 */}
+                        <div className="grid grid-cols-2 gap-20">
                             <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p></div>
                             <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">Customer Confirmation</p></div>
                         </div>
@@ -292,24 +340,9 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 </div>
             </div>
             
-            {/* 這裡的 global style 可以保留也可以刪除，因為 Blob 列印引擎已經包含完整的樣式重置 */}
+            {/* 保留原始預覽樣式（不影響列印，因為列印時使用內嵌樣式） */}
             <style jsx global>{`
                 @media print {
-                    @page { size: A4 portrait; margin: 10mm; }
-                    body * { visibility: hidden; }
-                    #print-area, #print-area * { visibility: visible; }
-                    
-                    #print-area { 
-                        position: relative !important; 
-                        left: 0; 
-                        top: 0; 
-                        width: 100% !important; 
-                        height: auto !important; 
-                        margin: 0; 
-                        padding: 0; 
-                        overflow: visible !important;
-                    }
-                    
                     .print\\:hidden { display: none !important; }
                     .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
                 }
