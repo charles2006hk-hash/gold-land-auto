@@ -262,7 +262,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         <div className="mb-6 shrink-0 break-inside-avoid">
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-3 border-l-4 border-slate-800 inline-block">Vehicle Photos (車況圖片)</h3>
                             <div className="bg-slate-50 border border-slate-200 rounded p-2 flex gap-2 justify-center items-center flex-wrap">
-                                {item.photos.slice(0, 5).map((url: string, idx: number) => (
+                                {/* ★ 將限制從 5 張提升至 10 張，自動排成兩列 */}
+                                {item.photos.slice(0, 10).map((url: string, idx: number) => (
                                     <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0">
                                         <img src={url} className="w-full h-full object-cover" alt="Vehicle Photo" />
                                     </div>
