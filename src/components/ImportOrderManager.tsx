@@ -188,8 +188,14 @@ const QuotationPreview = ({ item, onClose }: any) => {
     const yearStr = item.details?.year || item.carInfo?.year || '';
     const modelStr = item.details?.model || item.carInfo?.model || '';
     const regionStr = item.region || '';
-    // 組合並清理多餘空白，確保檔名合法
-    const safeFileName = `Quotation_${yearStr}_${modelStr}_${regionStr}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
+   const safeFileName = `Quotation_${yearStr}_${modelStr}_${item.region || ''}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
+
+    // ★ 終極防呆：只要預覽視窗開著，就強制霸佔網頁 Title，確保列印 100% 抓到檔名
+    useEffect(() => {
+        const originalTitle = document.title;
+        document.title = safeFileName;
+        return () => { document.title = originalTitle; };
+    }, [safeFileName]);
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
@@ -198,16 +204,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                     <div className="flex items-center gap-2"><Printer size={20}/><span className="font-bold">報價單預覽 (PDF Preview)</span></div>
                     <div className="flex gap-2">
                         <button 
-                            onClick={() => {
-                                // ★ 終極防呆：在呼叫列印前瞬間強制修改網頁標題，讓瀏覽器抓到正確檔名
-                                const originalTitle = document.title;
-                                document.title = safeFileName;
-                                
-                                triggerDocumentPrint('print-area', safeFileName);
-                                
-                                // 預留幾秒鐘讓系統對話框彈出後，再無縫恢復原本的網站標題
-                                setTimeout(() => { document.title = originalTitle; }, 3000);
-                            }} 
+                            onClick={() => triggerDocumentPrint('print-area', safeFileName)} 
                             className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
                         >
                             正式列印 / 輸出 PDF
@@ -238,7 +235,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Model:</span> <span className="font-black text-lg">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year || '-'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'}</span></p>
+                                <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'} / {item.details?.interiorColor || item.carInfo?.interiorColor || '-'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Seats / CC:</span> <span className="font-bold">{item.details?.seats || item.carInfo?.seats || '-'} 座 / {item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block">Mileage:</span> <span className="font-bold">{formatNum(item.details?.mileage || item.carInfo?.mileage) ? `${formatNum(item.details?.mileage || item.carInfo?.mileage)} km` : '-'}</span></p>
                             </div>
@@ -280,14 +277,17 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     )}
 
-                    <div className="text-[9px] text-slate-400 leading-relaxed mb-6 shrink-0 break-inside-avoid">
-                        <p>* This quotation is valid for 21 days. Prices are subject to local tax and exchange rate fluctuations.</p>
-                        <p>* 本報價單有效期為發出日起計 21 天。預估費用或因當地稅率及匯率變動而作適度調整。</p>
-                    </div>
+                    {/* ★ 將聲明與簽名欄打包，保證它們絕對不會被切開到兩頁 */}
+                    <div className="mt-auto shrink-0 break-inside-avoid pt-6">
+                        <div className="text-[9px] text-slate-400 leading-relaxed mb-8">
+                            <p>* This quotation is valid for 21 days. Prices are subject to local tax and exchange rate fluctuations.</p>
+                            <p>* 本報價單有效期為發出日起計 21 天。預估費用或因當地稅率及匯率變動而作適度調整。</p>
+                        </div>
 
-                    <div className="mt-auto border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20 shrink-0 break-inside-avoid">
-                        <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p></div>
-                        <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">Customer Confirmation</p></div>
+                        <div className="border-t-2 border-slate-200 pt-10 grid grid-cols-2 gap-20">
+                            <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">For and on behalf of Gold Land Auto</p></div>
+                            <div className="text-center pt-8 border-t border-slate-800"><p className="text-[10px] font-bold uppercase">Customer Confirmation</p></div>
+                        </div>
                     </div>
                 </div>
             </div>
