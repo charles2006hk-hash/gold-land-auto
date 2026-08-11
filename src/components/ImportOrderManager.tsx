@@ -163,7 +163,10 @@ const QuotationPreview = ({ item, onClose }: any) => {
 
     const orderDate = item.details?.orderDate;
     const departureDate = item.details?.departureDate;
-    const durationDays = parseFloat(item.details?.shippingDuration) || 0;
+    
+    // ★ 智能獲取航程天數 (如果有填就用填的，舊單據沒填則自動按地區預設)
+    const defaultDuration = item.region === 'UK' ? 45 : (item.region === 'JP' ? 7 : 0);
+    const durationDays = parseFloat(item.details?.shippingDuration) || defaultDuration;
     
     let estTotalDays = 'TBC (待定)';
     let estHKLicenseDate = 'TBC (待定)';
@@ -278,25 +281,27 @@ const QuotationPreview = ({ item, onClose }: any) => {
                     <div className="grid grid-cols-2 gap-8 mb-5 shrink-0 break-inside-avoid">
                         <div>
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800 inline-block">Vehicle Specification</h3>
-                            <div className="space-y-1 text-sm">
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Model:</span> <span className="font-black text-lg">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year || '-'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'} / {item.details?.interiorColor || item.carInfo?.interiorColor || '-'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Seats / CC:</span> <span className="font-bold">{item.details?.seats || item.carInfo?.seats || '-'} 座 / {item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block">Mileage:</span> <span className="font-bold">{formatNum(item.details?.mileage || item.carInfo?.mileage) ? `${formatNum(item.details?.mileage || item.carInfo?.mileage)} km` : '-'}</span></p>
+                            <div className="space-y-1.5 text-sm">
+                                {/* ★ 使用 flex 與 shrink-0，保證長車名自動整齊折行對齊 */}
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold pt-0.5">Model:</span> <span className="font-black text-lg leading-tight">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year || '-'}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'} / {item.details?.interiorColor || item.carInfo?.interiorColor || '-'}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Seats / CC:</span> <span className="font-bold">{item.details?.seats || item.carInfo?.seats || '-'} 座 / {item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Mileage:</span> <span className="font-bold">{formatNum(item.details?.mileage || item.carInfo?.mileage) ? `${formatNum(item.details?.mileage || item.carInfo?.mileage)} km` : '-'}</span></div>
                             </div>
                         </div>
                         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
                             <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport & Timeline (物流與時間)</h3>
-                            <div className="space-y-1 text-xs">
-                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Shipping:</span> <span className="font-bold">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></p>
-                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Voyage (預計航程):</span> <span className="font-bold">{durationDays ? `${durationDays} 天 (Days)` : 'TBC'}</span></p>
-                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Order Date:</span> <span className="font-bold">{orderDate || 'TBC'}</span></p>
-                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
-                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
+                            <div className="space-y-1.5 text-xs">
+                                <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Shipping:</span> <span className="font-bold leading-tight">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></div>
+                                {/* ★ 補上航程顯示 */}
+                                <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Voyage (預計航程):</span> <span className="font-bold leading-tight">{durationDays ? `${durationDays} 天 (Days)` : 'TBC'}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Order Date:</span> <span className="font-bold leading-tight">{orderDate || 'TBC'}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Est. Handover:</span> <span className="font-bold text-emerald-700 leading-tight">{estHKLicenseDate}</span></div>
+                                <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Total Time:</span> <span className="font-bold text-blue-700 leading-tight">{estTotalDays}</span></div>
                             </div>
-                            <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 21 days for HK customs & licensing.</p>
+                            <p className="text-[8px] text-slate-400 mt-3 leading-tight">* Total time includes approx. 21 days for HK customs & licensing.</p>
                         </div>
                     </div>
                     
