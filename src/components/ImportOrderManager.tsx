@@ -277,13 +277,13 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         </div>
                     </div>
                     
-                    {/* ★ 排版優化：縮減 mb-8 -> mb-5 */}
-                    <div className="grid grid-cols-2 gap-8 mb-5 shrink-0 break-inside-avoid">
-                        <div>
+                    {/* ★ 排版優化：改用 flex 佈局，讓左側車輛資料獲得最大延伸空間 */}
+                    <div className="flex justify-between gap-6 mb-5 shrink-0 break-inside-avoid">
+                        <div className="flex-1 min-w-0 pr-2">
                             <h3 className="bg-slate-100 px-2 py-1 text-[10px] font-black uppercase mb-2 border-l-4 border-slate-800 inline-block">Vehicle Specification</h3>
                             <div className="space-y-1.5 text-sm">
-                                {/* ★ 使用 flex 與 shrink-0，保證長車名自動整齊折行對齊 */}
-                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold pt-0.5">Model:</span> <span className="font-black text-lg leading-tight">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></div>
+                                {/* ★ 車型字體微調為 text-[17px]，配合 flex-1 確保超長車型一行顯示 */}
+                                <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold pt-0.5">Model:</span> <span className="font-black text-[17px] leading-tight">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</span></div>
                                 <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Year:</span> <span className="font-bold">{item.details?.year || item.carInfo?.year || '-'}</span></div>
                                 <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Chassis:</span> <span className="font-mono">{item.details?.chassisNo || item.details?.chassis || item.carInfo?.chassis || 'TBC'}</span></div>
                                 <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Color:</span> <span className="font-bold">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'} / {item.details?.interiorColor || item.carInfo?.interiorColor || '-'}</span></div>
@@ -291,11 +291,11 @@ const QuotationPreview = ({ item, onClose }: any) => {
                                 <div className="flex items-start"><span className="text-slate-500 w-24 shrink-0 font-bold">Mileage:</span> <span className="font-bold">{formatNum(item.details?.mileage || item.carInfo?.mileage) ? `${formatNum(item.details?.mileage || item.carInfo?.mileage)} km` : '-'}</span></div>
                             </div>
                         </div>
-                        <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                        {/* ★ 右側物流資料改為固定寬度 280px，把剩下的空間全讓給左側 */}
+                        <div className="w-[280px] shrink-0 border border-slate-200 rounded-lg p-3 bg-slate-50/50">
                             <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport & Timeline (物流與時間)</h3>
                             <div className="space-y-1.5 text-xs">
                                 <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Shipping:</span> <span className="font-bold leading-tight">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></div>
-                                {/* ★ 補上航程顯示 */}
                                 <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Voyage (預計航程):</span> <span className="font-bold leading-tight">{durationDays ? `${durationDays} 天 (Days)` : 'TBC'}</span></div>
                                 <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Order Date:</span> <span className="font-bold leading-tight">{orderDate || 'TBC'}</span></div>
                                 <div className="flex items-start"><span className="text-slate-500 w-[115px] shrink-0 font-bold whitespace-nowrap">Est. Handover:</span> <span className="font-bold text-emerald-700 leading-tight">{estHKLicenseDate}</span></div>
