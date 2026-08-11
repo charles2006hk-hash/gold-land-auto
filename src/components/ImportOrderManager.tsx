@@ -290,12 +290,11 @@ const QuotationPreview = ({ item, onClose }: any) => {
                         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
                             <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport & Timeline (物流與時間)</h3>
                             <div className="space-y-1 text-xs">
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Shipping:</span> <span className="font-bold">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></p>
-                                {/* ★ 新增航程天數表達 */}
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Voyage (預計航程):</span> <span className="font-bold">{durationDays ? `${durationDays} 天 (Days)` : 'TBC'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Order Date:</span> <span className="font-bold">{orderDate || 'TBC'}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
-                                <p><span className="text-slate-500 w-24 inline-block font-bold">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
+                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Shipping:</span> <span className="font-bold">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></p>
+                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Voyage (預計航程):</span> <span className="font-bold">{durationDays ? `${durationDays} 天 (Days)` : 'TBC'}</span></p>
+                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Order Date:</span> <span className="font-bold">{orderDate || 'TBC'}</span></p>
+                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
+                                <p className="flex"><span className="text-slate-500 w-[115px] shrink-0 inline-block font-bold whitespace-nowrap">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
                             </div>
                             <p className="text-[8px] text-slate-400 mt-2">* Total time includes approx. 21 days for HK customs & licensing.</p>
                         </div>
