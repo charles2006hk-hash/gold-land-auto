@@ -29,6 +29,7 @@ const FEE_LABELS: any = {
     terminal: '碼頭費', emission: '環保檢驗', glass: '驗玻璃', booking: '拖車/訂艙', fuel: '油費', process: '報關/處理費', misc: '雜費'
 };
 const getFeeLabel = (key: string) => FEE_LABELS[key] || key.toUpperCase();
+const getRegionDuration = (reg: string) => reg === 'UK' ? '45' : (reg === 'JP' ? '7' : '');
 
 // --- 輔助函數 ---
 const calcFRT = (prp: number) => {
@@ -290,6 +291,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">Transport & Timeline (物流與時間)</h3>
                             <div className="space-y-1 text-xs">
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Shipping:</span> <span className="font-bold">{item.details?.transportType === 'SEA' ? '船運 (Sea Freight)' : '空運 (Air Freight)'}</span></p>
+                                {/* ★ 新增航程天數表達 */}
+                                <p><span className="text-slate-500 w-24 inline-block font-bold">Voyage (預計航程):</span> <span className="font-bold">{durationDays ? `${durationDays} 天 (Days)` : 'TBC'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Order Date:</span> <span className="font-bold">{orderDate || 'TBC'}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Est. Handover:</span> <span className="font-bold text-emerald-700">{estHKLicenseDate}</span></p>
                                 <p><span className="text-slate-500 w-24 inline-block font-bold">Total Time:</span> <span className="font-bold text-blue-700">{estTotalDays}</span></p>
@@ -417,11 +420,13 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
     };
 
-    useEffect(() => {
+   useEffect(() => {
         if (!editingId) {
             setOriginFees(REGION_CONFIGS[region].origin);
             setHkMiscFees(REGION_CONFIGS[region].hk_misc);
             setHkLicenseFees(REGION_CONFIGS[region].hk_license);
+            // ★ 當切換地區時，自動帶入該地區的預設運輸天數
+            setTransport(prev => ({ ...prev, duration: getRegionDuration(region) }));
             fetchLiveRate(region);
         }
     }, [region, editingId]);
@@ -687,7 +692,9 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         setEditingId(null); setRegion('JP'); setCarPrice(''); setPrpPrice(''); setOrderRate('');
         setQuoteDate(new Date().toISOString().split('T')[0]);
         setCarInfo({ make: '', model: '', year: '', code: '', exteriorColor: '', interiorColor: '', transmission: 'AT', cc: '', seats: '', mileage: '', chassis: '' });
-        setOrderPhotos([]); setTransport({ type: 'SEA', orderDate: '', departureDate: '', duration: '' });
+        setOrderPhotos([]); 
+        // ★ 預設為 JP 的天數
+        setTransport({ type: 'SEA', orderDate: '', departureDate: '', duration: getRegionDuration('JP') });
         setOriginFees(REGION_CONFIGS['JP'].origin); setHkMiscFees(REGION_CONFIGS['JP'].hk_misc); setHkLicenseFees(REGION_CONFIGS['JP'].hk_license);
         setMargin('30000'); setOrderStatus('QUOTING'); setView('calc');
     };
