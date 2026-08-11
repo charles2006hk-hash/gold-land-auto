@@ -184,12 +184,12 @@ const QuotationPreview = ({ item, onClose }: any) => {
     const row3Amount = licenseFee + insuranceFee + 1000;
     const row1Amount = (item.results?.finalPrice || 0) - row3Amount;
 
-    // 👇---------- 新增這段智能檔名邏輯 ----------👇
+    // ★ 智能檔名設定：年份 + 型號 + 地區
     const yearStr = item.details?.year || item.carInfo?.year || '';
-    const makeStr = item.details?.make || item.details?.manufacturer || item.carInfo?.make || '';
     const modelStr = item.details?.model || item.carInfo?.model || '';
-    const safeFileName = `Quotation_${yearStr} ${makeStr} ${modelStr}`.replace(/\s+/g, ' ').trim() || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
-    // 👆--------------------------------------👆
+    const regionStr = item.region || '';
+    // 組合並清理多餘空白，確保檔名合法
+    const safeFileName = `Quotation_${yearStr}_${modelStr}_${regionStr}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
@@ -197,9 +197,17 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 <div className="bg-slate-900 text-white p-4 flex justify-between items-center print:hidden">
                     <div className="flex items-center gap-2"><Printer size={20}/><span className="font-bold">報價單預覽 (PDF Preview)</span></div>
                     <div className="flex gap-2">
-                        {/* ★ 核心修改：替換為獨立的 Blob 智慧列印引擎，並自動帶入動態檔名 */}
                         <button 
-                            onClick={() => triggerDocumentPrint('print-area', safeFileName)} 
+                            onClick={() => {
+                                // ★ 終極防呆：在呼叫列印前瞬間強制修改網頁標題，讓瀏覽器抓到正確檔名
+                                const originalTitle = document.title;
+                                document.title = safeFileName;
+                                
+                                triggerDocumentPrint('print-area', safeFileName);
+                                
+                                // 預留幾秒鐘讓系統對話框彈出後，再無縫恢復原本的網站標題
+                                setTimeout(() => { document.title = originalTitle; }, 3000);
+                            }} 
                             className="bg-blue-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
                         >
                             正式列印 / 輸出 PDF
@@ -252,7 +260,7 @@ const QuotationPreview = ({ item, onClose }: any) => {
                             <tr><th className="p-3 text-left uppercase tracking-widest text-[10px]">Description</th><th className="p-3 text-right uppercase tracking-widest text-[10px]">Amount</th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            <tr><td className="p-3 font-bold">車價（包到港，連船運及雜費）</td><td className="p-3 text-right font-mono">{fmt(row1Amount)}</td></tr>
+                            <tr><td className="p-3 font-bold">車價（包到港、連船運及雜費、連香港車輛入口稅）</td><td className="p-3 text-right font-mono">{fmt(row1Amount)}</td></tr>
                             <tr><td className="p-3">車輛牌費、保險（預計）、文件費用</td><td className="p-3 text-right font-mono">{fmt(row3Amount)}</td></tr>
                             <tr className="bg-slate-50 border-t-2 border-slate-800"><td className="p-4 font-black text-lg">Final Quotation (總報價)</td><td className="p-4 text-right font-black text-2xl text-blue-700">{fmt(item.results?.finalPrice)}</td></tr>
                         </tbody>
