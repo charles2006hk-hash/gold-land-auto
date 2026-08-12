@@ -480,10 +480,41 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             const matchCar = inventory.find((v:any) => v.make === classifyForm.make && v.model === classifyForm.model && v.year == classifyForm.year && v.colorExt === classifyForm.color);
             if (matchCar) finalRelatedId = matchCar.id;
         }
-        selectedInboxIds.forEach(id => {
-            const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', id);
-            batch.update(ref, { status: 'linked', relatedVehicleId: finalRelatedId || null, tags: [classifyForm.make, classifyForm.model, classifyForm.year, classifyForm.color, classifyForm.type], aiData: { ...classifyForm } });
+
+        // 準備歸檔的圖片項目
+        const itemsToClassify = mediaItems.filter(i => selectedInboxIds.includes(i.id));
+
+        itemsToClassify.forEach(item => {
+            const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
+            // 歸類時，如果是手動選擇的標籤，嘗試更新為對應的類型 (文件 or 車輛)
+            const finalMediaType = classifyForm.type.includes('文件') ? 'document' : 'vehicle';
+            batch.update(ref, { 
+                status: 'linked', 
+                relatedVehicleId: finalRelatedId || null, 
+                mediaType: finalMediaType,
+                tags: [classifyForm.make, classifyForm.model, classifyForm.year, classifyForm.color, classifyForm.type], 
+                aiData: { ...classifyForm } 
+            });
         });
+
+        // ★ 自動同步非文件的圖片到車輛卡片 (供推介單使用)
+        if (finalRelatedId) {
+            const existingCar = inventory.find((v:any) => v.id === finalRelatedId);
+            if (existingCar) {
+                // 找出該車現有 + 新歸檔中「非文件」的所有圖片 URL
+                const existingPhotos = existingCar.photos || [];
+                const newVehiclePhotos = itemsToClassify
+                    .filter(i => (!classifyForm.type.includes('文件') && i.mediaType !== 'document'))
+                    .map(i => i.url);
+                
+                // 去除重複 URL
+                const mergedPhotos = Array.from(new Set([...existingPhotos, ...newVehiclePhotos]));
+                
+                const invRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', finalRelatedId);
+                batch.update(invRef, { photos: mergedPhotos });
+            }
+        }
+
         await batch.commit();
         setSelectedInboxIds([]); setTargetVehicleId('');
     };
@@ -626,7 +657,61 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                             <div className="p-4 bg-slate-50/50 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
                                                 <div className="w-full max-w-4xl mb-3 flex justify-between items-center px-1"><span className="text-sm font-bold text-slate-700 bg-white px-4 py-1.5 rounded-full shadow-sm border border-slate-200 flex items-center"><Car size={14} className="mr-2 text-blue-500"/>{group.title.split(' (')[0] || '未分類車輛'}</span><span className="text-[10px] text-slate-400 hidden md:block">點擊圖片可全螢幕預覽</span></div>
                                                 <div className="w-full max-w-4xl aspect-[4/3] bg-slate-900 rounded-xl relative overflow-hidden shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] cursor-zoom-in group mb-4" onClick={() => setPreviewImage(activeItem.url)}><img src={activeItem.url} className="absolute inset-0 w-full h-full object-cover blur-xl opacity-40 scale-125 transition-transform duration-700" /><img src={activeItem.url} className="relative z-10 w-full h-full object-contain drop-shadow-2xl transition-transform duration-500 group-hover:scale-105" /><div className="absolute bottom-3 right-3 z-20 bg-black/60 text-white text-[10px] px-3 py-1.5 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">點擊全螢幕放大</div></div>
-                                                <div className="w-full max-w-4xl bg-white p-3 rounded-xl border border-slate-200 shadow-sm"><div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-300">{group.items.map(img => (<div key={img.id} onClick={() => setActiveGroupImages(prev => ({...prev, [group.key]: img.url}))} className={`relative w-24 aspect-[4/3] flex-shrink-0 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 ${activeItem.id === img.id ? 'ring-4 ring-blue-500 ring-offset-1 border-transparent scale-95' : 'border-2 border-transparent hover:border-slate-300 opacity-70 hover:opacity-100'}`}><img src={img.url} className="w-full h-full object-cover" />{img.isPrimary && (<div className="absolute top-1 left-1 bg-yellow-500/90 rounded-full p-1 backdrop-blur-sm shadow-sm"><Star size={10} className="text-white fill-white"/></div>)}</div>))}</div></div>
+                                                {/* ★ 升級：支援拖曳排序，並同步更新至庫存 (過濾文件) */}
+                                                <div className="w-full max-w-4xl bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                                    <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-300">
+                                                        {group.items.map((img, index) => (
+                                                            <div 
+                                                                key={img.id} 
+                                                                draggable
+                                                                onDragStart={(e) => e.dataTransfer.setData('text/plain', index.toString())}
+                                                                onDragOver={(e) => e.preventDefault()}
+                                                                onDrop={async (e) => {
+                                                                    e.preventDefault();
+                                                                    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                                                                    if (isNaN(sourceIndex) || sourceIndex === index) return;
+                                                                    
+                                                                    // 1. 本地更新順序
+                                                                    const newItems = [...group.items];
+                                                                    const [movedItem] = newItems.splice(sourceIndex, 1);
+                                                                    newItems.splice(index, 0, movedItem);
+                                                                    
+                                                                    // 2. 過濾文件：提取所有「非文件 (vehicle)」的圖片 URL 準備寫入 inventory
+                                                                    const vehiclePhotosToSync = newItems
+                                                                        .filter(i => i.mediaType !== 'document')
+                                                                        .map(i => i.url);
+
+                                                                    // 3. 同步至 Firebase (更新 Media Library 的 Timestamp 確保排序 & 同步 Inventory)
+                                                                    if (db) {
+                                                                        const batch = writeBatch(db);
+                                                                        // 更新圖庫本身的時間戳順序 (微調毫秒)
+                                                                        const baseTime = Date.now();
+                                                                        newItems.forEach((item, idx) => {
+                                                                            const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
+                                                                            batch.update(ref, { createdAt: { seconds: Math.floor((baseTime - idx * 1000) / 1000), nanoseconds: 0 } });
+                                                                        });
+                                                                        
+                                                                        // 更新關聯的車輛庫存 (只存入非文件照片，供對客推介單使用)
+                                                                        const targetVehicleId = img.relatedVehicleId || (img as any).vehicleId;
+                                                                        if (targetVehicleId && inventory.some((v:any) => v.id === targetVehicleId)) {
+                                                                            const invRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetVehicleId);
+                                                                            batch.update(invRef, { photos: vehiclePhotosToSync });
+                                                                        }
+                                                                        
+                                                                        await batch.commit();
+                                                                    }
+                                                                }}
+                                                                onClick={() => setActiveGroupImages(prev => ({...prev, [group.key]: img.url}))} 
+                                                                className={`relative w-24 aspect-[4/3] flex-shrink-0 rounded-lg overflow-hidden cursor-move transition-all duration-200 ${activeItem.id === img.id ? 'ring-4 ring-blue-500 ring-offset-1 border-transparent scale-95' : 'border-2 border-transparent hover:border-slate-300 opacity-70 hover:opacity-100'}`}
+                                                            >
+                                                                <img src={img.url} draggable={false} className="w-full h-full object-cover pointer-events-none" />
+                                                                {img.isPrimary && (<div className="absolute top-1 left-1 bg-yellow-500/90 rounded-full p-1 backdrop-blur-sm shadow-sm"><Star size={10} className="text-white fill-white"/></div>)}
+                                                                {/* ★ 新增：標示文件類型，提醒業務這張圖不會出現在推介單 */}
+                                                                {img.mediaType === 'document' && <div className="absolute bottom-1 right-1 bg-indigo-600/90 text-white text-[8px] px-1.5 py-0.5 rounded backdrop-blur-sm">文件</div>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
