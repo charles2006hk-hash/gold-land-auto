@@ -3409,8 +3409,8 @@ const DatabaseSelector = ({
       {/* ========================================================= */}
       {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
       {/* ========================================================= */}
-      {staffId && (
-          <div className="fixed bottom-6 right-4 md:right-6 z-[9000] flex flex-col items-end gap-3">
+      {staffId && !editingVehicle && activeTab !== 'inventory_add' && !isPreviewMode && (
+          <div className="fixed bottom-6 right-4 md:right-6 z-[45] flex flex-col items-end gap-3 print:hidden">
               
               {/* 彈出的選項清單 (點擊主按鈕後向上展開) */}
               <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
