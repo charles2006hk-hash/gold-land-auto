@@ -803,17 +803,21 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
             const list: any[] = [];
             snap.forEach(d => list.push(d.data()));
             
-            // ★ 核心修復 1：過濾掉被標記為「文件 (document)」的圖片
-            const vehiclePhotos = list.filter(item => item.mediaType !== 'document');
+            // ★ 核心防線 1：雙重過濾！只要 mediaType 是文件，或者標籤(tags)包含文件，一律剔除
+            const vehiclePhotos = list.filter(item => {
+                const isDocType = item.mediaType === 'document';
+                const hasDocTag = Array.isArray(item.tags) && item.tags.includes('文件');
+                return !isDocType && !hasDocTag;
+            });
 
-            // ★ 核心修復 2：依照您在圖庫拖曳的時間戳排序 (時間越新越前面)
+            // ★ 核心防線 2：依照智能圖庫拖曳後的時間戳 (createdAt) 進行排序
             vehiclePhotos.sort((a, b) => {
                 const timeA = a.createdAt?.seconds || 0;
                 const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA;
+                return timeB - timeA; // 越新的排越前面 (對應拖曳排序邏輯)
             });
 
-            // ★ 核心修復 3：最後確保「首圖 (isPrimary)」永遠被推到第一位
+            // ★ 核心防線 3：確保有星星標記 (isPrimary) 的封面圖絕對置頂
             vehiclePhotos.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
             
             setPhotos(vehiclePhotos.map(i => i.url).slice(0, 6)); 
