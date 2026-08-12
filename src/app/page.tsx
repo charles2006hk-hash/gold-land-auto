@@ -802,8 +802,21 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         const unsub = onSnapshot(q, (snap) => {
             const list: any[] = [];
             snap.forEach(d => list.push(d.data()));
-            list.sort((a,b) => (b.isPrimary?1:0) - (a.isPrimary?1:0));
-            setPhotos(list.map(i => i.url).slice(0, 6)); 
+            
+            // ★ 核心修復 1：過濾掉被標記為「文件 (document)」的圖片
+            const vehiclePhotos = list.filter(item => item.mediaType !== 'document');
+
+            // ★ 核心修復 2：依照您在圖庫拖曳的時間戳排序 (時間越新越前面)
+            vehiclePhotos.sort((a, b) => {
+                const timeA = a.createdAt?.seconds || 0;
+                const timeB = b.createdAt?.seconds || 0;
+                return timeB - timeA;
+            });
+
+            // ★ 核心修復 3：最後確保「首圖 (isPrimary)」永遠被推到第一位
+            vehiclePhotos.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
+            
+            setPhotos(vehiclePhotos.map(i => i.url).slice(0, 6)); 
             setLoading(false);
         });
         return () => unsub();
