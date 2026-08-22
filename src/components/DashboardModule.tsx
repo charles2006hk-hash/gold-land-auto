@@ -3,18 +3,12 @@
 import React, { useState } from 'react';
 import { 
   Layout, FileCheck, Plus, Search, X, ChevronDown, 
-  Globe, Database, RefreshCw, CheckCircle, Car, Check, Building2, 
-  Calendar, Share2, Trash2 
+  CheckCircle, Car, Share2
 } from 'lucide-react';
 import { 
   Vehicle, DatabaseEntry, SystemSettings, Payment, CrossBorderTask 
 } from '@/types';
-import { 
-  PORTS_HK_GD, PORTS_MO_GD 
-} from '@/config/constants';
-import { 
-  Firestore, doc, updateDoc 
-} from 'firebase/firestore';
+import { Firestore } from 'firebase/firestore';
 
 import SmartNewsTicker from '@/components/SmartNewsTicker';
 import SmartNotificationCenter from '@/components/SmartNotificationCenter';
@@ -297,7 +291,6 @@ export default function DashboardModule({
     if (car.status === 'Reserved') { statusText = '已訂'; dotColor = "bg-yellow-500"; }
     else if (car.status === 'Sold') { statusText = '已售'; dotColor = "bg-blue-600"; }
 
-    const isLicenseExpired = car.licenseExpiry && new Date(car.licenseExpiry) < new Date();
     const cbTags: { label: string; color: string }[] = [];
     const ports = car.crossBorder?.ports || [];
     if (car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate) {
@@ -420,6 +413,7 @@ export default function DashboardModule({
         </div>
       </div>
     );
+  };
 
   // ============================================================================
   // 4. 主渲染 (Render Module Layout)
@@ -650,7 +644,7 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* 左右雙軌看板（內部獨立滾動，WhatsApp 毛玻璃吸頂特效） */}
+      {/* ★ WhatsApp 毛玻璃吸頂 + 內部獨立滾動看板區 */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0 overflow-hidden mt-1 pb-1">
         
         {/* ==================== 在庫待售看板 ==================== */}
@@ -695,7 +689,7 @@ export default function DashboardModule({
               </div>
             </div>
 
-            {/* 列表內容 */}
+            {/* 列表內容 (加入 pb-24 防止被 iPhone 底部擋住) */}
             <div className="p-2.5 space-y-2.5">
               {filteredInStockCars.map(car => renderDashboardCard(car))}
               {filteredInStockCars.length === 0 && (
