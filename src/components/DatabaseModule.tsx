@@ -1,4 +1,7 @@
 // src/components/DatabaseModule.tsx
+'use client'; // ★ 必須加上這行，解決編譯報錯！
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
     Database, Plus, Search, Trash2, Edit, Save, 
