@@ -18,6 +18,8 @@ import { compressImage } from '@/utils/imageHelpers'; // 確保您有這個工�
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
+const [fullScreenImg, setFullScreenImg] = useState<string | null>(null);
+
 // 計算日期剩餘天數
 const getDaysRemaining = (targetDate?: string) => {
     if (!targetDate) return null;
@@ -899,14 +901,16 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (<button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}>{cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}</button>))}</div>
                     </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {filteredEntries.map(entry => {
+                <div className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-thin">
+                    {/* ★ 效能優化：限制最多只渲染前 100 筆資料，避免 DOM 過多導致手機卡頓 */}
+                    {filteredEntries.slice(0, 100).map(entry => {
                         const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
                         const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
                         const isAssignedToOther = entry.managedBy && entry.managedBy !== staffId;
 
                         return (
-                        <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} className={`p-3 rounded-lg border cursor-pointer transition-all ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-sm ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+                        <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} className={`p-3 rounded-xl border cursor-pointer transition-all duration-200 active:scale-[0.98] ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-md ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}>
+                            {/* ... 原有卡片內容保持不變 ... */}
                             <div className="flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
@@ -925,6 +929,11 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         </div>
                        );
                   })}
+                    {filteredEntries.length > 100 && (
+                        <div className="p-4 text-center text-xs text-slate-400 font-bold bg-slate-100 rounded-xl border border-slate-200 border-dashed">
+                            僅顯示最新 100 筆資料，請使用上方搜尋框尋找特定客戶。
+                        </div>
+                    )}
                     {filteredEntries.length === 0 && <div className="p-8 text-center text-slate-400 text-sm">沒有找到相關資料</div>}
                 </div>
             </div>
@@ -998,7 +1007,18 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* 第一欄：文字輸入區 */}
                                 <div className="space-y-4">
-                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">名稱 / 標題 (Name)</label><input disabled={!isDbEditing} value={editingEntry.name} onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} className="w-full p-2 border rounded text-lg font-bold" placeholder="姓名 / 公司名" required /></div>
+                                    {/* ★ 現代化輸入框樣式 */}
+                                    <div className="relative bg-slate-50/80 border border-slate-200 rounded-xl px-3 pt-5 pb-2 focus-within:bg-blue-50/50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all">
+                                        <label className="absolute left-3 top-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">名稱 / 標題 (Name)</label>
+                                        <input 
+                                            disabled={!isDbEditing} 
+                                            value={editingEntry.name} 
+                                            onChange={e => setEditingEntry({...editingEntry, name: e.target.value})} 
+                                            className="w-full bg-transparent text-lg font-black text-slate-800 outline-none placeholder:text-slate-300 disabled:text-slate-600" 
+                                            placeholder="請輸入姓名 / 公司名" 
+                                            required 
+                                        />
+                                    </div>
                                     {editingEntry.category === 'Person' && (
                                         <>
                                             <div><label className="block text-xs font-bold text-slate-500 mb-1">人員角色</label><div className="flex flex-wrap gap-2">{(settings.dbRoles || ['客戶', '司機']).map(role => (<button key={role} type="button" disabled={!isDbEditing} onClick={() => toggleRole(role)} className={`px-2 py-1 text-xs rounded border ${editingEntry.roles?.includes(role) ? 'bg-green-100 text-green-800 border-green-300 font-bold' : 'bg-white text-gray-500'}`}>{role}</button>))}</div></div>
@@ -1383,7 +1403,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                             <div key={idx} className={`relative group border rounded-xl overflow-hidden bg-white shadow-md flex flex-col transition-all ${selectedForPrint.includes(idx) ? 'ring-2 ring-purple-500' : ''}`}>
                                                 
                                                 <div className="w-full bg-slate-50 relative p-1">
-                                                    <img src={file.data} className="w-full h-auto object-contain" style={{ maxHeight: 'none' }} />
+                                                    <img 
+                                                        src={file.data} 
+                                                        className="w-full h-auto object-contain cursor-zoom-in" 
+                                                        style={{ maxHeight: 'none' }} 
+                                                        onClick={() => setFullScreenImg(file.data)}
+                                                    />
                                                     <div className="absolute top-2 right-2 flex gap-2">
                                                         {isDbEditing && (
                                                             <>
@@ -1535,6 +1560,23 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                             {availableDocs.length === 0 && <div className="col-span-full py-10 text-center text-slate-400">智能圖庫的 Inbox 中目前沒有文件。</div>}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* ★ 資料庫專用：全螢幕附件預覽 */}
+            {fullScreenImg && (
+                <div 
+                    className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-xl flex items-center justify-center p-2 md:p-8 animate-fade-in touch-none" 
+                    onClick={() => setFullScreenImg(null)}
+                >
+                    <button className="absolute top-6 right-6 text-white/50 hover:text-white bg-black/50 p-2 rounded-full transition-all z-10">
+                        <X size={24}/>
+                    </button>
+                    <img 
+                        src={fullScreenImg} 
+                        className="max-w-full max-h-[95vh] md:max-h-[85vh] object-contain rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)] scale-100 animate-in zoom-in-95 duration-200"
+                        onClick={e => e.stopPropagation()} 
+                    />
                 </div>
             )}
         </div>
