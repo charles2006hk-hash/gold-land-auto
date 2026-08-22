@@ -882,7 +882,7 @@ export default function CrossBorderView({
 
                                         const invoiceData = {
                                             id: null,
-                                            type: 'invoice',
+                                            type: 'service_invoice', // ★ 修正：預設帶入「服務發票」
                                             vehicleId: activeCar.id,
                                             formData: {
                                                 companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
