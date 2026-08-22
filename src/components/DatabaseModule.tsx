@@ -21,8 +21,6 @@ import { compressImage } from '@/utils/imageHelpers'; // 確保您有這個工�
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
-const [fullScreenImg, setFullScreenImg] = useState<string | null>(null);
-
 // 計算日期剩餘天數
 const getDaysRemaining = (targetDate?: string) => {
     if (!targetDate) return null;
@@ -222,6 +220,7 @@ export interface DatabaseModuleProps {
 }
 
 export default function DatabaseModule({ db, staffId, appId, settings, editingEntry, setEditingEntry, isDbEditing, setIsDbEditing, inventory, currentUser, systemUsers }: DatabaseModuleProps) {
+    const [fullScreenImg, setFullScreenImg] = useState<string | null>(null);
     const [entries, setEntries] = useState<DatabaseEntry[]>([]);
     const [selectedCatFilter, setSelectedCatFilter] = useState<string>('All');
     const [searchTerm, setSearchTerm] = useState('');
