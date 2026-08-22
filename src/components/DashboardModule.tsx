@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { 
   Layout, FileCheck, Plus, Search, X, ChevronDown, 
-  CheckCircle, Car, Share2
+  CheckCircle, Car, Share2, Check, Calendar, Building2
 } from 'lucide-react';
 import { 
   Vehicle, DatabaseEntry, SystemSettings, Payment, CrossBorderTask 
