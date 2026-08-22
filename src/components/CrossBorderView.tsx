@@ -378,7 +378,8 @@ export default function CrossBorderView({
             <div className="flex flex-1 gap-4 overflow-hidden min-h-0 relative">
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden ${isMobileDetail ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-3 border-b bg-slate-50"><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌..." className="w-full px-2 py-1.5 text-xs border rounded"/></div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    {/* ★ 修復：加入底部留白 (手機 pb-24, 電腦 md:pb-20) 避開藍色按鈕 */}
+                    <div className="flex-1 overflow-y-auto p-2 pb-24 md:pb-20 space-y-2 scrollbar-thin">
                         {filteredVehicles.map((car:any) => {
                             let expiredCount = 0;
                             Object.keys(dateFields).forEach(k => { 
@@ -603,7 +604,8 @@ export default function CrossBorderView({
                                 );
                             })()}
 
-                            <div className="flex-1 overflow-y-auto p-4 bg-white">
+                            {/* ★ 修復：加入底部留白 (手機 pb-24, 電腦 md:pb-20) 避開藍色按鈕 */}
+                            <div className="flex-1 overflow-y-auto p-4 pb-24 md:pb-20 bg-white scrollbar-thin">
                                 <div className="flex justify-between items-end mb-2">
                                     <h4 className="font-bold text-slate-700 text-sm">收費項目 ({activeCar.crossBorder?.tasks?.length || 0})</h4>
                                     <div className="flex gap-2">
