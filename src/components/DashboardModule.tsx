@@ -8,7 +8,7 @@ import {
 import { 
   Vehicle, DatabaseEntry, SystemSettings, Payment, CrossBorderTask 
 } from '@/types';
-import { Firestore } from 'firebase/firestore';
+import { Firestore, doc, updateDoc } from 'firebase/firestore';
 
 import SmartNewsTicker from '@/components/SmartNewsTicker';
 import SmartNotificationCenter from '@/components/SmartNotificationCenter';
