@@ -3409,10 +3409,7 @@ const DatabaseSelector = ({
      {/* ========================================================= */}
       {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
       {/* ========================================================= */}
-      {/* 1. 條件中加上 activeTab !== 'cross_border'，讓它在中港頁面徹底消失不阻礙操作 */}
       {staffId && !editingVehicle && activeTab !== 'inventory_add' && !isPreviewMode && activeTab !== 'cross_border' && (
-          
-          {/* 2. 加上 pointer-events-none 讓滑鼠可以穿透隱形容器！ */}
           <div className="fixed bottom-6 right-4 md:right-6 z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
               
               <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
@@ -3420,24 +3417,22 @@ const DatabaseSelector = ({
                   {/* 選項 2: T牌打卡 */}
                   <div className="flex items-center gap-3 group">
                       <span className="bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold">試車牌 (T牌) 打卡</span>
-                      {/* 3. 確保按鈕本身可以被點擊 (pointer-events-auto) */}
                       <button 
                           onClick={() => { setIsTPlateModalOpen(true); setIsFabMenuOpen(false); }}
                           className="pointer-events-auto w-12 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
                       >
-                          <Car size={20} />
+                          <Car size="{20}"/>
                       </button>
                   </div>
 
                   {/* 選項 1: 團隊協作中心 */}
                   <div className="flex items-center gap-3 group">
                       <span className="bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold">團隊協作 / 對話</span>
-                      {/* 3. 確保按鈕本身可以被點擊 (pointer-events-auto) */}
                       <button 
                           onClick={() => { setIsTeamHubOpen(true); setIsFabMenuOpen(false); }}
                           className="pointer-events-auto w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
                       >
-                          <MessageCircle size={20} />
+                          <MessageCircle size="{20}"/>
                       </button>
                   </div>
               </div>
@@ -3445,13 +3440,12 @@ const DatabaseSelector = ({
               {/* 主按鈕 */}
               <button 
                   onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
-                  // 3. 確保主按鈕可以被點擊 (pointer-events-auto)
                   className={`pointer-events-auto relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 ${isFabMenuOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-110'}`}
                   title="系統功能表"
               >
-                  {isFabMenuOpen ? <Plus size={28} className="text-white" /> : (
+                  {isFabMenuOpen ? <Plus className="text-white" size="{28}"/> : (
                       <>
-                          <Menu size={24} className="text-white" />
+                          <Menu className="text-white" size="{24}"/>
                           <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
                       </>
                   )}
