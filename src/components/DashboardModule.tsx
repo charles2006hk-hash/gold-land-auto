@@ -318,9 +318,11 @@ export default function DashboardModule({
       <div 
         key={car.id} 
         onClick={() => setEditingVehicle(car)} 
-        className="flex w-full box-border overflow-hidden bg-white/60 backdrop-blur-md p-2.5 md:p-3 rounded-2xl border border-white/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:bg-white/90 hover:shadow-[0_8px_24px_rgba(59,130,246,0.08)] hover:border-blue-300/50 cursor-pointer transition-all duration-300 group relative active:scale-[0.98]"
+        // ★ 核心修復 1：強制定高 (手機 110px, 電腦 124px) + items-center 垂直置中
+        className="flex items-center w-full box-border overflow-hidden bg-white/60 backdrop-blur-md p-2.5 md:p-3 rounded-2xl border border-white/80 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:bg-white/90 hover:shadow-[0_8px_24px_rgba(59,130,246,0.08)] hover:border-blue-300/50 cursor-pointer transition-all duration-300 group relative active:scale-[0.98] h-[110px] md:h-[124px]"
       >
-        <div className="w-28 md:w-32 aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-100 border border-slate-200/50 shadow-inner">
+        {/* ★ 核心修復 2：左側圖片高度 100%，寬度依比例自適應 */}
+        <div className="h-full aspect-[4/3] rounded-lg overflow-hidden relative flex-shrink-0 bg-slate-100 border border-slate-200/50 shadow-inner flex items-center justify-center">
           {thumbUrl ? (
             <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Car" loading="lazy" />
           ) : (
@@ -335,20 +337,23 @@ export default function DashboardModule({
           </div>
         </div>
 
-        <div className="ml-2.5 flex-1 min-w-0 flex flex-col justify-between py-0.5 relative">
+        {/* ★ 核心修復 3：右側資訊區加上 h-full 撐滿 */}
+        <div className="ml-2.5 flex-1 min-w-0 flex flex-col h-full justify-between py-0.5 relative">
           <button 
             onClick={(e) => { e.stopPropagation(); setShareCleanMode(false); setShareVehicle(car); }} 
-            className="absolute -top-1 -right-1 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10"
+            className="absolute -top-1 -right-1 p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all z-10 bg-white/50"
             title="產生對客推介單"
           >
             <Share2 size={14}/>
           </button>
 
-          <div className="w-full pr-6">
-            <div className="font-bold text-[13px] md:text-sm text-slate-800 leading-tight truncate w-full mb-1">
+          <div className="w-full pr-6 flex flex-col gap-1">
+            <div className="font-bold text-[13px] md:text-sm text-slate-800 leading-tight truncate w-full">
               {car.year} {car.make} {car.model}
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 w-full mb-1.5">
+            
+            {/* ★ 核心修復 4：車牌/中港牌/標籤 改為橫向滑動 (flex-nowrap overflow-x-auto scrollbar-hide) */}
+            <div className="flex items-center gap-1.5 w-full overflow-x-auto scrollbar-hide flex-nowrap">
               <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[9px] px-1.5 py-0.5 rounded-[2px] shadow-sm leading-none flex-shrink-0">
                 {car.regMark || '未出牌'}
               </span>
@@ -363,90 +368,65 @@ export default function DashboardModule({
             </div>
 
             {specs.length > 0 && (
-              <div className="text-[9px] text-slate-500 font-medium leading-none truncate w-full mb-1.5">
+              <div className="text-[9px] text-slate-500 font-medium leading-none truncate w-full">
                 {specs.join(' • ')}
-              </div>
-            )}
-
-            {car.licenseExpiry && (
-              <div className="flex w-full">
-                <span className={`text-[8px] px-1.5 py-[2px] rounded-[3px] shadow-sm font-mono flex items-center border leading-none ${isLicenseExpired ? 'text-red-600 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}>
-                  <Calendar size={8} className="mr-0.5 opacity-70"/>牌費: {car.licenseExpiry}
-                </span>
               </div>
             )}
           </div>
 
-          <div className="flex flex-wrap justify-between items-end mt-1.5 pt-1.5 border-t border-slate-50 w-full gap-x-1 gap-y-1.5">
-            <div className="font-black text-[15px] md:text-base text-slate-800 tracking-tight whitespace-nowrap leading-none mb-0.5">
+          {/* ★ 核心修復 5：底部價格與所有警示標籤 整合為單行橫向滑動 */}
+          <div className="flex justify-between items-end w-full gap-2 border-t border-slate-50 pt-1.5 mt-auto">
+            <div className="font-black text-[15px] md:text-base text-slate-800 tracking-tight whitespace-nowrap leading-none pb-0.5 shrink-0">
               {formatCurrency(car.price)}
             </div>
             
-            <div className="flex flex-col gap-1 items-end min-w-0 ml-auto">
-              {(logisticsBadge || received > 0) && (
-                <div className="flex flex-wrap justify-end items-center gap-1">
-                  {received > 0 && balance > 0 && (
-                    <span className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold whitespace-nowrap">
-                      有訂 / 部份已付
-                    </span>
-                  )}
-                  {logisticsBadge && (
-                    <span className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold ${logisticsBadge.color}`}>
-                      {logisticsBadge.text}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="flex flex-wrap justify-end items-center gap-1">
+            <div className="flex items-center justify-end min-w-0 overflow-x-auto scrollbar-hide flex-nowrap gap-1 pb-0.5 ml-auto">
                 {(() => {
+                  // 將所有警示標籤收攏成一個陣列，統一在一行內渲染
+                  const badges = [];
+                  if (received > 0 && balance > 0) badges.push(<span key="dep" className="text-[8px] text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] leading-none font-bold shrink-0 whitespace-nowrap">有訂 / 部份已付</span>);
+                  if (logisticsBadge) badges.push(<span key="log" className={`text-[9px] px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm border whitespace-nowrap font-bold shrink-0 ${logisticsBadge.color}`}>{logisticsBadge.text}</span>);
+                  
                   const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + ((e.isIncludedInPrice || e.paymentMethod === 'Included') ? 0 : (Number(e.amount) || 0)), 0);
                   const baseAcqCost = (car.costPrice || 0) - totalExpenses;
                   const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
                   const acqOffset = Number(car.acquisition?.offsetAmount || 0);
                   const acqBalance = baseAcqCost - acqPaid - acqOffset;
-                  if (acqBalance > 1) {
-                    return (
-                      <span className="text-[9px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
+                  
+                  if (acqBalance > 1) badges.push(
+                      <span key="acq" className="text-[9px] text-red-600 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold shrink-0">
                         欠車價 <span className="font-mono ml-1">{formatCurrency(acqBalance)}</span>
                       </span>
-                    );
-                  }
-                  return null;
+                  );
+                  if (totalUnpaidAmount > 0) badges.push(
+                      <span key="unpaid" className="text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold shrink-0">
+                        <span className="mr-1 opacity-80 text-[8px] font-sans">未付成本</span><span className="font-mono">{formatCurrency(totalUnpaidAmount)}</span>
+                      </span>
+                  );
+                  if (pendingCbTotal > 0) badges.push(
+                      <span key="cb" className="text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold shrink-0">
+                        <span className="mr-1 opacity-80 text-[8px] font-sans">中港待收</span><span className="font-mono">{formatCurrency(pendingCbTotal)}</span>
+                      </span>
+                  );
+                  if (balance > 0) badges.push(
+                      <span key="bal" className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold shrink-0">
+                        <span className="mr-1 opacity-80 text-[8px] font-sans">車款待收</span><span className="font-mono">{formatCurrency(balance)}</span>
+                      </span>
+                  );
+                  return badges;
                 })()}
-
-                {totalUnpaidAmount > 0 && (
-                  <span className="text-[10px] text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
-                    <span className="mr-1 opacity-80 text-[8px] font-sans">未付成本</span>
-                    <span className="font-mono">{formatCurrency(totalUnpaidAmount)}</span>
-                  </span>
-                )}
-                
-                {pendingCbTotal > 0 && (
-                  <span className="text-[10px] text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
-                    <span className="mr-1 opacity-80 text-[8px] font-sans">中港待收</span>
-                    <span className="font-mono">{formatCurrency(pendingCbTotal)}</span>
-                  </span>
-                )}
-                {balance > 0 && (
-                  <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-[2px] rounded-[3px] leading-none flex items-center shadow-sm whitespace-nowrap font-bold">
-                    <span className="mr-1 opacity-80 text-[8px] font-sans">車款待收</span>
-                    <span className="font-mono">{formatCurrency(balance)}</span>
-                  </span>
-                )}
-              </div>
             </div>
           </div>
         </div>
       </div>
     );
-  };
 
   // ============================================================================
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden space-y-3 animate-fade-in relative pb-10 scrollbar-thin">
+    // ★ 移除 overflow-y-auto 與 pb-10，將整個面板設定為隱藏溢出，讓內部雙軌獨立滾動
+    <div className="flex flex-col h-full overflow-hidden space-y-3 animate-fade-in relative pb-1 md:pb-0">
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -506,7 +486,7 @@ export default function DashboardModule({
             </div>
           </div>
 
-          {/* 2. 展開面板：啟用滾動區域 (Rolling List)，移除 .slice 限制 */}
+          {/* 2. 展開面板 */}
           {isAlertExpanded && (
             <div className="p-4 bg-slate-950/80 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
               
@@ -516,7 +496,6 @@ export default function DashboardModule({
                   <span>🔄 粵港車兜圈死線</span>
                   <span className="font-mono bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px]">{loopReminders.length} 台</span>
                 </div>
-                {/* 滾動容器 (Rolling Container) */}
                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
                   {loopReminders.map((car: any) => (
                     <div key={car.id} className="flex justify-between items-center text-xs p-2 rounded bg-white/5 hover:bg-white/10 transition-colors">
@@ -544,7 +523,7 @@ export default function DashboardModule({
                 </div>
               </div>
 
-              {/* --- 區塊 2: 中港業務到期 (包含過期與臨期，全量滾動展示) --- */}
+              {/* --- 區塊 2: 中港業務到期 --- */}
               <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
                 <div className="text-xs font-bold text-blue-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>🌐 中港業務到期</span>
@@ -553,7 +532,6 @@ export default function DashboardModule({
                     {cbSoonCount > 0 && <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">臨期 {cbSoonCount}</span>}
                   </div>
                 </div>
-                {/* 滾動容器 (Rolling Container) - 移除 .slice() 限制 */}
                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
                   {cbAlerts.map((item: any, idx: number) => (
                     <div 
@@ -578,7 +556,7 @@ export default function DashboardModule({
                 </div>
               </div>
 
-              {/* --- 區塊 3: 牌費 & 文件到期 (包含過期與臨期，全量滾動展示) --- */}
+              {/* --- 區塊 3: 牌費 & 文件到期 --- */}
               <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
                 <div className="text-xs font-bold text-emerald-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>📄 牌費 & 文件到期</span>
@@ -587,7 +565,6 @@ export default function DashboardModule({
                     {docSoonCount > 0 && <span className="bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">臨期 {docSoonCount}</span>}
                   </div>
                 </div>
-                {/* 滾動容器 (Rolling Container) - 移除 .slice() 限制 */}
                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
                   {docAlerts.map((item: any, idx: number) => (
                     <div 
@@ -620,7 +597,7 @@ export default function DashboardModule({
         </div>
       )}
 
-      {/* 4 格扁平 KPI Cards (減少 padding 改為 p-3) */}
+      {/* 4 格扁平 KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-none">
         <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
           <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
@@ -656,7 +633,7 @@ export default function DashboardModule({
       </div>
 
       {/* 手機專屬 Tab 切換按鈕 */}
-      <div className="md:hidden flex p-1.5 bg-slate-200/60 rounded-xl mx-1 mt-1 mb-2">
+      <div className="md:hidden flex p-1.5 bg-slate-200/60 rounded-xl mx-1 mt-1 mb-2 shrink-0">
         <button 
           onClick={() => setDashMobileTab('instock')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'instock' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
@@ -673,101 +650,111 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* 左右雙軌看板（整合式 Header，徹底移去獨立一行之全幅搜尋框） */}
-      <div className="flex flex-col md:flex-row gap-4 flex-1 min-h-[500px] lg:min-h-0 shrink-0 overflow-hidden">
+      {/* 左右雙軌看板（內部獨立滾動，WhatsApp 毛玻璃吸頂特效） */}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0 overflow-hidden mt-1 pb-1">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        <div className={`flex-1 flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-hidden min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex items-center justify-between p-3 border-b border-slate-200/60 bg-white/60 gap-2 flex-none">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center">
-                <Layout className="w-4 h-4 mr-1.5 text-green-600" /> 在庫待售
-              </h3>
-              <span className="bg-green-100 text-green-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
-                {filteredInStockCars.length}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-1 max-w-[180px] sm:max-w-[240px]">
-              <div className="relative w-full">
-                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="搜尋庫存車..." 
-                  value={dashSearchInStock}
-                  onChange={(e) => setDashSearchInStock(e.target.value)}
-                  className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all"
-                />
-                {dashSearchInStock && (
-                  <button onClick={() => setDashSearchInStock('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
+        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-hidden min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-y-auto scrollbar-thin relative pb-24 md:pb-6">
+            
+            {/* ★ 吸頂毛玻璃 Header */}
+            <div className="sticky top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center">
+                  <Layout className="w-4 h-4 mr-1.5 text-green-600" /> 在庫待售
+                </h3>
+                <span className="bg-green-100 text-green-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
+                  {filteredInStockCars.length}
+                </span>
               </div>
 
-              <button 
-                onClick={() => { setEditingVehicle({} as any); setActiveTab('inventory_add'); }}
-                className="bg-slate-900 hover:bg-slate-800 text-white p-1 rounded-lg shrink-0 transition-colors"
-                title="新增入庫"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+              <div className="flex items-center gap-1.5 flex-1 max-w-[180px] sm:max-w-[240px]">
+                <div className="relative w-full">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="搜尋庫存車..." 
+                    value={dashSearchInStock}
+                    onChange={(e) => setDashSearchInStock(e.target.value)}
+                    className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all"
+                  />
+                  {dashSearchInStock && (
+                    <button onClick={() => setDashSearchInStock('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
 
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 scrollbar-thin">
-            {filteredInStockCars.map(car => renderDashboardCard(car))}
-            {filteredInStockCars.length === 0 && (
-              <div className="text-center py-10 text-slate-400 text-xs">
-                {dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}
+                <button 
+                  onClick={() => { setEditingVehicle({} as any); setActiveTab('inventory_add'); }}
+                  className="bg-slate-900 hover:bg-slate-800 text-white p-1 rounded-lg shrink-0 transition-colors"
+                  title="新增入庫"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
               </div>
-            )}
+            </div>
+
+            {/* 列表內容 */}
+            <div className="p-2.5 space-y-2.5">
+              {filteredInStockCars.map(car => renderDashboardCard(car))}
+              {filteredInStockCars.length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-xs">
+                  {dashSearchInStock ? '找不到符合的車輛' : '目前無在庫車輛'}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* ==================== 已訂與待結清看板 ==================== */}
-        <div className={`flex-1 flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-hidden min-h-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex items-center justify-between p-3 border-b border-slate-200/60 bg-white/60 gap-2 flex-none">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center">
-                <FileCheck className="w-4 h-4 mr-1.5 text-amber-600" /> 已訂 / 待結清
-              </h3>
-              <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
-                {filteredActionCars.length}
-              </span>
-            </div>
+        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-hidden min-h-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-y-auto scrollbar-thin relative pb-24 md:pb-6">
+            
+            {/* ★ 吸頂毛玻璃 Header */}
+            <div className="sticky top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center">
+                  <FileCheck className="w-4 h-4 mr-1.5 text-amber-600" /> 已訂 / 待結清
+                </h3>
+                <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
+                  {filteredActionCars.length}
+                </span>
+              </div>
 
-            <div className="relative flex-1 max-w-[180px] sm:max-w-[240px]">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="搜尋交易車..." 
-                value={dashSearchAction}
-                onChange={(e) => setDashSearchAction(e.target.value)}
-                className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all"
-              />
-              {dashSearchAction && (
-                <button onClick={() => setDashSearchAction('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 scrollbar-thin">
-            {filteredActionCars.map(car => renderDashboardCard(car))}
-            {filteredActionCars.length === 0 && (
-              <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">
-                {dashSearchAction ? (
-                  <span className="mt-2">找不到符合的車輛</span>
-                ) : (
-                  <>
-                    <CheckCircle size={32} className="mb-2 text-green-400 opacity-50" />
-                    <span className="mt-2">所有交易皆已完美結清</span>
-                  </>
+              <div className="relative flex-1 max-w-[180px] sm:max-w-[240px]">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="搜尋交易車..." 
+                  value={dashSearchAction}
+                  onChange={(e) => setDashSearchAction(e.target.value)}
+                  className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all"
+                />
+                {dashSearchAction && (
+                  <button onClick={() => setDashSearchAction('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
+                    <X className="w-3 h-3" />
+                  </button>
                 )}
               </div>
-            )}
+            </div>
+
+            {/* 列表內容 */}
+            <div className="p-2.5 space-y-2.5">
+              {filteredActionCars.map(car => renderDashboardCard(car))}
+              {filteredActionCars.length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">
+                  {dashSearchAction ? (
+                    <span className="mt-2">找不到符合的車輛</span>
+                  ) : (
+                    <>
+                      <CheckCircle size={32} className="mb-2 text-green-400 opacity-50" />
+                      <span className="mt-2">所有交易皆已完美結清</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
