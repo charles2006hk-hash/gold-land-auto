@@ -92,6 +92,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
     });
 
+    // ★★★ 新增：合併單據專用 State ★★★
+    const [selectedForMerge, setSelectedForMerge] = useState<string[]>([]);
+    const [showMergeModal, setShowMergeModal] = useState(false);
+    const [mergeCustomerOptions, setMergeCustomerOptions] = useState<string[]>([]);
+    const [mergeCustomerName, setMergeCustomerName] = useState('');
+
     const fetchVehiclePhotos = async (carIdToFetch: string) => {
         if (!db || !appId || !carIdToFetch || carIdToFetch === 'BLANK') { setCarPhotos([]); return; }
         setIsFetchingPhotos(true);
@@ -198,6 +204,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             const secureDocs = list.filter((doc: any) => {
                 if (isAdmin) return true; 
                 if (doc.createdBy === staffId) return true;
+                
+                // ★ 升級：如果是合併單據 (擁有多台車輛的車牌)
+                if (doc.formData?.linkedRegMarks && Array.isArray(doc.formData.linkedRegMarks)) {
+                    // 嚴格規則：只要其中有一台車不是該員工負責，整張單據就隱藏！
+                    const hasPermissionForAll = doc.formData.linkedRegMarks.every((reg: string) => {
+                        const car = inventory.find((v: any) => v.regMark === reg);
+                        return car && car.managedBy === staffId;
+                    });
+                    return hasPermissionForAll;
+                }
+
+                // 一般單一車輛單據
                 const relatedCar = inventory.find((v: any) => v.regMark && v.regMark === doc.formData?.regMark);
                 if (relatedCar && relatedCar.managedBy === staffId) return true;
                 return false;
@@ -270,6 +288,75 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (!confirm("確定刪除此單據記錄？")) return;
         try { await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents', id)); } 
         catch (e) { console.error("刪除失敗", e); alert("刪除失敗"); }
+    };
+
+    // ★★★ 新增：處理點擊「合併」按鈕 ★★★
+    const handleInitMerge = () => {
+        const docsToMerge = savedDocs.filter(d => selectedForMerge.includes(d.id));
+        if (docsToMerge.length < 2) return showToast("請至少勾選兩張單據進行合併", "error");
+
+        const firstType = docsToMerge[0].type;
+        if (!docsToMerge.every(d => d.type === firstType)) {
+            return showToast("只能合併【相同單據類型】的記錄！", "error");
+        }
+
+        // 提取所有獨一無二的客戶名稱供下拉選擇
+        const customers = Array.from(new Set(docsToMerge.map(d => d.formData?.customerName).filter(Boolean))) as string[];
+        setMergeCustomerOptions(customers);
+        setMergeCustomerName(customers[0] || '');
+        setShowMergeModal(true);
+    };
+
+    // ★★★ 新增：確認執行合併，並載入到編輯區 ★★★
+    const executeMerge = () => {
+        const docsToMerge = savedDocs.filter(d => selectedForMerge.includes(d.id));
+        
+        let combinedDocItems: any[] = [];
+        let combinedDepositItems: any[] = [];
+        let regMarks: string[] = [];
+        
+        docsToMerge.forEach((doc, docIndex) => {
+            const vMark = doc.formData?.regMark || `車輛${docIndex+1}`;
+            regMarks.push(vMark);
+            
+            // 組合車價與項目
+            if (doc.formData?.price) {
+                combinedDocItems.push({ id: `merge_p_${doc.id}`, desc: `[${vMark}] 車價`, amount: Number(String(doc.formData.price).replace(/,/g, '')), isSelected: true });
+            }
+            if (doc.docItems) {
+                doc.docItems.forEach((i: any) => combinedDocItems.push({ ...i, id: `merge_i_${doc.id}_${i.id}`, desc: `[${vMark}] ${i.desc}` }));
+            }
+            // 組合已付訂金
+            if (doc.depositItems) {
+                doc.depositItems.forEach((d: any) => combinedDepositItems.push({ ...d, id: `merge_d_${doc.id}_${d.id}`, label: `[${vMark}] ${d.label}` }));
+            }
+        });
+
+        // 載入至編輯區，轉化為一張全新的未儲存草稿
+        setDocId(null); // 強制為新單據
+        setSelectedDocType(docsToMerge[0].type);
+        setSelectedCarId('BLANK'); // 合併單據不單獨綁定單一車庫車輛
+        setIsVehicleLocked(false);
+        
+        setFormData(prev => ({
+            ...prev,
+            customerName: mergeCustomerName,
+            regMark: regMarks.join(', '), // 將多台車牌合併顯示
+            linkedRegMarks: regMarks,     // ★ 權限引擎專用隱藏陣列
+            make: '合併單據 (Merged)',
+            model: 'Multiple Vehicles',
+            price: '0', // 價格已全數轉入 docItems
+            remarks: `合併單據包含以下記錄：\n${docsToMerge.map(d => d.id).join(', ')}\n`
+        }));
+        
+        setDocItems(combinedDocItems);
+        setDepositItems(combinedDepositItems);
+        
+        setShowMergeModal(false);
+        setSelectedForMerge([]);
+        setViewMode('edit');
+        setMobileStep('edit');
+        showToast("✨ 單據已成功合併！請在編輯區核對資料後儲存。");
     };
 
     const saveDocRecord = async () => {
@@ -1003,12 +1090,24 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                 </div>
 
+                {/* ★ 新增：合併操作按鈕列 */}
+                {selectedForMerge.length > 0 && (
+                    <div className="bg-indigo-50 border-b border-indigo-100 p-2.5 flex items-center justify-between z-10">
+                        <span className="text-xs font-bold text-indigo-700">已選取 {selectedForMerge.length} 張單據</span>
+                        <div className="flex gap-2">
+                            <button onClick={() => setSelectedForMerge([])} className="text-xs text-slate-500 hover:bg-slate-200 px-3 py-1.5 rounded">取消選取</button>
+                            <button onClick={handleInitMerge} className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-1.5 rounded shadow-sm">合併單據</button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex-1 overflow-y-auto bg-slate-50/50 p-0 md:p-2">
                     {filteredDocHistory.length === 0 ? <div className="text-center text-slate-400 py-10">找不到符合過濾條件的紀錄</div> : (
                         <div className="w-full overflow-x-auto rounded-xl shadow-sm border border-slate-200 scrollbar-thin scrollbar-thumb-slate-300">
                             <table className="w-full min-w-[900px] text-sm text-left border-collapse bg-white">
                                 <thead className="bg-slate-100 text-slate-600 border-b sticky top-0 shadow-sm z-10">
                                     <tr>
+                                        <th className="p-3 w-10 text-center"><Check size={16} className="text-slate-400 mx-auto"/></th>
                                         <th 
                                             className="p-3 w-36 cursor-pointer hover:bg-slate-200 transition-colors select-none group"
                                             onClick={() => setSortMode(prev => prev === 'created' ? 'updated' : 'created')}
@@ -1052,7 +1151,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     
                                     const totalAmt = basePrice + extrasTotal;
                                     return (
-                                        <tr key={doc.id} className="hover:bg-blue-50/50 cursor-pointer text-xs transition-colors" onClick={() => editDoc(doc)}>
+                                        <tr key={doc.id} className={`hover:bg-blue-50/50 cursor-pointer text-xs transition-colors ${selectedForMerge.includes(doc.id) ? 'bg-indigo-50/30' : ''}`} onClick={() => editDoc(doc)}>
+                                            <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="w-4 h-4 accent-indigo-600 cursor-pointer" 
+                                                    checked={selectedForMerge.includes(doc.id)} 
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setSelectedForMerge([...selectedForMerge, doc.id]);
+                                                        else setSelectedForMerge(selectedForMerge.filter(id => id !== doc.id));
+                                                    }} 
+                                                />
+                                            </td>
                                             <td className="p-3 font-mono text-slate-500">{docDateStr}</td>
                                             <td className="p-3 font-bold text-blue-600">{typeName}</td>
                                             <td className="p-3 text-slate-700">{summaryText}</td>
@@ -1068,6 +1178,44 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                       </div>
                     )}
                 </div>
+                {showMergeModal && (
+                <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-fade-in">
+                        <div className="p-4 border-b bg-indigo-50 flex justify-between items-center">
+                            <h3 className="font-bold text-indigo-800">合併單據設定</h3>
+                            <button onClick={() => setShowMergeModal(false)} className="text-slate-500 hover:text-slate-800"><X size={18}/></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 mb-2">請選擇合併後單據的客戶抬頭 (Customer Name)</label>
+                                <select 
+                                    value={mergeCustomerName} 
+                                    onChange={(e) => setMergeCustomerName(e.target.value)}
+                                    className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:ring-2 ring-indigo-200 mb-2 bg-slate-50"
+                                >
+                                    {mergeCustomerOptions.map((opt, idx) => (
+                                        <option key={idx} value={opt}>{opt}</option>
+                                    ))}
+                                </select>
+                                <input 
+                                    type="text" 
+                                    value={mergeCustomerName} 
+                                    onChange={(e) => setMergeCustomerName(e.target.value)}
+                                    placeholder="或手動修改抬頭名稱..."
+                                    className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-indigo-400"
+                                />
+                            </div>
+                            <div className="text-[10px] text-slate-500 bg-slate-100 p-2 rounded leading-relaxed border border-slate-200">
+                                ⚠️ 合併後，所有選擇的車價與明細將被轉換為新單據的「收費項目」。原單據不會被刪除，這將是一張全新的草稿單據。
+                            </div>
+                        </div>
+                        <div className="p-4 border-t bg-slate-50 flex gap-2 justify-end">
+                            <button onClick={() => setShowMergeModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded">取消</button>
+                            <button onClick={executeMerge} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-bold shadow-sm">確認合併</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             </div>
         );
     }
