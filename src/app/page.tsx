@@ -3421,7 +3421,7 @@ const DatabaseSelector = ({
                           onClick={() => { setIsTPlateModalOpen(true); setIsFabMenuOpen(false); }}
                           className="pointer-events-auto w-12 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
                       >
-                          <Car size="{20}"/>
+                          <Car size={20} />
                       </button>
                   </div>
 
@@ -3432,7 +3432,7 @@ const DatabaseSelector = ({
                           onClick={() => { setIsTeamHubOpen(true); setIsFabMenuOpen(false); }}
                           className="pointer-events-auto w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
                       >
-                          <MessageCircle size="{20}"/>
+                          <MessageCircle size={20} />
                       </button>
                   </div>
               </div>
@@ -3443,9 +3443,9 @@ const DatabaseSelector = ({
                   className={`pointer-events-auto relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 ${isFabMenuOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-110'}`}
                   title="系統功能表"
               >
-                  {isFabMenuOpen ? <Plus className="text-white" size="{28}"/> : (
+                  {isFabMenuOpen ? <Plus className="text-white" size={28} /> : (
                       <>
-                          <Menu className="text-white" size="{24}"/>
+                          <Menu className="text-white" size={24} />
                           <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
                       </>
                   )}
