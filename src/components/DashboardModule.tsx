@@ -419,8 +419,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    // ★ 移除 overflow-y-auto 與 pb-10，將整個面板設定為隱藏溢出，讓內部雙軌獨立滾動
-    <div className="flex flex-col h-full overflow-hidden space-y-3 animate-fade-in relative pb-1 md:pb-0">
+    // ★ 核心修復 1：手機版改為 overflow-y-auto 釋放全頁滾動，電腦版維持 md:overflow-hidden
+    <div className="flex flex-col h-full overflow-y-auto md:overflow-hidden space-y-3 animate-fade-in relative pb-24 md:pb-0 scrollbar-thin">
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -433,11 +433,10 @@ export default function DashboardModule({
         </div>
       </div>
 
-      {/* 🚨 整合式戰情通報橫幅 (雙狀態呈現 + 無限Rolling捲動) */}
+      {/* 🚨 整合式戰情通報橫幅 */}
       {(totalUrgentAlerts > 0 || totalSoonAlerts > 0) && (
         <div className="w-full bg-slate-900 text-white rounded-2xl border border-slate-800 overflow-hidden shadow-sm flex-none transition-all duration-300">
-          
-          {/* 1. 頂部狀態列：清晰標示「已過期」與「即將到期」 */}
+            {/* ... 戰情面板內容維持不變 ... */}
           <div 
             onClick={() => setIsAlertExpanded(!isAlertExpanded)}
             className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors"
@@ -449,8 +448,6 @@ export default function DashboardModule({
                   {totalUrgentAlerts + totalSoonAlerts}
                 </span>
               </div>
-
-              {/* 橫向膠囊摘要：完整展示「已過期」及「即將到期」數量 */}
               <div className="hidden md:flex items-center gap-2 text-xs font-medium truncate">
                 {loopReminders.length > 0 && (
                   <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
@@ -473,18 +470,14 @@ export default function DashboardModule({
                 )}
               </div>
             </div>
-
             <div className="flex items-center gap-2 text-xs text-slate-400 shrink-0 font-bold">
               <span>{isAlertExpanded ? '收起詳情' : '點擊展開管理'}</span>
               <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isAlertExpanded ? 'rotate-180' : ''}`} />
             </div>
           </div>
 
-          {/* 2. 展開面板 */}
           {isAlertExpanded && (
             <div className="p-4 bg-slate-950/80 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              {/* --- 區塊 1: 粵港車兜圈死線 --- */}
               <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
                 <div className="text-xs font-bold text-amber-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>🔄 粵港車兜圈死線</span>
@@ -517,7 +510,6 @@ export default function DashboardModule({
                 </div>
               </div>
 
-              {/* --- 區塊 2: 中港業務到期 --- */}
               <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
                 <div className="text-xs font-bold text-blue-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>🌐 中港業務到期</span>
@@ -550,7 +542,6 @@ export default function DashboardModule({
                 </div>
               </div>
 
-              {/* --- 區塊 3: 牌費 & 文件到期 --- */}
               <div className="flex flex-col bg-slate-900/50 rounded-xl border border-white/5 p-2">
                 <div className="text-xs font-bold text-emerald-400 flex items-center justify-between border-b border-white/10 pb-2 mb-1.5 px-1">
                   <span>📄 牌費 & 文件到期</span>
@@ -585,7 +576,6 @@ export default function DashboardModule({
                   {docAlerts.length === 0 && <p className="text-slate-500 text-xs text-center py-6">暫無到期項目</p>}
                 </div>
               </div>
-
             </div>
           )}
         </div>
@@ -600,7 +590,6 @@ export default function DashboardModule({
             {formatCurrency(stats.totalStockValue)}
           </span>
         </div>
-
         <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
           <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">未付費用</span>
@@ -608,7 +597,6 @@ export default function DashboardModule({
             {formatCurrency(stats.totalPayable)}
           </span>
         </div>
-
         <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">應收尾數</span>
@@ -616,7 +604,6 @@ export default function DashboardModule({
             {formatCurrency(stats.totalReceivable)}
           </span>
         </div>
-
         <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">本月銷售額</span>
@@ -626,8 +613,8 @@ export default function DashboardModule({
         </div>
       </div>
 
-      {/* 手機專屬 Tab 切換按鈕 */}
-      <div className="md:hidden flex p-1.5 bg-slate-200/60 rounded-xl mx-1 mt-1 mb-2 shrink-0">
+      {/* ★ 核心修復 2：手機版專屬 Tab 設為 sticky 且加上毛玻璃背景，隨頁面滾動置頂 */}
+      <div className="md:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
         <button 
           onClick={() => setDashMobileTab('instock')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'instock' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
@@ -644,15 +631,15 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ WhatsApp 毛玻璃吸頂 + 內部獨立滾動看板區 */}
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 min-h-0 overflow-hidden mt-1 pb-1">
+      {/* ★ 核心修復 3：左右雙軌看板，手機版改為 overflow-visible (跟隨外部全頁滾動)，電腦版維持 md:overflow-hidden 內部滾動 */}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-hidden min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-y-auto scrollbar-thin relative pb-24 md:pb-6">
+        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
             
-            {/* ★ 吸頂毛玻璃 Header */}
-            <div className="sticky top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+            {/* ★ 核心修復 4：第二層瀑布疊加 Sticky Header (手機版接在上方 Tab 底下) */}
+            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center">
                   <Layout className="w-4 h-4 mr-1.5 text-green-600" /> 在庫待售
@@ -661,35 +648,17 @@ export default function DashboardModule({
                   {filteredInStockCars.length}
                 </span>
               </div>
-
               <div className="flex items-center gap-1.5 flex-1 max-w-[180px] sm:max-w-[240px]">
                 <div className="relative w-full">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    type="text" 
-                    placeholder="搜尋庫存車..." 
-                    value={dashSearchInStock}
-                    onChange={(e) => setDashSearchInStock(e.target.value)}
-                    className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all"
-                  />
-                  {dashSearchInStock && (
-                    <button onClick={() => setDashSearchInStock('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
+                  <input type="text" placeholder="搜尋庫存車..." value={dashSearchInStock} onChange={(e) => setDashSearchInStock(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all"/>
+                  {dashSearchInStock && <button onClick={() => setDashSearchInStock('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
                 </div>
-
-                <button 
-                  onClick={() => { setEditingVehicle({} as any); setActiveTab('inventory_add'); }}
-                  className="bg-slate-900 hover:bg-slate-800 text-white p-1 rounded-lg shrink-0 transition-colors"
-                  title="新增入庫"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+                <button onClick={() => { setEditingVehicle({} as any); setActiveTab('inventory_add'); }} className="bg-slate-900 hover:bg-slate-800 text-white p-1 rounded-lg shrink-0 transition-colors" title="新增入庫"><Plus className="w-4 h-4" /></button>
               </div>
             </div>
 
-            {/* 列表內容 (加入 pb-24 防止被 iPhone 底部擋住) */}
+            {/* 列表內容 */}
             <div className="p-2.5 space-y-2.5">
               {filteredInStockCars.map(car => renderDashboardCard(car))}
               {filteredInStockCars.length === 0 && (
@@ -702,11 +671,11 @@ export default function DashboardModule({
         </div>
 
         {/* ==================== 已訂與待結清看板 ==================== */}
-        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-hidden min-h-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-y-auto scrollbar-thin relative pb-24 md:pb-6">
+        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 min-h-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
             
-            {/* ★ 吸頂毛玻璃 Header */}
-            <div className="sticky top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+            {/* ★ 第二層瀑布疊加 Sticky Header */}
+            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center">
                   <FileCheck className="w-4 h-4 mr-1.5 text-amber-600" /> 已訂 / 待結清
@@ -715,21 +684,10 @@ export default function DashboardModule({
                   {filteredActionCars.length}
                 </span>
               </div>
-
               <div className="relative flex-1 max-w-[180px] sm:max-w-[240px]">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="搜尋交易車..." 
-                  value={dashSearchAction}
-                  onChange={(e) => setDashSearchAction(e.target.value)}
-                  className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all"
-                />
-                {dashSearchAction && (
-                  <button onClick={() => setDashSearchAction('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
+                <input type="text" placeholder="搜尋交易車..." value={dashSearchAction} onChange={(e) => setDashSearchAction(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all" />
+                {dashSearchAction && <button onClick={() => setDashSearchAction('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
               </div>
             </div>
 
