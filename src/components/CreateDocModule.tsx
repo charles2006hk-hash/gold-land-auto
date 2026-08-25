@@ -1151,7 +1151,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     )}
                                     <p className="font-bold text-[10px] uppercase mt-1 leading-none">For and on behalf of {formData.companyNameEn}</p>
                                 </div>
-                                <div className="pt-1 border-t border-slate-800 text-center">
+                                {/* ★ 修復：在實時預覽加上客戶的電子簽名 */}
+                                <div className="relative pt-1 border-t border-slate-800 text-center">
+                                    {formData.customerSignature && (
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
+                                            <img src={formData.customerSignature} className="h-[25mm] w-auto object-contain mix-blend-multiply" alt="Signature" />
+                                        </div>
+                                    )}
                                     <p className="font-bold text-[10px] uppercase mt-1 leading-none">{isQuotation ? "Customer Confirmation" : (isBill ? "Received By" : "Customer Signature")}</p>
                                 </div>
                             </div>
