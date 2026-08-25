@@ -238,6 +238,16 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (selectedDocType === 'sales_contract' || selectedDocType === 'quotation') {
             setFormData((prev: any) => ({ ...prev, remarks: prev.remarks || DEFAULT_REMARKS }));
         }
+        // ★ 新增：當切換為收據時，自動帶入車輛資料到 Remarks
+        if (selectedDocType === 'receipt') {
+            setFormData((prev: any) => {
+                // 如果目前是空的，或是還留著預設的銀行帳號，就覆蓋為收訖車輛字樣
+                if (!prev.remarks || prev.remarks === DEFAULT_REMARKS) {
+                    return { ...prev, remarks: `收訖 ${prev.year || ''} ${prev.make || ''} ${prev.model || ''}`.trim() };
+                }
+                return prev;
+            });
+        }
         
         // ★ 防呆：如果正在編輯歷史單據，絕對不要用庫存資料洗掉客人的資料！
         if (docId) return;
@@ -467,7 +477,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-            remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : '', 
+            // ★ 修改這行：根據類型自動產生預設的備註
+            remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : (selectedDocType === 'receipt' ? `收訖 ${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim() : ''), 
             // 👇 補上這三行，確保符合 TypeScript 型別
             enablePaymentAuth: false,
             authPayeeName: '',
@@ -594,13 +605,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             showPurchaseGuarantees: showPurchaseGuarantees, 
             showSalesGuarantees: showSalesGuarantees,       
             showAttachments: showAttachments, 
+            showStampAndSig: showStampAndSig, // ★ 核心修復：把電子簽名開關狀態傳給列印引擎！
             companyNameEn: formData.companyNameEn, 
             companyNameCh: formData.companyNameCh, 
             companyEmail: formData.companyEmail, 
             companyPhone: formData.companyPhone, 
             paymentMethod: formData.paymentMethod 
         };
-
         // ★ 動態修改 PDF 預設檔名 (例如: Quotation_2025 Lamborghini Urus SE)
         const typeMap: Record<string, string> = {
             'sales_contract': 'Sales_Contract', 
