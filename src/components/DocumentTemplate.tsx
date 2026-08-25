@@ -316,7 +316,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
         </div>
     );
 
-   const SignatureSection = ({ labelLeft, labelRight }: any) => (
+   // ★ 新增接收 customerSignature 參數
+   const SignatureSection = ({ labelLeft, labelRight, customerSignature }: any) => (
         <div className="grid grid-cols-2 gap-12 w-full">
             <div className="relative pt-1 border-t border-slate-800 text-center">
                 {showStampAndSig && (
@@ -331,7 +332,13 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 )}
                 <p className="font-bold text-[10px] uppercase mt-1 leading-none">{labelLeft}</p>
             </div>
-            <div className="pt-1 border-t border-slate-800 text-center">
+            <div className="relative pt-1 border-t border-slate-800 text-center">
+                {/* ★ 如果有電子簽名，就渲染在線上方的絕對定位區域 */}
+                {customerSignature && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
+                        <img src={customerSignature} className="h-[25mm] w-auto object-contain mix-blend-multiply" alt="Signature" />
+                    </div>
+                )}
                 <p className="font-bold text-[10px] uppercase mt-1 leading-none">{labelRight}</p>
                 {curCustomer.hkid && labelRight !== "Received By" && <p className="text-[9px] text-gray-500 mt-1 leading-none">ID: {curCustomer.hkid}</p>}
             </div>
@@ -497,7 +504,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                 </div>
                 
                 <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
-                    <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} />
+                    {/* ★ 補上 customerSignature */}
+                    <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={isQuotation ? "Customer Confirmation" : ((isPurchase||isConsignment) ? "Vendor Signature" : "Purchaser Signature")} customerSignature={activeVehicle.customerSignature} />
                 </div>
             </div>
         );
@@ -585,7 +593,8 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             </div>
 
             <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
-                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={activeType === 'receipt' ? "Received By" : "Customer Signature"} />
+                {/* ★ 補上 customerSignature */}
+                <SignatureSection labelLeft={`For and on behalf of ${companyEn}`} labelRight={activeType === 'receipt' ? "Received By" : "Customer Signature"} customerSignature={activeVehicle.customerSignature} />
             </div>
         </div>
     );
