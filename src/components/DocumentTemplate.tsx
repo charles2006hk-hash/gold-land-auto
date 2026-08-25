@@ -212,7 +212,33 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
     const totalPaid = depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0);
     
     const balance = (basePrice + extrasTotal) - totalPaid;
-    
+    // ★ 新增：收據專用 - 金額與大寫轉換
+    const deposit = totalPaid;
+    const numberToEnglishWords = (n: number) => {
+        if (n === 0 || !n) return 'ZERO ONLY';
+        const a = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+        const b = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+        const formatChunk = (num: number) => {
+            let str = '';
+            if (num >= 100) { str += a[Math.floor(num / 100)] + ' HUNDRED '; num %= 100; }
+            if (num > 0) {
+                if (str !== '') str += 'AND ';
+                if (num < 20) str += a[num] + ' ';
+                else { str += b[Math.floor(num / 10)] + ' '; if (num % 10 > 0) str += a[num % 10] + ' '; }
+            }
+            return str;
+        };
+        let word = ''; let val = Math.floor(n); const cents = Math.round((n - val) * 100);
+        if (val >= 1000000) { word += formatChunk(Math.floor(val / 1000000)) + 'MILLION '; val %= 1000000; }
+        if (val >= 1000) { word += formatChunk(Math.floor(val / 1000)) + 'THOUSAND '; val %= 1000; }
+        if (val > 0) { word += formatChunk(val); }
+        word = word.trim();
+        if (cents > 0) {
+            if (word !== '') word += ' AND ';
+            word += `CENTS ${formatChunk(cents).trim()}`;
+        }
+        return word + ' ONLY';
+    };
     const showStampAndSig = (activeVehicle as any).showStampAndSig !== false;
     const soldDate = (activeVehicle as any).soldDate || '___________'; 
     const handoverTime = (activeVehicle as any).handoverTime || '_______';
@@ -483,37 +509,79 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
             
             <div className="p-8 pb-[45mm] print:pb-[45mm] h-full box-border">
                 <HeaderSection />
-                <div className="flex justify-between mb-6 border p-3 rounded bg-slate-50">
-                    <div className="text-[10px]"><p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p><p className="text-sm font-bold">{curCustomer.name}</p><p>{curCustomer.address}</p><p className="font-mono">{curCustomer.phone}</p></div>
-                    <div className="text-[10px] text-right"><p>Reg No: <span className="font-bold text-sm ml-1">{activeVehicle.regMark}</span></p><p>{activeVehicle.make} {activeVehicle.model}</p></div>
-                </div>
 
-                <table className="w-full text-[10px] border-collapse mb-6">
-                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
-                    <tbody>
-                        {/* ★ 修復點：發票第一行強制顯示車價本金，並加上計算 */}
-                        <tr><td className="border p-1.5 font-bold w-1/2">{((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="p-2 text-right font-mono font-bold text-[12px]">{formatCurrency(basePrice)}</td></tr>
-                        {itemsToRender.map((item: any, i: number) => (<tr key={`addon-${i}`} className="border-b text-slate-600"><td className="p-2 font-medium pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>))}
-                        {depositItems.map((item: any, idx: number) => (<tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-2 font-bold pl-4">Less: {item.label}</td><td className="p-2 text-right font-mono font-bold text-[12px]">- {formatCurrency(item.amount)}</td></tr>))}
-                    </tbody>
-                    {/* ★ 修復點：發票總計 = (車價 + 附加費) - 已付，若小於 0 顯示 Refund */}
-                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">{balance < 0 ? 'Refund Due (應退款項)' : 'Balance Due (應付尾數)'}</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(Math.abs(balance))}</td></tr></tfoot>
-                </table>
+                {activeType === 'receipt' ? (
+                    // ★ 收據專屬排版 (與實時預覽 100% 一致)
+                    <div className="border-[3px] border-double border-slate-800 p-8 mb-6 relative bg-white">
+                        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
+                            <img src={COMPANY_INFO?.logo_url || ''} className="w-64 h-64 object-contain grayscale" />
+                        </div>
 
-                {activeType === 'receipt' && (activeVehicle as any).paymentMethod && (<div className="mb-6 p-2 border border-slate-300 bg-slate-50 rounded"><p className="text-[10px] font-bold">Payment Method (收款方式): <span className="text-sm font-mono ml-2">{(activeVehicle as any).paymentMethod}</span></p></div>)}
-                {activeVehicle.remarks && (<div className="mb-6 border-t border-slate-200 pt-2"><p className="text-[9px] font-bold text-slate-500 mb-1">Remarks:</p><p className="text-[10px] whitespace-pre-wrap font-mono leading-relaxed">{activeVehicle.remarks}</p></div>)}
-                
-                {/* ★ 修復點：發票也需要顯示條款與條件 */}
-                {showTerms && (
-                    <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
-                        <p className="font-bold mb-1 text-slate-800">Invoice Terms & Conditions 發票條款：</p>
-                        <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
-                            <li><b>Title of Goods:</b> The title and ownership of the vehicle(s) and goods remain with the Seller until all payments are cleared in full. <br/><span className="text-slate-700"><b>貨物擁有權：</b>在所有款項全數結清之前，車輛及相關貨品之擁有權仍歸賣方所有。</span></li>
-                            <li><b>"As-Is" Condition:</b> The goods are sold strictly on an "As-Is" basis. <br/><span className="text-slate-700"><b>現狀買賣：</b>所有貨物及車輛均以「現狀」出售，賣方不作任何明示或暗示之保證。</span></li>
-                            <li><b>Payment:</b> Cheques should be crossed and made payable to "{companyEn}". Official receipt will only be issued upon clearance of cheque.<br/><span className="text-slate-700"><b>付款方式：</b>支票請劃線並抬頭註明「{companyEn}」。正式收據須待支票兌現後方為有效。</span></li>
-                        </ol>
+                        <div className="text-center mb-8 border-b-2 border-slate-800 pb-4 relative z-10">
+                            <h2 className="text-2xl font-black tracking-widest text-slate-900 uppercase">OFFICIAL RECEIPT</h2>
+                            <h3 className="text-lg font-bold tracking-[0.5em] text-slate-700 mt-1">正式收據</h3>
+                        </div>
+                        
+                        <div className="space-y-6 text-[13px] relative z-10">
+                            <div className="flex items-end">
+                                <div className="w-40 font-bold text-slate-700 leading-tight">Received from<br/><span className="text-[11px] font-medium text-slate-500">茲收到</span></div>
+                                <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[14px] text-slate-900 px-2 italic">{curCustomer.name || '_________________________________'}</div>
+                            </div>
+                            <div className="flex items-end">
+                                <div className="w-40 font-bold text-slate-700 leading-tight">the sum of H.K. Dollars<br/><span className="text-[11px] font-medium text-slate-500">港幣</span></div>
+                                <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[12px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">{numberToEnglishWords(deposit)}</div>
+                            </div>
+                            <div className="flex items-end">
+                                <div className="w-40 font-bold text-slate-700 leading-tight">in payment of<br/><span className="text-[11px] font-medium text-slate-500">係付</span></div>
+                                <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-slate-800 px-2">{depositItems.map((d: any) => d.label).join(', ')} {activeVehicle.regMark && ` (Reg No.: ${activeVehicle.regMark})`}</div>
+                            </div>
+
+                            <div className="flex items-end justify-between mt-10 pt-4">
+                                <div className="flex items-center">
+                                    <span className="text-2xl font-black text-slate-800 mr-4 italic">HK$</span>
+                                    <div className="border-y-4 border-slate-800 py-1 px-8 bg-slate-50 font-mono font-black text-xl text-slate-900 tracking-wider shadow-sm">
+                                        {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(deposit)}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="text-[11px] text-slate-500 font-bold text-right">Payment Method<br/>交來</div>
+                                    <div className="border-b border-slate-400 pb-1 px-4 font-mono font-bold text-slate-800 min-w-[120px] text-center">{(activeVehicle as any).paymentMethod}</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
+                ) : (
+                    // ★ 發票 (Invoice) 專屬排版
+                    <>
+                        <div className="flex justify-between mb-6 border p-3 rounded bg-slate-50">
+                            <div className="text-[10px]"><p className="text-slate-500 font-bold uppercase mb-1">Bill To:</p><p className="text-sm font-bold">{curCustomer.name}</p><p>{curCustomer.address}</p><p className="font-mono">{curCustomer.phone}</p></div>
+                            <div className="text-[10px] text-right"><p>Reg No: <span className="font-bold text-sm ml-1">{activeVehicle.regMark}</span></p><p>{activeVehicle.make} {activeVehicle.model}</p></div>
+                        </div>
+
+                        <table className="w-full text-[10px] border-collapse mb-6">
+                            <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
+                            <tbody>
+                                <tr><td className="border p-1.5 font-bold w-1/2">{((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="p-2 text-right font-mono font-bold text-[12px]">{formatCurrency(basePrice)}</td></tr>
+                                {itemsToRender.map((item: any, i: number) => (<tr key={`addon-${i}`} className="border-b text-slate-600"><td className="p-2 font-medium pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>))}
+                                {depositItems.map((item: any, idx: number) => (<tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-2 font-bold pl-4">Less: {item.label}</td><td className="p-2 text-right font-mono font-bold text-[12px]">- {formatCurrency(item.amount)}</td></tr>))}
+                            </tbody>
+                            <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">{balance < 0 ? 'Refund Due (應退款項)' : 'Balance Due (應付尾數)'}</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(Math.abs(balance))}</td></tr></tfoot>
+                        </table>
+                        
+                        {showTerms && (
+                            <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
+                                <p className="font-bold mb-1 text-slate-800">Invoice Terms & Conditions 發票條款：</p>
+                                <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
+                                    <li><b>Title of Goods:</b> The title and ownership of the vehicle(s) and goods remain with the Seller until all payments are cleared in full. <br/><span className="text-slate-700"><b>貨物擁有權：</b>在所有款項全數結清之前，車輛及相關貨品之擁有權仍歸賣方所有。</span></li>
+                                    <li><b>"As-Is" Condition:</b> The goods are sold strictly on an "As-Is" basis. <br/><span className="text-slate-700"><b>現狀買賣：</b>所有貨物及車輛均以「現狀」出售，賣方不作任何明示或暗示之保證。</span></li>
+                                    <li><b>Payment:</b> Cheques should be crossed and made payable to "{companyEn}". Official receipt will only be issued upon clearance of cheque.<br/><span className="text-slate-700"><b>付款方式：</b>支票請劃線並抬頭註明「{companyEn}」。正式收據須待支票兌現後方為有效。</span></li>
+                                </ol>
+                            </div>
+                        )}
+                    </>
                 )}
+
+                {activeVehicle.remarks && (<div className="mb-6 border-t border-slate-200 pt-2"><p className="text-[9px] font-bold text-slate-500 mb-1">Remarks:</p><p className="text-[10px] whitespace-pre-wrap font-mono leading-relaxed">{activeVehicle.remarks}</p></div>)}
             </div>
 
             <div className="absolute bottom-10 left-0 w-full px-8 print:bottom-12 bg-transparent pointer-events-none z-50 box-border">
