@@ -166,6 +166,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         customerSignature: ''
     });
 
+    const [showSignaturePad, setShowSignaturePad] = useState(false);
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
     const [savedDocs, setSavedDocs] = useState<any[]>([]);
     const [docItems, setDocItems] = useState<any[]>([]);
