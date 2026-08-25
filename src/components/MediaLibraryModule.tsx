@@ -716,7 +716,13 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             </div>
 
             {previewImage && (<div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}><img src={previewImage} className="max-w-full max-h-[90vh] object-contain"/><button className="absolute top-4 right-4 text-white"><X size={32}/></button></div>)}
-            {editingMedia && <ImageEditorModal mediaItem={editingMedia} onClose={() => setEditingMedia(null)} onSave={handleSaveEditedImage} />}
+            {editingMedia && (
+                <ImageEditorModal 
+                    imageUrl={editingMedia.url} 
+                    onClose={() => setEditingMedia(null)} 
+                    onSave={(newBase64) => handleSaveEditedImage(editingMedia, newBase64)} 
+                />
+            )}
         </div>
     );
 }
