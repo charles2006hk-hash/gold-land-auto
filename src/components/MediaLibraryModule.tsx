@@ -50,187 +50,215 @@ export const compressImageSmart = (file: File): Promise<Blob> => {
     });
 };
 
-// ==================================================================
-// ★★★ 升級版：圖片編輯器 (支援馬賽克、香港前/後車牌顏色) ★★★
+// ★★★ 終極版：圖片編輯器 (精準 4 點透視遮罩，專剋斜角車牌) ★★★
 const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onClose: () => void, onSave: (dataUrl: string) => void }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const [isDrawing, setIsDrawing] = useState(false);
     
-    // 工具狀態
-    const [brushType, setBrushType] = useState<'front' | 'rear' | 'mosaic' | 'black'>('mosaic');
-    const [brushSize, setBrushSize] = useState(30);
+    const [snapshot, setSnapshot] = useState<ImageData | null>(null);
+    const [originalImg, setOriginalImg] = useState<HTMLImageElement | null>(null);
+    
+    // 工具狀態：毛玻璃、前牌(白)、後牌(黃)
+    const [toolType, setToolType] = useState<'blur' | 'front' | 'rear'>('blur');
+    
+    // 記錄使用者點擊的 4 個透視頂點
+    const [points, setPoints] = useState<{x: number, y: number}[]>([]);
 
-    // 初始化畫布與圖片
+    // 初始化畫布與圖片 (保持原圖高解析度，確保儲存後清晰)
     useEffect(() => {
         const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d', { willReadFrequently: true }); // 優化讀取效能
+        const ctx = canvas?.getContext('2d', { willReadFrequently: true });
         const img = new Image();
         img.crossOrigin = "anonymous";
         img.src = imageUrl;
         img.onload = () => {
-            if (canvas && ctx && containerRef.current) {
-                // 計算等比例縮放，適應螢幕大小
-                const containerW = containerRef.current.clientWidth;
-                const containerH = containerRef.current.clientHeight;
-                const ratio = Math.min(containerW / img.width, containerH / img.height);
-                
-                canvas.width = img.width * ratio;
-                canvas.height = img.height * ratio;
-                
+            if (canvas && ctx) {
+                canvas.width = img.width;
+                canvas.height = img.height;
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                setOriginalImg(img);
+                setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
             }
         };
     }, [imageUrl]);
 
-    const getCoordinates = (e: any) => {
+    // 實時渲染：當使用者點擊頂點時，畫出紅色引導線
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx || !snapshot) return;
+
+        // 1. 永遠先還原到乾淨的底圖 (抹除上一幀的紅點)
+        ctx.putImageData(snapshot, 0, 0);
+
+        // 2. 如果有點位，畫出連線與標記
+        if (points.length > 0) {
+            // 動態計算紅線粗細，適應不同解析度的照片
+            const dynamicLineWidth = Math.max(4, canvas.width / 250);
+
+            ctx.strokeStyle = '#ef4444'; // 紅色
+            ctx.lineWidth = dynamicLineWidth;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.stroke();
+
+            points.forEach((p, idx) => {
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, dynamicLineWidth * 1.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 數字標記
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${dynamicLineWidth * 3}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText((idx + 1).toString(), p.x, p.y - (dynamicLineWidth * 3.5));
+            });
+        }
+    }, [points, snapshot]);
+
+    // 完美轉換點擊坐標到圖片實際像素
+    const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
-        if (e.touches && e.touches.length > 0) {
-            return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
-        }
-        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
+        };
     };
 
-    // ★ 馬賽克處理引擎
-    const applyMosaic = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) => {
-        const blockSize = 10; // 馬賽克方塊大小
-        const startX = Math.max(0, x - radius);
-        const startY = Math.max(0, y - radius);
-        const size = radius * 2;
-        
-        // 抓取筆刷範圍內的影像數據
-        const imageData = ctx.getImageData(startX, startY, size, size);
-        const data = imageData.data;
-
-        // 遍歷方塊並取平均色/左上景色來填充
-        for (let i = 0; i < size; i += blockSize) {
-            for (let j = 0; j < size; j += blockSize) {
-                // 圓形筆刷邊界檢查
-                const dx = startX + i + blockSize/2 - x;
-                const dy = startY + j + blockSize/2 - y;
-                if (dx * dx + dy * dy <= radius * radius) {
-                    const pixelIndex = (j * size + i) * 4;
-                    const r = data[pixelIndex];
-                    const g = data[pixelIndex + 1];
-                    const b = data[pixelIndex + 2];
-                    
-                    ctx.fillStyle = `rgb(${r},${g},${b})`;
-                    ctx.fillRect(startX + i, startY + j, blockSize, blockSize);
-                }
-            }
-        }
-    };
-
-    const startDrawing = (e: any) => {
+    const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
         e.preventDefault();
-        setIsDrawing(true);
-        const { x, y } = getCoordinates(e);
-        const ctx = canvasRef.current?.getContext('2d');
-        if (!ctx) return;
+        if (points.length >= 4) return;
 
-        if (brushType === 'mosaic') {
-            applyMosaic(ctx, x, y, brushSize);
-        } else {
-            ctx.beginPath();
-            ctx.moveTo(x, y);
+        const { x, y } = getCoordinates(e);
+        const newPoints = [...points, { x, y }];
+        setPoints(newPoints);
+
+        // ★ 當點滿 4 個點時，自動執行透視變形遮罩！
+        if (newPoints.length === 4) {
+            applyMask(newPoints);
         }
     };
 
-    const draw = (e: any) => {
-        e.preventDefault();
-        if (!isDrawing) return;
-        const { x, y } = getCoordinates(e);
-        const ctx = canvasRef.current?.getContext('2d');
-        if (!ctx) return;
+    const applyMask = (quad: {x: number, y: number}[]) => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx || !snapshot || !originalImg) return;
 
-        if (brushType === 'mosaic') {
-            applyMosaic(ctx, x, y, brushSize);
+        // 先還原底圖，擦掉所有紅點跟紅線
+        ctx.putImageData(snapshot, 0, 0);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(quad[0].x, quad[0].y);
+        ctx.lineTo(quad[1].x, quad[1].y);
+        ctx.lineTo(quad[2].x, quad[2].y);
+        ctx.lineTo(quad[3].x, quad[3].y);
+        ctx.closePath();
+
+        if (toolType === 'blur') {
+            // ★ 高階毛玻璃模式
+            ctx.clip();
+            ctx.filter = `blur(${Math.max(15, canvas.width / 40)}px)`; // 動態模糊強度
+            ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
         } else {
-            // 設定香港車牌專屬顏色與透明度 (稍微透一點點光會更自然)
-            if (brushType === 'front') {
-                ctx.strokeStyle = 'rgba(250, 250, 250, 0.95)'; // 車牌白
-            } else if (brushType === 'rear') {
-                ctx.strokeStyle = 'rgba(253, 224, 71, 0.95)'; // 車牌黃
-            } else {
-                ctx.strokeStyle = '#1e293b'; // 傳統黑色
-            }
-            
-            ctx.lineWidth = brushSize;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.lineTo(x, y);
+            // ★ 純色車牌模式 (前牌白/後牌黃)
+            ctx.fillStyle = toolType === 'front' ? 'rgba(250, 250, 252, 0.98)' : 'rgba(250, 204, 21, 0.98)';
+            ctx.fill();
+            ctx.lineWidth = Math.max(2, canvas.width / 500);
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)'; // 模擬車牌立體邊框陰影
             ctx.stroke();
         }
+        ctx.restore();
+
+        // 儲存結果，讓使用者可以繼續點下一個車牌
+        setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
+        setPoints([]); 
     };
 
-    const stopDrawing = () => setIsDrawing(false);
+    // UI 動態提示文字
+    const promptText = points.length === 0 ? "👆 請點擊車牌【左上角】(第 1 點)" :
+                       points.length === 1 ? "👆 請點擊車牌【右上角】(第 2 點)" :
+                       points.length === 2 ? "👆 請點擊車牌【右下角】(第 3 點)" :
+                       "👆 請點擊車牌【左下角】(第 4 點) 即可完成！";
 
     return (
         <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-sm animate-in fade-in">
             <div className="bg-slate-800 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
                 
                 {/* 頂部工具列 */}
-                <div className="p-4 bg-slate-900 flex flex-wrap justify-between items-center gap-3 shrink-0">
-                    <h3 className="text-white font-bold text-sm md:text-base flex items-center">
-                        <span className="bg-blue-600 p-1.5 rounded-lg mr-2"><PenTool size={16}/></span> 
-                        車牌遮蔽工具
-                    </h3>
+                <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 className="text-white font-bold text-sm md:text-base flex items-center">
+                            <span className="bg-blue-600 p-1.5 rounded-lg mr-2"><PenTool size={16}/></span> 
+                            四點智能透視遮罩 (專剋斜角車牌)
+                        </h3>
+                    </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
                 </div>
 
-                {/* 筆刷選擇區 */}
-                <div className="bg-slate-800 p-3 flex flex-wrap justify-center gap-2 border-b border-slate-700 shrink-0">
-                    <button onClick={() => setBrushType('front')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${brushType === 'front' ? 'bg-white text-slate-800 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                        <div className="w-3 h-3 rounded-full bg-slate-100 border border-slate-300"></div> 前車牌 (白)
+                {/* 模式選擇區 */}
+                <div className="bg-slate-800 p-3 flex flex-wrap justify-center gap-3 border-b border-slate-700 shrink-0">
+                    <button onClick={() => { setToolType('blur'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${toolType === 'blur' ? 'bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        💧 質感毛玻璃
                     </button>
-                    <button onClick={() => setBrushType('rear')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${brushType === 'rear' ? 'bg-yellow-400 text-yellow-900 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                        <div className="w-3 h-3 rounded-full bg-yellow-400 border border-yellow-500"></div> 後車牌 (黃)
+                    <button onClick={() => { setToolType('front'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${toolType === 'front' ? 'bg-white text-slate-800 shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        ⬜ 前牌 (純白)
                     </button>
-                    <button onClick={() => setBrushType('mosaic')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${brushType === 'mosaic' ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                        <div className="w-3 h-3 rounded-[2px] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiM5OTkiLz48cmVjdCB4PSI0IiB5PSI0IiB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjOTk5Ii8+PHJlY3QgeD0iNCIgd2lkdGg9IjQiIGhlaWdodD0iNCIgZmlsbD0iI2NjYyIvPjxyZWN0IHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz48L3N2Zz4=')]"></div> 馬賽克
+                    <button onClick={() => { setToolType('rear'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${toolType === 'rear' ? 'bg-yellow-400 text-yellow-950 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        🟨 後牌 (純黃)
                     </button>
                 </div>
 
                 {/* 畫布區塊 */}
-                <div ref={containerRef} className="flex-1 overflow-hidden bg-black/50 relative flex items-center justify-center p-2 touch-none">
+                <div ref={containerRef} className="flex-1 overflow-hidden bg-black/80 relative flex items-center justify-center p-2 touch-none select-none">
                     <canvas
                         ref={canvasRef}
-                        onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
-                        onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
-                        className="cursor-crosshair shadow-2xl touch-none rounded-sm max-w-full max-h-full"
+                        onPointerDown={handlePointerDown}
+                        className="cursor-crosshair shadow-2xl touch-none rounded-sm max-w-full max-h-full object-contain"
                         style={{ display: 'block' }}
                     />
-                    <div className="absolute bottom-4 text-white/50 text-xs font-bold pointer-events-none drop-shadow-md">
-                        👆 請用手指或滑鼠在車牌位置滑動
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white font-bold pointer-events-none drop-shadow-md bg-black/60 px-5 py-2.5 rounded-full flex items-center shadow-lg border border-white/10">
+                        {promptText}
+                        {points.length > 0 && (
+                            <span 
+                                className="ml-4 pl-4 border-l border-white/30 text-red-400 pointer-events-auto cursor-pointer hover:text-red-300 underline"
+                                onPointerDown={(e) => { e.stopPropagation(); setPoints(prev => prev.slice(0, -1)); }}
+                            >
+                                撤銷上一步
+                            </span>
+                        )}
                     </div>
                 </div>
 
                 {/* 底部操作區 */}
                 <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400 font-bold hidden sm:inline">筆刷大小:</span>
-                        <input type="range" min="10" max="80" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className="w-24 md:w-32 accent-blue-500" />
-                    </div>
-                    <div className="flex gap-3">
-                        <button onClick={() => {
-                            const canvas = canvasRef.current;
-                            const ctx = canvas?.getContext('2d');
-                            const img = new Image(); img.crossOrigin = "anonymous"; img.src = imageUrl;
-                            img.onload = () => { if (canvas && ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height); };
-                        }} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition-colors">
-                            重置還原
-                        </button>
-                        <button onClick={() => {
-                            const canvas = canvasRef.current;
-                            if (canvas) onSave(canvas.toDataURL('image/jpeg', 0.9));
-                        }} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-1.5">
-                            <Check size={16}/> 儲存並替換
-                        </button>
-                    </div>
+                    <button onClick={() => {
+                        const canvas = canvasRef.current;
+                        const ctx = canvas?.getContext('2d');
+                        if (canvas && ctx && originalImg) {
+                            ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
+                            setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
+                            setPoints([]);
+                        }
+                    }} className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-xl transition-colors">
+                        還原重來
+                    </button>
+                    <button onClick={() => {
+                        const canvas = canvasRef.current;
+                        if (canvas) onSave(canvas.toDataURL('image/jpeg', 0.95)); // 高畫質儲存
+                    }} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-2">
+                        <Check size={18}/> 儲存並替換
+                    </button>
                 </div>
-
             </div>
         </div>
     );
