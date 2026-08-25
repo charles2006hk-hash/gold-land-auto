@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Upload, Settings, ImageIcon, Clipboard, Loader2, Plus, 
     Car, FileText, Check, Maximize2, Edit, Trash2, Star, 
-    Minimize2, X, Move, MousePointer2, Save
+    Minimize2, X, Move, MousePointer2, Save, PenTool,
 } from 'lucide-react';
 import { 
     collection, query, orderBy, onSnapshot, doc, updateDoc, 
