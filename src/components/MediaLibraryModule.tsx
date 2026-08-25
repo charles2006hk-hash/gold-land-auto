@@ -51,193 +51,186 @@ export const compressImageSmart = (file: File): Promise<Blob> => {
 };
 
 // ==================================================================
-// 2. 智慧圖片編輯器 (支援自由拖曳、縮放、車牌遮罩)
-// ==================================================================
-const ImageEditorModal = ({ mediaItem, onClose, onSave }: any) => {
+// ★★★ 升級版：圖片編輯器 (支援馬賽克、香港前/後車牌顏色) ★★★
+const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onClose: () => void, onSave: (dataUrl: string) => void }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [imgObj, setImgObj] = useState<HTMLImageElement | null>(null);
-    const [brightness, setBrightness] = useState(100);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
     
-    const [zoom, setZoom] = useState(1);
-    const [pan, setPan] = useState({ x: 0, y: 0 });
-    const [editorMode, setEditorMode] = useState<'pan' | 'mask'>('pan');
-    const [masks, setMasks] = useState<{x:number, y:number, w:number, h:number}[]>([]);
-    const [isDrawingMask, setIsDrawingMask] = useState(false);
-    const [isDraggingImage, setIsDraggingImage] = useState(false);
-    const [startPos, setStartPos] = useState({x:0, y:0});
-    const [currentPos, setCurrentPos] = useState({x:0, y:0});
-    const [isProcessing, setIsProcessing] = useState(false);
+    // 工具狀態
+    const [brushType, setBrushType] = useState<'front' | 'rear' | 'mosaic' | 'black'>('mosaic');
+    const [brushSize, setBrushSize] = useState(30);
 
-    const CANVAS_W = 1200;
-    const CANVAS_H = 900;
-
+    // 初始化畫布與圖片
     useEffect(() => {
-        const loadImg = async () => {
-            try {
-                const res = await fetch(mediaItem.url);
-                const blob = await res.blob();
-                const localUrl = URL.createObjectURL(blob);
-                const img = new Image();
-                img.onload = () => {
-                    setImgObj(img);
-                    const defaultScale = Math.max(CANVAS_W / img.width, CANVAS_H / img.height);
-                    setZoom(defaultScale);
-                    setPan({ x: (CANVAS_W - img.width * defaultScale) / 2, y: (CANVAS_H - img.height * defaultScale) / 2 });
-                };
-                img.src = localUrl;
-            } catch(e) { 
-                alert("圖片加載失敗"); onClose(); 
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d', { willReadFrequently: true }); // 優化讀取效能
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = imageUrl;
+        img.onload = () => {
+            if (canvas && ctx && containerRef.current) {
+                // 計算等比例縮放，適應螢幕大小
+                const containerW = containerRef.current.clientWidth;
+                const containerH = containerRef.current.clientHeight;
+                const ratio = Math.min(containerW / img.width, containerH / img.height);
+                
+                canvas.width = img.width * ratio;
+                canvas.height = img.height * ratio;
+                
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             }
         };
-        loadImg();
-    }, [mediaItem]);
+    }, [imageUrl]);
 
-    useEffect(() => {
-        if (!imgObj || !canvasRef.current) return;
+    const getCoordinates = (e: any) => {
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        if (e.touches && e.touches.length > 0) {
+            return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+        }
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    // ★ 馬賽克處理引擎
+    const applyMosaic = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) => {
+        const blockSize = 10; // 馬賽克方塊大小
+        const startX = Math.max(0, x - radius);
+        const startY = Math.max(0, y - radius);
+        const size = radius * 2;
+        
+        // 抓取筆刷範圍內的影像數據
+        const imageData = ctx.getImageData(startX, startY, size, size);
+        const data = imageData.data;
+
+        // 遍歷方塊並取平均色/左上景色來填充
+        for (let i = 0; i < size; i += blockSize) {
+            for (let j = 0; j < size; j += blockSize) {
+                // 圓形筆刷邊界檢查
+                const dx = startX + i + blockSize/2 - x;
+                const dy = startY + j + blockSize/2 - y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                    const pixelIndex = (j * size + i) * 4;
+                    const r = data[pixelIndex];
+                    const g = data[pixelIndex + 1];
+                    const b = data[pixelIndex + 2];
+                    
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillRect(startX + i, startY + j, blockSize, blockSize);
+                }
+            }
+        }
+    };
+
+    const startDrawing = (e: any) => {
+        e.preventDefault();
+        setIsDrawing(true);
+        const { x, y } = getCoordinates(e);
+        const ctx = canvasRef.current?.getContext('2d');
         if (!ctx) return;
 
-        canvas.width = CANVAS_W;
-        canvas.height = CANVAS_H;
-
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.save();
-        ctx.translate(pan.x, pan.y);
-        ctx.scale(zoom, zoom);
-        ctx.filter = `brightness(${brightness}%)`;
-        ctx.drawImage(imgObj, 0, 0);
-        ctx.restore();
-
-        ctx.fillStyle = '#1e293b'; 
-        masks.forEach(m => { ctx.fillRect(m.x, m.y, m.w, m.h); });
-
-        if (editorMode === 'mask' && isDrawingMask) {
-            ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
-            const w = currentPos.x - startPos.x;
-            const h = currentPos.y - startPos.y;
-            ctx.fillRect(startPos.x, startPos.y, w, h);
-            ctx.strokeStyle = '#ef4444';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(startPos.x, startPos.y, w, h);
-        }
-    }, [imgObj, brightness, zoom, pan, masks, isDrawingMask, currentPos, editorMode]);
-
-    const getCanvasPos = (clientX: number, clientY: number) => {
-        const rect = canvasRef.current!.getBoundingClientRect();
-        const scaleX = CANVAS_W / rect.width;
-        const scaleY = CANVAS_H / rect.height;
-        return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-    };
-
-    const handlePointerDown = (e: any) => {
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        if (editorMode === 'mask') {
-            setIsDrawingMask(true);
-            const pos = getCanvasPos(clientX, clientY);
-            setStartPos(pos); setCurrentPos(pos);
-        } else if (editorMode === 'pan') {
-            setIsDraggingImage(true);
-            setStartPos({ x: clientX, y: clientY }); 
+        if (brushType === 'mosaic') {
+            applyMosaic(ctx, x, y, brushSize);
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
         }
     };
 
-    const handlePointerMove = (e: any) => {
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        if (editorMode === 'mask' && isDrawingMask) {
-            setCurrentPos(getCanvasPos(clientX, clientY));
-        } else if (editorMode === 'pan' && isDraggingImage) {
-            const rect = canvasRef.current!.getBoundingClientRect();
-            const ratio = CANVAS_W / rect.width;
-            setPan(prev => ({ x: prev.x + (clientX - startPos.x) * ratio, y: prev.y + (clientY - startPos.y) * ratio }));
-            setStartPos({ x: clientX, y: clientY }); 
-        }
-    };
+    const draw = (e: any) => {
+        e.preventDefault();
+        if (!isDrawing) return;
+        const { x, y } = getCoordinates(e);
+        const ctx = canvasRef.current?.getContext('2d');
+        if (!ctx) return;
 
-    const handlePointerUp = () => {
-        if (editorMode === 'mask' && isDrawingMask) {
-            setIsDrawingMask(false);
-            const w = currentPos.x - startPos.x;
-            const h = currentPos.y - startPos.y;
-            if (Math.abs(w) > 20 && Math.abs(h) > 20) {
-                setMasks([...masks, { x: w > 0 ? startPos.x : currentPos.x, y: h > 0 ? startPos.y : currentPos.y, w: Math.abs(w), h: Math.abs(h) }]);
+        if (brushType === 'mosaic') {
+            applyMosaic(ctx, x, y, brushSize);
+        } else {
+            // 設定香港車牌專屬顏色與透明度 (稍微透一點點光會更自然)
+            if (brushType === 'front') {
+                ctx.strokeStyle = 'rgba(250, 250, 250, 0.95)'; // 車牌白
+            } else if (brushType === 'rear') {
+                ctx.strokeStyle = 'rgba(253, 224, 71, 0.95)'; // 車牌黃
+            } else {
+                ctx.strokeStyle = '#1e293b'; // 傳統黑色
             }
-        } else if (editorMode === 'pan') {
-            setIsDraggingImage(false);
+            
+            ctx.lineWidth = brushSize;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineTo(x, y);
+            ctx.stroke();
         }
     };
 
-    const handleSaveClick = async () => {
-        if (!canvasRef.current) return;
-        setIsProcessing(true);
-        try {
-            const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.85); 
-            await onSave(mediaItem, dataUrl);
-        } catch(e) { alert('儲存失敗'); } 
-        finally { setIsProcessing(false); }
-    };
+    const stopDrawing = () => setIsDrawing(false);
 
     return (
-        <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center md:p-4">
-            <div className="w-full md:max-w-6xl bg-slate-900 text-white md:rounded-2xl flex flex-col h-full md:h-[90vh] overflow-hidden shadow-2xl">
-                <div className="p-4 flex justify-between items-center border-b border-slate-700 bg-slate-800 flex-none">
-                    <h3 className="font-bold flex items-center"><Edit size={18} className="mr-2 text-blue-400"/> 圖片排版與美化 (輸出比例 4:3)</h3>
-                    <button onClick={onClose} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
-                </div>
+        <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-800 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
                 
-                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                    <div className="flex-1 p-2 md:p-6 flex items-center justify-center bg-black/80 overflow-hidden relative touch-none">
-                        {!imgObj && <div className="text-white flex items-center"><Loader2 className="animate-spin mr-2"/> 載入中...</div>}
-                        <canvas 
-                            ref={canvasRef}
-                            onMouseDown={handlePointerDown} onMouseMove={handlePointerMove}
-                            onMouseUp={handlePointerUp} onMouseLeave={handlePointerUp}
-                            onTouchStart={(e) => { e.preventDefault(); handlePointerDown(e); }}
-                            onTouchMove={(e) => { e.preventDefault(); handlePointerMove(e); }}
-                            onTouchEnd={handlePointerUp}
-                            className={`max-w-full max-h-full object-contain shadow-[0_0_50px_rgba(0,0,0,0.5)] border-2 border-slate-700 ${editorMode === 'pan' ? (isDraggingImage ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
-                        />
-                    </div>
+                {/* 頂部工具列 */}
+                <div className="p-4 bg-slate-900 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                    <h3 className="text-white font-bold text-sm md:text-base flex items-center">
+                        <span className="bg-blue-600 p-1.5 rounded-lg mr-2"><PenTool size={16}/></span> 
+                        車牌遮蔽工具
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
+                </div>
 
-                    <div className="w-full md:w-80 bg-slate-800 p-5 flex flex-col gap-6 overflow-y-auto flex-none border-t md:border-t-0 md:border-l border-slate-700">
-                        <div>
-                            <label className="text-xs text-slate-400 font-bold mb-2 block">1. 選擇操作模式</label>
-                            <div className="flex bg-slate-900 rounded-lg p-1">
-                                <button onClick={() => setEditorMode('pan')} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition ${editorMode === 'pan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Move size={16} className="mr-2"/> 移動排版</button>
-                                <button onClick={() => setEditorMode('mask')} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition ${editorMode === 'mask' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><MousePointer2 size={16} className="mr-2"/> 畫遮罩</button>
-                            </div>
-                        </div>
+                {/* 筆刷選擇區 */}
+                <div className="bg-slate-800 p-3 flex flex-wrap justify-center gap-2 border-b border-slate-700 shrink-0">
+                    <button onClick={() => setBrushType('front')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${brushType === 'front' ? 'bg-white text-slate-800 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        <div className="w-3 h-3 rounded-full bg-slate-100 border border-slate-300"></div> 前車牌 (白)
+                    </button>
+                    <button onClick={() => setBrushType('rear')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${brushType === 'rear' ? 'bg-yellow-400 text-yellow-900 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        <div className="w-3 h-3 rounded-full bg-yellow-400 border border-yellow-500"></div> 後車牌 (黃)
+                    </button>
+                    <button onClick={() => setBrushType('mosaic')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${brushType === 'mosaic' ? 'bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+                        <div className="w-3 h-3 rounded-[2px] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiM5OTkiLz48cmVjdCB4PSI0IiB5PSI0IiB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjOTk5Ii8+PHJlY3QgeD0iNCIgd2lkdGg9IjQiIGhlaWdodD0iNCIgZmlsbD0iI2NjYyIvPjxyZWN0IHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz48L3N2Zz4=')]"></div> 馬賽克
+                    </button>
+                </div>
 
-                        {editorMode === 'pan' && (
-                            <div className="space-y-4 animate-in fade-in">
-                                <div>
-                                    <label className="text-xs text-slate-400 font-bold mb-2 flex justify-between"><span>🔍 圖片縮放 (Zoom)</span><span className="text-blue-400">{Math.round(zoom * 100)}%</span></label>
-                                    <input type="range" min="0.2" max="3" step="0.05" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-full accent-blue-500"/>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-400 font-bold mb-2 flex justify-between"><span>☀️ 亮度調整 (Brightness)</span><span className="text-yellow-400">{brightness}%</span></label>
-                                    <input type="range" min="50" max="150" value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} className="w-full accent-yellow-500"/>
-                                </div>
-                            </div>
-                        )}
-
-                        {editorMode === 'mask' && masks.length > 0 && (
-                            <div className="animate-in fade-in">
-                                <button onClick={() => setMasks([])} className="w-full bg-slate-700 hover:bg-slate-600 text-red-300 text-sm font-bold py-2.5 rounded-lg transition border border-slate-600">復原 (清除所有遮罩)</button>
-                            </div>
-                        )}
-
-                        <div className="mt-auto pt-4 border-t border-slate-700">
-                            <button onClick={handleSaveClick} disabled={isProcessing || !imgObj} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center transition disabled:opacity-50 active:scale-95">
-                                {isProcessing ? <><Loader2 className="animate-spin mr-2" size={18}/> 處理中...</> : <><Save size={18} className="mr-2"/> 覆蓋並儲存</>}
-                            </button>
-                        </div>
+                {/* 畫布區塊 */}
+                <div ref={containerRef} className="flex-1 overflow-hidden bg-black/50 relative flex items-center justify-center p-2 touch-none">
+                    <canvas
+                        ref={canvasRef}
+                        onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
+                        onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
+                        className="cursor-crosshair shadow-2xl touch-none rounded-sm max-w-full max-h-full"
+                        style={{ display: 'block' }}
+                    />
+                    <div className="absolute bottom-4 text-white/50 text-xs font-bold pointer-events-none drop-shadow-md">
+                        👆 請用手指或滑鼠在車牌位置滑動
                     </div>
                 </div>
+
+                {/* 底部操作區 */}
+                <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 font-bold hidden sm:inline">筆刷大小:</span>
+                        <input type="range" min="10" max="80" value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className="w-24 md:w-32 accent-blue-500" />
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={() => {
+                            const canvas = canvasRef.current;
+                            const ctx = canvas?.getContext('2d');
+                            const img = new Image(); img.crossOrigin = "anonymous"; img.src = imageUrl;
+                            img.onload = () => { if (canvas && ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height); };
+                        }} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition-colors">
+                            重置還原
+                        </button>
+                        <button onClick={() => {
+                            const canvas = canvasRef.current;
+                            if (canvas) onSave(canvas.toDataURL('image/jpeg', 0.9));
+                        }} className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-1.5">
+                            <Check size={16}/> 儲存並替換
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </div>
     );
