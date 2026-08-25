@@ -1,12 +1,112 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator } from 'lucide-react';
+import { FileText, Search, Plus, Trash2, Edit, Eye, Car, Printer, Save, Check, X, Globe, ChevronLeft, RefreshCw, Calculator, PenTool } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy, where, getDocs } from "firebase/firestore";
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 import { calculateAutoLoan } from '@/utils/LoanCalculator'; 
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
+
+// ★★★ 新增：電子簽名板組件 ★★★
+const SignatureModal = ({ onSave, onClose, customerName }: { onSave: (img: string) => void, onClose: () => void, customerName: string }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        // 設定 Canvas 真實解析度，避免模糊
+        canvas.width = canvas.offsetWidth * 2;
+        canvas.height = canvas.offsetHeight * 2;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.scale(2, 2);
+            ctx.strokeStyle = '#0f172a'; // 深藍黑色的墨水感
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+    }, []);
+
+    const getCoordinates = (e: any) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        if (e.touches && e.touches.length > 0) {
+            return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+        }
+        return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const startDrawing = (e: any) => {
+        e.preventDefault(); setIsDrawing(true);
+        const { x, y } = getCoordinates(e);
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) { ctx.beginPath(); ctx.moveTo(x, y); }
+    };
+
+    const draw = (e: any) => {
+        e.preventDefault(); if (!isDrawing) return;
+        const { x, y } = getCoordinates(e);
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) { ctx.lineTo(x, y); ctx.stroke(); }
+    };
+
+    const stopDrawing = () => setIsDrawing(false);
+
+    const handleClear = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (canvas && ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+        }
+    };
+
+    const handleSave = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            // 轉成透明背景的 PNG Base64
+            onSave(canvas.toDataURL('image/png'));
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+                <div className="p-4 bg-slate-100 flex justify-between items-center border-b border-slate-200">
+                    <div>
+                        <h3 className="font-black text-slate-800 text-lg flex items-center"><PenTool className="mr-2 text-blue-600"/> 客戶電子簽署</h3>
+                        <p className="text-xs text-slate-500 mt-1 font-bold">請 {customerName || '客戶'} 在下方空白處簽名</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600"><X size={20}/></button>
+                </div>
+                
+                {/* Canvas 畫布區塊：加上 touch-none 防止手機滾動頁面 */}
+                <div className="p-4 bg-slate-50 relative">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
+                        <PenTool size={120} />
+                    </div>
+                    <canvas
+                        ref={canvasRef}
+                        onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing}
+                        onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing}
+                        className="w-full h-[60vh] md:h-[300px] bg-white rounded-xl shadow-inner border-2 border-dashed border-slate-300 touch-none cursor-crosshair relative z-10"
+                    />
+                    <div className="absolute bottom-6 right-6 text-slate-300 font-mono text-sm pointer-events-none z-0">Sign Here</div>
+                </div>
+
+                <div className="p-4 border-t border-slate-200 flex justify-between gap-3 bg-white">
+                    <button onClick={handleClear} className="px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">清除重簽</button>
+                    <button onClick={handleSave} className="flex-1 bg-blue-600 text-white font-black text-lg rounded-xl hover:bg-blue-700 shadow-lg active:scale-95 transition-transform flex items-center justify-center">
+                        <Check size={20} className="mr-2" /> 確認簽署
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const overseasOptions = [
     {k:'chk_ov_price', l:'車價'}, {k:'chk_ov_local', l:'當地人費用'}, {k:'chk_ov_auction', l:'拍賣手續'}, {k:'chk_ov_shipping', l:'運輸'}, 
@@ -62,7 +162,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         // ★ 新增：代收款授權書欄位
         enablePaymentAuth: false,
         authPayeeName: '',
-        authPayeeId: ''
+        authPayeeId: '',
+        customerSignature: ''
     });
 
     const [checklist, setChecklist] = useState({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -484,6 +585,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             authPayeeName: '',
             authPayeeId: '',
             paymentMethod: 'Cheque',
+            customerSignature: '',
             
             orderType: car.acquisition?.type === 'Import' ? 'Overseas' : 'None', 
             overseasCountry: 'Japan', etaFormat: 'date', etaDays: '', etaDate: car.eta || car.acquisition?.eta || '',
@@ -553,7 +655,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             // 👇 補上這三行，確保符合 TypeScript 型別要求
             enablePaymentAuth: false,
             authPayeeName: '',
-            authPayeeId: ''
+            authPayeeId: '',
+            customerSignature: ''
         });
         
         setChecklist({ vrd: false, keys: false, tools: false, manual: false, other: '' });
@@ -592,6 +695,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const dummyVehicle: any = {
             id: finalId || docId || 'DRAFT', 
             ...formData, 
+            customerSignature: formData.customerSignature, // ★ 傳入簽名
             photos: formData.contractPhotos || [], 
             price: Number(String(formData.price).replace(/,/g, '')) || 0, 
             deposit: Math.round(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0) * 100) / 100,
@@ -1323,7 +1427,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     <div className="p-3 border-b bg-slate-50 flex justify-between items-center shadow-sm z-10">
                         <span className="font-bold text-slate-700 text-sm">{docId ? '✏️ 編輯單據' : '📝 新增單據'}</span>
                         <div className="flex gap-2">
-                            {/* ★ 新增：重置按鈕 */}
+                            {/* ★ 新增：觸發電子簽名板的按鈕 */}
+                            <button type="button" onClick={() => setShowSignaturePad(true)} className="px-3 py-1.5 bg-yellow-500 text-yellow-950 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform hover:bg-yellow-400">
+                                <PenTool size={14} className="mr-1"/> 電子簽署
+                            </button>
+
                             <button onClick={handleResetForm} className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform hover:bg-slate-300" title="還原至最初載入的狀態">
                                 <RefreshCw size={14} className="mr-1"/> 重置
                             </button>
@@ -1839,6 +1947,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                 </div>
             </div>
+
+            {showSignaturePad && (
+                <SignatureModal 
+                    customerName={formData.customerName}
+                    onClose={() => setShowSignaturePad(false)}
+                    onSave={(imgBase64) => {
+                        setFormData(prev => ({ ...prev, customerSignature: imgBase64 }));
+                        setShowSignaturePad(false);
+                        showToast("✅ 電子簽署已成功捕捉！");
+                    }}
+                />
+            )}
         </div>
     );
 }
