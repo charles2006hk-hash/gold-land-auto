@@ -507,7 +507,63 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 const ref = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), { ...docData, createdAt: serverTimestamp() }); 
                 setDocId(ref.id); currentId = ref.id;
             }
-            alert("✅ 單據已成功儲存");
+            
+            // ★★★ 核心升級：智能同步客戶資料到資料庫中心 (Upsert 防重複引擎) ★★★
+            if (formData.customerName && formData.customerName.trim() !== '') {
+                const customerName = formData.customerName.trim();
+                const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
+                
+                // 1. 精準比對名稱
+                const q = query(dbRef, where('name', '==', customerName));
+                const snap = await getDocs(q);
+
+                if (!snap.empty) {
+                    // 2. 發現重複資料 -> 執行「智能合併更新 (Merge Update)」
+                    const existingDoc = snap.docs[0];
+                    const existingData = existingDoc.data();
+                    
+                    // 只有當舊資料沒有該欄位時，才用新資料補上，避免洗掉已豐富的資料
+                    const updatedFields: any = { updatedAt: serverTimestamp() };
+                    if (!existingData.phone && formData.customerPhone) updatedFields.phone = formData.customerPhone;
+                    if (!existingData.idNumber && formData.customerId) updatedFields.idNumber = formData.customerId;
+                    if (!existingData.address && formData.customerAddress) updatedFields.address = formData.customerAddress;
+                    
+                    // 自動補上關聯車牌 (去重疊)
+                    if (formData.regMark) {
+                        const currentPlates = existingData.relatedPlateNo ? existingData.relatedPlateNo.split(',').map((p:string) => p.trim()) : [];
+                        if (!currentPlates.includes(formData.regMark)) {
+                            currentPlates.push(formData.regMark);
+                            updatedFields.relatedPlateNo = currentPlates.join(', ');
+                        }
+                    }
+
+                    // 確保分類是 Person
+                    if (!existingData.category) updatedFields.category = 'Person';
+
+                    if (Object.keys(updatedFields).length > 1) {
+                        await updateDoc(doc(dbRef, existingDoc.id), updatedFields);
+                        console.log(`✅ 已智能合併更新現有客戶資料: ${customerName}`);
+                    }
+                } else {
+                    // 3. 完全沒找到 -> 執行「全新建立 (Insert)」
+                    const isCompany = selectedDocType === 'purchase_contract' && formData.customerId?.includes('BR');
+                    await addDoc(dbRef, {
+                        name: customerName,
+                        category: isCompany ? 'Company' : 'Person',
+                        roles: selectedDocType === 'purchase_contract' ? ['行家 / 前車主'] : ['買家'],
+                        phone: formData.customerPhone || '',
+                        idNumber: formData.customerId || '',
+                        address: formData.customerAddress || '',
+                        relatedPlateNo: formData.regMark || '',
+                        createdAt: serverTimestamp(),
+                        updatedAt: serverTimestamp(),
+                        managedBy: staffId // 預設由開單業務負責
+                    });
+                    console.log(`✅ 已在資料庫中自動建立新客戶: ${customerName}`);
+                }
+            }
+            
+            alert("✅ 單據已成功儲存\n(客戶資料已同步更新至資料庫中心)");
             return currentId; 
         } catch (e) { console.error(e); alert("儲存失敗"); return null; }
     };
