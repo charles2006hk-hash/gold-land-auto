@@ -1066,7 +1066,89 @@ const VehicleFormModal = ({
             }
         }
 
-        try { await saveVehicle(e); } catch (err) { alert(`儲存失敗: ${err}`); }
+        try { 
+            // 1. 先執行原本的車輛儲存動作
+            await saveVehicle(e); 
+            
+            // 2. ★★★ 核心升級：智能同步收車/售車客戶至資料庫中心 (Upsert 防重複引擎) ★★★
+            if (db && staffId) {
+                // 動態載入 Firebase 方法避免依賴衝突
+                const { collection, query, where, getDocs, updateDoc, addDoc, serverTimestamp, doc } = await import('firebase/firestore');
+                const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
+                const regMark = formData.get('regMark') as string || '';
+
+                // 通用同步函數
+                const syncPerson = async (name: string, phone: string, idNum: string, address: string, role: string) => {
+                    if (!name || name.trim() === '') return;
+                    const cleanName = name.trim();
+                    const q = query(dbRef, where('name', '==', cleanName));
+                    const snap = await getDocs(q);
+
+                    if (!snap.empty) {
+                        // 💡 發現重複資料 -> 執行「智能合併更新 (Merge Update)」
+                        const existingDoc = snap.docs[0];
+                        const existingData = existingDoc.data();
+                        const updatedFields: any = { updatedAt: serverTimestamp() };
+                        
+                        // 只填補空缺，不覆蓋舊有珍貴資料
+                        if (!existingData.phone && phone) updatedFields.phone = phone;
+                        if (!existingData.idNumber && idNum) updatedFields.idNumber = idNum;
+                        if (!existingData.address && address) updatedFields.address = address;
+                        
+                        // 自動補上關聯車牌 (去重複合併)
+                        if (regMark) {
+                            const currentPlates = existingData.relatedPlateNo ? existingData.relatedPlateNo.split(',').map((p:string)=>p.trim()) : [];
+                            if (!currentPlates.includes(regMark)) {
+                                currentPlates.push(regMark);
+                                updatedFields.relatedPlateNo = currentPlates.join(', ');
+                            }
+                        }
+                        
+                        if (!existingData.category) updatedFields.category = 'Person';
+                        
+                        // 智能疊加角色標籤 (Role)
+                        const currentRoles = existingData.roles || [];
+                        if (!currentRoles.includes(role)) {
+                            updatedFields.roles = [...currentRoles, role];
+                        }
+
+                        if (Object.keys(updatedFields).length > 1) {
+                            await updateDoc(doc(dbRef, existingDoc.id), updatedFields);
+                            console.log(`✅ 已智能合併更新現有資料庫檔案: ${cleanName}`);
+                        }
+                    } else {
+                        // 💡 完全沒找到 -> 執行「全新建立 (Insert)」
+                        const isCompany = idNum && idNum.toUpperCase().includes('BR');
+                        await addDoc(dbRef, {
+                            name: cleanName,
+                            category: isCompany ? 'Company' : 'Person',
+                            roles: [role],
+                            phone: phone || '',
+                            idNumber: idNum || '',
+                            address: address || '',
+                            relatedPlateNo: regMark || '',
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp(),
+                            managedBy: staffId
+                        });
+                        console.log(`✅ 已在資料庫中心自動建立新檔案: ${cleanName}`);
+                    }
+                };
+
+                // A. 執行同步「前手/收車對象 (Vendor)」
+                const formVendorName = formData.get('acq_vendor') as string;
+                const formVendorPhone = formData.get('acq_vendorPhone') as string;
+                const formVendorID = formData.get('acq_vendorID') as string;
+                await syncPerson(formVendorName, formVendorPhone, formVendorID, '', '前車主/行家');
+
+                // B. 執行同步「買家 (Purchaser)」
+                const formCustName = formData.get('customerName') as string;
+                const formCustPhone = formData.get('customerPhone') as string;
+                const formCustID = formData.get('customerID') as string;
+                const formCustAddress = formData.get('customerAddress') as string;
+                await syncPerson(formCustName, formCustPhone, formCustID, formCustAddress, '買家');
+            }
+        } catch (err) { alert(`儲存失敗: ${err}`); }
     };
 
     const handleClose = () => { setEditingVehicle(null); if(activeTab === 'inventory_add') setActiveTab('inventory'); };
