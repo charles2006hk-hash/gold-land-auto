@@ -231,7 +231,8 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
     // 重複資料處理狀態
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
     const [showDupeModal, setShowDupeModal] = useState(false);
-
+    const [selectedDupeIds, setSelectedDupeIds] = useState<string[]>([]);
+    
     // AI 識別狀態
     const [isScanning, setIsScanning] = useState(false);
 
@@ -803,25 +804,41 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         entries.forEach(e => {
             const nameKey = e.name.trim(); 
             if (!nameKey) return;
-            // ★ 升級 1：以「類別 + 名稱」作為分組鍵，嚴格隔離不同性質的文件
             const groupKey = `${e.category}::${nameKey}`; 
             if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
             groupMap.get(groupKey)?.push(e);
         });
         const duplicates: DatabaseEntry[][] = [];
-        groupMap.forEach((group) => { if (group.length > 1) duplicates.push(group); });
+        const allIds: string[] = []; // ★ 儲存所有重複項目的 ID 以便預設全選
+        groupMap.forEach((group) => { 
+            if (group.length > 1) {
+                duplicates.push(group); 
+                group.forEach(e => allIds.push(e.id));
+            }
+        });
         if (duplicates.length === 0) { showToast("未發現重複資料"); } 
-        else { setDupeGroups(duplicates); setShowDupeModal(true); }
+        else { 
+            setDupeGroups(duplicates); 
+            setSelectedDupeIds(allIds); // ★ 預設全選
+            setShowDupeModal(true); 
+        }
     };
 
     // ★★★ 智能合併防重複引擎 (Smart Merge) ★★★
     const resolveDuplicate = async (keepId: string, group: DatabaseEntry[]) => {
-        if (!confirm("確定執行「智能合併」？\n系統會將其他紀錄的圖片、標籤及空缺資料吸收進這筆，並安全移除重複項。")) return;
+        // ★ 核心升級：只抓取「被勾選」且「不是自己」的項目來合併
+        const otherEntries = group.filter(e => e.id !== keepId && selectedDupeIds.includes(e.id));
+        
+        if (otherEntries.length === 0) {
+            showToast("請至少勾選一筆要合併吸收的資料！", "error");
+            return;
+        }
+
+        if (!confirm(`確定執行「智能合併」？\n系統將保留您點擊的主體，並吸收已勾選的 ${otherEntries.length} 筆資料。\n(未勾選的資料將會維持原狀不被影響)`)) return;
         if (!db) return;
 
         try {
             const keepEntry = group.find(e => e.id === keepId)!;
-            const otherEntries = group.filter(e => e.id !== keepId);
             const deleteIds = otherEntries.map(e => e.id);
 
             // 1. 複製主體資料準備合併
@@ -1514,23 +1531,35 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                             return (
                                                 <div key={item.id} className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-50 p-3 rounded-lg border border-slate-200 hover:border-indigo-300 transition-colors gap-4">
                                                     
-                                                    <div className="text-xs space-y-1.5 flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200">{item.category}</span> 
-                                                            {item.roles?.map((r:string) => <span key={r} className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200">{r}</span>)}
-                                                            {item.attachments?.length > 0 && <span className="text-purple-600 font-bold flex items-center"><ImageIcon size={12} className="mr-1"/> 圖片x{item.attachments.length}</span>}
-                                                        </div>
-                                                        
-                                                        <div className="grid grid-cols-2 gap-2 mt-1">
-                                                            <div className="truncate"><span className="font-bold text-gray-400">電話:</span> <span className="text-gray-700 font-mono">{item.phone || '-'}</span></div>
-                                                            <div className="truncate"><span className="font-bold text-gray-400">證件:</span> <span className="text-gray-700 font-mono">{item.idNumber || '-'}</span></div>
-                                                            <div className="truncate"><span className="font-bold text-gray-400">車牌:</span> <span className="text-gray-700 font-mono font-bold bg-yellow-100 px-1 rounded">{item.plateNoHK || item.plateNoCN || '-'}</span></div>
-                                                            <div className="truncate"><span className="font-bold text-gray-400">更新:</span> <span className="text-gray-700">{timeDisplay}</span></div>
+                                                    {/* ★ 升級：加入勾選框 */}
+                                                    <div className="flex items-center flex-1 min-w-0 w-full">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedDupeIds.includes(item.id)} 
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) setSelectedDupeIds([...selectedDupeIds, item.id]);
+                                                                else setSelectedDupeIds(selectedDupeIds.filter(id => id !== item.id));
+                                                            }}
+                                                            className="w-5 h-5 mr-3 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer flex-shrink-0"
+                                                        />
+                                                        <div className="text-xs space-y-1.5 flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-200">{item.category}</span> 
+                                                                {item.roles?.map((r:string) => <span key={r} className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-200">{r}</span>)}
+                                                                {item.attachments?.length > 0 && <span className="text-purple-600 font-bold flex items-center"><ImageIcon size={12} className="mr-1"/> 圖片x{item.attachments.length}</span>}
+                                                            </div>
+                                                            
+                                                            <div className="grid grid-cols-2 gap-2 mt-1">
+                                                                <div className="truncate"><span className="font-bold text-gray-400">電話:</span> <span className="text-gray-700 font-mono">{item.phone || '-'}</span></div>
+                                                                <div className="truncate"><span className="font-bold text-gray-400">證件:</span> <span className="text-gray-700 font-mono">{item.idNumber || '-'}</span></div>
+                                                                <div className="truncate"><span className="font-bold text-gray-400">車牌:</span> <span className="text-gray-700 font-mono font-bold bg-yellow-100 px-1 rounded">{item.plateNoHK || item.plateNoCN || '-'}</span></div>
+                                                                <div className="truncate"><span className="font-bold text-gray-400">更新:</span> <span className="text-gray-700">{timeDisplay}</span></div>
+                                                            </div>
                                                         </div>
                                                     </div>
 
                                                     <button onClick={() => resolveDuplicate(item.id, group)} className="px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-indigo-700 flex items-center shrink-0 w-full md:w-auto justify-center transition-transform active:scale-95">
-                                                        <Zap size={14} className="mr-1.5 fill-white"/> 保留並吸收其他筆
+                                                        <Zap size={14} className="mr-1.5 fill-white"/> 保留並吸收已勾選
                                                     </button>
                                                 </div>
                                             )
