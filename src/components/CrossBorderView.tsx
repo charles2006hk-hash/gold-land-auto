@@ -184,6 +184,66 @@ export default function CrossBorderView({
     const [newPayAmount, setNewPayAmount] = useState('');
     const [newPayMethod, setNewPayMethod] = useState('Cash');
     const [reportModalData, setReportModalData] = useState<{ title: string, type: 'expired' | 'soon', items: any[] } | null>(null);
+    // ★ 新增：行動清單專用狀態與函數
+    const [reportSelectedIds, setReportSelectedIds] = useState<string[]>([]);
+    const [reportNotes, setReportNotes] = useState<Record<string, string>>({});
+
+    // 匯出為 Apple/Google 行事曆 (.ics)
+    const exportToCalendar = (item: any, note: string) => {
+        const dateStr = item.date.replace(/-/g, ''); // 轉為 YYYYMMDD
+        const summary = `[${item.plate}] ${item.item}`;
+        const description = note ? `${note}\\n\\n系統自動排程` : `車牌: ${item.plate}\\n項目: ${item.item}\\n到期日: ${item.date}\\n\\n系統自動排程`;
+        const icsData = `BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART;VALUE=DATE:${dateStr}\nSUMMARY:${summary}\nDESCRIPTION:${description}\nEND:VEVENT\nEND:VCALENDAR`;
+        const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.setAttribute('download', `${item.plate}_${item.item}.ics`);
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+
+    // 輸出列印行動清單 PDF
+    const printActionList = () => {
+        if (!reportModalData) return;
+        const selectedItems = reportModalData.items.filter(it => reportSelectedIds.includes(it.id));
+        if (selectedItems.length === 0) return alert("請至少勾選一個項目列印");
+
+        const printWin = window.open('', '_blank');
+        if (!printWin) return alert("請允許彈出視窗以進行列印");
+
+        const html = `
+            <html><head><title>行動清單 Action List</title>
+            <style>
+                body { font-family: 'Helvetica Neue', sans-serif; padding: 20px; color: #1e293b; }
+                h1 { text-align: center; border-bottom: 2px solid #1e293b; padding-bottom: 10px; font-size: 24px; letter-spacing: 2px;}
+                .task-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; align-items: flex-start; page-break-inside: avoid; }
+                .checkbox { width: 24px; height: 24px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 15px; flex-shrink: 0; }
+                .content { flex-1; }
+                .plate { display: inline-block; background: #FFD600; color: #000; font-weight: bold; padding: 3px 8px; border: 1px solid #000; border-radius: 3px; font-family: monospace; font-size: 14px; margin-bottom: 5px; }
+                .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+                .meta { color: #64748b; font-size: 14px; margin-bottom: 8px; }
+                .note { background: #f1f5f9; padding: 10px; border-left: 4px solid #3b82f6; font-size: 14px; color: #334155; }
+                .footer { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 40px; }
+            </style>
+            </head><body>
+                <h1>📝 業務行動清單 (Action List)</h1>
+                <p style="text-align:center; color:#64748b; margin-bottom:30px;">產生日: ${new Date().toLocaleDateString('zh-HK')} | 負責人: ${staffId}</p>
+                ${selectedItems.map(it => `
+                    <div class="task-card">
+                        <div class="checkbox"></div>
+                        <div class="content">
+                            <div><span class="plate">${it.plate}</span></div>
+                            <div class="title">${it.item}</div>
+                            <div class="meta">📍 期限: <b>${it.date}</b> (${it.days < 0 ? '已過期' : '剩餘'} ${Math.abs(it.days)} 天)</div>
+                            ${reportNotes[it.id] ? `<div class="note">${reportNotes[it.id]}</div>` : '<div class="note" style="background:transparent; border:1px dashed #cbd5e1; height:30px; color:#94a3b8;">手寫備註...</div>'}
+                        </div>
+                    </div>
+                `).join('')}
+                <div class="footer">-- GOLD LAND AUTO 金田汽車 內部文件 --</div>
+            </body></html>
+        `;
+        printWin.document.write(html); printWin.document.close();
+        setTimeout(() => { printWin.print(); printWin.close(); }, 250);
+    };
     
     // ★ 新增：控制「項目合併開單選取彈窗」的狀態
     const [isCombineModalOpen, setIsCombineModalOpen] = useState(false);
@@ -229,7 +289,7 @@ export default function CrossBorderView({
             if (dateStr && isRemind) { 
                 const days = getDaysRemaining(dateStr); 
                 if (days !== null) { 
-                    const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days }; 
+                    const itemData = { id: `${v.id}-${label}`, vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days };
                     if (days < 0) expiredMap.set(`${v.id}-${label}`, itemData); 
                     else if (days <= 30) soonMap.set(`${v.id}-${label}`, itemData); 
                 } 
@@ -245,7 +305,7 @@ export default function CrossBorderView({
             if (lastOutDate) {
                 const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
                 const days = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                const itemData = { vid: v.id!, plate: v.regMark || '未出牌', item: '⚠️ 3個月兜圈', date: lastOutDate, days: days }; 
+                const itemData = { id: `${v.id}-loop`, vid: v.id!, plate: v.regMark || '未出牌', item: '⚠️ 3個月兜圈', date: lastOutDate, days: days }; 
                 if (days < 0) expiredMap.set(`${v.id}-loop`, itemData); 
                 else if (days <= 30) soonMap.set(`${v.id}-loop`, itemData); 
             }
@@ -352,7 +412,101 @@ export default function CrossBorderView({
 
     return (
         <div className="flex flex-col h-full gap-4 relative">
-            {reportModalData && (<div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setReportModalData(null)}><div className="bg-white w-full max-w-3xl rounded-xl shadow-2xl flex flex-col max-h-[90%]" onClick={e => e.stopPropagation()}><div className={`p-4 text-white flex justify-between items-center ${reportModalData.type === 'expired' ? 'bg-red-800' : 'bg-amber-700'}`}><h3 className="font-bold text-lg">{reportModalData.title}</h3><button onClick={() => setReportModalData(null)}><X/></button></div><div className="flex-1 overflow-y-auto p-6 bg-slate-50"><table className="w-full text-sm border-collapse bg-white shadow-sm"><thead><tr className="bg-slate-100"><th className="p-2 text-left">車牌</th><th className="p-2">項目</th><th className="p-2">日期</th><th className="p-2 text-right">狀態</th></tr></thead><tbody>{reportModalData.items.map((it, i) => (<tr key={i} className="border-b"><td className="p-2 font-bold">{it.plate}</td><td className="p-2">{it.item}</td><td className="p-2">{it.date}</td><td className="p-2 text-right font-bold">{it.days < 0 ? '過期' : '剩餘'} {Math.abs(it.days)}天</td></tr>))}</tbody></table></div></div></div>)}
+            {/* ★★★ 全新升級：業務行動清單中心 (Action List Center) ★★★ */}
+            {reportModalData && (
+                <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setReportModalData(null)}>
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                        
+                        {/* 頂部標題 */}
+                        <div className={`p-4 text-white flex justify-between items-center shrink-0 ${reportModalData.type === 'expired' ? 'bg-gradient-to-r from-red-800 to-red-600' : 'bg-gradient-to-r from-amber-600 to-orange-500'}`}>
+                            <div>
+                                <h3 className="font-bold text-lg flex items-center gap-2">
+                                    <Check size={20}/> 業務行動排程中心
+                                </h3>
+                                <p className="text-xs opacity-80 mt-0.5">{reportModalData.title} · 共 {reportModalData.items.length} 項</p>
+                            </div>
+                            <button onClick={() => setReportModalData(null)} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
+                        </div>
+
+                        {/* 批次操作列 */}
+                        <div className="bg-slate-50 border-b border-slate-200 p-3 flex justify-between items-center shrink-0">
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer select-none">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 accent-blue-600"
+                                    checked={reportSelectedIds.length === reportModalData.items.length && reportModalData.items.length > 0}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setReportSelectedIds(reportModalData.items.map(it => it.id));
+                                        else setReportSelectedIds([]);
+                                    }}
+                                />
+                                全選 ({reportSelectedIds.length})
+                            </label>
+                            <button 
+                                onClick={printActionList}
+                                className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+                            >
+                                <Printer size={14}/> 輸出列印 PDF
+                            </button>
+                        </div>
+
+                        {/* 任務清單區 (模仿協作中心卡片設計) */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100/50">
+                            {reportModalData.items.map(it => {
+                                const isChecked = reportSelectedIds.includes(it.id);
+                                return (
+                                    <div key={it.id} className={`p-4 rounded-xl border transition-all ${isChecked ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-200 shadow-sm opacity-80 hover:opacity-100'}`}>
+                                        <div className="flex gap-3">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isChecked}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setReportSelectedIds([...reportSelectedIds, it.id]);
+                                                    else setReportSelectedIds(reportSelectedIds.filter(id => id !== it.id));
+                                                }}
+                                                className="w-5 h-5 mt-1 accent-blue-600 cursor-pointer shrink-0"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                                    <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 py-0.5 rounded shadow-sm">
+                                                        {it.plate}
+                                                    </span>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${it.days < 0 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+                                                        {it.days < 0 ? `已逾期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400 font-mono ml-auto">
+                                                        到期: {it.date}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="font-bold text-slate-800 text-sm mb-2">{it.item}</div>
+                                                
+                                                {/* 手寫備註框 (模擬隨記) */}
+                                                <input 
+                                                    type="text"
+                                                    placeholder="輸入行動備註 (例如：皇崗裝牌、聯絡車主)..."
+                                                    value={reportNotes[it.id] || ''}
+                                                    onChange={e => setReportNotes({...reportNotes, [it.id]: e.target.value})}
+                                                    className={`w-full text-xs p-2 rounded-lg border outline-none transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200 focus:border-blue-400 focus:bg-white' : 'bg-slate-50 border-slate-200'}`}
+                                                />
+
+                                                <div className="flex justify-end mt-2">
+                                                    <button 
+                                                        onClick={() => exportToCalendar(it, reportNotes[it.id] || '')}
+                                                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 px-2.5 py-1.5 rounded-lg font-bold flex items-center shadow-sm transition-colors"
+                                                    >
+                                                        <CalendarDays size={12} className="mr-1"/> 加入行事曆
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showDocModal && activeCar && <DocumentCustodyModal vehicle={activeCar} staffId={"Staff"} onClose={() => setShowDocModal(false)} onSaveLog={handleSaveDocLog} />}
 
