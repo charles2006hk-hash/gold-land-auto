@@ -575,18 +575,19 @@ export default function CrossBorderView({
                                 const carCN = normalizePlate(activeCar.crossBorder?.mainlandPlate);
 
                                 const relatedDocs = dbEntries?.filter(entry => {
-                                    // 確保只抓取中港類別的文件
-                                    if (entry.category !== 'CrossBorder') return false;
-
+                                    // ★ 核心升級：移除 category 限制！
+                                    // 只要這份文件有綁定這台車的「香港車牌」或「內地車牌」，
+                                    // 不管它是「車輛牌簿」、「公司文件」還是「司機證件」，通通拉出來顯示！
+                                    
                                     // 清洗資料庫中的所有潛在車牌欄位
                                     const docHK = normalizePlate(entry.plateNoHK);
                                     const docCN = normalizePlate(entry.plateNoCN);
                                     const docRelated = normalizePlate(entry.relatedPlateNo);
 
-                                    // 🛑 防呆機制：如果這份文件完全沒有任何車牌資料，絕對不能配對 (防止 "" === "" 的全域匹配災難)
+                                    // 🛑 防呆機制：如果這份文件完全沒有任何車牌資料，絕對不能配對
                                     if (!docHK && !docCN && !docRelated) return false;
 
-                                    // ✅ 只要香港車牌或內地車牌有任何一個精準命中，就拉出來顯示
+                                    // ✅ 只要精準命中，就拉出來顯示
                                     if (carHK && (carHK === docHK || carHK === docCN || carHK === docRelated)) return true;
                                     if (carCN && (carCN === docHK || carCN === docCN || carCN === docRelated)) return true;
 
