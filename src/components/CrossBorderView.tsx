@@ -157,12 +157,14 @@ interface CrossBorderViewProps {
     updateVehicle: any;
     primaryImages: Record<string, string>;
     onJumpToDoc: (docData: any) => void;
+    staffId?: string; // ★ 新增：接收登入員工 ID
 }
 
 export default function CrossBorderView({ 
     inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, 
     setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, 
-    deletePayment, updateVehicle, primaryImages, onJumpToDoc
+    deletePayment, updateVehicle, primaryImages, onJumpToDoc,
+    staffId = 'Staff' // ★ 新增：解構出 staffId，若無則預設顯示 'Staff'
 }: CrossBorderViewProps) {
     const [searchTerm, setSearchTerm] = useState('');
     // ★ 優化 1：將頂部警報面板預設為 false (收起狀態)，釋放巨大垂直空間
