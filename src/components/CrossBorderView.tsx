@@ -568,10 +568,30 @@ export default function CrossBorderView({
 
                             {/* 2. ★ 新增：自動連動資料庫中心的中港文件 ★ */}
                             {(() => {
-                                const relatedDocs = dbEntries?.filter(entry => 
-                                    entry.category === 'CrossBorder' && 
-                                    (entry.relatedPlateNo === activeCar.crossBorder?.mainlandPlate || entry.plateNoHK === activeCar.regMark || entry.relatedPlateNo === activeCar.regMark)
-                                ) || [];
+                                // ★ 核心修復：智能車牌清洗器 (去除所有空白與特殊符號，強制轉大寫，消除人為輸入誤差)
+                                const normalizePlate = (p?: string) => (p || '').replace(/[^A-Z0-9\u4e00-\u9fa5]/ig, '').toUpperCase();
+
+                                const carHK = normalizePlate(activeCar.regMark);
+                                const carCN = normalizePlate(activeCar.crossBorder?.mainlandPlate);
+
+                                const relatedDocs = dbEntries?.filter(entry => {
+                                    // 確保只抓取中港類別的文件
+                                    if (entry.category !== 'CrossBorder') return false;
+
+                                    // 清洗資料庫中的所有潛在車牌欄位
+                                    const docHK = normalizePlate(entry.plateNoHK);
+                                    const docCN = normalizePlate(entry.plateNoCN);
+                                    const docRelated = normalizePlate(entry.relatedPlateNo);
+
+                                    // 🛑 防呆機制：如果這份文件完全沒有任何車牌資料，絕對不能配對 (防止 "" === "" 的全域匹配災難)
+                                    if (!docHK && !docCN && !docRelated) return false;
+
+                                    // ✅ 只要香港車牌或內地車牌有任何一個精準命中，就拉出來顯示
+                                    if (carHK && (carHK === docHK || carHK === docCN || carHK === docRelated)) return true;
+                                    if (carCN && (carCN === docHK || carCN === docCN || carCN === docRelated)) return true;
+
+                                    return false;
+                                }) || [];
 
                                 if (relatedDocs.length === 0) return null;
 
