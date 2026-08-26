@@ -171,7 +171,7 @@ export default function CrossBorderView({
     
     // ★ 新增：控制關聯文件的摺疊狀態與全螢幕放大預覽
     const [isRelatedDocsOpen, setIsRelatedDocsOpen] = useState(false);
-    const [fullScreenImg, setFullScreenImg] = useState<string | null>(null);
+    const [previewDoc, setPreviewDoc] = useState<any | null>(null);
     
     const [isMobileDetail, setIsMobileDetail] = useState(false);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -629,7 +629,7 @@ export default function CrossBorderView({
                                                     return (
                                                         <div 
                                                             key={doc.id} 
-                                                            onClick={() => thumbUrl ? setFullScreenImg(thumbUrl) : alert('此文件無圖片可供預覽。')}
+                                                            onClick={() => setPreviewDoc(doc)} // ★ 修復：直接傳入整份文件資料
                                                             className="w-32 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group flex-shrink-0"
                                                         >
                                                             <div className="h-20 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
@@ -965,20 +965,69 @@ export default function CrossBorderView({
                 </div>
             )}
 
-            {/* ★★★ 全螢幕圖片預覽 Modal ★★★ */}
-            {fullScreenImg && (
+            {/* ★★★ 升級版：綜合文件與圖片預覽 Modal ★★★ */}
+            {previewDoc && (
                 <div 
-                    className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in touch-none" 
-                    onClick={() => setFullScreenImg(null)}
+                    className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in touch-none" 
+                    onClick={() => setPreviewDoc(null)}
                 >
-                    <button className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 p-2 rounded-full transition-all z-10">
-                        <X size={24}/>
-                    </button>
-                    <img 
-                        src={fullScreenImg} 
-                        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-                        onClick={e => e.stopPropagation()} 
-                    />
+                    <div 
+                        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl" 
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="bg-slate-900 p-4 flex justify-between items-center text-white shrink-0">
+                            <h3 className="font-bold flex items-center text-sm"><Database size={16} className="mr-2 text-blue-400"/> 文件資料預覽</h3>
+                            <button onClick={() => setPreviewDoc(null)} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={18}/></button>
+                        </div>
+                        
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-5 bg-slate-50 flex flex-col gap-4 scrollbar-thin">
+                            {/* 文字資料區 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">名稱 (Name)</span>
+                                    <span className="font-black text-slate-800 text-lg leading-tight">{previewDoc.name || '-'}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">文件分類</span>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">{previewDoc.category || '未分類'}</span>
+                                        {previewDoc.docType && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs border">{previewDoc.docType}</span>}
+                                    </div>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">電話 (Phone)</span>
+                                    <span className="font-mono font-bold text-slate-700">{previewDoc.phone || '-'}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">證件號碼 (ID/BR)</span>
+                                    <span className="font-mono font-bold text-slate-700">{previewDoc.idNumber || '-'}</span>
+                                </div>
+                            </div>
+
+                            {previewDoc.description && (
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-1">備註 (Remarks)</span>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{previewDoc.description}</p>
+                                </div>
+                            )}
+
+                            {/* 圖片區：同時相容新版 attachments 與舊版 images */}
+                            {(() => {
+                                const imgUrl = previewDoc.attachments?.[0]?.data || previewDoc.images?.[0];
+                                if (!imgUrl) return null;
+                                return (
+                                    <div className="mt-2">
+                                        <span className="text-[10px] text-slate-400 font-bold block mb-2 px-1">附件圖片預覽</span>
+                                        <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
+                                            <img src={imgUrl} className="w-full h-auto max-h-[50vh] object-contain rounded-lg" alt="Document Attachment" />
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
                 </div>
             )}
 
