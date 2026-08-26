@@ -1256,32 +1256,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                         </div>
                                     )}
 
-                                    <div><label className="block text-xs font-bold text-slate-500 mb-1">文件類型</label><input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="選擇或輸入新類型..."/><datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist></div>
                                     
-                                    {editingEntry.docType && DOCUMENT_FIELD_SCHEMA[editingEntry.docType] && (
-                                        <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 mt-2 animate-fade-in space-y-3">
-                                            <div className="text-[10px] font-bold text-blue-600 flex items-center mb-1">
-                                                <ShieldCheck size={14} className="mr-1"/> {editingEntry.docType} 專屬數據欄位
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                {DOCUMENT_FIELD_SCHEMA[editingEntry.docType].map((field) => (
-                                                    <div key={field.key} className={field.type === 'date' ? 'col-span-1' : 'col-span-2 md:col-span-1'}>
-                                                        <label className="block text-[10px] text-slate-400 font-bold mb-1">{field.label}</label>
-                                                        <input 
-                                                            type={field.type} 
-                                                            disabled={!isDbEditing} 
-                                                            value={editingEntry.extractedData?.[field.key] || ''} 
-                                                            onChange={e => {
-                                                                const newExtData = { ...(editingEntry.extractedData || {}), [field.key]: e.target.value };
-                                                                setEditingEntry({ ...editingEntry, extractedData: newExtData });
-                                                            }} 
-                                                            className="w-full p-2 border border-slate-200 rounded text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none font-medium" 
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
 
                                     {toastMsg && (
                                         <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${toastMsg.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
