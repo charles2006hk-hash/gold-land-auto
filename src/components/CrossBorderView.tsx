@@ -858,7 +858,6 @@ export default function CrossBorderView({
             {isCombineModalOpen && activeCar && (
                 <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh] overflow-hidden">
-                        
                         {/* 彈窗標頭 */}
                         <div className="p-4 bg-gradient-to-r from-indigo-700 to-slate-950 text-white flex justify-between items-center shrink-0">
                             <div>
@@ -962,30 +961,27 @@ export default function CrossBorderView({
                                 </button>
                             </div>
                         </div>
-
                     </div>
                 </div>
             )}
+
             {/* ★★★ 全螢幕圖片預覽 Modal ★★★ */}
-                        {fullScreenImg && (
-                            <div 
-                                className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in touch-none" 
-                                onClick={() => setFullScreenImg(null)}
-                            >
-                                <button className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 p-2 rounded-full transition-all z-10">
-                                    <X size={24}/>
-                                </button>
-                                <img 
-                                    src={fullScreenImg} 
-                                    className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-                                    onClick={e => e.stopPropagation()} 
-                                />
-                            </div>
-                        )}
-            
-                    </div> // <- 這是整個 CrossBorderView 最底部的結束 div
-                );
-            }
+            {fullScreenImg && (
+                <div 
+                    className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in touch-none" 
+                    onClick={() => setFullScreenImg(null)}
+                >
+                    <button className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 p-2 rounded-full transition-all z-10">
+                        <X size={24}/>
+                    </button>
+                    <img 
+                        src={fullScreenImg} 
+                        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                        onClick={e => e.stopPropagation()} 
+                    />
+                </div>
+            )}
+
         </div>
     );
 }
