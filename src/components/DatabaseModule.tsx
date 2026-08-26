@@ -893,7 +893,8 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                             <button onClick={(e) => { 
                                 e.preventDefault(); 
                                 const defaultDoc = settings.dbDocTypes?.['Person']?.[0] || '';
-                                setEditingEntry({ id: '', category: 'Person', docType: defaultDoc, name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null }); 
+                                // ★ 確保新增時，提醒模塊絕對是預設關閉的
+                                setEditingEntry({ id: '', category: 'Person', docType: defaultDoc, name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null, reminderEnabled: false, customReminders: [] }); 
                                 setIsDbEditing(true); 
                             }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
                         </div>
@@ -1009,9 +1010,44 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* 第一欄：文字輸入區 */}
                                 <div className="space-y-4">
+                                    
+                                    {/* ★ 升級優化：將文件類型與專屬欄位移到最上方，作為建檔第一步 */}
+                                    <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                                        <label className="block text-xs font-black text-blue-800 mb-2 uppercase tracking-wider">1. 請先選擇文件類型 (Doc Type)</label>
+                                        <input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2.5 border border-blue-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none font-bold text-slate-800 shadow-inner transition-all" placeholder="選擇或輸入文件類型..."/>
+                                        <datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist>
+                                        
+                                        {/* 專屬數據欄位緊接在文件類型下方 */}
+                                        {editingEntry.docType && DOCUMENT_FIELD_SCHEMA[editingEntry.docType] && (
+                                            <div className="mt-4 pt-3 border-t border-blue-200/60 animate-fade-in space-y-3">
+                                                <div className="text-[10px] font-bold text-blue-600 flex items-center mb-1">
+                                                    <ShieldCheck size={14} className="mr-1"/> {editingEntry.docType} 專屬數據欄位
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {DOCUMENT_FIELD_SCHEMA[editingEntry.docType].map((field) => (
+                                                        <div key={field.key} className={field.type === 'date' ? 'col-span-1' : 'col-span-2 md:col-span-1'}>
+                                                            <label className="block text-[10px] text-slate-500 font-bold mb-1">{field.label}</label>
+                                                            <input 
+                                                                type={field.type} 
+                                                                disabled={!isDbEditing} 
+                                                                value={editingEntry.extractedData?.[field.key] || ''} 
+                                                                onChange={e => {
+                                                                    const newExtData = { ...(editingEntry.extractedData || {}), [field.key]: e.target.value };
+                                                                    setEditingEntry({ ...editingEntry, extractedData: newExtData });
+                                                                }} 
+                                                                className="w-full p-2 border border-slate-200 rounded text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none font-medium transition-all" 
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {/* ★ 現代化輸入框樣式 */}
                                     <div className="relative bg-slate-50/80 border border-slate-200 rounded-xl px-3 pt-5 pb-2 focus-within:bg-blue-50/50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all">
-                                        <label className="absolute left-3 top-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">名稱 / 標題 (Name)</label>
+                                        <label className="absolute left-3 top-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. 名稱 / 標題 (Name)</label>
                                         <input 
                                             disabled={!isDbEditing} 
                                             value={editingEntry.name} 
