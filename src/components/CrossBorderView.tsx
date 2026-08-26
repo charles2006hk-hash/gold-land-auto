@@ -165,8 +165,14 @@ export default function CrossBorderView({
     deletePayment, updateVehicle, primaryImages, onJumpToDoc
 }: CrossBorderViewProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [showExpired, setShowExpired] = useState(true);
-    const [showSoon, setShowSoon] = useState(true);
+    // ★ 優化 1：將頂部警報面板預設為 false (收起狀態)，釋放巨大垂直空間
+    const [showExpired, setShowExpired] = useState(false); 
+    const [showSoon, setShowSoon] = useState(false);
+    
+    // ★ 新增：控制關聯文件的摺疊狀態與全螢幕放大預覽
+    const [isRelatedDocsOpen, setIsRelatedDocsOpen] = useState(false);
+    const [fullScreenImg, setFullScreenImg] = useState<string | null>(null);
+    
     const [isMobileDetail, setIsMobileDetail] = useState(false);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [showDocModal, setShowDocModal] = useState(false); 
@@ -594,33 +600,54 @@ export default function CrossBorderView({
                                     return false;
                                 }) || [];
 
-                                if (relatedDocs.length === 0) return null;
+                               if (relatedDocs.length === 0) return null;
 
                                 return (
-                                    <div className="px-4 py-3 bg-slate-100 border-b border-slate-200">
-                                        <h4 className="text-xs font-bold text-slate-500 mb-2 flex items-center">
-                                            <Database size={14} className="mr-1"/> 關聯資料庫文件 ({relatedDocs.length})
-                                        </h4>
-                                        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-                                            {relatedDocs.map(doc => {
-                                                const thumbUrl = doc.attachments?.[0]?.data;
-                                                return (
-                                                    <div key={doc.id} className="w-40 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group">
-                                                        <div className="h-24 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
-                                                            {thumbUrl ? (
-                                                                <img src={thumbUrl} alt="doc" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                                                            ) : (
-                                                                <FileText size={24} className="text-slate-300 opacity-50"/>
-                                                            )}
-                                                            <div className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
-                                                                {doc.docType || '中港文件'}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-xs font-bold text-slate-800 truncate px-1" title={doc.name}>{doc.name}</div>
-                                                    </div>
-                                                );
-                                            })}
+                                    <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex-none transition-all">
+                                        {/* 標題列：改為可點擊摺疊 */}
+                                        <div 
+                                            className="flex justify-between items-center cursor-pointer select-none"
+                                            onClick={() => setIsRelatedDocsOpen(!isRelatedDocsOpen)}
+                                        >
+                                            <h4 className="text-xs font-bold text-slate-600 flex items-center">
+                                                <Database size={14} className="mr-1.5 text-slate-400"/> 
+                                                關聯資料庫文件 ({relatedDocs.length})
+                                            </h4>
+                                            <div className="bg-white px-2 py-0.5 rounded shadow-sm border border-slate-200 flex items-center gap-1 text-[10px] text-slate-500 font-bold hover:bg-slate-50 transition-colors">
+                                                {isRelatedDocsOpen ? '收起隱藏' : '點擊展開'}
+                                                {isRelatedDocsOpen ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                                            </div>
                                         </div>
+                                        
+                                        {/* 內容區：動畫展開 */}
+                                        {isRelatedDocsOpen && (
+                                            <div className="flex gap-3 overflow-x-auto pt-3 pb-1 scrollbar-thin animate-in slide-in-from-top-2 fade-in duration-200">
+                                                {relatedDocs.map(doc => {
+                                                    // ★ 智能圖片抓取：同時相容舊版 images 陣列與新版 attachments 陣列
+                                                    const thumbUrl = doc.attachments?.[0]?.data || doc.images?.[0] || null;
+                                                    
+                                                    return (
+                                                        <div 
+                                                            key={doc.id} 
+                                                            onClick={() => thumbUrl ? setFullScreenImg(thumbUrl) : alert('此文件無圖片可供預覽。')}
+                                                            className="w-32 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group flex-shrink-0"
+                                                        >
+                                                            <div className="h-20 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
+                                                                {thumbUrl ? (
+                                                                    <img src={thumbUrl} alt="doc" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                                ) : (
+                                                                    <FileText size={24} className="text-slate-300 opacity-50"/>
+                                                                )}
+                                                                <div className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                                                                    {doc.docType || '文件'}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-[10px] font-bold text-slate-800 truncate px-1 text-center" title={doc.name}>{doc.name}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })()}
@@ -939,7 +966,26 @@ export default function CrossBorderView({
                     </div>
                 </div>
             )}
-
+            {/* ★★★ 全螢幕圖片預覽 Modal ★★★ */}
+                        {fullScreenImg && (
+                            <div 
+                                className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in touch-none" 
+                                onClick={() => setFullScreenImg(null)}
+                            >
+                                <button className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 p-2 rounded-full transition-all z-10">
+                                    <X size={24}/>
+                                </button>
+                                <img 
+                                    src={fullScreenImg} 
+                                    className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                                    onClick={e => e.stopPropagation()} 
+                                />
+                            </div>
+                        )}
+            
+                    </div> // <- 這是整個 CrossBorderView 最底部的結束 div
+                );
+            }
         </div>
     );
 }
