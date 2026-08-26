@@ -799,14 +799,17 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
     });
 
     const scanForDuplicates = () => {
-        const nameMap = new Map<string, DatabaseEntry[]>();
+        const groupMap = new Map<string, DatabaseEntry[]>();
         entries.forEach(e => {
-            const key = e.name.trim(); if (!key) return;
-            if (!nameMap.has(key)) nameMap.set(key, []);
-            nameMap.get(key)?.push(e);
+            const nameKey = e.name.trim(); 
+            if (!nameKey) return;
+            // ★ 升級 1：以「類別 + 名稱」作為分組鍵，嚴格隔離不同性質的文件
+            const groupKey = `${e.category}::${nameKey}`; 
+            if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
+            groupMap.get(groupKey)?.push(e);
         });
         const duplicates: DatabaseEntry[][] = [];
-        nameMap.forEach((group) => { if (group.length > 1) duplicates.push(group); });
+        groupMap.forEach((group) => { if (group.length > 1) duplicates.push(group); });
         if (duplicates.length === 0) { showToast("未發現重複資料"); } 
         else { setDupeGroups(duplicates); setShowDupeModal(true); }
     };
@@ -828,11 +831,24 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             otherEntries.forEach(other => {
                 // 補齊基本空欄位 (如果主體沒填，舊的檔案有填，就吸過來)
                 Object.keys(other).forEach(key => {
+                    if (key === 'extractedData') return; // 特別處理專屬欄位
                     const val = mergedData[key];
                     if ((val === undefined || val === '' || val === null || val === 0) && other[key as keyof DatabaseEntry]) {
                         mergedData[key] = other[key as keyof DatabaseEntry];
                     }
                 });
+
+                // ★ 升級 2：深度合併專屬欄位 (extractedData)
+                let otherExt: any = {};
+                let mergedExt: any = {};
+                try { otherExt = typeof other.extractedData === 'string' ? JSON.parse(other.extractedData || '{}') : (other.extractedData || {}); } catch(e){}
+                try { mergedExt = typeof mergedData.extractedData === 'string' ? JSON.parse(mergedData.extractedData || '{}') : (mergedData.extractedData || {}); } catch(e){}
+                
+                Object.keys(otherExt).forEach(k => {
+                    // 如果主體沒有這個專屬屬性，就從舊檔案吸過來
+                    if (!mergedExt[k]) mergedExt[k] = otherExt[k];
+                });
+                mergedData.extractedData = JSON.stringify(mergedExt);
 
                 // 智能合併陣列 (不重複疊加)
                 if (other.tags) mergedData.tags = Array.from(new Set([...(mergedData.tags || []), ...other.tags]));
@@ -1478,9 +1494,15 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                             {dupeGroups.map((group, idx) => (
                                 <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
                                     <h4 className="font-black text-lg mb-3 text-slate-800 flex items-center">
+                                        {/* ★ 顯示分類標籤，讓使用者知道現在正在合併什麼類型的資料 */}
+                                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs mr-3 font-bold border border-blue-200 shadow-sm">
+                                            {group[0].category}
+                                        </span>
                                         <UserIcon size={18} className="mr-2 text-slate-400"/> 
-                                        名稱: {group[0].name} 
-                                        <span className="ml-3 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">發現 {group.length} 筆重複</span>
+                                        {group[0].name} 
+                                        <span className="ml-3 text-[10px] bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold tracking-wider">
+                                            發現 {group.length} 筆重複
+                                        </span>
                                     </h4>
                                     
                                     <div className="space-y-3">
