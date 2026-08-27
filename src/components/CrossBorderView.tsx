@@ -190,12 +190,14 @@ export default function CrossBorderView({
     // ★ 新增：行動清單專用狀態與函數
     const [reportSelectedIds, setReportSelectedIds] = useState<string[]>([]);
     const [reportNotes, setReportNotes] = useState<Record<string, string>>({});
+    const [reportActionDates, setReportActionDates] = useState<Record<string, string>>({}); // ★ 新增：辦事日期
 
     // 匯出為 Apple/Google 行事曆 (.ics)
-    const exportToCalendar = (item: any, note: string) => {
-        const dateStr = item.date.replace(/-/g, ''); // 轉為 YYYYMMDD
+    const exportToCalendar = (item: any, note: string, actionDateStr: string) => {
+        const targetDate = actionDateStr || item.date;
+        const dateStr = targetDate.replace(/-/g, ''); // 轉為 YYYYMMDD
         const summary = `[${item.plate}] ${item.item}`;
-        const description = note ? `${note}\\n\\n系統自動排程` : `車牌: ${item.plate}\\n項目: ${item.item}\\n到期日: ${item.date}\\n\\n系統自動排程`;
+        const description = note ? `${note}\\n\\n(原本到期日: ${item.date})\\n系統自動排程` : `車牌: ${item.plate}\\n項目: ${item.item}\\n原本到期: ${item.date}\\n\\n系統自動排程`;
         const icsData = `BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART;VALUE=DATE:${dateStr}\nSUMMARY:${summary}\nDESCRIPTION:${description}\nEND:VEVENT\nEND:VCALENDAR`;
         const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8' });
         const link = document.createElement('a');
@@ -204,7 +206,7 @@ export default function CrossBorderView({
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
-    // 輸出列印行動清單 PDF
+    // 輸出列印行動清單 PDF (智能排版版)
     const printActionList = () => {
         if (!reportModalData) return;
         const selectedItems = reportModalData.items.filter(it => reportSelectedIds.includes(it.id));
@@ -213,39 +215,89 @@ export default function CrossBorderView({
         const printWin = window.open('', '_blank');
         if (!printWin) return alert("請允許彈出視窗以進行列印");
 
+        // ★ 智能排版：依照辦事日期進行分組與排序
+        const grouped: Record<string, typeof selectedItems> = {};
+        selectedItems.forEach(it => {
+            const date = reportActionDates[it.id];
+            const groupKey = date ? date : '待定日期 (TBC)';
+            if (!grouped[groupKey]) grouped[groupKey] = [];
+            grouped[groupKey].push(it);
+        });
+
+        const sortedDates = Object.keys(grouped).sort((a,b) => {
+            if (a === '待定日期 (TBC)') return 1;
+            if (b === '待定日期 (TBC)') return -1;
+            return a.localeCompare(b);
+        });
+
+        const getWeekday = (d: string) => ['日','一','二','三','四','五','六'][new Date(d).getDay()];
+
+        let contentHtml = '';
+        sortedDates.forEach(dateKey => {
+            const isTBC = dateKey === '待定日期 (TBC)';
+            const weekStr = isTBC ? '' : ` (星期${getWeekday(dateKey)})`;
+            
+            contentHtml += `
+                <div class="date-section">
+                    <div class="date-header">
+                        📅 辦事日期：${dateKey}${weekStr} <span style="font-size:12px; margin-left:10px; font-weight:normal; opacity:0.8;">共 ${grouped[dateKey].length} 項</span>
+                    </div>
+                    <div class="task-list">
+                        ${grouped[dateKey].map(it => `
+                            <div class="task-row">
+                                <div class="checkbox-col"><div class="checkbox"></div></div>
+                                <div class="content-col">
+                                    <div class="task-header">
+                                        <span class="plate-badge">${it.plate}</span>
+                                        <span class="task-title">${it.item}</span>
+                                        <span class="due-badge ${it.days < 0 ? 'overdue' : ''}">原本期限: ${it.date} (${it.days < 0 ? '已逾期' : '剩餘'} ${Math.abs(it.days)} 天)</span>
+                                    </div>
+                                    <div class="task-note">
+                                        <b>行動備註：</b>${reportNotes[it.id] ? reportNotes[it.id] : '<span style="color:#cbd5e1;">(手寫區) __________________________________________________________________</span>'}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        });
+
         const html = `
             <html><head><title>行動清單 Action List</title>
             <style>
-                body { font-family: 'Helvetica Neue', sans-serif; padding: 20px; color: #1e293b; }
-                h1 { text-align: center; border-bottom: 2px solid #1e293b; padding-bottom: 10px; font-size: 24px; letter-spacing: 2px;}
-                .task-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; align-items: flex-start; page-break-inside: avoid; }
-                .checkbox { width: 24px; height: 24px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 15px; flex-shrink: 0; }
-                .content { flex-1; }
-                .plate { display: inline-block; background: #FFD600; color: #000; font-weight: bold; padding: 3px 8px; border: 1px solid #000; border-radius: 3px; font-family: monospace; font-size: 14px; margin-bottom: 5px; }
-                .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
-                .meta { color: #64748b; font-size: 14px; margin-bottom: 8px; }
-                .note { background: #f1f5f9; padding: 10px; border-left: 4px solid #3b82f6; font-size: 14px; color: #334155; }
-                .footer { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 40px; }
+                @page { size: A4; margin: 15mm; }
+                body { font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif; padding: 0; margin: 0; color: #1e293b; line-height: 1.5; }
+                .header-area { text-align: center; border-bottom: 3px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px; }
+                h1 { margin: 0 0 5px 0; font-size: 26px; letter-spacing: 2px; }
+                .meta-info { color: #64748b; font-size: 12px; }
+                .date-section { margin-bottom: 25px; page-break-inside: avoid; }
+                .date-header { background: #334155; color: #f8fafc; padding: 8px 15px; font-size: 16px; font-weight: bold; border-radius: 6px; display: flex; align-items: baseline; margin-bottom: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .task-list { border: 2px solid #e2e8f0; border-radius: 6px; padding: 5px 15px; }
+                .task-row { display: flex; align-items: stretch; border-bottom: 1px dashed #cbd5e1; padding: 15px 0; }
+                .task-row:last-child { border-bottom: none; }
+                .checkbox-col { width: 35px; display: flex; align-items: flex-start; padding-top: 2px; }
+                .checkbox { width: 20px; height: 20px; border: 2px solid #64748b; border-radius: 4px; }
+                .content-col { flex: 1; min-width: 0; }
+                .task-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+                .plate-badge { background: #FFD600; color: #000; padding: 2px 8px; border: 2px solid #000; border-radius: 4px; font-family: monospace; font-weight: 900; font-size: 14px; box-shadow: 2px 2px 0px rgba(0,0,0,0.15); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .task-title { font-size: 16px; font-weight: bold; color: #0f172a; }
+                .due-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #d97706; border: 1px solid #fde68a; font-weight: bold; margin-left: auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .due-badge.overdue { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+                .task-note { background: #f8fafc; padding: 8px 10px; border-left: 4px solid #3b82f6; font-size: 14px; color: #334155; min-height: 24px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
             </style>
             </head><body>
-                <h1>📝 業務行動清單 (Action List)</h1>
-                <p style="text-align:center; color:#64748b; margin-bottom:30px;">產生日: ${new Date().toLocaleDateString('zh-HK')} | 負責人: ${staffId}</p>
-                ${selectedItems.map(it => `
-                    <div class="task-card">
-                        <div class="checkbox"></div>
-                        <div class="content">
-                            <div><span class="plate">${it.plate}</span></div>
-                            <div class="title">${it.item}</div>
-                            <div class="meta">📍 期限: <b>${it.date}</b> (${it.days < 0 ? '已過期' : '剩餘'} ${Math.abs(it.days)} 天)</div>
-                            ${reportNotes[it.id] ? `<div class="note">${reportNotes[it.id]}</div>` : '<div class="note" style="background:transparent; border:1px dashed #cbd5e1; height:30px; color:#94a3b8;">手寫備註...</div>'}
-                        </div>
-                    </div>
-                `).join('')}
-                <div class="footer">-- GOLD LAND AUTO 金田汽車 內部文件 --</div>
+                <div class="header-area">
+                    <h1>📋 業務行動排程清單 (Action List)</h1>
+                    <div class="meta-info">列印日期: ${new Date().toLocaleDateString('zh-HK')} | 負責人: ${staffId || '業務部'} | 共 ${selectedItems.length} 項任務</div>
+                </div>
+                ${contentHtml}
+                <div class="footer">-- GOLD LAND AUTO 金田汽車 內部行動文件 --</div>
             </body></html>
         `;
         printWin.document.write(html); printWin.document.close();
-        setTimeout(() => { printWin.print(); printWin.close(); }, 250);
+        setTimeout(() => { printWin.print(); printWin.close(); }, 350);
     };
     
     // ★ 新增：控制「項目合併開單選取彈窗」的狀態
@@ -484,21 +536,40 @@ export default function CrossBorderView({
                                                 
                                                 <div className="font-bold text-slate-800 text-sm mb-2">{it.item}</div>
                                                 
-                                                {/* 手寫備註框 (模擬隨記) */}
-                                                <input 
-                                                    type="text"
-                                                    placeholder="輸入行動備註 (例如：皇崗裝牌、聯絡車主)..."
-                                                    value={reportNotes[it.id] || ''}
-                                                    onChange={e => setReportNotes({...reportNotes, [it.id]: e.target.value})}
-                                                    className={`w-full text-xs p-2 rounded-lg border outline-none transition-colors ${isChecked ? 'bg-blue-50/50 border-blue-200 focus:border-blue-400 focus:bg-white' : 'bg-slate-50 border-slate-200'}`}
-                                                />
+                                                <div className="font-bold text-slate-800 text-sm mb-2">{it.item}</div>
+                                                
+                                                {/* ★ 升級：行動日期與手寫備註框 (模擬團隊協作) */}
+                                                <div className={`mt-2 flex flex-col md:flex-row gap-2 transition-opacity duration-200 ${isChecked ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                                                    <div className="flex-none w-full md:w-40 relative">
+                                                        <input 
+                                                            type="date"
+                                                            title="選擇辦事日期"
+                                                            value={reportActionDates[it.id] || ''}
+                                                            onChange={e => setReportActionDates({...reportActionDates, [it.id]: e.target.value})}
+                                                            className="w-full text-xs p-2 rounded-lg border outline-none bg-blue-50/50 border-blue-200 focus:border-blue-400 focus:bg-white text-blue-700 font-bold"
+                                                        />
+                                                        {reportActionDates[it.id] && (
+                                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-500 pointer-events-none bg-blue-50 px-1">
+                                                                週{['日','一','二','三','四','五','六'][new Date(reportActionDates[it.id]).getDay()]}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <input 
+                                                        type="text"
+                                                        placeholder="輸入行動備註 (例如：皇崗裝牌、聯絡車主)..."
+                                                        value={reportNotes[it.id] || ''}
+                                                        onChange={e => setReportNotes({...reportNotes, [it.id]: e.target.value})}
+                                                        className="flex-1 text-xs p-2 rounded-lg border outline-none bg-blue-50/50 border-blue-200 focus:border-blue-400 focus:bg-white text-slate-700"
+                                                    />
+                                                </div>
 
-                                                <div className="flex justify-end mt-2">
+                                                <div className="flex justify-end mt-3">
                                                     <button 
-                                                        onClick={() => exportToCalendar(it, reportNotes[it.id] || '')}
-                                                        className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 px-2.5 py-1.5 rounded-lg font-bold flex items-center shadow-sm transition-colors"
+                                                        onClick={() => exportToCalendar(it, reportNotes[it.id] || '', reportActionDates[it.id] || '')}
+                                                        disabled={!isChecked}
+                                                        className="text-[10px] bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 px-3 py-1.5 rounded-lg font-bold flex items-center shadow-sm transition-colors disabled:opacity-50"
                                                     >
-                                                        <CalendarDays size={12} className="mr-1"/> 加入行事曆
+                                                        <CalendarDays size={14} className="mr-1.5 text-blue-600"/> 加入 iPhone/系統行事曆
                                                     </button>
                                                 </div>
                                             </div>
