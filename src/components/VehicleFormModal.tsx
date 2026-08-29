@@ -1281,15 +1281,19 @@ const VehicleFormModal = ({
                         )}
                     </div>
                   
-                    {/* VRD Card */}
-                    <div className="bg-white rounded-xl shadow-sm border-2 border-red-100 overflow-hidden relative group">
-                        <div className="absolute top-0 left-0 w-full h-2 bg-red-400/80"></div>
-                        <div className="p-4 space-y-4 md:space-y-3">
-                            <div className="flex justify-between items-center">
+                    {/* ★ 終極牌簿化 (VRD) 擬真介面 ★ */}
+                    <div className="bg-[#fff9f0] rounded-xl shadow-md border border-slate-300 overflow-hidden relative group">
+                        
+                        {/* 牌簿頂部紅線與浮水印質感 */}
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600"></div>
+                        <div className="absolute top-4 left-4 text-4xl opacity-[0.03] text-red-900 pointer-events-none select-none -rotate-12 font-serif font-black">VRD</div>
+                        
+                        <div className="p-4 pt-5">
+                            <div className="flex justify-between items-center mb-4">
                                 <h3 className="font-bold text-red-800 text-sm flex items-center">
-                                    <FileText size={14} className="mr-1"/> 登記文件 (VRD)
+                                    <FileText size={14} className="mr-1.5"/> 登記文件 (VRD)
                                 </h3>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5">
                                     <button 
                                         type="button" 
                                         onClick={(e) => {
@@ -1313,125 +1317,153 @@ const VehicleFormModal = ({
                                             if (currentPlate && currentPlate !== '未出牌') navigator.clipboard.writeText(currentPlate);
                                             alert(`✅ 已自動複製車牌：${currentPlate}\n\n📆 車主登記日期為：\n👉👉   ${tdFormatDate}   👈👈`);
                                         }} 
-                                        className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1.5 md:py-1 rounded hover:bg-amber-100 flex items-center shadow-sm transition-colors"
+                                        className="text-[9px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded-full hover:bg-amber-200 flex items-center shadow-sm transition-colors font-bold"
                                     >
-                                        <Search size={12} className="mr-1"/> 查牌費
+                                        <Search size={10} className="mr-1"/> 查牌費
                                     </button>
                                     
-                                    <button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[10px] bg-blue-600 text-white px-2 py-1.5 md:py-1 rounded hover:bg-blue-700 flex items-center shadow-sm transition-colors">
-                                        <Link size={12} className="mr-1"/> 連結資料庫
+                                    <button type="button" onClick={() => setShowVrdOverlay(true)} className="text-[9px] bg-blue-600 text-white px-2 py-1 rounded-full hover:bg-blue-700 flex items-center shadow-sm transition-colors font-bold">
+                                        <Link size={10} className="mr-1"/> 連結資料庫
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="space-y-1 relative"><label className="text-xs md:text-[10px] text-slate-400 font-bold uppercase">Registration Mark</label><input name="regMark" defaultValue={v.regMark} placeholder="未出牌" className="w-full bg-[#FFD600] border-[3px] border-black py-3 md:py-2 text-2xl font-black font-mono text-center text-black focus:ring-4 focus:ring-yellow-200 rounded-md uppercase"/></div>
+                            {/* 車牌 - 視覺焦點 */}
+                            <div className="mb-4">
+                                <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5 block ml-1">Registration Mark (車牌)</label>
+                                <input 
+                                    name="regMark" 
+                                    defaultValue={v.regMark} 
+                                    placeholder="未出牌" 
+                                    className="w-full bg-[#FFD600] border-4 border-black py-2.5 text-2xl font-black font-mono text-center text-black focus:ring-4 focus:ring-yellow-200 rounded uppercase shadow-inner"
+                                />
+                            </div>
                             
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-3">
-                                <div>
-                                    <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Make</label>
-                                    <input list="make_list" name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-sm font-bold text-slate-700 outline-none"/>
+                            {/* 廠牌與型號 */}
+                            <div className="grid grid-cols-2 gap-0 border-t border-l border-slate-300 bg-white">
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Make (廠名)</label>
+                                    <input list="make_list" name="make" value={selectedMake} onChange={(e) => setSelectedMake(e.target.value)} className="w-full bg-transparent text-sm font-bold text-slate-800 outline-none uppercase"/>
                                     <datalist id="make_list">{settings.makes.map((m:string) => <option key={m} value={m}>{m}</option>)}</datalist>
                                 </div>
-                                <div><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Model</label><input list="model_list" name="model" defaultValue={v.model} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-sm font-bold text-slate-700 outline-none"/><datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist></div>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-2">
-                                <div className="col-span-1"><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Year</label><input name="year" type="number" defaultValue={v.year} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-sm font-mono"/></div>
-                                <div className="col-span-1"><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Mileage</label><input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-sm font-mono text-left md:text-right" placeholder="km"/></div>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-2">
-                                <div className="col-span-1">
-                                    <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Reg. as Owner Date</label>
-                                    <input type="date" name="registeredOwnerDate" defaultValue={v.registeredOwnerDate} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs font-mono outline-none text-slate-600"/>
+                                <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Model (型號)</label>
+                                    <input list="model_list" name="model" defaultValue={v.model} className="w-full bg-transparent text-sm font-bold text-slate-800 outline-none uppercase"/>
+                                    <datalist id="model_list">{(settings.models[selectedMake] || []).map((m:string) => <option key={m} value={m} />)}</datalist>
                                 </div>
-                                <div className="col-span-1 bg-red-50/50 rounded px-2 md:px-1 py-1 md:py-0 border border-red-100 md:border-none relative group">
-                                    <div className="flex justify-between items-center mb-0.5 md:mb-0">
-                                        <label className="text-xs md:text-[9px] text-red-500 md:text-red-400 font-bold uppercase flex items-center">
-                                            Lic. Expiry
-                                            {/* ★ 鈴鐺圖示，根據開關狀態改變顏色 */}
-                                            <Bell size={10} className={`ml-1 ${v.licenseReminderEnabled !== false ? 'text-red-500 animate-pulse' : 'text-gray-300'}`} />
+                            </div>
+
+                            {/* 年份與里數 */}
+                            <div className="grid grid-cols-2 gap-0 border-l border-slate-300 bg-white">
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Year of Mfg (製造年份)</label>
+                                    <input name="year" type="number" defaultValue={v.year} className="w-full bg-transparent text-sm font-mono font-bold outline-none text-slate-800"/>
+                                </div>
+                                <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Mileage (里數 km)</label>
+                                    <input name="mileage" value={mileageStr} onChange={(e) => setMileageStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-sm font-mono font-bold outline-none text-right text-blue-700"/>
+                                </div>
+                            </div>
+                            
+                            {/* 車主登記日與牌費 */}
+                            <div className="grid grid-cols-2 gap-0 border-l border-slate-300 bg-white">
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Reg. Date (登記日)</label>
+                                    <input type="date" name="registeredOwnerDate" defaultValue={v.registeredOwnerDate} className="w-full bg-transparent text-xs font-mono font-bold outline-none text-slate-800 cursor-pointer"/>
+                                </div>
+                                <div className="border-b border-slate-300 p-1.5 bg-red-50/30 group">
+                                    <div className="flex justify-between items-center mb-0.5">
+                                        <label className="text-[8px] text-red-600 font-bold uppercase tracking-wider flex items-center">
+                                            Lic. Expiry (牌費)
+                                            <Bell size={8} className={`ml-1 ${v.licenseReminderEnabled !== false ? 'text-red-500 animate-pulse' : 'text-gray-300'}`} />
                                         </label>
-                                        
-                                        {/* ★ 小巧的開關 Toggle */}
-                                        <label className="flex items-center cursor-pointer relative z-10" title={v.licenseReminderEnabled !== false ? "提醒已開啟" : "不作提醒"}>
-                                            <div className="relative">
-                                                {/* 隱藏欄位：傳送 true/false 給 formData */}
-                                                <input type="hidden" name="licenseReminderEnabled" value={v.licenseReminderEnabled !== false ? 'true' : 'false'} />
-                                                
-                                                <input 
-                                                    type="checkbox" 
-                                                    className="sr-only peer"
-                                                    defaultChecked={v.licenseReminderEnabled !== false} 
-                                                    onChange={(e) => {
-                                                        // 當切換時，更新隱藏欄位的值
-                                                        const hiddenInput = e.target.previousElementSibling as HTMLInputElement;
-                                                        if (hiddenInput) hiddenInput.value = e.target.checked ? 'true' : 'false';
-                                                        
-                                                        // 即時更新畫面上的鈴鐺顏色 (透過簡單的 DOM 操作，不觸發整個元件 re-render)
-                                                        const bellIcon = e.target.closest('.group')?.querySelector('.lucide-bell');
-                                                        if (bellIcon) {
-                                                            if (e.target.checked) {
-                                                                bellIcon.classList.add('text-red-500', 'animate-pulse');
-                                                                bellIcon.classList.remove('text-gray-300');
-                                                            } else {
-                                                                bellIcon.classList.remove('text-red-500', 'animate-pulse');
-                                                                bellIcon.classList.add('text-gray-300');
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                {/* Toggle UI (縮小版) */}
-                                                <div className="w-5 h-3 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2.5 after:w-2.5 after:transition-all peer-checked:bg-red-500 shadow-inner"></div>
-                                            </div>
+                                        <label className="flex items-center cursor-pointer relative z-10">
+                                            <input type="hidden" name="licenseReminderEnabled" value={v.licenseReminderEnabled !== false ? 'true' : 'false'} />
+                                            <input type="checkbox" className="sr-only peer" defaultChecked={v.licenseReminderEnabled !== false} onChange={(e) => { const h = e.target.previousElementSibling as HTMLInputElement; if(h) h.value = e.target.checked?'true':'false'; const b = e.target.closest('.group')?.querySelector('.lucide-bell'); if(b) { if(e.target.checked){b.classList.add('text-red-500','animate-pulse');b.classList.remove('text-gray-300');} else {b.classList.remove('text-red-500','animate-pulse');b.classList.add('text-gray-300');} } }}/>
+                                            <div className="w-4 h-2.5 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-[1px] after:left-[1px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-2 after:w-2 after:transition-all peer-checked:bg-red-500"></div>
                                         </label>
                                     </div>
-                                    
-                                    <input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent border-b border-red-300 md:border-red-200 p-2 md:p-1 text-base md:text-xs font-mono text-left md:text-right text-red-700 outline-none relative z-0"/>
+                                    <input type="date" name="licenseExpiry" defaultValue={v.licenseExpiry} className="w-full bg-transparent text-xs font-mono font-bold outline-none text-right text-red-700 cursor-pointer"/>
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-2 pt-2">
-                                <div>
-                                    <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Prev Owners</label>
-                                    <input name="previousOwners" defaultValue={v.previousOwners !== undefined ? v.previousOwners : ''} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs text-left md:text-center" placeholder="首數"/>
+                            {/* 底盤與引擎 (跨欄顯示，增強長度) */}
+                            <div className="grid grid-cols-1 gap-0 border-l border-r border-slate-300 bg-white">
+                                <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Chassis No. (底盤號碼)</label>
+                                    <input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-transparent text-sm font-mono font-bold tracking-widest outline-none uppercase text-slate-800"/>
                                 </div>
-                                <div>
-                                    <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Color (Ext)</label>
-                                    <input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs"/>
+                            </div>
+                            <div className="grid grid-cols-1 gap-0 border-l border-r border-slate-300 bg-white">
+                                <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Engine No. (引擎號碼)</label>
+                                    <input name="engineNo" defaultValue={v.engineNo} className="w-full bg-transparent text-sm font-mono font-bold tracking-widest outline-none uppercase text-slate-800"/>
+                                </div>
+                            </div>
+
+                            {/* 顏色與首數 */}
+                            <div className="grid grid-cols-3 gap-0 border-l border-slate-300 bg-white">
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Prev. (首數)</label>
+                                    {/* ★ 修正：強制處理空值，預設顯示 '0'，並加上 type="number" */}
+                                    <input 
+                                        name="previousOwners" 
+                                        type="number" 
+                                        min="0"
+                                        defaultValue={v.previousOwners !== undefined && v.previousOwners !== null && v.previousOwners !== '' ? v.previousOwners : '0'} 
+                                        className="w-full bg-transparent text-xs font-bold outline-none text-center text-slate-800"
+                                    />
+                                </div>
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Color (車身)</label>
+                                    <input list="colors" name="colorExt" defaultValue={v.colorExt} className="w-full bg-transparent text-xs font-bold outline-none text-slate-800"/>
                                     <datalist id="colors">{settings.colors.map((c:string) => <option key={c} value={c} />)}</datalist>
                                 </div>
-                                <div>
-                                    <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Color (Int)</label>
-                                    <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs"/>
+                                <div className="border-b border-r border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Int. (內籠)</label>
+                                    <input list="colors" name="colorInt" defaultValue={v.colorInt} className="w-full bg-transparent text-xs font-bold outline-none text-slate-800"/>
                                 </div>
                             </div>
                             
-                            <div className="space-y-1 pt-4 md:pt-2 border-t border-dashed border-slate-300 md:border-slate-200">
-                                <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Chassis No.</label>
-                                <input name="chassisNo" defaultValue={v.chassisNo} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs font-mono tracking-wider uppercase"/>
+                            {/* CC數、座位與排檔 */}
+                            <div className="grid grid-cols-4 gap-0 border-l border-slate-300 bg-white">
+                                <div className="col-span-2 border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">{fuelType === 'Electric' ? 'Power(KW)' : 'Cyl. Cap.(cc)'}</label>
+                                    <input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-transparent text-xs font-mono font-bold outline-none text-slate-800" />
+                                </div>
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Seat</label>
+                                    <input name="seating" type="number" defaultValue={v.seating || 5} className="w-full bg-transparent text-xs font-bold outline-none text-center text-slate-800"/>
+                                </div>
+                                <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Trans.</label>
+                                    <select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-transparent text-[10px] font-bold outline-none cursor-pointer text-slate-800 appearance-none text-center">
+                                        <option value="Automatic">Auto</option><option value="Manual">Man</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Engine No.</label>
-                                <input name="engineNo" defaultValue={v.engineNo} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs font-mono tracking-wider uppercase"/>
+
+                            {/* Fuel Type */}
+                            <div className="grid grid-cols-1 gap-0 border-l border-r border-slate-300 bg-white rounded-b">
+                                <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
+                                    <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Propulsion (能源)</label>
+                                    <select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-transparent text-xs font-bold outline-none cursor-pointer text-slate-800">
+                                        <option value="Petrol">Petrol (電油)</option><option value="Diesel">Diesel (柴油)</option><option value="Electric">Electric (電動)</option>
+                                    </select>
+                                </div>
                             </div>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-3 pt-2">
-                                <div><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">{fuelType === 'Electric' ? 'Rated Power (KW)' : 'Cyl. Cap. (cc)'}</label><input name="engineSize" value={engineSizeStr} onChange={(e) => setEngineSizeStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs text-left md:text-right font-mono" /></div>
-                                <div><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Seating</label><input name="seating" type="number" defaultValue={v.seating || 5} className="w-full bg-slate-50 border-b border-slate-300 md:border-slate-200 p-2.5 md:p-1 text-base md:text-xs text-left md:text-right"/></div>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-2 pt-4 md:pt-2 border-t border-dashed border-slate-300 md:border-slate-200">
-                                <div><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Fuel Type</label><select name="fuelType" value={fuelType} onChange={(e) => setFuelType(e.target.value as any)} className="w-full bg-white md:bg-slate-50 border border-slate-300 md:border-b md:border-slate-200 p-3 md:p-1 text-base md:text-xs outline-none rounded md:rounded-none"><option value="Petrol">Petrol</option><option value="Diesel">Diesel</option><option value="Electric">Electric</option></select></div>
-                                <div><label className="text-xs md:text-[9px] text-slate-400 font-bold uppercase">Transmission</label><select name="transmission" value={transmission} onChange={(e) => setTransmission(e.target.value as any)} className="w-full bg-white md:bg-slate-50 border border-slate-300 md:border-b md:border-slate-200 p-3 md:p-1 text-base md:text-xs outline-none rounded md:rounded-none"><option value="Automatic">Auto</option><option value="Manual">Manual</option></select></div>
-                            </div>
+
                         </div>
                     </div>
 
-                     {/* Photos Card */}
-                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-4">
-                        <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3><button type="button" onClick={handleGoToMediaLibrary} className="text-xs md:text-[10px] bg-blue-50 text-blue-600 px-3 py-2 md:py-1.5 rounded-lg border hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button></div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[300px] md:max-h-[260px] overflow-y-auto pr-1">
+                     {/* Photos Card (優化下方空間利用率) */}
+                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mt-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3>
+                            <button type="button" onClick={handleGoToMediaLibrary} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button>
+                        </div>
+                        {/* 兩列式縮圖，減少浪費的高度 */}
+                        <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
                             {displayPhotos.map((url, idx) => (
                                 <div 
                                     key={idx} 
@@ -1447,40 +1479,38 @@ const VehicleFormModal = ({
                                         setCarPhotos(newArr);
                                         setDragPhotoIdx(null);
                                     }}
-                                    className={`relative aspect-video rounded-lg border overflow-hidden shadow-sm transition-transform ${!isOneForOne ? 'cursor-move hover:scale-[1.02]' : ''} ${dragPhotoIdx === idx ? 'opacity-50 ring-2 ring-blue-500' : ''} ${idx===0 ? 'col-span-2' : ''}`}
+                                    className={`relative aspect-video rounded border overflow-hidden shadow-sm transition-transform ${!isOneForOne ? 'cursor-move hover:scale-[1.02]' : ''} ${dragPhotoIdx === idx ? 'opacity-50 ring-2 ring-blue-500' : ''}`}
                                     onClick={() => setPreviewImage(url)}
                                 >
                                     {/* 加入 pointer-events-none 確保拖曳順暢不被圖片干擾 */}
                                     <img src={url} className="w-full h-full object-cover pointer-events-none"/>
                                     {!isOneForOne && (
-                                        <div className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded backdrop-blur-sm">
-                                            <Eye size={12}/>
+                                        <div className="absolute top-0.5 right-0.5 bg-black/50 text-white p-0.5 rounded backdrop-blur-sm">
+                                            <Eye size={10}/>
                                         </div>
                                     )}
                                 </div>
                             ))}
-                            {displayPhotos.length === 0 && (<div className="col-span-full py-8 text-center text-slate-400 text-sm md:text-[10px] border-2 border-dashed rounded-lg bg-slate-50">暫無照片</div>)}
+                            {displayPhotos.length === 0 && (<div className="col-span-full py-4 text-center text-slate-400 text-[10px] border border-dashed rounded bg-slate-50">暫無照片</div>)}
                         </div>
                     </div>
 
-                          <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-4 mt-4 relative group hover:border-amber-300 transition-colors">
-                                <div className="flex justify-between items-center mb-2">
-                                    <h3 className="font-bold text-amber-800 text-sm flex items-center">
-                                        <Star size={16} className="mr-1.5 text-amber-500"/> 車輛專屬賣點 (Sales Remarks)
+                          <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-3 mt-4 relative group hover:border-amber-300 transition-colors">
+                                <div className="flex justify-between items-center mb-1.5">
+                                    <h3 className="font-bold text-amber-800 text-[11px] flex items-center uppercase tracking-wider">
+                                        <Star size={12} className="mr-1 text-amber-500"/> 車輛專屬賣點
                                     </h3>
-                                    <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200 font-bold shadow-sm">連動推介單</span>
                                 </div>
                                 <textarea 
                                     name="salesRemarks"
                                     defaultValue={v.salesRemarks}
-                                    placeholder="在這裡輸入車輛亮點、優勢或給客戶的話 (例如：直版任驗、原廠保養、送一年牌費)..."
-                                    className="w-full h-24 p-3 bg-white border border-amber-200 rounded-lg text-sm text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none shadow-sm font-medium leading-relaxed transition-all"
+                                    placeholder="輸入車輛亮點 (例如：直版任驗、送一年牌費)..."
+                                    className="w-full h-16 p-2 bg-white border border-amber-200 rounded text-xs text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none shadow-inner font-medium transition-all"
                                 />
                             </div>
                   
                  </div>
             </div>
-            
             {/* ================= 右側欄 (Tabs System) ================= */}
             <div className={`w-full md:flex-1 flex-col md:h-full bg-white md:overflow-hidden order-2 md:order-2 min-w-0 ${rightTab !== 'vrd' ? 'flex' : 'hidden md:flex'}`}>
                 
