@@ -6,7 +6,7 @@ import {
     Database, Plus, Search, Trash2, Edit, Save, 
     FileText, File, AlertTriangle, X, Loader2, Zap, DownloadCloud,
     User as UserIcon, Bell, Printer, ImageIcon,
-    ArrowLeft, Upload, RefreshCw, ShieldCheck, ChevronDown
+    ArrowLeft, Upload, RefreshCw, ShieldCheck, ChevronDown, Maximize
 } from 'lucide-react';
 import { 
     collection, addDoc, deleteDoc, doc, onSnapshot, query, 
