@@ -1238,7 +1238,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 </div>
             </div>
         );
-
+    }
     // ★★★ 確保 if (viewMode === 'list') { 緊接在上面 LivePreview 的 }; 之後 ★★★
     if (viewMode === 'list') {
         return (
