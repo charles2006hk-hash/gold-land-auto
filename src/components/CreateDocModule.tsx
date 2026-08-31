@@ -1008,7 +1008,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             <tbody>
                                                 <tr><td className="border p-1 font-bold w-1/2">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">{formatCurrency(basePrice)}</td></tr>
                                                 {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                    <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                    <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                                 ))}
                                                 {depositItems.map((item: any, idx: number) => (
                                                     <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1 font-bold pl-4">Less: {item.label}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td></tr>
@@ -1098,7 +1098,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <thead><tr className="bg-slate-800 text-white"><th className="p-1 text-left">Service / Description (服務項目與描述)</th><th className="p-1 text-right">Amount (HKD)</th></tr></thead>
                                                     <tbody>
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                            <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                            <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                                         ))}
                                                         {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
                                                             <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-1 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td></tr>
@@ -1112,8 +1112,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <tbody>
                                                         <tr className="border-b"><td className="p-1 font-bold text-purple-800">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-1 text-right font-mono font-bold text-[11px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                            <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
-                                                        ))}
+                                                                <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
+                                                            ))}
                                                         {depositItems.map((item: any, idx: number) => (
                                                             <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-1 font-bold pl-4">Less: {item.label}</td><td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td></tr>
                                                         ))}
