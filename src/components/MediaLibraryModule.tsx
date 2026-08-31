@@ -14,9 +14,10 @@ import { compressImage } from '@/utils/imageHelpers';
 import { MediaLibraryItem, Vehicle, SystemSettings } from '@/types';
 
 // ==================================================================
-// 1. 圖片壓縮工具函數 (目標約 100-150KB)
+// 1. 圖片/文件智能分流壓縮工具函數
 // ==================================================================
-export const compressImageSmart = (file: File): Promise<Blob> => {
+// ★ 新增 type 參數，讓系統知道這是一般照片還是重要文件
+export const compressImageSmart = (file: File, type: 'vehicle' | 'document' = 'vehicle'): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -28,7 +29,11 @@ export const compressImageSmart = (file: File): Promise<Blob> => {
                 let width = img.width;
                 let height = img.height;
                 
-                const MAX_SIZE = 1280;
+                // ★ 智能解析度：
+                // 如果是 document (文件/牌簿)，最大邊保留至 2400px，確保小字清晰
+                // 如果是 vehicle (車輛照片)，最大邊縮至 1280px，節省空間
+                const MAX_SIZE = type === 'document' ? 2400 : 1280;
+                
                 if (width > height) {
                     if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
                 } else {
@@ -38,12 +43,23 @@ export const compressImageSmart = (file: File): Promise<Blob> => {
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
+                
+                if (ctx) {
+                    // 啟用高畫質平滑演算法
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(img, 0, 0, width, height);
+                }
+                
+                // ★ 智能品質：
+                // 文件使用 0.92 極高畫質，避免文字邊緣模糊
+                // 照片維持 0.6，快速載入
+                const quality = type === 'document' ? 0.92 : 0.6;
                 
                 canvas.toBlob((blob) => {
                     if (blob) resolve(blob);
                     else reject(new Error("Compression failed"));
-                }, 'image/jpeg', 0.6);
+                }, 'image/jpeg', quality);
             };
         };
         reader.onerror = error => reject(error);
@@ -408,8 +424,17 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                     file = new window.File([convertedBlob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
                 }
 
-                const compressedBase64 = await compressImage(file, autoType === 'document' ? 250 : 130); 
-                await uploadToStorage(compressedBase64, file.name, autoType);
+                // ★ 使用剛升級的智能分流壓縮 (傳入 autoType 判斷是文件還是車照)
+                const compressedBlob = await compressImageSmart(file, autoType); 
+                
+                // 將 Blob 轉回 base64 (因為 uploadToStorage 目前設計接收字串)
+                const base64Data = await new Promise<string>((resolve) => {
+                    const r = new FileReader();
+                    r.onloadend = () => resolve(r.result as string);
+                    r.readAsDataURL(compressedBlob);
+                });
+
+                await uploadToStorage(base64Data, file.name, autoType);
 
             } catch (err) { console.error(`處理 ${file.name} 失敗:`, err); }
         }
