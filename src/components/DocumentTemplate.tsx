@@ -228,14 +228,9 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             </div>
                         </div>
 
-                        {/* 圖片隱藏與顯示邏輯 */}
+                        {/* 圖片顯示邏輯 (已經被 showPhotos 控制為 []，不需額外加 hidden css) */}
                         {carPhotos.length > 0 && (
-                            <div className={`mb-2 relative ${!showPhotos ? 'print:hidden opacity-40 grayscale' : ''}`}>
-                                {!showPhotos && (
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-100/90 text-red-700 text-[10px] font-black px-3 py-1 rounded shadow-lg z-10 border-2 border-red-400 rotate-[-5deg]">
-                                        🚫 列印時不顯示圖片
-                                    </div>
-                                )}
+                            <div className="mb-2 relative">
                                 <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
                                     {carPhotos.map((url: string, idx: number) => (
                                         <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
@@ -269,7 +264,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                 <tbody>
                                     <tr><td className="border p-1 font-bold w-1/2">{((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">{formatCurrency(basePrice)}</td></tr>
                                     {itemsToRender.map((item: any, i: number) => (
-                                        <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                        <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                     ))}
                                     {depositItems.map((item: any, idx: number) => (
                                         <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1 font-bold pl-4">Less: {item.label}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td></tr>
@@ -340,12 +335,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                 
                                 {/* 發票圖片處理，同樣受 showPhotos 控制 */}
                                 {carPhotos.length > 0 && (
-                                    <div className={`mb-2 relative ${!showPhotos ? 'print:hidden opacity-40 grayscale' : ''}`}>
-                                        {!showPhotos && (
-                                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-100/90 text-red-700 text-[10px] font-black px-3 py-1 rounded shadow-lg z-10 border-2 border-red-400 rotate-[-5deg]">
-                                                🚫 列印時不顯示圖片
-                                            </div>
-                                        )}
+                                    <div className="mb-2 relative">
                                         <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
                                             {carPhotos.map((url: string, idx: number) => (
                                                 <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
@@ -359,7 +349,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <thead><tr className="bg-slate-800 text-white"><th className="p-1 text-left">Service / Description (服務項目與描述)</th><th className="p-1 text-right">Amount (HKD)</th></tr></thead>
                                         <tbody>
                                             {itemsToRender.map((item: any, i: number) => (
-                                                <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                             ))}
                                             {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
                                                 <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-1 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td></tr>
@@ -373,7 +363,7 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                                         <tbody>
                                             <tr className="border-b"><td className="p-1 font-bold text-purple-800">{((activeVehicle as any).orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${activeVehicle.make} ${activeVehicle.model})`}</td><td className="p-1 text-right font-mono font-bold text-[11px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
                                             {itemsToRender.map((item: any, i: number) => (
-                                                <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                             ))}
                                             {depositItems.map((item: any, idx: number) => (
                                                 <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-1 font-bold pl-4">Less: {item.label}</td><td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td></tr>
