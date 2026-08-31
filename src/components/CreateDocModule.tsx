@@ -753,8 +753,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             id: finalId || docId || 'DRAFT', 
             ...formData, 
             customerSignature: formData.customerSignature, // ★ 傳入簽名
-            photos: formData.contractPhotos || [], 
-            price: Number(String(formData.price).replace(/,/g, '')) || 0, 
+            // ★ 核心修復：如果關閉圖片列印，直接傳遞空陣列給列印引擎，從根本解決列印時無法隱藏的問題！
+            photos: showPhotos ? (formData.contractPhotos || []) : [], 
+            price: Number(String(formData.price).replace(/,/g, '')) || 0,
             deposit: Math.round(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0) * 100) / 100,
             customerID: formData.customerId, 
             soldDate: formData.deliveryDate, 
@@ -1128,6 +1129,20 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </>
                                     )}
                                 </>
+                            )}
+
+                            {/* ★ 新增修復：隨車附件區塊 (收據不顯示) */}
+                            {showAttachments && !isReceipt && (
+                                <div className="mb-2">
+                                    <div className="font-bold text-[9px] mb-1 text-slate-800">ATTACHMENTS (隨車附件):</div>
+                                    <div className="flex flex-wrap gap-4 text-[9px] font-bold text-slate-800">
+                                        <div className="flex items-center gap-1"><div className="border border-slate-600 w-3 h-3 flex items-center justify-center text-[10px] leading-none pb-[1px]">{checklist.vrd ? '✓' : ''}</div> VRD (牌簿)</div>
+                                        <div className="flex items-center gap-1"><div className="border border-slate-600 w-3 h-3 flex items-center justify-center text-[10px] leading-none pb-[1px]">{checklist.keys ? '✓' : ''}</div> Spare Key (後備匙)</div>
+                                        <div className="flex items-center gap-1"><div className="border border-slate-600 w-3 h-3 flex items-center justify-center text-[10px] leading-none pb-[1px]">{checklist.tools ? '✓' : ''}</div> Tools (工具)</div>
+                                        <div className="flex items-center gap-1"><div className="border border-slate-600 w-3 h-3 flex items-center justify-center text-[10px] leading-none pb-[1px]">{checklist.manual ? '✓' : ''}</div> Manual (說明書)</div>
+                                        {checklist.other && <div className="ml-2 text-slate-600 font-medium">| 其他: {checklist.other}</div>}
+                                    </div>
+                                </div>
                             )}
 
                             {/* ★ 壓縮版條款：大幅減少 padding 與 font-size 爭取空間 */}
