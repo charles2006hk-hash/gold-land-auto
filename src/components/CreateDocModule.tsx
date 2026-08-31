@@ -767,7 +767,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             showSalesGuarantees: showSalesGuarantees,       
             showAttachments: showAttachments, 
             showStampAndSig: showStampAndSig, // ★ 核心修復：把電子簽名開關狀態傳給列印引擎！
-            companyNameEn: formData.companyNameEn, 
+            showPhotos: showPhotos, // ★ 核心修復：把相片開關狀態傳給列印引擎，解決按了沒反應的問題！
+            companyNameEn: formData.companyNameEn,
             companyNameCh: formData.companyNameCh, 
             companyEmail: formData.companyEmail, 
             companyPhone: formData.companyPhone, 
@@ -924,67 +925,75 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             <div ref={containerRef} className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start">
                 <div className="relative flex-shrink-0 transition-all duration-200" style={{ width: `${794 * dynamicScale}px`, height: `${1123 * dynamicScale}px` }}>
                     <div className="bg-white shadow-2xl overflow-hidden box-border absolute top-0 left-0" style={{ width: '794px', height: '1123px', transform: `scale(${dynamicScale})`, transformOrigin: 'top left' }}>
-                        <div className="p-8 font-sans text-slate-900 h-full pb-[38mm] relative box-border">
-                            <div className="flex justify-between items-start mb-4 border-b-2 border-slate-800 pb-2">
+                        {/* ★ 排版優化：縮小四周 padding (p-8 -> p-6) 與底部空間 (pb-[38mm] -> pb-[25mm]) 爭取極大空間 */}
+                        <div className="p-6 font-sans text-slate-900 h-full pb-[25mm] relative box-border">
+                            
+                            <div className="flex justify-between items-start mb-2 border-b-2 border-slate-800 pb-1.5">
                                 <div className="flex items-center gap-3 min-w-0">
                                     <img src={COMPANY_INFO?.logo_url || ''} alt="Logo" className="w-16 h-16 object-contain flex-shrink-0" onError={(e) => { e.currentTarget.style.display='none'; }} />
                                     <div className="min-w-0">
-                                        <h1 className="text-xl font-black text-slate-900 tracking-wide uppercase truncate">{formData.companyNameEn}</h1>
-                                        <h2 className="text-lg font-bold text-slate-700 tracking-widest truncate">{formData.companyNameCh}</h2>
-                                        <div className="text-[9px] text-slate-500 mt-1 leading-tight font-serif truncate"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div>
+                                        <h1 className="text-lg font-black text-slate-900 tracking-wide uppercase truncate">{formData.companyNameEn}</h1>
+                                        <h2 className="text-base font-bold text-slate-700 tracking-widest truncate">{formData.companyNameCh}</h2>
+                                        <div className="text-[8px] text-slate-500 mt-0.5 leading-tight font-serif truncate"><p>{formData.companyAddress}</p><p>Tel: {formData.companyPhone} | Email: {formData.companyEmail}</p></div>
                                     </div>
                                 </div>
                                 <div className="text-right flex-shrink-0 pl-2">
-                                    <div className="text-lg font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
-                                    <div className="text-[11px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
-                                    <div className="mt-1 text-[10px] font-mono">NO: {docId ? `${selectedDocType === 'sales_contract' ? 'SAL' : isSalesInvoice ? 'INV' : isServiceInvoice ? 'SRV' : selectedDocType === 'quotation' ? 'QUO' : 'DOC'}-${displayDate.replace(/\//g, '')}-${docId.slice(0,6).toUpperCase()}` : 'PREVIEW-DRAFT'}</div>
-                                    <div className="text-[10px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
+                                    <div className="text-base font-black text-slate-800 uppercase tracking-widest border-b-2 border-slate-800 inline-block mb-1">{t.en}</div>
+                                    <div className="text-[10px] font-bold text-slate-600 tracking-[0.3em] text-center">{t.ch}</div>
+                                    <div className="mt-1 text-[9px] font-mono">NO: {docId ? `${selectedDocType === 'sales_contract' ? 'SAL' : isSalesInvoice ? 'INV' : isServiceInvoice ? 'SRV' : selectedDocType === 'quotation' ? 'QUO' : 'DOC'}-${displayDate.replace(/\//g, '')}-${docId.slice(0,6).toUpperCase()}` : 'PREVIEW-DRAFT'}</div>
+                                    <div className="text-[9px] font-mono font-bold text-blue-800">DATE: {displayDate}</div>
                                 </div>
                             </div>
 
                             {(!isBill) ? (
                                 <>
-                                    <div className="grid grid-cols-3 gap-3 mb-3">
+                                    <div className="grid grid-cols-3 gap-2 mb-2">
                                         <div className="col-span-1">
-                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part A: Customer</div>
-                                            <div className="border border-slate-300 p-2 text-[10px] min-h-[64px] flex flex-col justify-center space-y-1"><p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> {formData.customerName || '(Client)'}</p><p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {formData.customerPhone}</p><p className="truncate"><span className="text-slate-500 font-bold">ID:</span> {formData.customerId}</p></div>
+                                            <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Part A: Customer</div>
+                                            <div className="border border-slate-300 p-1 text-[9px] min-h-[56px] flex flex-col justify-center space-y-1"><p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> {formData.customerName || '(Client)'}</p><p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {formData.customerPhone}</p><p className="truncate"><span className="text-slate-500 font-bold">ID:</span> {formData.customerId}</p></div>
                                         </div>
                                         <div className="col-span-2">
-                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part B: Vehicle Details</div>
-                                            <table className="w-full text-[10px] border-collapse border border-slate-300 min-h-[64px]">
+                                            <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Part B: Vehicle Details</div>
+                                            <table className="w-full text-[9px] border-collapse border border-slate-300 min-h-[56px]">
                                                 <tbody>
-                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold w-[16%]">Reg. No.</td><td className="border p-1.5 font-mono font-bold w-[34%] text-[11px]">{formData.regMark || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[16%]">Make/Model</td><td className="border p-1.5 w-[34%] text-[11px] font-bold">{formData.make} {formData.model}</td></tr>
-                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No.</td><td className="border p-1.5 font-mono">{formData.chassisNo || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine No.</td><td className="border p-1.5 font-mono">{formData.engineNo || 'TBC'}</td></tr>
-                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Year</td><td className="border p-1.5">{formData.year}</td><td className="border p-1.5 bg-slate-50 font-bold">Color (Ext/Int)</td><td className="border p-1.5">{formData.color || '-'} / {formData.colorInterior || '-'}</td></tr>
-                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Mileage</td><td className="border p-1.5">{formData.mileage ? `${Number(formData.mileage).toLocaleString()} km` : '-'}</td><td className="border p-1.5 bg-slate-50 font-bold">Engine Cap.</td><td className="border p-1.5">{formData.engineSize ? `${formData.engineSize} cc` : '-'}</td></tr>
-                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold">Transmission</td><td className="border p-1.5">{formData.transmission === 'Manual' ? 'Manual (手波)' : (formData.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td><td className="border p-1.5 bg-slate-50 font-bold">Seat / Prev.</td><td className="border p-1.5">{formData.seat || '-'} 座 / {formData.previousOwners || '0'} 手</td></tr>
+                                                    <tr><td className="border p-1 bg-slate-50 font-bold w-[16%]">Reg. No.</td><td className="border p-1 font-mono font-bold w-[34%] text-[10px]">{formData.regMark || 'TBC'}</td><td className="border p-1 bg-slate-50 font-bold w-[16%]">Make/Model</td><td className="border p-1 w-[34%] text-[10px] font-bold">{formData.make} {formData.model}</td></tr>
+                                                    <tr><td className="border p-1 bg-slate-50 font-bold">Chassis No.</td><td className="border p-1 font-mono">{formData.chassisNo || 'TBC'}</td><td className="border p-1 bg-slate-50 font-bold">Engine No.</td><td className="border p-1 font-mono">{formData.engineNo || 'TBC'}</td></tr>
+                                                    <tr><td className="border p-1 bg-slate-50 font-bold">Year</td><td className="border p-1">{formData.year}</td><td className="border p-1 bg-slate-50 font-bold">Color (Ext/Int)</td><td className="border p-1">{formData.color || '-'} / {formData.colorInterior || '-'}</td></tr>
+                                                    <tr><td className="border p-1 bg-slate-50 font-bold">Mileage</td><td className="border p-1">{formData.mileage ? `${Number(formData.mileage).toLocaleString()} km` : '-'}</td><td className="border p-1 bg-slate-50 font-bold">Engine Cap.</td><td className="border p-1">{formData.engineSize ? `${formData.engineSize} cc` : '-'}</td></tr>
+                                                    <tr><td className="border p-1 bg-slate-50 font-bold">Transmission</td><td className="border p-1">{formData.transmission === 'Manual' ? 'Manual (手波)' : (formData.transmission === 'Automatic' ? 'Auto (自動波)' : '-')}</td><td className="border p-1 bg-slate-50 font-bold">Seat / Prev.</td><td className="border p-1">{formData.seat || '-'} 座 / {formData.previousOwners || '0'} 手</td></tr>
                                                 </tbody>
                                             </table>
                                         </div>
                                     </div>
 
-                                    {showPhotos && formData.contractPhotos.length > 0 && (
-                                        <div className="mb-3">
-                                            <div className="bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
+                                    {/* ★ 圖片顯示智能優化：關閉列印時，預覽圖會變淡並蓋上印章 */}
+                                    {formData.contractPhotos.length > 0 && (
+                                        <div className={`mb-2 relative ${!showPhotos ? 'print:hidden opacity-40 grayscale' : ''}`}>
+                                            {!showPhotos && (
+                                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-100/90 text-red-700 text-[10px] font-black px-3 py-1 rounded shadow-lg z-10 border-2 border-red-400 rotate-[-5deg]">
+                                                    🚫 列印時不顯示圖片
+                                                </div>
+                                            )}
+                                            <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
                                                 {formData.contractPhotos.map((url: string, idx: number) => (
-                                                    <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                                    <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
                                                 ))}
                                             </div>
                                         </div>
                                     )}
 
                                     {hasOrderDetails && (
-                                        <div className="mb-3">
-                                            <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Part C: Order & Shipping Details (訂購與運輸明細)</div>
-                                            <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                        <div className="mb-2">
+                                            <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Part C: Order & Shipping Details (訂購與運輸明細)</div>
+                                            <table className="w-full text-[9px] border-collapse border border-slate-300">
                                                 <tbody>
-                                                    <tr><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Order Type (類別)</td><td className="border p-1.5 w-[30%]">{formData.orderType === 'Overseas' ? `Overseas 境外訂購 (${formData.overseasCountry})` : 'Local 本地訂購'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td><td className="border p-1.5 font-bold text-blue-700">{etaDisplay}</td></tr>
+                                                    <tr><td className="border p-1 bg-slate-50 font-bold w-[20%]">Order Type (類別)</td><td className="border p-1 w-[30%]">{formData.orderType === 'Overseas' ? `Overseas 境外訂購 (${formData.overseasCountry})` : 'Local 本地訂購'}</td><td className="border p-1 bg-slate-50 font-bold w-[20%] text-blue-800">Est. Arrival (ETA)</td><td className="border p-1 font-bold text-blue-700">{etaDisplay}</td></tr>
                                                     {formData.orderType === 'Overseas' && (
                                                         <>
-                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Overseas Charges (預估當地費用)</td></tr>
-                                                            <tr><td colSpan={3} className="border p-1.5 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {overseasOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(ovFee)}</td></tr>
-                                                            <tr><td colSpan={4} className="border p-1.5 bg-slate-100 font-bold text-center">Estimated Local Charges (預估到港本地費用)</td></tr>
-                                                            <tr><td colSpan={3} className="border p-1.5 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {localOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1.5 font-mono text-right font-bold">{formatCurrency(hkFee)}</td></tr>
+                                                            <tr><td colSpan={4} className="border p-1 bg-slate-100 font-bold text-center">Estimated Overseas Charges (預估當地費用)</td></tr>
+                                                            <tr><td colSpan={3} className="border p-1 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {overseasOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1 font-mono text-right font-bold">{formatCurrency(ovFee)}</td></tr>
+                                                            <tr><td colSpan={4} className="border p-1 bg-slate-100 font-bold text-center">Estimated Local Charges (預估到港本地費用)</td></tr>
+                                                            <tr><td colSpan={3} className="border p-1 text-slate-600"><span className="font-bold text-slate-800">Included:</span> {localOptions.filter(opt => (formData as any)[opt.k]).map(opt => opt.l).join(', ') || 'N/A'}</td><td className="border p-1 font-mono text-right font-bold">{formatCurrency(hkFee)}</td></tr>
                                                         </>
                                                     )}
                                                 </tbody>
@@ -992,21 +1001,21 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </div>
                                     )}
 
-                                    <div className="mb-3">
-                                        <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">{partPaymentLabel}</div>
-                                        <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                    <div className="mb-2">
+                                        <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">{partPaymentLabel}</div>
+                                        <table className="w-full text-[9px] border-collapse border border-slate-300">
                                             <tbody>
-                                                <tr><td className="border p-1.5 font-bold w-1/2">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">{formatCurrency(basePrice)}</td></tr>
+                                                <tr><td className="border p-1 font-bold w-1/2">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : 'Vehicle Price (車價)'}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">{formatCurrency(basePrice)}</td></tr>
                                                 {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                    <tr key={i} className="border-b"><td className="border p-1.5 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1.5 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                    <tr key={i} className="border-b"><td className="border p-1 text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="border p-1 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
                                                 ))}
                                                 {depositItems.map((item: any, idx: number) => (
-                                                    <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1.5 font-bold pl-4">Less: {item.label}</td><td className="border p-1.5 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td></tr>
+                                                    <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="border p-1 font-bold pl-4">Less: {item.label}</td><td className="border p-1 text-right font-mono font-bold text-[10px]">- {formatCurrency(item.amount)}</td></tr>
                                                 ))}
-                                                <tr className="bg-red-50/50 font-black"><td className="border p-1.5 uppercase text-[11px]">Balance Due (總結餘/尾數)</td><td className="border p-1.5 text-right font-mono text-[14px] text-red-600">{formatCurrency(balance)}</td></tr>
+                                                <tr className="bg-red-50/50 font-black"><td className="border p-1 uppercase text-[10px]">Balance Due (總結餘/尾數)</td><td className="border p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(balance)}</td></tr>
                                                 {formData.isFinance && (
-                                                    <tr className="bg-cyan-50/30 text-[10px]">
-                                                        <td colSpan={2} className="border p-1.5 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
+                                                    <tr className="bg-cyan-50/30 text-[9px]">
+                                                        <td colSpan={2} className="border p-1 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
                                                     </tr>
                                                 )}
                                             </tbody>
@@ -1016,97 +1025,104 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             ) : (
                                 <>
                                     {isReceipt ? (
-                                        <div className="border-[3px] border-double border-slate-800 p-8 mb-6 relative bg-white">
+                                        <div className="border-[3px] border-double border-slate-800 p-6 mb-4 relative bg-white">
                                             <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
                                                 <img src={COMPANY_INFO?.logo_url || ''} className="w-64 h-64 object-contain grayscale" />
                                             </div>
 
-                                            <div className="text-center mb-8 border-b-2 border-slate-800 pb-4 relative z-10">
-                                                <h2 className="text-2xl font-black tracking-widest text-slate-900 uppercase">OFFICIAL RECEIPT</h2>
-                                                <h3 className="text-lg font-bold tracking-[0.5em] text-slate-700 mt-1">正式收據</h3>
+                                            <div className="text-center mb-6 border-b-2 border-slate-800 pb-3 relative z-10">
+                                                <h2 className="text-xl font-black tracking-widest text-slate-900 uppercase">OFFICIAL RECEIPT</h2>
+                                                <h3 className="text-base font-bold tracking-[0.5em] text-slate-700 mt-1">正式收據</h3>
                                             </div>
                                             
-                                            <div className="space-y-6 text-[13px] relative z-10">
+                                            <div className="space-y-4 text-[12px] relative z-10">
                                                 <div className="flex items-end">
-                                                    <div className="w-40 font-bold text-slate-700 leading-tight">Received from<br/><span className="text-[11px] font-medium text-slate-500">茲收到</span></div>
-                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[14px] text-slate-900 px-2 italic">{formData.customerName || '_________________________________'}</div>
+                                                    <div className="w-36 font-bold text-slate-700 leading-tight">Received from<br/><span className="text-[10px] font-medium text-slate-500">茲收到</span></div>
+                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[13px] text-slate-900 px-2 italic">{formData.customerName || '_________________________________'}</div>
                                                 </div>
                                                 <div className="flex items-end">
-                                                    <div className="w-40 font-bold text-slate-700 leading-tight">the sum of H.K. Dollars<br/><span className="text-[11px] font-medium text-slate-500">港幣</span></div>
-                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[12px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">{numberToEnglishWords(deposit)}</div>
+                                                    <div className="w-36 font-bold text-slate-700 leading-tight">the sum of H.K. Dollars<br/><span className="text-[10px] font-medium text-slate-500">港幣</span></div>
+                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[11px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">{numberToEnglishWords(deposit)}</div>
                                                 </div>
                                                 <div className="flex items-end">
-                                                    <div className="w-40 font-bold text-slate-700 leading-tight">in payment of<br/><span className="text-[11px] font-medium text-slate-500">係付</span></div>
+                                                    <div className="w-36 font-bold text-slate-700 leading-tight">in payment of<br/><span className="text-[10px] font-medium text-slate-500">係付</span></div>
                                                     <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-slate-800 px-2">{depositItems.map((d: any) => d.label).join(', ')} {formData.regMark && ` (Reg No.: ${formData.regMark})`}</div>
                                                 </div>
 
-                                                <div className="flex items-end justify-between mt-10 pt-4">
+                                                <div className="flex items-end justify-between mt-6 pt-3">
                                                     <div className="flex items-center">
-                                                        <span className="text-2xl font-black text-slate-800 mr-4 italic">HK$</span>
-                                                        <div className="border-y-4 border-slate-800 py-1 px-8 bg-slate-50 font-mono font-black text-xl text-slate-900 tracking-wider shadow-sm">
+                                                        <span className="text-xl font-black text-slate-800 mr-3 italic">HK$</span>
+                                                        <div className="border-y-4 border-slate-800 py-1 px-6 bg-slate-50 font-mono font-black text-lg text-slate-900 tracking-wider shadow-sm">
                                                             {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(deposit)}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <div className="text-[11px] text-slate-500 font-bold text-right">Payment Method<br/>交來</div>
-                                                        <div className="border-b border-slate-400 pb-1 px-4 font-mono font-bold text-slate-800 min-w-[120px] text-center">{formData.paymentMethod}</div>
+                                                        <div className="text-[10px] text-slate-500 font-bold text-right">Payment Method<br/>交來</div>
+                                                        <div className="border-b border-slate-400 pb-1 px-4 font-mono font-bold text-slate-800 min-w-[100px] text-center">{formData.paymentMethod}</div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="mb-4">
-                                                <div className="bg-slate-800 text-white text-[10px] font-bold px-2 py-1 uppercase mb-0.5">Vehicle Reference (車輛資料)</div>
-                                                <table className="w-full text-[10px] border-collapse border border-slate-300">
+                                            <div className="mb-2">
+                                                <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Vehicle Reference (車輛資料)</div>
+                                                <table className="w-full text-[9px] border-collapse border border-slate-300">
                                                     <tbody>
-                                                        <tr><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Reg. No. (車牌)</td><td className="border p-1.5 font-mono font-bold w-[30%] text-[11px]">{formData.regMark || 'TBC'}</td><td className="border p-1.5 bg-slate-50 font-bold w-[20%]">Make/Model</td><td className="border p-1.5 w-[30%] text-[11px] font-bold">{formData.make} {formData.model}</td></tr>
-                                                        <tr><td className="border p-1.5 bg-slate-50 font-bold">Year (年份)</td><td className="border p-1.5 font-bold">{formData.year || 'N/A'}</td><td className="border p-1.5 bg-slate-50 font-bold">Color (顏色)</td><td className="border p-1.5">{formData.color || 'N/A'} {formData.colorInterior ? `(Int: ${formData.colorInterior})` : ''}</td></tr>
-                                                        <tr><td className="border p-1.5 bg-slate-50 font-bold">Chassis No. (車身)</td><td colSpan={3} className="border p-1.5 font-mono">{formData.chassisNo || 'N/A'}</td></tr>
+                                                        <tr><td className="border p-1 bg-slate-50 font-bold w-[20%]">Reg. No. (車牌)</td><td className="border p-1 font-mono font-bold w-[30%] text-[10px]">{formData.regMark || 'TBC'}</td><td className="border p-1 bg-slate-50 font-bold w-[20%]">Make/Model</td><td className="border p-1 w-[30%] text-[10px] font-bold">{formData.make} {formData.model}</td></tr>
+                                                        <tr><td className="border p-1 bg-slate-50 font-bold">Year (年份)</td><td className="border p-1 font-bold">{formData.year || 'N/A'}</td><td className="border p-1 bg-slate-50 font-bold">Color (顏色)</td><td className="border p-1">{formData.color || 'N/A'} {formData.colorInterior ? `(Int: ${formData.colorInterior})` : ''}</td></tr>
+                                                        <tr><td className="border p-1 bg-slate-50 font-bold">Chassis No. (車身)</td><td colSpan={3} className="border p-1 font-mono">{formData.chassisNo || 'N/A'}</td></tr>
                                                     </tbody>
                                                 </table>
                                             </div>
                                             
-                                            {showPhotos && formData.contractPhotos.length > 0 && (
-                                                <div className="mb-4 bg-slate-100 border border-slate-200 rounded p-1.5 flex gap-1.5 justify-center items-center">
-                                                    {formData.contractPhotos.map((url: string, idx: number) => (
-                                                        <div key={idx} className="w-[36mm] h-[24mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
-                                                    ))}
+                                            {/* 發票模式下的圖片預覽處理 */}
+                                            {formData.contractPhotos.length > 0 && (
+                                                <div className={`mb-2 relative ${!showPhotos ? 'print:hidden opacity-40 grayscale' : ''}`}>
+                                                    {!showPhotos && (
+                                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-100/90 text-red-700 text-[10px] font-black px-3 py-1 rounded shadow-lg z-10 border-2 border-red-400 rotate-[-5deg]">
+                                                            🚫 列印時不顯示圖片
+                                                        </div>
+                                                    )}
+                                                    <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
+                                                        {formData.contractPhotos.map((url: string, idx: number) => (
+                                                            <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
 
                                             {isServiceInvoice ? (
-                                                <table className="w-full text-[10px] border-collapse mb-6">
-                                                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Service / Description (服務項目與描述)</th><th className="p-2 text-right">Amount (HKD)</th></tr></thead>
+                                                <table className="w-full text-[9px] border-collapse mb-4">
+                                                    <thead><tr className="bg-slate-800 text-white"><th className="p-1 text-left">Service / Description (服務項目與描述)</th><th className="p-1 text-right">Amount (HKD)</th></tr></thead>
                                                     <tbody>
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                            <tr key={i} className="border-b"><td className="p-2 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-2 text-right font-mono text-[12px]">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                            <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
                                                         ))}
                                                         {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
-                                                            <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-2 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-2 text-right font-mono text-blue-600 text-[12px]">- {formatCurrency(item.amount)}</td></tr>
+                                                            <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-1 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td></tr>
                                                         ))}
                                                     </tbody>
-                                                    <tfoot><tr className="bg-slate-100 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">Total Due (應付總額)</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(extrasTotal - deposit)}</td></tr></tfoot>
+                                                    <tfoot><tr className="bg-slate-100 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">Total Due (應付總額)</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(extrasTotal - deposit)}</td></tr></tfoot>
                                                 </table>
                                             ) : (
-                                                <table className="w-full text-[10px] border-collapse mb-6">
-                                                    <thead><tr className="bg-slate-800 text-white"><th className="p-2 text-left">Description</th><th className="p-2 text-right">Amount</th></tr></thead>
+                                                <table className="w-full text-[9px] border-collapse mb-4">
+                                                    <thead><tr className="bg-slate-800 text-white"><th className="p-1 text-left">Description</th><th className="p-1 text-right">Amount</th></tr></thead>
                                                     <tbody>
-                                                        {/* ★ 預覽模式下的發票，同樣加上車價項目與精確扣減 */}
-                                                        <tr className="border-b"><td className="p-2 font-bold text-purple-800">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-2 text-right font-mono font-bold text-[12px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
+                                                        <tr className="border-b"><td className="p-1 font-bold text-purple-800">{(formData.orderType === 'Overseas' && orderFeesTotal > 0) ? 'Overseas & Local Charges (海外與本地總費用)' : `Vehicle Price (${formData.make} ${formData.model})`}</td><td className="p-1 text-right font-mono font-bold text-[11px] text-purple-800">{formatCurrency(basePrice)}</td></tr>
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
-                                                            <tr key={i} className="border-b"><td className="p-2 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-2 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
+                                                            <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? '0' : formatCurrency(item.amount)}</td></tr>
                                                         ))}
                                                         {depositItems.map((item: any, idx: number) => (
-                                                            <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-2 font-bold pl-4">Less: {item.label}</td><td className="p-2 text-right font-mono font-bold text-[12px]">- {formatCurrency(item.amount)}</td></tr>
+                                                            <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-1 font-bold pl-4">Less: {item.label}</td><td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td></tr>
                                                         ))}
                                                         {formData.isFinance && (
-                                                            <tr className="bg-cyan-50/30 text-[10px]">
-                                                                <td colSpan={2} className="p-2 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
+                                                            <tr className="bg-cyan-50/30 text-[9px]">
+                                                                <td colSpan={2} className="p-1 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
                                                             </tr>
                                                         )}
                                                     </tbody>
-                                                    <tfoot><tr className="bg-red-50/50 font-bold text-xs border-t-2 border-slate-800"><td className="p-2 text-right uppercase tracking-widest text-[11px]">{balance < 0 ? 'Refund Due (應退款項)' : 'Balance Due (應付尾數)'}</td><td className="p-2 text-right font-mono text-[14px] text-red-600">{formatCurrency(Math.abs(balance))}</td></tr></tfoot>
+                                                    <tfoot><tr className="bg-red-50/50 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">{balance < 0 ? 'Refund Due (應退款項)' : 'Balance Due (應付尾數)'}</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(Math.abs(balance))}</td></tr></tfoot>
                                                 </table>
                                             )}
                                         </>
@@ -1114,9 +1130,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </>
                             )}
 
-                            {/* ★ 預覽模式下也渲染條款與授權書 */}
+                            {/* ★ 壓縮版條款：大幅減少 padding 與 font-size 爭取空間 */}
                             {!isBill && showTerms && (
-                                <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
+                                <div className="mb-2 p-1.5 border-2 border-slate-800 bg-gray-50 text-[8px] leading-normal text-justify font-serif">
                                     {isQuotation ? (
                                         <p>VALIDITY: This quotation is valid for 14 days. Prices and ETA are subject to change without prior notice. 本報價單有效期為發出日起計 14 天。預計費用及到港時間 (ETA) 或會作適度調整。</p>
                                     ) : (
@@ -1125,9 +1141,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             本人 <b>{formData.customerName || '___________'}</b> 同意以總價金 <b>{formatCurrency(balance + deposit)}</b> {selectedDocType === 'purchase_contract' ? '將上述車輛售予' : selectedDocType === 'consignment_contract' ? '將上述車輛委託寄賣予' : '向'} <b>{formData.companyNameCh}</b> {selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract' ? '' : '購買上述車輛'}，交車時間為 <b>{formData.deliveryDate || '___________'} {formData.handoverTime || '_______'}</b>。此時間點前後之交通違例及法律責任概由相應方負責。</p>
                                             
                                             {selectedDocType === 'purchase_contract' && showPurchaseGuarantees && (
-                                                <div className="mt-2 pt-2 border-t border-slate-300">
-                                                    <p className="font-bold mb-1 text-slate-800">Seller's Warranties and Guarantees 賣方保證條款：</p>
-                                                    <ol className="list-decimal pl-4 space-y-1 text-[8.5px]">
+                                                <div className="mt-1.5 pt-1.5 border-t border-slate-300">
+                                                    <p className="font-bold mb-0.5 text-slate-800">Seller's Warranties and Guarantees 賣方保證條款：</p>
+                                                    <ol className="list-decimal pl-4 space-y-0.5 text-[7.5px] leading-tight">
                                                         <li><b>Clear Title & No Encumbrances:</b> The Seller warrants that the Vehicle is free from any outstanding finance, loans, debts, or third-party encumbrances. <br/><span className="text-slate-700"><b>無債務及順利過戶：</b>賣方保證上述車輛並無任何未清繳之財務、貸款或第三方權利負擔，且可合法順利轉讓予買方。</span></li>
                                                         <li><b>Vehicle Condition:</b> The Seller guarantees that the Vehicle has never been involved in any major accidents resulting in structural damage, nor has it ever been damaged by flooding. <br/><span className="text-slate-700"><b>車輛狀況：</b>賣方保證上述車輛從未涉及任何導致結構受損之重大意外，亦從未受過水浸損壞。</span></li>
                                                         <li><b>Cross-Border Quota Clearance (If Applicable):</b> For vehicles with prior cross-border registration, the Seller warrants that all associated quotas have been completely detached. <br/><span className="text-slate-700"><b>中港指標退清 (如適用)：</b>若為跨境車輛，賣方保證已徹底註銷及退清該車輛與之前所有中港車牌指標之關聯。</span></li>
@@ -1136,9 +1152,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             )}
 
                                             {selectedDocType === 'sales_contract' && showSalesGuarantees && (
-                                                <div className="mt-2 pt-2 border-t border-slate-300">
-                                                    <p className="font-bold mb-1 text-slate-800">Purchaser's Acknowledgements and Terms 買方確認及合約條款：</p>
-                                                    <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
+                                                <div className="mt-1.5 pt-1.5 border-t border-slate-300">
+                                                    <p className="font-bold mb-0.5 text-slate-800">Purchaser's Acknowledgements and Terms 買方確認及合約條款：</p>
+                                                    <ol className="list-decimal pl-4 space-y-0.5 text-[7px] leading-tight">
                                                         <li><b>"As-Is" Condition:</b> The Buyer acknowledges having inspected the Vehicle (or waived such right) and agrees to purchase it strictly "As-Is". <br/><span className="text-slate-700"><b>現狀買賣：</b>買方確認已檢驗上述車輛（或自願放棄驗車權利），並同意以「現狀」(As-Is) 購入。賣方對車輛之性能或質量不作任何保證。</span></li>
                                                         <li><b>Odometer Disclaimer:</b> As a pre-owned vehicle, the odometer reading is indicative only. The Seller cannot warrant the vehicle's history or dashboard alterations. <br/><span className="text-slate-700"><b>里數免責：</b>此為二手車輛，儀錶板里數僅供參考。賣方無法保證該儀錶板未曾被前任車主干擾或更換。</span></li>
                                                         <li><b>Post-Delivery Liability:</b> Upon vehicle handover, all risks, liabilities, and subsequent repair costs pass entirely to the Buyer. <br/><span className="text-slate-700"><b>交車後免責：</b>自交車之時起，所有風險、法律責任及日後維修費用均由買方承擔，賣方概不負責。</span></li>
@@ -1155,9 +1171,9 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             )}
 
                             {isSalesInvoice && showTerms && (
-                                <div className="mb-3 p-2 border-2 border-slate-800 bg-gray-50 text-[9px] leading-relaxed text-justify font-serif">
-                                    <p className="font-bold mb-1 text-slate-800">Invoice Terms & Conditions 發票條款：</p>
-                                    <ol className="list-decimal pl-4 space-y-1 text-[8px] leading-tight">
+                                <div className="mb-2 p-1.5 border-2 border-slate-800 bg-gray-50 text-[8px] leading-normal text-justify font-serif">
+                                    <p className="font-bold mb-0.5 text-slate-800">Invoice Terms & Conditions 發票條款：</p>
+                                    <ol className="list-decimal pl-4 space-y-0.5 text-[7.5px] leading-tight">
                                         <li><b>Title of Goods:</b> The title and ownership of the vehicle(s) and goods remain with the Seller until all payments are cleared in full. <br/><span className="text-slate-700"><b>貨物擁有權：</b>在所有款項全數結清之前，車輛及相關貨品之擁有權仍歸賣方所有。</span></li>
                                         <li><b>"As-Is" Condition:</b> The goods are sold strictly on an "As-Is" basis. <br/><span className="text-slate-700"><b>現狀買賣：</b>所有貨物及車輛均以「現狀」出售，賣方不作任何明示或暗示之保證。</span></li>
                                         <li><b>Payment:</b> Cheques should be crossed and made payable to "{formData.companyNameEn}". Official receipt will only be issued upon clearance of cheque.<br/><span className="text-slate-700"><b>付款方式：</b>支票請劃線並抬頭註明「{formData.companyNameEn}」。正式收據須待支票兌現後方為有效。</span></li>
@@ -1166,33 +1182,34 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             )}
 
                             {formData.enablePaymentAuth && (
-                                <div className="mb-2 p-1.5 border-2 border-slate-800 bg-slate-50 break-inside-avoid no-break">
-                                    <h3 className="text-[9px] font-black text-slate-800 uppercase border-b border-slate-300 pb-0.5 mb-1">代收款委託授權書 / Third-Party Payment Auth.</h3>
-                                    <div className="text-[8px] text-slate-700 leading-tight text-justify font-serif">
-                                        <p><strong>1. 授權聲明：</strong> 賣方（授權人）現正式並不可撤銷地指示買方（{formData.companyNameCh}），將本合約項下之車款餘額支付予以下指定受款人。<br/><span className="italic text-slate-500 text-[7.5px]">The Vendor irrevocably authorizes the Purchaser ({formData.companyNameEn}) to pay the vehicle purchase balance to the designated Payee below.</span></p>
-                                        <div className="flex gap-3 px-1.5 py-1 bg-white border border-slate-300 my-1 font-sans">
+                                <div className="mb-1.5 p-1 border-2 border-slate-800 bg-slate-50 break-inside-avoid no-break">
+                                    <h3 className="text-[8px] font-black text-slate-800 uppercase border-b border-slate-300 pb-0.5 mb-1">代收款委託授權書 / Third-Party Payment Auth.</h3>
+                                    <div className="text-[7px] text-slate-700 leading-tight text-justify font-serif">
+                                        <p><strong>1. 授權聲明：</strong> 賣方（授權人）現正式並不可撤銷地指示買方（{formData.companyNameCh}），將本合約項下之車款餘額支付予以下指定受款人。<br/><span className="italic text-slate-500 text-[6.5px]">The Vendor irrevocably authorizes the Purchaser ({formData.companyNameEn}) to pay the vehicle purchase balance to the designated Payee below.</span></p>
+                                        <div className="flex gap-3 px-1 py-1 bg-white border border-slate-300 my-1 font-sans">
                                             <div className="flex items-end flex-[1.2] min-w-0">
                                                 <span className="font-bold whitespace-nowrap shrink-0">受款方名稱 Payee Name:</span>
-                                                <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[9px] text-center truncate">{formData.authPayeeName || '\u00A0'}</span>
+                                                <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[8px] text-center truncate">{formData.authPayeeName || '\u00A0'}</span>
                                             </div>
                                             <div className="flex items-end flex-[0.8] min-w-0">
                                                 <span className="font-bold whitespace-nowrap shrink-0">證件號碼 ID/BR No.:</span>
-                                                <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[9px] text-center truncate">{formData.authPayeeId || '\u00A0'}</span>
+                                                <span className="font-bold border-b border-slate-400 flex-1 px-1 text-[8px] text-center truncate">{formData.authPayeeId || '\u00A0'}</span>
                                             </div>
                                         </div>
-                                        <p><strong>2. 免責條款：</strong> 買方一經將款項支付予上述受款人，即視為已完全履行付款義務。賣方承擔因此引起之任何法律及財務責任，與買方無涉。<br/><span className="italic text-slate-500 text-[7.5px]">Payment made to the Payee shall be deemed as full discharge of Purchaser's payment obligations. The Vendor assumes all liabilities arising from this arrangement.</span></p>
+                                        <p><strong>2. 免責條款：</strong> 買方一經將款項支付予上述受款人，即視為已完全履行付款義務。賣方承擔因此引起之任何法律及財務責任，與買方無涉。<br/><span className="italic text-slate-500 text-[6.5px]">Payment made to the Payee shall be deemed as full discharge of Purchaser's payment obligations. The Vendor assumes all liabilities arising from this arrangement.</span></p>
                                     </div>
                                 </div>
                             )}
 
                             {formData.remarks && (
-                                <div className="mb-3 border border-dashed border-slate-300 p-2 text-[10px] font-mono leading-relaxed bg-slate-50">
-                                    <span className="font-bold text-slate-500">Remarks:</span><p className="mt-1 whitespace-pre-wrap">{formData.remarks}</p>
+                                <div className="mb-2 border border-dashed border-slate-300 p-1.5 text-[9px] font-mono leading-relaxed bg-slate-50">
+                                    <span className="font-bold text-slate-500">Remarks:</span><p className="mt-0.5 whitespace-pre-wrap">{formData.remarks}</p>
                                 </div>
                             )}
                         </div>
 
-                        <div className="absolute bottom-8 left-8 right-8 bg-transparent pointer-events-none">
+                        {/* ★ 簽名區塊優化：調整位置確保不會溢出 (absolute bottom-4) */}
+                        <div className="absolute bottom-4 left-6 right-6 bg-transparent pointer-events-none">
                             <div className="grid grid-cols-2 gap-12 w-full">
                                 <div className="relative pt-1 border-t border-slate-800 text-center">
                                     {showStampAndSig && (
@@ -1205,16 +1222,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             </div>
                                         </div>
                                     )}
-                                    <p className="font-bold text-[10px] uppercase mt-1 leading-none">For and on behalf of {formData.companyNameEn}</p>
+                                    <p className="font-bold text-[9px] uppercase mt-1 leading-none">For and on behalf of {formData.companyNameEn}</p>
                                 </div>
-                                {/* ★ 修復：在實時預覽加上客戶的電子簽名 */}
                                 <div className="relative pt-1 border-t border-slate-800 text-center">
                                     {formData.customerSignature && (
                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-none">
-                                            <img src={formData.customerSignature} className="h-[25mm] w-auto object-contain mix-blend-multiply" alt="Signature" />
+                                            <img src={formData.customerSignature} className="h-[20mm] w-auto object-contain mix-blend-multiply" alt="Signature" />
                                         </div>
                                     )}
-                                    <p className="font-bold text-[10px] uppercase mt-1 leading-none">{isQuotation ? "Customer Confirmation" : (isBill ? "Received By" : "Customer Signature")}</p>
+                                    <p className="font-bold text-[9px] uppercase mt-1 leading-none">{isQuotation ? "Customer Confirmation" : (isBill ? "Received By" : "Customer Signature")}</p>
                                 </div>
                             </div>
                         </div>
@@ -1222,7 +1238,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 </div>
             </div>
         );
-    };
 
     // ★★★ 確保 if (viewMode === 'list') { 緊接在上面 LivePreview 的 }; 之後 ★★★
     if (viewMode === 'list') {
