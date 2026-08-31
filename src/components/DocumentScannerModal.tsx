@@ -23,7 +23,8 @@ export default function DocumentScannerModal({
     const [previewData, setPreviewData] = useState<string | null>(null);
     
     const [filterMode, setFilterMode] = useState<'original' | 'texture' | 'magic' | 'bw'>('texture');
-    const [edgeTrim, setEdgeTrim] = useState<number>(0.02);
+    // ★ 修正：大幅降低內縮比例，提供更精細的控制，預設不裁切或僅 1%
+    const [edgeTrim, setEdgeTrim] = useState<number>(0.01);
 
     useEffect(() => {
         const img = new Image();
@@ -112,7 +113,7 @@ export default function DocumentScannerModal({
 
     const onPointerUp = () => setDraggingId(null);
 
-    // ★★★ 先進高通差異運算引擎 (Advanced Differential Separation) ★★★
+    // ★★★ 核心影像處理引擎 (全新自適應光照 + 高光去色技術) ★★★
     const processScan = async (currentMode = filterMode, currentTrim = edgeTrim) => {
         if (!image) return;
         setIsProcessing(true);
@@ -133,7 +134,7 @@ export default function DocumentScannerModal({
         if (ratio < 1.2 && ratio > 1.0) ratio = 1.3;
 
         let outWidth = Math.max(widthAvg, 1600); 
-        outWidth = Math.min(outWidth, 2200); 
+        outWidth = Math.min(outWidth, 2400); // 確保文字絕對清晰
         let outHeight = Math.round(outWidth * ratio);
         outWidth = Math.round(outWidth);
 
@@ -162,6 +163,7 @@ export default function DocumentScannerModal({
         const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
 
         for (let y = 0; y < outHeight; y++) {
+            // ★ 光學縮放 (UV Trim) 替代強制白邊：自然放大畫面，不會像一塊白布蓋住簽名
             const v = currentTrim + (y / outHeight) * (1 - 2 * currentTrim); 
             for (let x = 0; x < outWidth; x++) {
                 const u = currentTrim + (x / outWidth) * (1 - 2 * currentTrim); 
@@ -195,57 +197,61 @@ export default function DocumentScannerModal({
             if (illCtx) {
                 illCtx.drawImage(dstCanvas, 0, 0);
                 
-                // 1. Dilation (膨脹)：擴大亮點，吃掉深色文字
+                // 產生平滑的紙張背景光照圖 (Illumination Map)
                 illCtx.globalCompositeOperation = 'lighten';
-                illCtx.drawImage(dstCanvas, 4, 4);
-                illCtx.drawImage(dstCanvas, -4, -4);
-                illCtx.drawImage(dstCanvas, 4, -4);
-                illCtx.drawImage(dstCanvas, -4, 4);
+                const offset = Math.max(3, Math.floor(outWidth / 150));
+                illCtx.drawImage(dstCanvas, offset, offset);
+                illCtx.drawImage(dstCanvas, -offset, -offset);
                 
-                // 2. Heavy Blur：計算出極度平滑的光照陰影圖
                 const tinyCanvas = document.createElement('canvas');
-                const tinyW = 16; const tinyH = Math.max(16, Math.floor(16 * ratio));
-                tinyCanvas.width = tinyW; tinyCanvas.height = tinyH;
+                tinyCanvas.width = 16; tinyCanvas.height = Math.floor(16 * ratio);
                 const tinyCtx = tinyCanvas.getContext('2d');
-                tinyCtx?.drawImage(illCanvas, 0, 0, tinyW, tinyH);
+                tinyCtx?.drawImage(illCanvas, 0, 0, tinyCanvas.width, tinyCanvas.height);
                 
                 illCtx.globalCompositeOperation = 'source-over';
                 illCtx.imageSmoothingEnabled = true;
                 illCtx.imageSmoothingQuality = 'high';
-                illCtx.drawImage(tinyCanvas, 0, 0, tinyW, tinyH, 0, 0, outWidth, outHeight);
+                illCtx.drawImage(tinyCanvas, 0, 0, tinyCanvas.width, tinyCanvas.height, 0, 0, outWidth, outHeight);
 
                 const illData = illCtx.getImageData(0, 0, outWidth, outHeight).data;
                 const finalData = dstCtx.getImageData(0, 0, outWidth, outHeight);
                 const fd = finalData.data;
 
-                // 3. 高通差異運算 (Differential Separation)
                 for (let i = 0; i < fd.length; i += 4) {
                     let origR = fd[i], origG = fd[i+1], origB = fd[i+2];
                     let bgR = illData[i], bgG = illData[i+1], bgB = illData[i+2];
 
-                    // 提取差異細節 (包含文字、物理紋理，已完全排除不均勻光照)
-                    let diffR = origR - bgR;
-                    let diffG = origG - bgG;
-                    let diffB = origB - bgB;
+                    // 1. 光照除法 (Division)：完美抵消紙張彎曲造成的陰影梯度
+                    let r = (origR / Math.max(1, bgR)) * 255;
+                    let g = (origG / Math.max(1, bgG)) * 255;
+                    let b = (origB / Math.max(1, bgB)) * 255;
 
-                    let r, g, b;
+                    let lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
                     if (currentMode === 'texture') {
-                        // 【保留紋理模式】：重建於自然物理白 (RGB: 235)
-                        r = 235 + diffR * 1.15;
-                        g = 235 + diffG * 1.15;
-                        b = 235 + diffB * 1.15;
+                        // ★ 高光去色技術 (Highlight Desaturation)：
+                        // 如果該像素偏亮 (紙張)，則降低飽和度，徹底消除邊緣暗處被調亮後產生的「紅綠雜色塊」
+                        // 如果偏暗 (印章、簽名、文字)，則完美保留原色
+                        if (lum > 170) { 
+                            let blend = Math.min(1, (lum - 170) / 50); // 平滑過渡至灰階
+                            r = r * (1 - blend) + lum * blend;
+                            g = g * (1 - blend) + lum * blend;
+                            b = b * (1 - blend) + lum * blend;
+                        }
+                        
+                        // 輕微 S-Curve，讓文字扎實，但不過度漂白背景 (維持 240-250 的紙張灰階感)
+                        r = r < 120 ? r * 0.85 : (r > 235 ? 245 : r);
+                        g = g < 120 ? g * 0.85 : (g > 235 ? 245 : g);
+                        b = b < 120 ? b * 0.85 : (b > 235 ? 245 : b);
+
                     } else if (currentMode === 'magic') {
-                        // 【強力漂白模式】：重建於純白 (RGB: 255)
-                        r = 255 + diffR * 1.6;
-                        g = 255 + diffG * 1.6;
-                        b = 255 + diffB * 1.6;
-                        r = r > 240 ? 255 : r; g = g > 240 ? 255 : g; b = b > 240 ? 255 : b;
-                    } else {
-                        // 【黑白模式】 (將 else if 改為 else，確保絕對賦值)
-                        let diffGray = diffR * 0.299 + diffG * 0.587 + diffB * 0.114;
-                        let gray = 255 + diffGray * 1.8;
-                        gray = gray > 230 ? 255 : (gray < 120 ? gray * 0.8 : gray);
+                        // 強力漂白：強制去背，高對比
+                        r = r > 200 ? 255 : (r < 120 ? r * 0.7 : r);
+                        g = g > 200 ? 255 : (g < 120 ? g * 0.7 : g);
+                        b = b > 200 ? 255 : (b < 120 ? b * 0.7 : b);
+                    } else if (currentMode === 'bw') {
+                        // 黑白模式：純粹二值化
+                        let gray = lum > 190 ? 255 : (lum < 130 ? lum * 0.6 : lum);
                         r = g = b = gray;
                     }
 
@@ -254,22 +260,9 @@ export default function DocumentScannerModal({
                     fd[i+2] = Math.min(255, Math.max(0, b));
                 }
 
-                // 邊緣物理白邊填充 (取代被內縮掉的手指與背景)
-                const edgeX = Math.floor(outWidth * 0.015);
-                const edgeY = Math.floor(outHeight * 0.015);
-                for (let y = 0; y < outHeight; y++) {
-                    for (let x = 0; x < outWidth; x++) {
-                        if (x < edgeX || x > outWidth - edgeX || y < edgeY || y > outHeight - edgeY) {
-                            const idx = (y * outWidth + x) * 4;
-                            const baseColor = currentMode === 'texture' ? 245 : 255;
-                            fd[idx] = baseColor; fd[idx+1] = baseColor; fd[idx+2] = baseColor;
-                        }
-                    }
-                }
-
                 dstCtx.putImageData(finalData, 0, 0);
 
-                // 4. 卷積銳化 (紋理模式不銳化以維持物理自然感，只在漂白與黑白啟用)
+                // ★ 卷積銳化僅在強力漂白/黑白模式啟用。保留紋理模式「不銳化」，確保物理真實感。
                 if (currentMode === 'magic' || currentMode === 'bw') {
                     const sharpData = dstCtx.getImageData(0, 0, outWidth, outHeight);
                     const sData = sharpData.data;
@@ -288,6 +281,7 @@ export default function DocumentScannerModal({
             }
         }
         
+        // 輸出高畫質結果
         setPreviewData(dstCanvas.toDataURL('image/jpeg', 0.95));
         setIsProcessing(false);
     };
@@ -351,12 +345,12 @@ export default function DocumentScannerModal({
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center"><Crop size={12} className="mr-1"/> 邊緣雜物/手指內縮</label>
+                                <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center"><Crop size={12} className="mr-1"/> 邊緣自然光學內縮 (防裁切文字)</label>
                                 <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
                                     <button onClick={() => handleTrimChange(0)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${edgeTrim === 0 ? 'bg-slate-600 text-white shadow' : 'text-slate-400 hover:bg-slate-700'}`}>不裁切</button>
+                                    <button onClick={() => handleTrimChange(0.01)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${edgeTrim === 0.01 ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:bg-slate-700'}`}>極微 1%</button>
                                     <button onClick={() => handleTrimChange(0.02)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${edgeTrim === 0.02 ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:bg-slate-700'}`}>微縮 2%</button>
-                                    <button onClick={() => handleTrimChange(0.05)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${edgeTrim === 0.05 ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:bg-slate-700'}`}>適中 5%</button>
-                                    <button onClick={() => handleTrimChange(0.08)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${edgeTrim === 0.08 ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:bg-slate-700'}`}>大裁 8%</button>
+                                    <button onClick={() => handleTrimChange(0.04)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${edgeTrim === 0.04 ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:bg-slate-700'}`}>邊緣 4%</button>
                                 </div>
                             </div>
                         </div>
