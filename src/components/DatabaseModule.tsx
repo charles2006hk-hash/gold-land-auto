@@ -205,78 +205,6 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
     );
 };
 
-// --- ★ 新增：歷史數據遷移腳本 (Base64 -> Storage) ★ ---
-const MigrateBase64ToStorageBtn = ({ db, appId }: { db: any, appId: string }) => {
-    const [isMigrating, setIsMigrating] = useState(false);
-    const [progress, setProgress] = useState({ current: 0, total: 0 });
-
-    const handleMigration = async () => {
-        if (!confirm('⚠️ 警告：這將會讀取資料庫中所有舊的 Base64 圖片並上傳至 Storage。\n請確保您在穩定的 Wi-Fi 環境下進行，過程可能需要數分鐘。確定開始？')) return;
-        
-        setIsMigrating(true);
-        const storage = getStorage();
-        let migratedCount = 0;
-
-        try {
-            const colRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-            const snap = await getDocs(colRef);
-            setProgress({ current: 0, total: snap.docs.length });
-
-            let index = 0;
-            // 使用 for...of 確保同步執行，避免大量 Base64 導致記憶體溢出
-            for (const document of snap.docs) {
-                index++;
-                setProgress({ current: index, total: snap.docs.length });
-                
-                const data = document.data();
-                const attachments = data.attachments || [];
-                let hasChanges = false;
-                const newAttachments = [];
-
-                for (const att of attachments) {
-                    // 判斷是否為 Base64 (長度大於1000且不是 http 開頭)
-                    if (att.data && att.data.length > 1000 && !att.data.startsWith('http')) {
-                        console.log(`Migrating: ${document.id} -> ${att.name}`);
-                        const uniqueFileName = `migrated_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-                        const storageRef = ref(storage, `database_attachments/${appId}/${uniqueFileName}`);
-                        
-                        await uploadString(storageRef, att.data, 'data_url');
-                        const newUrl = await getDownloadURL(storageRef);
-                        
-                        newAttachments.push({ ...att, data: newUrl });
-                        hasChanges = true;
-                    } else {
-                        newAttachments.push(att);
-                    }
-                }
-
-                if (hasChanges) {
-                    const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', document.id);
-                    await updateDoc(docRef, { attachments: newAttachments, updatedAt: serverTimestamp() });
-                    migratedCount++;
-                }
-            }
-            alert(`✅ 遷移完成！共成功轉換並清理了 ${migratedCount} 筆含有舊 Base64 的資料。`);
-        } catch (error: any) {
-            console.error("Migration Error:", error);
-            alert(`❌ 遷移過程中斷: ${error.message}`);
-        } finally {
-            setIsMigrating(false);
-        }
-    };
-
-    return (
-        <button 
-            onClick={handleMigration} 
-            disabled={isMigrating}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-full hover:bg-rose-700 shadow-sm disabled:opacity-50 transition-all active:scale-95"
-            title="一鍵將舊的肥大資料轉移到雲端"
-        >
-            {isMigrating ? <Loader2 size={14} className="animate-spin"/> : <Database size={14}/>}
-            {isMigrating ? `遷移中 ${progress.current}/${progress.total}` : '升級舊圖至雲端'}
-        </button>
-    );
-};
 
 // --- DatabaseModule 主體 ---
 export interface DatabaseModuleProps {
@@ -975,14 +903,18 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             <div className={`w-full md:w-1/3 border-r border-slate-100 flex-col bg-slate-50 ${editingEntry ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-slate-200">
                     <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
-                            {/* ★ 加入歷史數據遷移按鈕 */}
-                            <MigrateBase64ToStorageBtn db={db} appId={appId} />
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-lg font-bold flex items-center text-slate-700">
+                                <Database className="mr-2" size={20}/> 資料庫
+                            </h2>
+                            {/* ★ 系統資料總數統計標籤 */}
+                            <div className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-[11px] font-black border border-blue-200 shadow-sm flex items-center tracking-widest">
+                                共 {filteredEntries.length} 筆
+                            </div>
                         </div>
                         <div className="flex gap-2">
                             <button onClick={scanForDuplicates} className="bg-amber-100 text-amber-700 p-2 rounded-full hover:bg-amber-200" title="檢查重複"><RefreshCw size={18}/></button>
-                            <button onClick={(e) => { 
+                            <button onClick={(e) => {
                                 e.preventDefault(); 
                                 const defaultDoc = settings.dbDocTypes?.['Person']?.[0] || '';
                                 setEditingEntry({ id: '', category: 'Person', docType: defaultDoc, name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null, reminderEnabled: false, customReminders: [] }); 
