@@ -28,7 +28,6 @@ export default function DocumentScannerModal({
         img.onload = () => {
             setImage(img);
             const w = img.width; const h = img.height;
-            // 預設稍微內縮，方便避開邊緣的手指或雜物
             setPoints([
                 { x: w * 0.12, y: h * 0.12 },     
                 { x: w * 0.88, y: h * 0.12 },     
@@ -39,7 +38,6 @@ export default function DocumentScannerModal({
         img.src = imageUrl;
     }, [imageUrl]);
 
-    // 渲染圖片與藍色控制點
     useEffect(() => {
         if (previewData) return;
 
@@ -110,13 +108,14 @@ export default function DocumentScannerModal({
 
     const onPointerUp = () => setDraggingId(null);
 
-    // ★★★ 影像處理核心 ★★★
+    // ★★★ 核心影像處理引擎 ★★★
     const processScan = async () => {
         if (!image) return;
         setIsProcessing(true);
         
         await new Promise(resolve => setTimeout(resolve, 50));
 
+        // 1. 動態計算最佳尺寸與比例 (防止過度變形)
         const widthTop = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
         const widthBottom = Math.hypot(points[2].x - points[3].x, points[2].y - points[3].y);
         const heightLeft = Math.hypot(points[3].x - points[0].x, points[3].y - points[0].y);
@@ -124,16 +123,18 @@ export default function DocumentScannerModal({
         
         const widthAvg = (widthTop + widthBottom) / 2;
         const heightAvg = (heightLeft + heightRight) / 2;
-        const isLandscape = widthAvg > heightAvg;
-
-        // ★ 優化 1：極限高清化 - 將最大寬度從 2000 提升到 2400，確保小字絕對清晰
-        let outWidth = Math.max(widthAvg, 1600); 
-        outWidth = Math.min(outWidth, 2400); 
-        let outHeight = isLandscape ? outWidth / 1.414 : outWidth * 1.414;
         
-        outWidth = Math.round(outWidth);
-        outHeight = Math.round(outHeight);
+        // 保留真實的長寬比，但若太誇張則限制在 A4 範圍附近
+        let ratio = heightAvg / widthAvg;
+        if (ratio > 1.6) ratio = 1.5; 
+        if (ratio < 1.2 && ratio > 1.0) ratio = 1.3;
 
+        let outWidth = Math.max(widthAvg, 1600); 
+        outWidth = Math.min(outWidth, 2200); 
+        let outHeight = Math.round(outWidth * ratio);
+        outWidth = Math.round(outWidth);
+
+        // 2. 透視矩陣投影 (Homography)
         const srcCanvas = document.createElement('canvas');
         srcCanvas.width = image.width; srcCanvas.height = image.height;
         const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
@@ -149,8 +150,10 @@ export default function DocumentScannerModal({
         const dstImgData = dstCtx.createImageData(outWidth, outHeight);
         const dstData = dstImgData.data;
 
-        const x0 = points[0].x, y0 = points[0].y, x1 = points[1].x, y1 = points[1].y;
-        const x2 = points[2].x, y2 = points[2].y, x3 = points[3].x, y3 = points[3].y;
+        const [x0, y0] = [points[0].x, points[0].y];
+        const [x1, y1] = [points[1].x, points[1].y];
+        const [x2, y2] = [points[2].x, points[2].y];
+        const [x3, y3] = [points[3].x, points[3].y];
 
         const sx = x0 - x1 + x2 - x3, sy = y0 - y1 + y2 - y3;
         const dx1 = x1 - x2, dx2 = x3 - x2, dy1 = y1 - y2, dy2 = y3 - y2;
@@ -160,37 +163,9 @@ export default function DocumentScannerModal({
         const a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
         const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
 
-        // ★ 優化 2：S-Curve LUT 白點裁切 (解決背景灰暗/光線不均)
-        const lut = new Uint8Array(256);
-        for (let i = 0; i < 256; i++) {
-            let val = i;
-            if (filterMode === 'bw') {
-                // 黑白：強制二值化傾向
-                val = i > 150 ? 255 : (i < 90 ? 0 : (i - 90) * 4.25);
-            } else if (filterMode === 'magic') {
-                // 魔法增強：裁切亮部(消除紙張陰影)，加深暗部(清晰字體)
-                if (i > 185) val = 255; 
-                else if (i < 80) val = i * 0.8;
-                else val = (i - 80) * (255 - 60) / (185 - 80) + 60;
-            }
-            lut[i] = Math.min(255, Math.max(0, val));
-        }
-
-        // ★ 優化 3：邊界自動漂白 (去除四邊的手指與背景)
-        const edgeBorderX = Math.floor(outWidth * 0.015); // 1.5% 的邊界
-        const edgeBorderY = Math.floor(outHeight * 0.015);
-
         for (let y = 0; y < outHeight; y++) {
             const v = y / outHeight; 
             for (let x = 0; x < outWidth; x++) {
-                const dstIdx = (y * outWidth + x) * 4;
-
-                // 邊界防護：直接填入純白，產生乾淨的「白邊」
-                if (filterMode !== 'original' && (x < edgeBorderX || x > outWidth - edgeBorderX || y < edgeBorderY || y > outHeight - edgeBorderY)) {
-                    dstData[dstIdx] = 255; dstData[dstIdx + 1] = 255; dstData[dstIdx + 2] = 255; dstData[dstIdx + 3] = 255;
-                    continue;
-                }
-
                 const u = x / outWidth; 
                 const denominator = g * u + h * v + 1 || 0.0001;
                 const srcX = (a * u + b * v + c) / denominator;
@@ -200,46 +175,105 @@ export default function DocumentScannerModal({
                 if (xf < 0) xf = 0; if (xf >= srcW - 1) xf = srcW - 2;
                 if (yf < 0) yf = 0; if (yf >= srcH - 1) yf = srcH - 2;
 
-                const dx = srcX - xf, dy = srcY - yf, omdx = 1 - dx, omdy = 1 - dy;
-                const w1 = omdx * omdy, w2 = dx * omdy, w3 = omdx * dy, w4 = dx * dy;
-
+                const dx = srcX - xf, dy = srcY - yf;
+                const w1 = (1-dx)*(1-dy), w2 = dx*(1-dy), w3 = (1-dx)*dy, w4 = dx*dy;
                 const i1 = (yf * srcW + xf) * 4, i2 = i1 + 4, i3 = ((yf + 1) * srcW + xf) * 4, i4 = i3 + 4;
 
-                let pr = srcData[i1] * w1 + srcData[i2] * w2 + srcData[i3] * w3 + srcData[i4] * w4;
-                let pg = srcData[i1+1] * w1 + srcData[i2+1] * w2 + srcData[i3+1] * w3 + srcData[i4+1] * w4;
-                let pb = srcData[i1+2] * w1 + srcData[i2+2] * w2 + srcData[i3+2] * w3 + srcData[i4+2] * w4;
-
-                if (filterMode !== 'original') {
-                    pr = lut[Math.round(pr)]; pg = lut[Math.round(pg)]; pb = lut[Math.round(pb)];
-                }
-
-                dstData[dstIdx] = pr; dstData[dstIdx + 1] = pg; dstData[dstIdx + 2] = pb; dstData[dstIdx + 3] = 255;
+                const dstIdx = (y * outWidth + x) * 4;
+                dstData[dstIdx] = srcData[i1]*w1 + srcData[i2]*w2 + srcData[i3]*w3 + srcData[i4]*w4;
+                dstData[dstIdx+1] = srcData[i1+1]*w1 + srcData[i2+1]*w2 + srcData[i3+1]*w3 + srcData[i4+1]*w4;
+                dstData[dstIdx+2] = srcData[i1+2]*w1 + srcData[i2+2]*w2 + srcData[i3+2]*w3 + srcData[i4+2]*w4;
+                dstData[dstIdx+3] = 255;
             }
         }
-        
         dstCtx.putImageData(dstImgData, 0, 0);
 
-        // ★ 優化 4：3x3 卷積銳化 (解決字體模糊問題)
+        // ★★★ 突破點：自適應光照校正 (Adaptive Illumination Normalization) ★★★
         if (filterMode !== 'original') {
-            const sharpData = dstCtx.getImageData(0, 0, outWidth, outHeight);
-            const sData = sharpData.data;
-            const copyData = new Uint8ClampedArray(sData); // 複製一份作為參考
-            
-            for (let y = 1; y < outHeight - 1; y++) {
-                for (let x = 1; x < outWidth - 1; x++) {
-                    const idx = (y * outWidth + x) * 4;
-                    // 拉普拉斯銳化矩陣 (Laplacian Sharpen Kernel)
-                    for (let c = 0; c < 3; c++) {
-                        const val = 5 * copyData[idx + c] 
-                                  - copyData[idx - 4 + c] 
-                                  - copyData[idx + 4 + c] 
-                                  - copyData[idx - outWidth * 4 + c] 
-                                  - copyData[idx + outWidth * 4 + c];
-                        sData[idx + c] = Math.min(255, Math.max(0, val));
+            // 建立光照背景圖 (Illumination Map)
+            const illCanvas = document.createElement('canvas');
+            illCanvas.width = outWidth; illCanvas.height = outHeight;
+            const illCtx = illCanvas.getContext('2d', { willReadFrequently: true });
+            if (illCtx) {
+                illCtx.drawImage(dstCanvas, 0, 0);
+                
+                // 1. 白點膨脹 (吃掉深色文字，留下紙張陰影)
+                illCtx.globalCompositeOperation = 'lighten';
+                const offset = Math.max(2, Math.floor(outWidth / 150));
+                illCtx.drawImage(dstCanvas, offset, offset);
+                illCtx.drawImage(dstCanvas, -offset, -offset);
+                
+                // 2. 極度模糊 (縮小再放大) 以獲得平滑的陰影分佈圖
+                const tinyCanvas = document.createElement('canvas');
+                tinyCanvas.width = 32; tinyCanvas.height = Math.floor(32 * ratio);
+                const tinyCtx = tinyCanvas.getContext('2d');
+                tinyCtx?.drawImage(illCanvas, 0, 0, tinyCanvas.width, tinyCanvas.height);
+                
+                illCtx.globalCompositeOperation = 'source-over';
+                illCtx.imageSmoothingEnabled = true;
+                illCtx.imageSmoothingQuality = 'high';
+                illCtx.drawImage(tinyCanvas, 0, 0, tinyCanvas.width, tinyCanvas.height, 0, 0, outWidth, outHeight);
+
+                const illData = illCtx.getImageData(0, 0, outWidth, outHeight).data;
+                const finalData = dstCtx.getImageData(0, 0, outWidth, outHeight);
+                const fd = finalData.data;
+
+                // 3. 像素除法除霧 (Image Division) + S-Curve 增強
+                for (let i = 0; i < fd.length; i += 4) {
+                    // 將原圖除以陰影圖，完美消除紙張起伏帶來的漸層陰影
+                    let r = (fd[i] / Math.max(1, illData[i])) * 255;
+                    let g = (fd[i+1] / Math.max(1, illData[i+1])) * 255;
+                    let b = (fd[i+2] / Math.max(1, illData[i+2])) * 255;
+
+                    if (filterMode === 'bw') {
+                        // 黑白模式：強制轉灰階並嚴格二值化
+                        let gray = r * 0.299 + g * 0.587 + b * 0.114;
+                        gray = gray > 180 ? 255 : (gray < 100 ? 0 : gray * 0.8);
+                        r = g = b = gray;
+                    } else {
+                        // 魔法增強：確保紙張純白，文字銳利加深
+                        r = r > 210 ? 255 : (r < 120 ? r * 0.8 : r);
+                        g = g > 210 ? 255 : (g < 120 ? g * 0.8 : g);
+                        b = b > 210 ? 255 : (b < 120 ? b * 0.8 : b);
+                    }
+
+                    fd[i] = r; fd[i+1] = g; fd[i+2] = b;
+                }
+
+                // ★ 強制邊緣填白 (消除四邊的手指和桌子邊界)
+                const edgeX = Math.floor(outWidth * 0.015);
+                const edgeY = Math.floor(outHeight * 0.015);
+                for (let y = 0; y < outHeight; y++) {
+                    for (let x = 0; x < outWidth; x++) {
+                        if (x < edgeX || x > outWidth - edgeX || y < edgeY || y > outHeight - edgeY) {
+                            const idx = (y * outWidth + x) * 4;
+                            fd[idx] = 255; fd[idx+1] = 255; fd[idx+2] = 255;
+                        }
                     }
                 }
+
+                dstCtx.putImageData(finalData, 0, 0);
+
+                // ★ 3x3 拉普拉斯矩陣銳化 (修復因拍攝沒放平導致的字體模糊)
+                const sharpData = dstCtx.getImageData(0, 0, outWidth, outHeight);
+                const sData = sharpData.data;
+                const copyData = new Uint8ClampedArray(sData); 
+                
+                for (let y = 1; y < outHeight - 1; y++) {
+                    for (let x = 1; x < outWidth - 1; x++) {
+                        const idx = (y * outWidth + x) * 4;
+                        for (let c = 0; c < 3; c++) {
+                            const val = 5 * copyData[idx + c] 
+                                      - copyData[idx - 4 + c] 
+                                      - copyData[idx + 4 + c] 
+                                      - copyData[idx - outWidth * 4 + c] 
+                                      - copyData[idx + outWidth * 4 + c];
+                            sData[idx + c] = Math.min(255, Math.max(0, val));
+                        }
+                    }
+                }
+                dstCtx.putImageData(sharpData, 0, 0);
             }
-            dstCtx.putImageData(sharpData, 0, 0);
         }
         
         // 輸出 95% 極高畫質 JPEG
@@ -258,7 +292,7 @@ export default function DocumentScannerModal({
                             <Maximize size={18} className="mr-2 text-blue-400"/> 智能文檔掃描 (Pro Scanner)
                         </h3>
                         <p className="text-[10px] text-slate-400 mt-1">
-                            {previewData ? "已套用高清銳化與白點漂白，請確認效果" : "建議將四個點稍微往文件【內側】縮進一點，系統會自動補白邊緣"}
+                            {previewData ? "已啟動自適應除霧與銳化引擎，請確認效果" : "建議將四個點稍微往文件【內側】縮進一點，系統會自動補白邊緣"}
                         </p>
                     </div>
                     <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
@@ -268,7 +302,7 @@ export default function DocumentScannerModal({
                     {isProcessing ? (
                         <div className="flex flex-col items-center text-blue-400">
                             <Loader2 size={48} className="animate-spin mb-4" />
-                            <p className="font-bold tracking-widest animate-pulse">正在執行高階透視矩陣與邊緣銳化...</p>
+                            <p className="font-bold tracking-widest animate-pulse">正在執行光照校正與除霧演算...</p>
                         </div>
                     ) : previewData ? (
                         <div className="w-full h-full flex items-center justify-center animate-in zoom-in-95 duration-200">
