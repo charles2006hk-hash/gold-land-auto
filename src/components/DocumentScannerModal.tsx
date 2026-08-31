@@ -28,11 +28,12 @@ export default function DocumentScannerModal({
         img.onload = () => {
             setImage(img);
             const w = img.width; const h = img.height;
+            // 預設稍微內縮，方便避開邊緣的手指或雜物
             setPoints([
-                { x: w * 0.15, y: h * 0.15 },     // TL
-                { x: w * 0.85, y: h * 0.15 },     // TR
-                { x: w * 0.85, y: h * 0.85 },     // BR
-                { x: w * 0.15, y: h * 0.85 }      // BL
+                { x: w * 0.12, y: h * 0.12 },     
+                { x: w * 0.88, y: h * 0.12 },     
+                { x: w * 0.88, y: h * 0.88 },     
+                { x: w * 0.12, y: h * 0.88 }      
             ]);
         };
         img.src = imageUrl;
@@ -70,13 +71,13 @@ export default function DocumentScannerModal({
             ctx.strokeStyle = '#3b82f6';
             ctx.lineWidth = Math.max(3, canvas.width / 350);
             ctx.beginPath();
-            ctx.arc(p.x, p.y, Math.max(20, canvas.width / 45), 0, Math.PI * 2);
+            ctx.arc(p.x, p.y, Math.max(25, canvas.width / 40), 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
             
             ctx.strokeStyle = draggingIdx === idx ? '#ffffff' : '#3b82f6';
             ctx.lineWidth = Math.max(2, canvas.width / 500);
-            const crossSize = Math.max(8, canvas.width / 100);
+            const crossSize = Math.max(10, canvas.width / 90);
             ctx.beginPath();
             ctx.moveTo(p.x - crossSize, p.y); ctx.lineTo(p.x + crossSize, p.y);
             ctx.moveTo(p.x, p.y - crossSize); ctx.lineTo(p.x, p.y + crossSize);
@@ -96,7 +97,7 @@ export default function DocumentScannerModal({
     const onPointerDown = (e: React.PointerEvent) => {
         const pos = getPointerPos(e);
         const canvas = canvasRef.current;
-        const hitRadius = Math.max(60, (canvas?.width || 1000) / 15);
+        const hitRadius = Math.max(80, (canvas?.width || 1000) / 12);
         const hitIdx = points.findIndex(p => Math.hypot(p.x - pos.x, p.y - pos.y) < hitRadius);
         if (hitIdx !== -1) setDraggingId(hitIdx);
     };
@@ -109,7 +110,7 @@ export default function DocumentScannerModal({
 
     const onPointerUp = () => setDraggingId(null);
 
-    // ★ 核心：真實透視變換演算法 (已修復浮點數索引與效能問題)
+    // ★★★ 影像處理核心 ★★★
     const processScan = async () => {
         if (!image) return;
         setIsProcessing(true);
@@ -125,12 +126,11 @@ export default function DocumentScannerModal({
         const heightAvg = (heightLeft + heightRight) / 2;
         const isLandscape = widthAvg > heightAvg;
 
-        // ★ 修復 1：限制最高解析度為 2000，防止手機瀏覽器 OOM (記憶體溢出)
-        let outWidth = Math.max(widthAvg, 1200); 
-        outWidth = Math.min(outWidth, 2000); 
-        
-        // ★ 修復 2：動態判定橫直幅比例，並強制 Math.round，保證像素陣列索引為嚴格整數
+        // ★ 優化 1：極限高清化 - 將最大寬度從 2000 提升到 2400，確保小字絕對清晰
+        let outWidth = Math.max(widthAvg, 1600); 
+        outWidth = Math.min(outWidth, 2400); 
         let outHeight = isLandscape ? outWidth / 1.414 : outWidth * 1.414;
+        
         outWidth = Math.round(outWidth);
         outHeight = Math.round(outHeight);
 
@@ -139,8 +139,7 @@ export default function DocumentScannerModal({
         const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
         if (!srcCtx) return;
         srcCtx.drawImage(image, 0, 0);
-        const srcImgData = srcCtx.getImageData(0, 0, image.width, image.height);
-        const srcData = srcImgData.data;
+        const srcData = srcCtx.getImageData(0, 0, image.width, image.height).data;
         const srcW = image.width; const srcH = image.height;
 
         const dstCanvas = document.createElement('canvas');
@@ -150,65 +149,58 @@ export default function DocumentScannerModal({
         const dstImgData = dstCtx.createImageData(outWidth, outHeight);
         const dstData = dstImgData.data;
 
-        const x0 = points[0].x, y0 = points[0].y;
-        const x1 = points[1].x, y1 = points[1].y;
-        const x2 = points[2].x, y2 = points[2].y;
-        const x3 = points[3].x, y3 = points[3].y;
+        const x0 = points[0].x, y0 = points[0].y, x1 = points[1].x, y1 = points[1].y;
+        const x2 = points[2].x, y2 = points[2].y, x3 = points[3].x, y3 = points[3].y;
 
-        const sx = x0 - x1 + x2 - x3;
-        const sy = y0 - y1 + y2 - y3;
-        const dx1 = x1 - x2;
-        const dx2 = x3 - x2;
-        const dy1 = y1 - y2;
-        const dy2 = y3 - y2;
+        const sx = x0 - x1 + x2 - x3, sy = y0 - y1 + y2 - y3;
+        const dx1 = x1 - x2, dx2 = x3 - x2, dy1 = y1 - y2, dy2 = y3 - y2;
 
-        const det = dx1 * dy2 - dx2 * dy1;
-        
-        // 防呆：防止四點重疊導致除以 0 崩潰
-        if (Math.abs(det) < 1e-6) {
-            alert("框線範圍不合理，請重新調整");
-            setIsProcessing(false);
-            return;
-        }
+        const det = dx1 * dy2 - dx2 * dy1 || 0.0001;
+        const g = (sx * dy2 - sy * dx2) / det, h = (dx1 * sy - dy1 * sx) / det;
+        const a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
+        const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
 
-        const g = (sx * dy2 - sy * dx2) / det;
-        const h = (dx1 * sy - dy1 * sx) / det;
-        
-        const a = x1 - x0 + g * x1;
-        const b = x3 - x0 + h * x3;
-        const c = x0;
-        const d = y1 - y0 + g * y1;
-        const e = y3 - y0 + h * y3;
-        const f = y0;
-
-        // 濾鏡 LUT 加強 (更強的漂白與黑字對比)
+        // ★ 優化 2：S-Curve LUT 白點裁切 (解決背景灰暗/光線不均)
         const lut = new Uint8Array(256);
         for (let i = 0; i < 256; i++) {
             let val = i;
-            if (filterMode === 'bw') val = (i - 128) * 2.5 + 128 + 40; 
-            else if (filterMode === 'magic') val = (i - 128) * 1.8 + 128 + 40; 
+            if (filterMode === 'bw') {
+                // 黑白：強制二值化傾向
+                val = i > 150 ? 255 : (i < 90 ? 0 : (i - 90) * 4.25);
+            } else if (filterMode === 'magic') {
+                // 魔法增強：裁切亮部(消除紙張陰影)，加深暗部(清晰字體)
+                if (i > 185) val = 255; 
+                else if (i < 80) val = i * 0.8;
+                else val = (i - 80) * (255 - 60) / (185 - 80) + 60;
+            }
             lut[i] = Math.min(255, Math.max(0, val));
         }
+
+        // ★ 優化 3：邊界自動漂白 (去除四邊的手指與背景)
+        const edgeBorderX = Math.floor(outWidth * 0.015); // 1.5% 的邊界
+        const edgeBorderY = Math.floor(outHeight * 0.015);
 
         for (let y = 0; y < outHeight; y++) {
             const v = y / outHeight; 
             for (let x = 0; x < outWidth; x++) {
-                const u = x / outWidth; 
+                const dstIdx = (y * outWidth + x) * 4;
 
+                // 邊界防護：直接填入純白，產生乾淨的「白邊」
+                if (filterMode !== 'original' && (x < edgeBorderX || x > outWidth - edgeBorderX || y < edgeBorderY || y > outHeight - edgeBorderY)) {
+                    dstData[dstIdx] = 255; dstData[dstIdx + 1] = 255; dstData[dstIdx + 2] = 255; dstData[dstIdx + 3] = 255;
+                    continue;
+                }
+
+                const u = x / outWidth; 
                 const denominator = g * u + h * v + 1 || 0.0001;
                 const srcX = (a * u + b * v + c) / denominator;
                 const srcY = (d * u + e * v + f) / denominator;
 
-                let xf = Math.floor(srcX);
-                let yf = Math.floor(srcY);
+                let xf = Math.floor(srcX), yf = Math.floor(srcY);
                 if (xf < 0) xf = 0; if (xf >= srcW - 1) xf = srcW - 2;
                 if (yf < 0) yf = 0; if (yf >= srcH - 1) yf = srcH - 2;
 
-                const dx = srcX - xf;
-                const dy = srcY - yf;
-                const omdx = 1 - dx;
-                const omdy = 1 - dy;
-
+                const dx = srcX - xf, dy = srcY - yf, omdx = 1 - dx, omdy = 1 - dy;
                 const w1 = omdx * omdy, w2 = dx * omdy, w3 = omdx * dy, w4 = dx * dy;
 
                 const i1 = (yf * srcW + xf) * 4, i2 = i1 + 4, i3 = ((yf + 1) * srcW + xf) * 4, i4 = i3 + 4;
@@ -217,31 +209,48 @@ export default function DocumentScannerModal({
                 let pg = srcData[i1+1] * w1 + srcData[i2+1] * w2 + srcData[i3+1] * w3 + srcData[i4+1] * w4;
                 let pb = srcData[i1+2] * w1 + srcData[i2+2] * w2 + srcData[i3+2] * w3 + srcData[i4+2] * w4;
 
-                if (filterMode === 'bw') {
-                    const gray = Math.round(pr * 0.299 + pg * 0.587 + pb * 0.114);
-                    pr = pg = pb = lut[gray];
-                } else if (filterMode === 'magic') {
+                if (filterMode !== 'original') {
                     pr = lut[Math.round(pr)]; pg = lut[Math.round(pg)]; pb = lut[Math.round(pb)];
                 }
 
-                const dstIdx = (y * outWidth + x) * 4;
-                dstData[dstIdx] = pr; 
-                dstData[dstIdx + 1] = pg; 
-                dstData[dstIdx + 2] = pb; 
-                dstData[dstIdx + 3] = 255; // ★ 確保 Alpha 通道完全不透明
+                dstData[dstIdx] = pr; dstData[dstIdx + 1] = pg; dstData[dstIdx + 2] = pb; dstData[dstIdx + 3] = 255;
             }
         }
         
         dstCtx.putImageData(dstImgData, 0, 0);
+
+        // ★ 優化 4：3x3 卷積銳化 (解決字體模糊問題)
+        if (filterMode !== 'original') {
+            const sharpData = dstCtx.getImageData(0, 0, outWidth, outHeight);
+            const sData = sharpData.data;
+            const copyData = new Uint8ClampedArray(sData); // 複製一份作為參考
+            
+            for (let y = 1; y < outHeight - 1; y++) {
+                for (let x = 1; x < outWidth - 1; x++) {
+                    const idx = (y * outWidth + x) * 4;
+                    // 拉普拉斯銳化矩陣 (Laplacian Sharpen Kernel)
+                    for (let c = 0; c < 3; c++) {
+                        const val = 5 * copyData[idx + c] 
+                                  - copyData[idx - 4 + c] 
+                                  - copyData[idx + 4 + c] 
+                                  - copyData[idx - outWidth * 4 + c] 
+                                  - copyData[idx + outWidth * 4 + c];
+                        sData[idx + c] = Math.min(255, Math.max(0, val));
+                    }
+                }
+            }
+            dstCtx.putImageData(sharpData, 0, 0);
+        }
         
-        const resultBase64 = dstCanvas.toDataURL('image/jpeg', 0.92);
+        // 輸出 95% 極高畫質 JPEG
+        const resultBase64 = dstCanvas.toDataURL('image/jpeg', 0.95);
         setPreviewData(resultBase64);
         setIsProcessing(false);
     };
 
     return (
         <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-md animate-in fade-in">
-            <div className="bg-slate-800 w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
+            <div className="bg-slate-800 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
                 
                 <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
                     <div>
@@ -249,7 +258,7 @@ export default function DocumentScannerModal({
                             <Maximize size={18} className="mr-2 text-blue-400"/> 智能文檔掃描 (Pro Scanner)
                         </h3>
                         <p className="text-[10px] text-slate-400 mt-1">
-                            {previewData ? "請確認掃描結果是否清晰" : "請拖曳四個藍色圓點，精準對齊牌簿/文件的四個角落"}
+                            {previewData ? "已套用高清銳化與白點漂白，請確認效果" : "建議將四個點稍微往文件【內側】縮進一點，系統會自動補白邊緣"}
                         </p>
                     </div>
                     <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
@@ -259,7 +268,7 @@ export default function DocumentScannerModal({
                     {isProcessing ? (
                         <div className="flex flex-col items-center text-blue-400">
                             <Loader2 size={48} className="animate-spin mb-4" />
-                            <p className="font-bold tracking-widest animate-pulse">正在透過透視矩陣重建高畫質文檔...</p>
+                            <p className="font-bold tracking-widest animate-pulse">正在執行高階透視矩陣與邊緣銳化...</p>
                         </div>
                     ) : previewData ? (
                         <div className="w-full h-full flex items-center justify-center animate-in zoom-in-95 duration-200">
@@ -278,7 +287,7 @@ export default function DocumentScannerModal({
                 {previewData ? (
                     <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0 border-t border-slate-800">
                         <button onClick={() => setPreviewData(null)} className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-xl transition-colors flex items-center shadow-md">
-                            <ArrowLeft size={16} className="mr-1.5"/> 返回重調框線
+                            <ArrowLeft size={16} className="mr-1.5"/> 返回重調
                         </button>
                         <button onClick={() => onSave(previewData)} className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white text-sm font-black rounded-xl shadow-lg shadow-green-900/50 transition-transform active:scale-95 flex items-center gap-2">
                             <Check size={18}/> 確認並替換原圖
@@ -296,7 +305,7 @@ export default function DocumentScannerModal({
                             <button onClick={() => {
                                 if(!image) return;
                                 const w = image.width, h = image.height;
-                                setPoints([{ x: w*0.15, y: h*0.15 }, { x: w*0.85, y: h*0.15 }, { x: w*0.85, y: h*0.85 }, { x: w*0.15, y: h*0.85 }]);
+                                setPoints([{ x: w*0.12, y: h*0.12 }, { x: w*0.88, y: h*0.12 }, { x: w*0.88, y: h*0.88 }, { x: w*0.12, y: h*0.88 }]);
                             }} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center flex-1 md:flex-none">
                                 <RotateCcw size={14} className="mr-1"/> 重設框線
                             </button>
