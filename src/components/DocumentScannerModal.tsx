@@ -231,19 +231,18 @@ export default function DocumentScannerModal({
                     let r, g, b;
 
                     if (currentMode === 'texture') {
-                        // 【保留紋理模式】：重建於自然物理白 (RGB: 235)，微幅增強對比，絕不裁切高光
+                        // 【保留紋理模式】：重建於自然物理白 (RGB: 235)
                         r = 235 + diffR * 1.15;
                         g = 235 + diffG * 1.15;
                         b = 235 + diffB * 1.15;
                     } else if (currentMode === 'magic') {
-                        // 【強力漂白模式】：重建於純白 (RGB: 255)，高強度對比
+                        // 【強力漂白模式】：重建於純白 (RGB: 255)
                         r = 255 + diffR * 1.6;
                         g = 255 + diffG * 1.6;
                         b = 255 + diffB * 1.6;
-                        // 強制高光裁切，確保背景死白
                         r = r > 240 ? 255 : r; g = g > 240 ? 255 : g; b = b > 240 ? 255 : b;
-                    } else if (currentMode === 'bw') {
-                        // 【黑白模式】
+                    } else {
+                        // 【黑白模式】 (將 else if 改為 else，確保絕對賦值)
                         let diffGray = diffR * 0.299 + diffG * 0.587 + diffB * 0.114;
                         let gray = 255 + diffGray * 1.8;
                         gray = gray > 230 ? 255 : (gray < 120 ? gray * 0.8 : gray);
