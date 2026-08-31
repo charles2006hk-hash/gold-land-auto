@@ -19,8 +19,6 @@ export default function DocumentScannerModal({
     const [draggingIdx, setDraggingId] = useState<number | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [filterMode, setFilterMode] = useState<'magic' | 'bw' | 'original'>('magic');
-    
-    // ★ 新增：預覽掃描結果的狀態
     const [previewData, setPreviewData] = useState<string | null>(null);
 
     // 載入圖片並初始化 4 個頂點
@@ -40,9 +38,9 @@ export default function DocumentScannerModal({
         img.src = imageUrl;
     }, [imageUrl]);
 
-    // 渲染圖片與藍色控制點 (只有在非預覽模式才需要畫)
+    // 渲染圖片與藍色控制點
     useEffect(() => {
-        if (previewData) return; // 如果在預覽模式，就不畫控制點
+        if (previewData) return;
 
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
@@ -111,7 +109,7 @@ export default function DocumentScannerModal({
 
     const onPointerUp = () => setDraggingId(null);
 
-    // 透視變換演算法
+    // ★ 核心：真實透視變換演算法 (已修復浮點數索引與效能問題)
     const processScan = async () => {
         if (!image) return;
         setIsProcessing(true);
@@ -123,8 +121,18 @@ export default function DocumentScannerModal({
         const heightLeft = Math.hypot(points[3].x - points[0].x, points[3].y - points[0].y);
         const heightRight = Math.hypot(points[2].x - points[1].x, points[2].y - points[1].y);
         
-        const outWidth = Math.max(widthTop, widthBottom, 1200); 
-        const outHeight = Math.max(heightLeft, heightRight, outWidth * 1.414);
+        const widthAvg = (widthTop + widthBottom) / 2;
+        const heightAvg = (heightLeft + heightRight) / 2;
+        const isLandscape = widthAvg > heightAvg;
+
+        // ★ 修復 1：限制最高解析度為 2000，防止手機瀏覽器 OOM (記憶體溢出)
+        let outWidth = Math.max(widthAvg, 1200); 
+        outWidth = Math.min(outWidth, 2000); 
+        
+        // ★ 修復 2：動態判定橫直幅比例，並強制 Math.round，保證像素陣列索引為嚴格整數
+        let outHeight = isLandscape ? outWidth / 1.414 : outWidth * 1.414;
+        outWidth = Math.round(outWidth);
+        outHeight = Math.round(outHeight);
 
         const srcCanvas = document.createElement('canvas');
         srcCanvas.width = image.width; srcCanvas.height = image.height;
@@ -155,6 +163,14 @@ export default function DocumentScannerModal({
         const dy2 = y3 - y2;
 
         const det = dx1 * dy2 - dx2 * dy1;
+        
+        // 防呆：防止四點重疊導致除以 0 崩潰
+        if (Math.abs(det) < 1e-6) {
+            alert("框線範圍不合理，請重新調整");
+            setIsProcessing(false);
+            return;
+        }
+
         const g = (sx * dy2 - sy * dx2) / det;
         const h = (dx1 * sy - dy1 * sx) / det;
         
@@ -165,11 +181,12 @@ export default function DocumentScannerModal({
         const e = y3 - y0 + h * y3;
         const f = y0;
 
+        // 濾鏡 LUT 加強 (更強的漂白與黑字對比)
         const lut = new Uint8Array(256);
         for (let i = 0; i < 256; i++) {
             let val = i;
             if (filterMode === 'bw') val = (i - 128) * 2.5 + 128 + 40; 
-            else if (filterMode === 'magic') val = (i - 128) * 1.5 + 128 + 30; 
+            else if (filterMode === 'magic') val = (i - 128) * 1.8 + 128 + 40; 
             lut[i] = Math.min(255, Math.max(0, val));
         }
 
@@ -178,7 +195,7 @@ export default function DocumentScannerModal({
             for (let x = 0; x < outWidth; x++) {
                 const u = x / outWidth; 
 
-                const denominator = g * u + h * v + 1;
+                const denominator = g * u + h * v + 1 || 0.0001;
                 const srcX = (a * u + b * v + c) / denominator;
                 const srcY = (d * u + e * v + f) / denominator;
 
@@ -208,15 +225,16 @@ export default function DocumentScannerModal({
                 }
 
                 const dstIdx = (y * outWidth + x) * 4;
-                dstData[dstIdx] = pr; dstData[dstIdx + 1] = pg; dstData[dstIdx + 2] = pb; dstData[dstIdx + 3] = 255;
+                dstData[dstIdx] = pr; 
+                dstData[dstIdx + 1] = pg; 
+                dstData[dstIdx + 2] = pb; 
+                dstData[dstIdx + 3] = 255; // ★ 確保 Alpha 通道完全不透明
             }
         }
         
         dstCtx.putImageData(dstImgData, 0, 0);
         
         const resultBase64 = dstCanvas.toDataURL('image/jpeg', 0.92);
-        
-        // ★ 不直接存檔，而是切換到預覽畫面
         setPreviewData(resultBase64);
         setIsProcessing(false);
     };
@@ -225,7 +243,6 @@ export default function DocumentScannerModal({
         <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-md animate-in fade-in">
             <div className="bg-slate-800 w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
                 
-                {/* 頂部標題 */}
                 <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
                     <div>
                         <h3 className="text-white font-bold text-sm md:text-base flex items-center">
@@ -238,7 +255,6 @@ export default function DocumentScannerModal({
                     <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
                 </div>
 
-                {/* 主畫面：如果是預覽模式就顯示圖，否則顯示拉框 Canvas */}
                 <div ref={containerRef} className="flex-1 overflow-hidden bg-black/80 relative flex items-center justify-center touch-none select-none p-2">
                     {isProcessing ? (
                         <div className="flex flex-col items-center text-blue-400">
@@ -246,12 +262,10 @@ export default function DocumentScannerModal({
                             <p className="font-bold tracking-widest animate-pulse">正在透過透視矩陣重建高畫質文檔...</p>
                         </div>
                     ) : previewData ? (
-                        // ★ 預覽掃描結果
                         <div className="w-full h-full flex items-center justify-center animate-in zoom-in-95 duration-200">
                             <img src={previewData} className="max-w-full max-h-full object-contain drop-shadow-2xl rounded-sm" alt="Scanned Preview" />
                         </div>
                     ) : (
-                        // ★ 拉框作業區
                         <canvas
                             ref={canvasRef}
                             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
@@ -261,9 +275,7 @@ export default function DocumentScannerModal({
                     )}
                 </div>
 
-                {/* 底部操作列 */}
                 {previewData ? (
-                    // ★ 預覽模式的底部列
                     <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0 border-t border-slate-800">
                         <button onClick={() => setPreviewData(null)} className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-xl transition-colors flex items-center shadow-md">
                             <ArrowLeft size={16} className="mr-1.5"/> 返回重調框線
@@ -273,7 +285,6 @@ export default function DocumentScannerModal({
                         </button>
                     </div>
                 ) : (
-                    // ★ 拉框模式的底部列
                     <div className="p-4 bg-slate-900 flex flex-col md:flex-row justify-between items-center shrink-0 gap-4">
                         <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-xl">
                             <button onClick={() => setFilterMode('magic')} className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center ${filterMode === 'magic' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Wand2 size={14} className="mr-1.5"/>魔法增強</button>
@@ -287,7 +298,7 @@ export default function DocumentScannerModal({
                                 const w = image.width, h = image.height;
                                 setPoints([{ x: w*0.15, y: h*0.15 }, { x: w*0.85, y: h*0.15 }, { x: w*0.85, y: h*0.85 }, { x: w*0.15, y: h*0.85 }]);
                             }} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center flex-1 md:flex-none">
-                                <RotateCcw size={14} className="mr-1"/> 重設
+                                <RotateCcw size={14} className="mr-1"/> 重設框線
                             </button>
                             <button onClick={processScan} disabled={isProcessing} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center justify-center flex-1 md:flex-none disabled:opacity-50">
                                 <Maximize size={16} className="mr-1.5"/> 預覽掃描效果
