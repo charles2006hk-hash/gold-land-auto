@@ -14,6 +14,8 @@ import {
     orderBy, serverTimestamp, writeBatch, updateDoc, getDocs, where,
     Firestore
 } from 'firebase/firestore';
+// ★ 新增：引入 Firebase Storage 用於儲存高畫質附件
+import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { DatabaseEntry, SystemSettings, Vehicle, DatabaseAttachment } from '@/types';
 import { DB_CATEGORIES, DOCUMENT_FIELD_SCHEMA } from '@/config/constants';
 import { compressImage } from '@/utils/imageHelpers'; // 確保您有這個工具函數
@@ -549,55 +551,90 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         return () => unsub();
     }, [staffId, db, appId, currentUser]);
 
-    // 處理圖片/PDF上傳
+    // 處理圖片/PDF上傳 (★ 已升級為 Firebase Storage 雲端架構 + 高畫質解析)
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-          const files = e.target.files;
-          if (!files || files.length === 0) return;
-          const file = files[0];
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        
+        // 初始化 Storage
+        const storage = getStorage();
 
-          if (file.type === 'application/pdf') {
-              if (file.size > 15 * 1024 * 1024) { alert("PDF 檔案過大 (限制 15MB)"); return; } 
-              try {
-                  const pdfjsLib = await import('pdfjs-dist');
-                  (pdfjsLib as any).GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/build/pdf.worker.min.mjs`;
-                  const arrayBuffer = await file.arrayBuffer();
-                  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer, cMapUrl: `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/cmaps/`, cMapPacked: true });
-                  const pdf = await loadingTask.promise;
-                  const newAttachments: DatabaseAttachment[] = [];
-                  const MAX_PAGES = 5; 
-                  const numPages = Math.min(pdf.numPages, MAX_PAGES);
-                  for (let i = 1; i <= numPages; i++) {
-                      const page = await pdf.getPage(i);
-                      const viewport = page.getViewport({ scale: 2.0 }); 
-                      const canvas = document.createElement('canvas');
-                      const context = canvas.getContext('2d');
-                      canvas.height = viewport.height; canvas.width = viewport.width;
-                      if (context) {
-                          await page.render({ canvasContext: context, viewport: viewport } as any).promise;
-                          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                          newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: dataUrl });
-                      }
-                  }
-                  setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, ...newAttachments] } : null);
-                  showToast(`成功匯入 PDF 前 ${numPages} 頁！`);
-              } catch (err: any) { showToast(`PDF 解析失敗: ${err.message}`, 'error'); }
-              e.target.value = ''; 
-              return;
-          }
+        // 建立獨立的 Storage 上傳模組
+        const uploadToStorage = async (base64Data: string, fileName: string) => {
+            // 產生唯一檔名避免覆蓋
+            const uniqueFileName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+            const storageRef = ref(storage, `database_attachments/${appId}/${uniqueFileName}`);
+            
+            // 將 Base64 字串上傳至 Storage
+            await uploadString(storageRef, base64Data, 'data_url');
+            // 取得真實的 URL 下載網址
+            return await getDownloadURL(storageRef);
+        };
 
-          if (file.size > 15 * 1024 * 1024) { showToast(`檔案過大 (限制 15MB)`, 'error'); return; }
-          
-          try {
-              const compressedBase64 = await compressImage(file, 200);
-              setEditingEntry(prev => prev ? { 
-                  ...prev, 
-                  attachments: [...prev.attachments, { name: file.name, data: compressedBase64 }] 
-              } : null);
-          } catch (error) {
-              showToast("圖片處理失敗，請重試", 'error');
-          }
-          
-          e.target.value = '';
+        if (file.type === 'application/pdf') {
+            if (file.size > 15 * 1024 * 1024) { showToast("PDF 檔案過大 (限制 15MB)", "error"); return; } 
+            try {
+                showToast("⏳ 正在高畫質解析 PDF 並上傳至雲端...");
+                const pdfjsLib = await import('pdfjs-dist');
+                (pdfjsLib as any).GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/build/pdf.worker.min.mjs`;
+                const arrayBuffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer, cMapUrl: `https://unpkg.com/pdfjs-dist@${(pdfjsLib as any).version}/cmaps/`, cMapPacked: true });
+                const pdf = await loadingTask.promise;
+                
+                const newAttachments: DatabaseAttachment[] = [];
+                // 不再受限 Firestore 1MB，安全讀取前 5 頁
+                const MAX_PAGES = 5; 
+                const numPages = Math.min(pdf.numPages, MAX_PAGES);
+                
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    // ★ 核心優化：將 DPI 提升至 3.0，確保文字清晰銳利
+                    const viewport = page.getViewport({ scale: 3.0 }); 
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height; canvas.width = viewport.width;
+                    if (context) {
+                        context.imageSmoothingEnabled = true;
+                        context.imageSmoothingQuality = 'high';
+                        context.fillStyle = '#ffffff'; // 確保背景為白
+                        context.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        await page.render({ canvasContext: context, viewport: viewport } as any).promise;
+                        
+                        // ★ 核心優化：轉成 90% 高畫質 JPEG
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+                        
+                        // ★ 上傳到 Storage 獲取 URL (避開 Firestore 容量地雷)
+                        const downloadUrl = await uploadToStorage(dataUrl, `${file.name}_P${i}.jpg`);
+                        newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: downloadUrl });
+                    }
+                }
+                setEditingEntry(prev => prev ? { ...prev, attachments: [...prev.attachments, ...newAttachments] } : null);
+                showToast(`✅ 成功匯入 PDF 共 ${numPages} 頁！(已安全儲存至 Storage)`);
+            } catch (err: any) { showToast(`PDF 解析失敗: ${err.message}`, 'error'); }
+            e.target.value = ''; 
+            return;
+        }
+
+        if (file.size > 15 * 1024 * 1024) { showToast(`檔案過大 (限制 15MB)`, 'error'); return; }
+        
+        try {
+            showToast("⏳ 正在處理圖片並上傳至雲端...");
+            // 普通圖片：先在本地壓縮 (節省上傳頻寬)，再傳到 Storage 獲取 URL
+            const compressedBase64 = await compressImage(file, 200); 
+            const downloadUrl = await uploadToStorage(compressedBase64, file.name);
+            
+            setEditingEntry(prev => prev ? { 
+                ...prev, 
+                attachments: [...prev.attachments, { name: file.name, data: downloadUrl }] 
+            } : null);
+            showToast("✅ 圖片上傳成功！");
+        } catch (error) {
+            showToast("圖片上傳失敗，請檢查網路狀態", 'error');
+        }
+        
+        e.target.value = '';
     };
 
     // 下載圖片
