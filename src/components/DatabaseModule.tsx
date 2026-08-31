@@ -18,6 +18,7 @@ import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage'
 import { DatabaseEntry, SystemSettings, Vehicle, DatabaseAttachment } from '@/types';
 import { DB_CATEGORIES, DOCUMENT_FIELD_SCHEMA } from '@/config/constants';
 import { compressImage } from '@/utils/imageHelpers'; 
+import DocumentScannerModal from './DocumentScannerModal';
 
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
@@ -246,6 +247,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
     const [plateSearchText, setPlateSearchText] = useState(''); 
     const [showPlateDropdown, setShowPlateDropdown] = useState(false); 
+    const [scannerData, setScannerData] = useState<{ url: string, index: number } | null>(null);
 
     const showToast = (text: string, type: 'success' | 'error' = 'success') => {
         setToastMsg({text, type});
@@ -1437,6 +1439,11 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                     <div className="absolute top-2 right-2 flex gap-2">
                                                         {isDbEditing && (
                                                             <>
+                                                                {/* ★ 新增：文檔掃描按鈕 */}
+                                                                <button type="button" onClick={(e) => { e.preventDefault(); setScannerData({ url: file.data, index: idx }); }} className="bg-indigo-600 text-white p-2 rounded-full opacity-90 hover:opacity-100 shadow-lg transition-all transform active:scale-95" title="智能掃描 (拉平與增強)">
+                                                                    <Maximize size={18}/>
+                                                                </button>
+                                                                
                                                                 <button type="button" onClick={() => analyzeImageWithAI(file.data, editingEntry.docType || editingEntry.category)} disabled={isScanning} className="bg-yellow-400 text-yellow-900 p-2 rounded-full opacity-90 hover:opacity-100 hover:bg-yellow-300 shadow-lg transition-all flex items-center justify-center transform active:scale-95" title="AI 智能識別文字">
                                                                     {isScanning ? <Loader2 size={18} className="animate-spin"/> : <Zap size={18} fill="currentColor"/>}
                                                                 </button>
@@ -1619,6 +1626,44 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         onClick={e => e.stopPropagation()} 
                     />
                 </div>
+            )}
+
+            {/* ★ 新增掛載：智能掃描器 Modal */}
+            {scannerData && (
+                <DocumentScannerModal 
+                    imageUrl={scannerData.url}
+                    onClose={() => setScannerData(null)}
+                    onSave={async (scannedBase64) => {
+                        showToast("⏳ 正在將高清掃描檔同步至雲端...");
+                        try {
+                            const storage = getStorage();
+                            // 上傳至 Storage 並取得 URL
+                            const uniqueFileName = `scanned_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+                            const storageRef = ref(storage, `database_attachments/${appId}/${uniqueFileName}`);
+                            await uploadString(storageRef, scannedBase64, 'data_url');
+                            const downloadUrl = await getDownloadURL(storageRef);
+
+                            // 更新當前編輯項目的特定圖片
+                            setEditingEntry(prev => {
+                                if (!prev) return null;
+                                const newAtt = [...prev.attachments];
+                                // 修改檔名以標示為掃描件，並替換 URL
+                                newAtt[scannerData.index] = { 
+                                    ...newAtt[scannerData.index], 
+                                    name: newAtt[scannerData.index].name.replace('.jpg', '') + '_scanned.jpg',
+                                    data: downloadUrl 
+                                };
+                                return { ...prev, attachments: newAtt };
+                            });
+                            showToast("✅ 掃描完成並已取代原圖！記得點擊「儲存」按鈕。");
+                        } catch (error) {
+                            console.error(error);
+                            showToast("上傳掃描檔失敗", "error");
+                        } finally {
+                            setScannerData(null);
+                        }
+                    }}
+                />
             )}
         </div>
     );
