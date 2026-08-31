@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Check, X, Maximize, Wand2, Loader2, RotateCcw, ArrowLeft, Image as ImageIcon, Crop } from 'lucide-react';
+import { Check, X, Maximize, Wand2, Loader2, RotateCcw, ArrowLeft, Crop } from 'lucide-react';
 
 interface Point { x: number; y: number }
 
@@ -18,23 +18,19 @@ export default function DocumentScannerModal({
     const [points, setPoints] = useState<Point[]>([]);
     const [draggingIdx, setDraggingId] = useState<number | null>(null);
     
-    // 狀態管理
     const [isProcessing, setIsProcessing] = useState(false);
     const [isPreviewing, setIsPreviewing] = useState(false);
     const [previewData, setPreviewData] = useState<string | null>(null);
     
-    // 調教參數
     const [filterMode, setFilterMode] = useState<'original' | 'texture' | 'magic' | 'bw'>('texture');
-    const [edgeTrim, setEdgeTrim] = useState<number>(0.02); // 預設內縮 2% 去除邊緣手指
+    const [edgeTrim, setEdgeTrim] = useState<number>(0.02);
 
-    // 載入圖片並初始化 4 個頂點
     useEffect(() => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
             setImage(img);
             const w = img.width; const h = img.height;
-            // 預設稍微內縮，提供緩衝空間
             setPoints([
                 { x: w * 0.1, y: h * 0.1 },     
                 { x: w * 0.9, y: h * 0.1 },     
@@ -45,7 +41,6 @@ export default function DocumentScannerModal({
         img.src = imageUrl;
     }, [imageUrl]);
 
-    // 渲染拉框畫面 (僅在非預覽狀態下)
     useEffect(() => {
         if (isPreviewing) return;
 
@@ -59,14 +54,12 @@ export default function DocumentScannerModal({
         
         ctx.drawImage(image, 0, 0);
 
-        // 畫遮罩
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         ctx.beginPath();
         ctx.moveTo(0, 0); ctx.lineTo(canvas.width, 0); ctx.lineTo(canvas.width, canvas.height); ctx.lineTo(0, canvas.height); ctx.closePath();
         ctx.moveTo(points[0].x, points[0].y); ctx.lineTo(points[3].x, points[3].y); ctx.lineTo(points[2].x, points[2].y); ctx.lineTo(points[1].x, points[1].y); ctx.closePath();
         ctx.fill('evenodd');
 
-        // 畫裁切框線
         ctx.strokeStyle = '#3b82f6';
         ctx.lineWidth = Math.max(4, canvas.width / 250);
         ctx.beginPath();
@@ -74,7 +67,6 @@ export default function DocumentScannerModal({
         ctx.closePath();
         ctx.stroke();
 
-        // 畫 4 個控制點
         points.forEach((p, idx) => {
             ctx.fillStyle = draggingIdx === idx ? '#ef4444' : '#ffffff';
             ctx.strokeStyle = '#3b82f6';
@@ -120,7 +112,7 @@ export default function DocumentScannerModal({
 
     const onPointerUp = () => setDraggingId(null);
 
-    // ★★★ 核心影像處理引擎 (帶入參數以支援實時切換) ★★★
+    // ★★★ 先進高通差異運算引擎 (Advanced Differential Separation) ★★★
     const processScan = async (currentMode = filterMode, currentTrim = edgeTrim) => {
         if (!image) return;
         setIsProcessing(true);
@@ -128,7 +120,6 @@ export default function DocumentScannerModal({
         
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        // 1. 動態計算比例
         const widthTop = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
         const widthBottom = Math.hypot(points[2].x - points[3].x, points[2].y - points[3].y);
         const heightLeft = Math.hypot(points[3].x - points[0].x, points[3].y - points[0].y);
@@ -146,7 +137,6 @@ export default function DocumentScannerModal({
         let outHeight = Math.round(outWidth * ratio);
         outWidth = Math.round(outWidth);
 
-        // 2. 獲取原圖像素
         const srcCanvas = document.createElement('canvas');
         srcCanvas.width = image.width; srcCanvas.height = image.height;
         const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
@@ -155,7 +145,6 @@ export default function DocumentScannerModal({
         const srcData = srcCtx.getImageData(0, 0, image.width, image.height).data;
         const srcW = image.width; const srcH = image.height;
 
-        // 3. 目標畫布
         const dstCanvas = document.createElement('canvas');
         dstCanvas.width = outWidth; dstCanvas.height = outHeight;
         const dstCtx = dstCanvas.getContext('2d', { willReadFrequently: true });
@@ -163,7 +152,6 @@ export default function DocumentScannerModal({
         const dstImgData = dstCtx.createImageData(outWidth, outHeight);
         const dstData = dstImgData.data;
 
-        // 4. 計算透視矩陣 (Homography)
         const [x0, y0] = [points[0].x, points[0].y], [x1, y1] = [points[1].x, points[1].y];
         const [x2, y2] = [points[2].x, points[2].y], [x3, y3] = [points[3].x, points[3].y];
         const sx = x0 - x1 + x2 - x3, sy = y0 - y1 + y2 - y3;
@@ -173,9 +161,7 @@ export default function DocumentScannerModal({
         const a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
         const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
 
-        // 5. 投影映射 (結合 UV 內縮裁切)
         for (let y = 0; y < outHeight; y++) {
-            // ★ UV 內縮：這能完美物理裁切掉四周邊緣的手指與雜物
             const v = currentTrim + (y / outHeight) * (1 - 2 * currentTrim); 
             for (let x = 0; x < outWidth; x++) {
                 const u = currentTrim + (x / outWidth) * (1 - 2 * currentTrim); 
@@ -201,7 +187,6 @@ export default function DocumentScannerModal({
         }
         dstCtx.putImageData(dstImgData, 0, 0);
 
-        // 6. 光照校正與濾鏡 (如果不是原圖模式)
         if (currentMode !== 'original') {
             const illCanvas = document.createElement('canvas');
             illCanvas.width = outWidth; illCanvas.height = outHeight;
@@ -209,58 +194,83 @@ export default function DocumentScannerModal({
             
             if (illCtx) {
                 illCtx.drawImage(dstCanvas, 0, 0);
-                illCtx.globalCompositeOperation = 'lighten';
-                const offset = Math.max(2, Math.floor(outWidth / 150));
-                illCtx.drawImage(dstCanvas, offset, offset);
-                illCtx.drawImage(dstCanvas, -offset, -offset);
                 
+                // 1. Dilation (膨脹)：擴大亮點，吃掉深色文字
+                illCtx.globalCompositeOperation = 'lighten';
+                illCtx.drawImage(dstCanvas, 4, 4);
+                illCtx.drawImage(dstCanvas, -4, -4);
+                illCtx.drawImage(dstCanvas, 4, -4);
+                illCtx.drawImage(dstCanvas, -4, 4);
+                
+                // 2. Heavy Blur：計算出極度平滑的光照陰影圖
                 const tinyCanvas = document.createElement('canvas');
-                tinyCanvas.width = 32; tinyCanvas.height = Math.floor(32 * ratio);
+                const tinyW = 16; const tinyH = Math.max(16, Math.floor(16 * ratio));
+                tinyCanvas.width = tinyW; tinyCanvas.height = tinyH;
                 const tinyCtx = tinyCanvas.getContext('2d');
-                tinyCtx?.drawImage(illCanvas, 0, 0, tinyCanvas.width, tinyCanvas.height);
+                tinyCtx?.drawImage(illCanvas, 0, 0, tinyW, tinyH);
                 
                 illCtx.globalCompositeOperation = 'source-over';
                 illCtx.imageSmoothingEnabled = true;
                 illCtx.imageSmoothingQuality = 'high';
-                illCtx.drawImage(tinyCanvas, 0, 0, tinyCanvas.width, tinyCanvas.height, 0, 0, outWidth, outHeight);
+                illCtx.drawImage(tinyCanvas, 0, 0, tinyW, tinyH, 0, 0, outWidth, outHeight);
 
                 const illData = illCtx.getImageData(0, 0, outWidth, outHeight).data;
                 const finalData = dstCtx.getImageData(0, 0, outWidth, outHeight);
                 const fd = finalData.data;
 
+                // 3. 高通差異運算 (Differential Separation)
                 for (let i = 0; i < fd.length; i += 4) {
                     let origR = fd[i], origG = fd[i+1], origB = fd[i+2];
-                    let normR = (origR / Math.max(1, illData[i])) * 255;
-                    let normG = (origG / Math.max(1, illData[i+1])) * 255;
-                    let normB = (origB / Math.max(1, illData[i+2])) * 255;
+                    let bgR = illData[i], bgG = illData[i+1], bgB = illData[i+2];
+
+                    // 提取差異細節 (包含文字、物理紋理，已完全排除不均勻光照)
+                    let diffR = origR - bgR;
+                    let diffG = origG - bgG;
+                    let diffB = origB - bgB;
 
                     let r, g, b;
 
-                    if (currentMode === 'bw') {
-                        let gray = normR * 0.299 + normG * 0.587 + normB * 0.114;
-                        gray = gray > 180 ? 255 : (gray < 100 ? 0 : gray * 0.8);
-                        r = g = b = gray;
+                    if (currentMode === 'texture') {
+                        // 【保留紋理模式】：重建於自然物理白 (RGB: 235)，微幅增強對比，絕不裁切高光
+                        r = 235 + diffR * 1.15;
+                        g = 235 + diffG * 1.15;
+                        b = 235 + diffB * 1.15;
                     } else if (currentMode === 'magic') {
-                        r = normR > 210 ? 255 : (normR < 120 ? normR * 0.8 : normR);
-                        g = normG > 210 ? 255 : (normG < 120 ? normG * 0.8 : normG);
-                        b = normB > 210 ? 255 : (normB < 120 ? normB * 0.8 : normB);
-                    } else {
-                        // ★ 保留紋理模式：將平坦的除霧圖 (70%) 與原始物理圖 (30%) 混合
-                        // 這能消除嚴重的漸層陰影，但完美保留紙張紋理與細節
-                        r = origR * 0.3 + normR * 0.7;
-                        g = origG * 0.3 + normG * 0.7;
-                        b = origB * 0.3 + normB * 0.7;
-                        // 輕微對比提升，避免死白
-                        r = r > 235 ? 255 : r * 0.95;
-                        g = g > 235 ? 255 : g * 0.95;
-                        b = b > 235 ? 255 : b * 0.95;
+                        // 【強力漂白模式】：重建於純白 (RGB: 255)，高強度對比
+                        r = 255 + diffR * 1.6;
+                        g = 255 + diffG * 1.6;
+                        b = 255 + diffB * 1.6;
+                        // 強制高光裁切，確保背景死白
+                        r = r > 240 ? 255 : r; g = g > 240 ? 255 : g; b = b > 240 ? 255 : b;
+                    } else if (currentMode === 'bw') {
+                        // 【黑白模式】
+                        let diffGray = diffR * 0.299 + diffG * 0.587 + diffB * 0.114;
+                        let gray = 255 + diffGray * 1.8;
+                        gray = gray > 230 ? 255 : (gray < 120 ? gray * 0.8 : gray);
+                        r = g = b = gray;
                     }
 
-                    fd[i] = r; fd[i+1] = g; fd[i+2] = b;
+                    fd[i] = Math.min(255, Math.max(0, r));
+                    fd[i+1] = Math.min(255, Math.max(0, g));
+                    fd[i+2] = Math.min(255, Math.max(0, b));
                 }
+
+                // 邊緣物理白邊填充 (取代被內縮掉的手指與背景)
+                const edgeX = Math.floor(outWidth * 0.015);
+                const edgeY = Math.floor(outHeight * 0.015);
+                for (let y = 0; y < outHeight; y++) {
+                    for (let x = 0; x < outWidth; x++) {
+                        if (x < edgeX || x > outWidth - edgeX || y < edgeY || y > outHeight - edgeY) {
+                            const idx = (y * outWidth + x) * 4;
+                            const baseColor = currentMode === 'texture' ? 245 : 255;
+                            fd[idx] = baseColor; fd[idx+1] = baseColor; fd[idx+2] = baseColor;
+                        }
+                    }
+                }
+
                 dstCtx.putImageData(finalData, 0, 0);
 
-                // 7. 卷積銳化 (僅對強力漂白與黑白模式，保留紋理模式不銳化以維持自然)
+                // 4. 卷積銳化 (紋理模式不銳化以維持物理自然感，只在漂白與黑白啟用)
                 if (currentMode === 'magic' || currentMode === 'bw') {
                     const sharpData = dstCtx.getImageData(0, 0, outWidth, outHeight);
                     const sData = sharpData.data;
@@ -283,7 +293,6 @@ export default function DocumentScannerModal({
         setIsProcessing(false);
     };
 
-    // 參數切換處理器 (改變參數後自動重算)
     const handleFilterChange = (mode: any) => {
         setFilterMode(mode);
         if (isPreviewing) processScan(mode, edgeTrim);
@@ -298,7 +307,6 @@ export default function DocumentScannerModal({
         <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-md animate-in fade-in">
             <div className="bg-slate-800 w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
                 
-                {/* 頂部標題 */}
                 <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
                     <div>
                         <h3 className="text-white font-bold text-sm md:text-base flex items-center">
@@ -311,7 +319,6 @@ export default function DocumentScannerModal({
                     <button onClick={onClose} disabled={isProcessing} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
                 </div>
 
-                {/* 畫布 / 預覽區 */}
                 <div ref={containerRef} className="flex-1 overflow-hidden bg-black/80 relative flex items-center justify-center touch-none select-none p-2">
                     {isProcessing ? (
                         <div className="flex flex-col items-center text-blue-400">
@@ -332,12 +339,9 @@ export default function DocumentScannerModal({
                     )}
                 </div>
 
-                {/* ★ 底部調教面板 (互動式 UI) ★ */}
                 {isPreviewing ? (
                     <div className="bg-slate-900 flex flex-col shrink-0 border-t border-slate-800">
-                        {/* 控制面板列 */}
                         <div className="p-3 border-b border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* 濾鏡選擇 */}
                             <div>
                                 <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center"><Wand2 size={12} className="mr-1"/> 影像質感濾鏡</label>
                                 <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
@@ -347,7 +351,6 @@ export default function DocumentScannerModal({
                                     <button onClick={() => handleFilterChange('bw')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${filterMode === 'bw' ? 'bg-slate-200 text-slate-800 shadow' : 'text-slate-400 hover:bg-slate-700'}`}>黑白</button>
                                 </div>
                             </div>
-                            {/* 邊緣去背裁切 */}
                             <div>
                                 <label className="text-[10px] font-bold text-slate-400 mb-1.5 flex items-center"><Crop size={12} className="mr-1"/> 邊緣雜物/手指內縮</label>
                                 <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
@@ -358,7 +361,6 @@ export default function DocumentScannerModal({
                                 </div>
                             </div>
                         </div>
-                        {/* 動作列 */}
                         <div className="p-3 flex justify-between items-center bg-slate-900">
                             <button onClick={() => { setIsPreviewing(false); setPreviewData(null); }} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-xl transition-colors flex items-center">
                                 <ArrowLeft size={16} className="mr-1.5"/> 重調框線
