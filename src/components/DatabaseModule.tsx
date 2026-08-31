@@ -1,6 +1,5 @@
 // src/components/DatabaseModule.tsx
-'use client'; // ★ 必須加上這行，解決編譯報錯！
-
+'use client'; 
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -14,11 +13,11 @@ import {
     orderBy, serverTimestamp, writeBatch, updateDoc, getDocs, where,
     Firestore
 } from 'firebase/firestore';
-// ★ 新增：引入 Firebase Storage 用於儲存高畫質附件
+// ★ 新增：引入 Firebase Storage 用於儲存高畫質附件與遷移
 import { getStorage, ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { DatabaseEntry, SystemSettings, Vehicle, DatabaseAttachment } from '@/types';
 import { DB_CATEGORIES, DOCUMENT_FIELD_SCHEMA } from '@/config/constants';
-import { compressImage } from '@/utils/imageHelpers'; // 確保您有這個工具函數
+import { compressImage } from '@/utils/imageHelpers'; 
 
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
@@ -206,6 +205,79 @@ const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
     );
 };
 
+// --- ★ 新增：歷史數據遷移腳本 (Base64 -> Storage) ★ ---
+const MigrateBase64ToStorageBtn = ({ db, appId }: { db: any, appId: string }) => {
+    const [isMigrating, setIsMigrating] = useState(false);
+    const [progress, setProgress] = useState({ current: 0, total: 0 });
+
+    const handleMigration = async () => {
+        if (!confirm('⚠️ 警告：這將會讀取資料庫中所有舊的 Base64 圖片並上傳至 Storage。\n請確保您在穩定的 Wi-Fi 環境下進行，過程可能需要數分鐘。確定開始？')) return;
+        
+        setIsMigrating(true);
+        const storage = getStorage();
+        let migratedCount = 0;
+
+        try {
+            const colRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
+            const snap = await getDocs(colRef);
+            setProgress({ current: 0, total: snap.docs.length });
+
+            let index = 0;
+            // 使用 for...of 確保同步執行，避免大量 Base64 導致記憶體溢出
+            for (const document of snap.docs) {
+                index++;
+                setProgress({ current: index, total: snap.docs.length });
+                
+                const data = document.data();
+                const attachments = data.attachments || [];
+                let hasChanges = false;
+                const newAttachments = [];
+
+                for (const att of attachments) {
+                    // 判斷是否為 Base64 (長度大於1000且不是 http 開頭)
+                    if (att.data && att.data.length > 1000 && !att.data.startsWith('http')) {
+                        console.log(`Migrating: ${document.id} -> ${att.name}`);
+                        const uniqueFileName = `migrated_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+                        const storageRef = ref(storage, `database_attachments/${appId}/${uniqueFileName}`);
+                        
+                        await uploadString(storageRef, att.data, 'data_url');
+                        const newUrl = await getDownloadURL(storageRef);
+                        
+                        newAttachments.push({ ...att, data: newUrl });
+                        hasChanges = true;
+                    } else {
+                        newAttachments.push(att);
+                    }
+                }
+
+                if (hasChanges) {
+                    const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', document.id);
+                    await updateDoc(docRef, { attachments: newAttachments, updatedAt: serverTimestamp() });
+                    migratedCount++;
+                }
+            }
+            alert(`✅ 遷移完成！共成功轉換並清理了 ${migratedCount} 筆含有舊 Base64 的資料。`);
+        } catch (error: any) {
+            console.error("Migration Error:", error);
+            alert(`❌ 遷移過程中斷: ${error.message}`);
+        } finally {
+            setIsMigrating(false);
+        }
+    };
+
+    return (
+        <button 
+            onClick={handleMigration} 
+            disabled={isMigrating}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-full hover:bg-rose-700 shadow-sm disabled:opacity-50 transition-all active:scale-95"
+            title="一鍵將舊的肥大資料轉移到雲端"
+        >
+            {isMigrating ? <Loader2 size={14} className="animate-spin"/> : <Database size={14}/>}
+            {isMigrating ? `遷移中 ${progress.current}/${progress.total}` : '升級舊圖至雲端'}
+        </button>
+    );
+};
+
 // --- DatabaseModule 主體 ---
 export interface DatabaseModuleProps {
     db: any;
@@ -245,7 +317,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
     const [plateSearchText, setPlateSearchText] = useState(''); 
-    const [showPlateDropdown, setShowPlateDropdown] = useState(false); // ★ 新增：控制懸浮選單開關
+    const [showPlateDropdown, setShowPlateDropdown] = useState(false); 
 
     const showToast = (text: string, type: 'success' | 'error' = 'success') => {
         setToastMsg({text, type});
@@ -272,7 +344,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                 }) as string;
             }
 
-            // ★★★ 智能防護版 Fetch (自動重試 + 攔截 HTML 錯誤) ★★★
             const fetchWithRetry = async (retries = 3, delay = 3000): Promise<any> => {
                 const response = await fetch('/api/ocr', {
                     method: 'POST',
@@ -280,14 +351,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     body: JSON.stringify({ image: base64ToSend, docType: docType })
                 });
                 
-                // 1. 遇到 429 限制，自動等待並重試
                 if (response.status === 429 && retries > 0) {
                     showToast(`⚠️ AI 伺服器擁擠，${delay/1000}秒後自動重試...`, 'error');
                     await new Promise(res => setTimeout(res, delay));
-                    return fetchWithRetry(retries - 1, delay * 2); // 延遲時間加倍 (3s -> 6s -> 12s)
+                    return fetchWithRetry(retries - 1, delay * 2); 
                 }
                 
-                // 2. 攔截 Vercel 冷啟動的 504 HTML 錯誤頁面，防止 JSON 解析崩潰
                 const contentType = response.headers.get("content-type");
                 if (contentType && !contentType.includes("application/json")) {
                     throw new Error("伺服器冷啟動超時，請再試一次。");
@@ -352,7 +421,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.brExpiryDate) newExtractedData.brExpiryDate = data.brExpiryDate;
                     if (data.natureOfBusiness) newExtractedData.natureOfBusiness = data.natureOfBusiness;
 
-                    // ★ 新增：接收中港批文卡與行駛證的深度數據
                     if (data.approvalCardNo) newExtractedData.approvalCardNo = data.approvalCardNo;
                     if (data.hkCompany) newExtractedData.hkCompany = data.hkCompany;
                     if (data.mainlandCompany) newExtractedData.mainlandCompany = data.mainlandCompany;
@@ -362,11 +430,10 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.ports && data.ports.length > 0) newExtractedData.ports = Array.isArray(data.ports) ? data.ports.join(', ') : data.ports;
                     if (data.brandModel) newExtractedData.brandModel = data.brandModel;
                     if (data.vin) newExtractedData.vin = data.vin;
-                    // 🧠 智慧大腦：行駛證日期防呆小工具
+                    
                     const fixShortDate = (dateStr: string) => {
                         if (!dateStr) return '';
                         let clean = dateStr.trim();
-                        // 如果格式是 YYYY-MM (7個字)，自動補上 -01
                         if (clean.length === 7 && clean.includes('-')) {
                             return `${clean}-01`;
                         }
@@ -378,13 +445,11 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (data.expiryDate) newExtractedData.expiryDate = fixShortDate(data.expiryDate);
                     if (data.licenseBarcodeNo) newExtractedData.licenseBarcodeNo = data.licenseBarcodeNo;
 
-                    // ★ 補回動態資料框的車牌與核心車輛數據顯示
                     if (data.plateNoHK) newExtractedData.plateNoHK = data.plateNoHK;
                     if (data.relatedPlateNo) newExtractedData.relatedPlateNo = data.relatedPlateNo;
-                    if (data.engineNo) newExtractedData.engineNo = data.engineNo; // 👈 補上這行，發動機號就會顯示了！
+                    if (data.engineNo) newExtractedData.engineNo = data.engineNo; 
                     if (data.chassisNo) newExtractedData.chassisNo = data.chassisNo;
 
-                    // ★ 自動以香港或內地公司名稱作為標題
                     const finalName = data.name || data.hkCompany || data.mainlandCompany || data.registeredOwnerName || data.insuredPerson || prev.name;
                     const finalOwnerId = data.registeredOwnerId || data.idNumber || prev.registeredOwnerId;
 
@@ -395,18 +460,14 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         if (parsedSeat !== undefined) finalSeating = parsedSeat + 1;
                     }
 
-                    // 🧠 ★★★ 智能車牌清洗引擎 (過濾 VRD 右側獨立數字) ★★★
                     const sanitizePlate = (plateStr: string) => {
                         if (!plateStr) return '';
-                        // 1. 斬除 VRD 車牌框右側因為距離太近被誤讀的單一數字 (例如 "HD709 8" -> "HD709")
                         let cleaned = String(plateStr).replace(/[\s\n]+\d$/, '');
-                        // 2. 剔除所有空格與特殊符號，並強制大寫，保持資料庫純淨
                         return cleaned.replace(/[^A-Z0-9]/ig, '').toUpperCase();
                     };
 
                     const finalPlateHK = sanitizePlate(data.plateNoHK || prev.plateNoHK);
                     
-                    // 同步修復動態數據框裡的值
                     if (data.plateNoHK && newExtractedData.plateNoHK) {
                         newExtractedData.plateNoHK = finalPlateHK;
                     }
@@ -418,17 +479,13 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         idNumber: data.idNumber || prev.idNumber,
                         phone: data.phone || prev.phone,
                         address: data.address || prev.address,
-                        // ★ 自動打勾到期提醒
                         expiryDate: (data.expiryDate || prev.expiryDate) ? (
                             (data.expiryDate || prev.expiryDate).trim().length === 7 
                                 ? `${(data.expiryDate || prev.expiryDate).trim()}-01` 
                                 : (data.expiryDate || prev.expiryDate).trim()
                         ) : '',
                         reminderEnabled: (data.expiryDate) ? true : (prev.reminderEnabled || false),
-                        
-                        // ★ 指標號自動抓取批文卡號
                         quotaNo: data.approvalCardNo || data.quotaNo || prev.quotaNo,
-                        
                         plateNoHK: finalPlateHK,
                         make: data.make || prev.make,
                         model: data.model || prev.model,
@@ -445,10 +502,8 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         registeredOwnerId: finalOwnerId,
                         registeredOwnerDate: data.registeredOwnerDate || data.ownerRegDate || data.dateOfRegAsOwner || prev.registeredOwnerDate,
                         seating: finalSeating,
-                        
-                        // ★ 完美對接「關聯香港車牌」下拉選單與「國內車牌」
-                        relatedPlateNo: finalPlateHK || prev.relatedPlateNo, // 下拉選單自動選取清洗後的香港車牌
-                        plateNoCN: data.relatedPlateNo || prev.plateNoCN,      // 內地車牌存入專屬格
+                        relatedPlateNo: finalPlateHK || prev.relatedPlateNo, 
+                        plateNoCN: data.relatedPlateNo || prev.plateNoCN,      
                         
                         hkid_name: data.hkid_name || prev.hkid_name,
                         hkid_code: data.hkid_code || prev.hkid_code,
@@ -538,7 +593,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                 } as DatabaseEntry);
             });
 
-            // 權限過濾：管理員看全部，普通員工看自己的和公開的
             const filteredList = list.filter(entry => {
                 if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') {
                     return true;
@@ -551,24 +605,18 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         return () => unsub();
     }, [staffId, db, appId, currentUser]);
 
-    // 處理圖片/PDF上傳 (★ 已升級為 Firebase Storage 雲端架構 + 高畫質解析)
+    // ★★★ 處理圖片/PDF上傳 (已升級為 Firebase Storage 雲端架構 + 高畫質解析) ★★★
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
         const file = files[0];
         
-        // 初始化 Storage
         const storage = getStorage();
 
-        // 建立獨立的 Storage 上傳模組
         const uploadToStorage = async (base64Data: string, fileName: string) => {
-            // 產生唯一檔名避免覆蓋
             const uniqueFileName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9.]/g, '_')}`;
             const storageRef = ref(storage, `database_attachments/${appId}/${uniqueFileName}`);
-            
-            // 將 Base64 字串上傳至 Storage
             await uploadString(storageRef, base64Data, 'data_url');
-            // 取得真實的 URL 下載網址
             return await getDownloadURL(storageRef);
         };
 
@@ -583,13 +631,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                 const pdf = await loadingTask.promise;
                 
                 const newAttachments: DatabaseAttachment[] = [];
-                // 不再受限 Firestore 1MB，安全讀取前 5 頁
                 const MAX_PAGES = 5; 
                 const numPages = Math.min(pdf.numPages, MAX_PAGES);
                 
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdf.getPage(i);
-                    // ★ 核心優化：將 DPI 提升至 3.0，確保文字清晰銳利
+                    // 提升 DPI 至 3.0，確保文字清晰銳利
                     const viewport = page.getViewport({ scale: 3.0 }); 
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
@@ -597,15 +644,14 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     if (context) {
                         context.imageSmoothingEnabled = true;
                         context.imageSmoothingQuality = 'high';
-                        context.fillStyle = '#ffffff'; // 確保背景為白
+                        context.fillStyle = '#ffffff'; 
                         context.fillRect(0, 0, canvas.width, canvas.height);
                         
                         await page.render({ canvasContext: context, viewport: viewport } as any).promise;
                         
-                        // ★ 核心優化：轉成 90% 高畫質 JPEG
+                        // 轉成 90% 高畫質 JPEG
                         const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
                         
-                        // ★ 上傳到 Storage 獲取 URL (避開 Firestore 容量地雷)
                         const downloadUrl = await uploadToStorage(dataUrl, `${file.name}_P${i}.jpg`);
                         newAttachments.push({ name: `${file.name}_P${i}.jpg`, data: downloadUrl });
                     }
@@ -621,7 +667,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         
         try {
             showToast("⏳ 正在處理圖片並上傳至雲端...");
-            // 普通圖片：先在本地壓縮 (節省上傳頻寬)，再傳到 Storage 獲取 URL
             const compressedBase64 = await compressImage(file, 200); 
             const downloadUrl = await uploadToStorage(compressedBase64, file.name);
             
@@ -674,7 +719,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         setEditingEntry({ ...editingEntry, expiryDate: currentDate.toISOString().split('T')[0], renewalCount: (editingEntry.renewalCount || 0) + 1 });
     };
 
-    // 儲存邏輯 (100% 絕對純淨版：拋棄所有展開運算子，手動建構絕對白名單)
+    // 儲存邏輯 (100% 絕對純淨版)
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault(); 
         
@@ -684,7 +729,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
         if (!db || !staffId || !editingEntry) return;
         
-        // 1. 確保標籤是標準單層陣列
         const autoTags = new Set<string>();
         if (Array.isArray(editingEntry.tags)) {
             editingEntry.tags.forEach(t => autoTags.add(String(t)));
@@ -692,16 +736,13 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         if (editingEntry.name) autoTags.add(String(editingEntry.name));
         const safeTags = Array.from(autoTags);
         
-        // 2. 確保角色是標準單層陣列
         const safeRoles = Array.isArray(editingEntry.roles) ? editingEntry.roles.map(r => String(r)) : [];
         
-        // 3. 確保附件是純淨的 Object 陣列 (絕無巢狀)
         const safeAttachments = Array.isArray(editingEntry.attachments) ? editingEntry.attachments.map(a => ({
             name: String(a?.name || 'document.jpg'),
             data: String(a?.data || '')
         })) : [];
 
-        // 4. 確保提醒是純淨的 Object 陣列
         const safeReminders = Array.isArray(editingEntry.customReminders) ? editingEntry.customReminders.map(r => ({
             date: String(r?.date || ''),
             title: String(r?.title || ''),
@@ -710,12 +751,10 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             renewalUnit: String(r?.renewalUnit || 'year')
         })) : [];
 
-        // 5. 將所有 OCR 數據強制轉為字串，徹底斬斷 Firebase 解析
         const safeExtractedData = typeof editingEntry.extractedData === 'object' 
             ? JSON.stringify(editingEntry.extractedData) 
             : String(editingEntry.extractedData || '{}');
 
-        // 6. ★★★ 100% 手動建構資料，絕對不用 ...editingEntry，杜絕一切幽靈屬性 ★★★
         const finalEntry: Record<string, any> = {
             category: String(editingEntry.category || 'Person'),
             docType: String(editingEntry.docType || ''),
@@ -770,13 +809,11 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             extractedData: safeExtractedData,
         };
 
-        // ★ 7. 針對陣列欄位：如果裡面有東西才加入，如果是空的直接丟棄，防止 Firebase 對空陣列發瘋
         if (safeTags.length > 0) finalEntry.tags = safeTags;
         if (safeRoles.length > 0) finalEntry.roles = safeRoles;
         if (safeAttachments.length > 0) finalEntry.attachments = safeAttachments;
         if (safeReminders.length > 0) finalEntry.customReminders = safeReminders;
 
-        // ★ 8. 清除所有空字串與 undefined，保持資料庫極度乾淨
         const cleanData: any = {};
         for (const key in finalEntry) {
             if (finalEntry[key] !== '' && finalEntry[key] !== undefined && finalEntry[key] !== null && finalEntry[key] !== 0) {
@@ -823,17 +860,14 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         if (tagInput.trim() && editingEntry) { setEditingEntry({ ...editingEntry, tags: [...(editingEntry.tags || []), tagInput.trim()] }); setTagInput(''); }
     };
 
-    // 智能搜尋邏輯
     const filteredEntries = entries.filter(entry => {
         const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
         const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''} ${entry.chassisNo || ''} ${entry.engineNo || ''}`;
         return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
     }).sort((a, b) => {
-        // ★★★ 智能時間排序：優先看最後更新時間，沒有的話看建立時間 ★★★
-        // 先嘗試抓取 seconds，如果沒有可能是字串或其他格式，這時當作 0
         const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
         const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
-        return timeB - timeA; // 降序 (最新的在最上面)
+        return timeB - timeA; 
     });
 
     const scanForDuplicates = () => {
@@ -846,7 +880,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             groupMap.get(groupKey)?.push(e);
         });
         const duplicates: DatabaseEntry[][] = [];
-        const allIds: string[] = []; // ★ 儲存所有重複項目的 ID 以便預設全選
+        const allIds: string[] = []; 
         groupMap.forEach((group) => { 
             if (group.length > 1) {
                 duplicates.push(group); 
@@ -856,14 +890,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         if (duplicates.length === 0) { showToast("未發現重複資料"); } 
         else { 
             setDupeGroups(duplicates); 
-            setSelectedDupeIds(allIds); // ★ 預設全選
+            setSelectedDupeIds(allIds); 
             setShowDupeModal(true); 
         }
     };
 
-    // ★★★ 智能合併防重複引擎 (Smart Merge) ★★★
     const resolveDuplicate = async (keepId: string, group: DatabaseEntry[]) => {
-        // ★ 核心升級：只抓取「被勾選」且「不是自己」的項目來合併
         const otherEntries = group.filter(e => e.id !== keepId && selectedDupeIds.includes(e.id));
         
         if (otherEntries.length === 0) {
@@ -878,59 +910,46 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             const keepEntry = group.find(e => e.id === keepId)!;
             const deleteIds = otherEntries.map(e => e.id);
 
-            // 1. 複製主體資料準備合併
             const mergedData: any = { ...keepEntry };
 
-            // 2. 執行吸星大法：吸收其他檔案的精華
             otherEntries.forEach(other => {
-                // 補齊基本空欄位 (如果主體沒填，舊的檔案有填，就吸過來)
                 Object.keys(other).forEach(key => {
-                    if (key === 'extractedData') return; // 特別處理專屬欄位
+                    if (key === 'extractedData') return; 
                     const val = mergedData[key];
                     if ((val === undefined || val === '' || val === null || val === 0) && other[key as keyof DatabaseEntry]) {
                         mergedData[key] = other[key as keyof DatabaseEntry];
                     }
                 });
 
-                // ★ 升級 2：深度合併專屬欄位 (extractedData)
                 let otherExt: any = {};
                 let mergedExt: any = {};
                 try { otherExt = typeof other.extractedData === 'string' ? JSON.parse(other.extractedData || '{}') : (other.extractedData || {}); } catch(e){}
                 try { mergedExt = typeof mergedData.extractedData === 'string' ? JSON.parse(mergedData.extractedData || '{}') : (mergedData.extractedData || {}); } catch(e){}
                 
                 Object.keys(otherExt).forEach(k => {
-                    // 如果主體沒有這個專屬屬性，就從舊檔案吸過來
                     if (!mergedExt[k]) mergedExt[k] = otherExt[k];
                 });
                 mergedData.extractedData = JSON.stringify(mergedExt);
 
-                // 智能合併陣列 (不重複疊加)
                 if (other.tags) mergedData.tags = Array.from(new Set([...(mergedData.tags || []), ...other.tags]));
                 if (other.roles) mergedData.roles = Array.from(new Set([...(mergedData.roles || []), ...other.roles]));
                 
-                // 完美合併附件圖片
                 if (other.attachments && other.attachments.length > 0) {
                     mergedData.attachments = [...(mergedData.attachments || []), ...other.attachments];
                 }
 
-                // 備註歷史保留
                 if (other.description) {
                     mergedData.description = (mergedData.description ? mergedData.description + '\n' : '') + `[合併自舊紀錄]: ${other.description}`;
                 }
             });
 
-            // 清理前端 ID 並更新時間
             delete mergedData.id;
             mergedData.updatedAt = serverTimestamp();
 
-            // 3. 執行 Firestore 批次更新與刪除
             const batch = writeBatch(db);
-            
-            // 寫入加強後的主體檔案
             const keepRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', keepId);
             batch.update(keepRef, mergedData);
 
-            // 刪除已經被吸乾的舊檔案
             deleteIds.forEach(id => {
                 const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', id);
                 batch.delete(ref);
@@ -938,7 +957,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
             await batch.commit();
 
-            // 4. 更新畫面狀態
             const newGroups = dupeGroups.map(g => g.filter(e => !deleteIds.includes(e.id))).filter(g => g.length > 1);
             setDupeGroups(newGroups);
             if (newGroups.length === 0) setShowDupeModal(false);
@@ -957,13 +975,16 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             <div className={`w-full md:w-1/3 border-r border-slate-100 flex-col bg-slate-50 ${editingEntry ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-slate-200">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-bold flex items-center text-slate-700"><Database className="mr-2" size={20}/> 資料庫</h2>
+                            {/* ★ 加入歷史數據遷移按鈕 */}
+                            <MigrateBase64ToStorageBtn db={db} appId={appId} />
+                        </div>
                         <div className="flex gap-2">
                             <button onClick={scanForDuplicates} className="bg-amber-100 text-amber-700 p-2 rounded-full hover:bg-amber-200" title="檢查重複"><RefreshCw size={18}/></button>
                             <button onClick={(e) => { 
                                 e.preventDefault(); 
                                 const defaultDoc = settings.dbDocTypes?.['Person']?.[0] || '';
-                                // ★ 確保新增時，提醒模塊絕對是預設關閉的
                                 setEditingEntry({ id: '', category: 'Person', docType: defaultDoc, name: '', description: '', attachments: [], tags: [], roles: [], createdAt: null, reminderEnabled: false, customReminders: [] }); 
                                 setIsDbEditing(true); 
                             }} className="bg-blue-600 text-white p-2 rounded-full hover:bg-blue-700 shadow-sm transition-transform active:scale-95"><Plus size={20}/></button>
@@ -975,7 +996,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-2 scrollbar-thin">
-                    {/* ★ 效能優化：限制最多只渲染前 100 筆資料，避免 DOM 過多導致手機卡頓 */}
                     {filteredEntries.slice(0, 100).map(entry => {
                         const isExpired = entry.reminderEnabled && entry.expiryDate && new Date(entry.expiryDate) < new Date();
                         const isSoon = entry.reminderEnabled && entry.expiryDate && getDaysRemaining(entry.expiryDate)! <= 30 && !isExpired;
@@ -983,7 +1003,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
                         return (
                         <div key={entry.id} onClick={() => { setEditingEntry(entry); setIsDbEditing(false); }} className={`p-3 rounded-xl border cursor-pointer transition-all duration-200 active:scale-[0.98] ${editingEntry?.id === entry.id ? 'bg-blue-50 border-blue-500 shadow-md ring-1 ring-blue-200' : 'bg-white border-slate-200 hover:border-blue-300 hover:shadow-sm'}`}>
-                            {/* ... 原有卡片內容保持不變 ... */}
                             <div className="flex justify-between items-start">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
@@ -1081,7 +1100,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                 {/* 第一欄：文字輸入區 */}
                                 <div className="space-y-4">
                                     
-                                    {/* ★ 升級優化：將文件類型與專屬欄位移到最上方，作為建檔第一步 */}
                                     <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                                         <label className="block text-xs font-black text-blue-800 mb-2 uppercase tracking-wider">1. 請先選擇文件類型 (Doc Type)</label>
@@ -1115,7 +1133,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                         )}
                                     </div>
 
-                                    {/* ★ 現代化輸入框樣式 */}
                                     <div className="relative bg-slate-50/80 border border-slate-200 rounded-xl px-3 pt-5 pb-2 focus-within:bg-blue-50/50 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all">
                                         <label className="absolute left-3 top-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">2. 名稱 / 標題 (Name)</label>
                                         <input 
@@ -1187,14 +1204,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                     <label className="block text-xs font-bold text-slate-500 mb-1">指標號 (Quota No)</label>
                                                     <input disabled={!isDbEditing} value={editingEntry.quotaNo || ''} onChange={e => setEditingEntry({...editingEntry, quotaNo: e.target.value})} className="w-full p-2 border rounded text-sm"/>
                                                 </div>
-                                                {/* 🚗 終極升級版：一體化智能搜尋下拉選單 */}
                                                 <div className="relative" onMouseLeave={() => setShowPlateDropdown(false)}>
                                                     <label className="block text-xs font-bold text-slate-500 mb-1">
                                                         關聯香港車牌 {isDbEditing && <span className="text-blue-500">(支援打字搜尋)</span>}
                                                     </label>
                                                     {isDbEditing ? (
                                                         <div className="relative">
-                                                            {/* 顯示當前選取的車牌，點擊可展開搜尋 */}
                                                             <div 
                                                                 onClick={() => setShowPlateDropdown(true)}
                                                                 className="w-full bg-white p-2 rounded border border-blue-200 text-sm font-bold text-blue-800 font-mono cursor-pointer flex justify-between items-center shadow-sm hover:border-blue-400 transition-colors"
@@ -1203,7 +1218,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                                 <ChevronDown size={16} className={`text-blue-400 transition-transform ${showPlateDropdown ? 'rotate-180' : ''}`}/>
                                                             </div>
 
-                                                            {/* 彈出的搜尋與選項視窗 */}
                                                             {showPlateDropdown && (
                                                                 <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden animate-fade-in">
                                                                     <div className="p-2 border-b border-slate-100 bg-slate-50">
@@ -1230,14 +1244,12 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                                         {(() => {
                                                                             let sortedVehicles = [...(inventory || [])];
                                                                             
-                                                                            // A-Z 智能排序
                                                                             sortedVehicles.sort((a, b) => {
                                                                                 const markA = (a.regMark || '').toUpperCase();
                                                                                 const markB = (b.regMark || '').toUpperCase();
                                                                                 return markA.localeCompare(markB, 'en', { numeric: true, sensitivity: 'base' });
                                                                             });
 
-                                                                            // 關鍵字過濾
                                                                             if (plateSearchText) {
                                                                                 const keyword = plateSearchText.toUpperCase();
                                                                                 sortedVehicles = sortedVehicles.filter(v => 
@@ -1325,8 +1337,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                             )}
                                         </div>
                                     )}
-
-                                    
 
                                     {toastMsg && (
                                         <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${toastMsg.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
@@ -1548,7 +1558,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                             {dupeGroups.map((group, idx) => (
                                 <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-white shadow-sm">
                                     <h4 className="font-black text-lg mb-3 text-slate-800 flex items-center">
-                                        {/* ★ 顯示分類標籤，讓使用者知道現在正在合併什麼類型的資料 */}
                                         <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs mr-3 font-bold border border-blue-200 shadow-sm">
                                             {group[0].category}
                                         </span>
@@ -1568,7 +1577,6 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                             return (
                                                 <div key={item.id} className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-50 p-3 rounded-lg border border-slate-200 hover:border-indigo-300 transition-colors gap-4">
                                                     
-                                                    {/* ★ 升級：加入勾選框 */}
                                                     <div className="flex items-center flex-1 min-w-0 w-full">
                                                         <input 
                                                             type="checkbox" 
