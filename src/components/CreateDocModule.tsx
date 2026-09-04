@@ -1,3 +1,4 @@
+// src/components/CreateDocModule.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -8,7 +9,6 @@ import { calculateAutoLoan } from '@/utils/LoanCalculator';
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
-// ★★★ 新增：電子簽名板組件 ★★★
 const SignatureModal = ({ onSave, onClose, customerName }: { onSave: (img: string) => void, onClose: () => void, customerName: string }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
@@ -16,13 +16,12 @@ const SignatureModal = ({ onSave, onClose, customerName }: { onSave: (img: strin
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        // 設定 Canvas 真實解析度，避免模糊
         canvas.width = canvas.offsetWidth * 2;
         canvas.height = canvas.offsetHeight * 2;
         const ctx = canvas.getContext('2d');
         if (ctx) {
             ctx.scale(2, 2);
-            ctx.strokeStyle = '#0f172a'; // 深藍黑色的墨水感
+            ctx.strokeStyle = '#0f172a'; 
             ctx.lineWidth = 4;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
@@ -67,7 +66,6 @@ const SignatureModal = ({ onSave, onClose, customerName }: { onSave: (img: strin
     const handleSave = () => {
         const canvas = canvasRef.current;
         if (canvas) {
-            // 轉成透明背景的 PNG Base64
             onSave(canvas.toDataURL('image/png'));
         }
     };
@@ -83,7 +81,6 @@ const SignatureModal = ({ onSave, onClose, customerName }: { onSave: (img: strin
                     <button onClick={onClose} className="p-2 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600"><X size={20}/></button>
                 </div>
                 
-                {/* Canvas 畫布區塊：加上 touch-none 防止手機滾動頁面 */}
                 <div className="p-4 bg-slate-50 relative">
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
                         <PenTool size={120} />
@@ -129,7 +126,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [carPhotos, setCarPhotos] = useState<string[]>([]);
     const [isFetchingPhotos, setIsFetchingPhotos] = useState(false);
     const [sortMode, setSortMode] = useState<'created' | 'updated'>('created');
-    const [isVehicleLocked, setIsVehicleLocked] = useState(false); // ★ 新增：左側車輛防誤觸安全鎖
+    const [isVehicleLocked, setIsVehicleLocked] = useState(false);
 
     const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
 
@@ -158,8 +155,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         overseasTotalFee: '', localTotalFee: '', chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false,
         contractPhotos: [] as string[],
         isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
-
-        // ★ 新增：代收款授權書欄位
         enablePaymentAuth: false,
         authPayeeName: '',
         authPayeeId: '',
@@ -175,13 +170,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const [depositItems, setDepositItems] = useState<any[]>([{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
     
     const [showTerms, setShowTerms] = useState(true);
-    const [showPurchaseGuarantees, setShowPurchaseGuarantees] = useState(true); // ★ 新增：收車保障條款開關
-    const [showSalesGuarantees, setShowSalesGuarantees] = useState(true);       // ★ 新增：賣車/訂車免責條款開關
+    const [showPurchaseGuarantees, setShowPurchaseGuarantees] = useState(true); 
+    const [showSalesGuarantees, setShowSalesGuarantees] = useState(true);       
     
     const [showAttachments, setShowAttachments] = useState(true);
     const [showStampAndSig, setShowStampAndSig] = useState(true); 
-    const [showPhotos, setShowPhotos] = useState(true); // ★ 新增：相片列印開關
-    const [newItemDate, setNewItemDate] = useState(''); // ★ 新增：代辦事項到期日
+    const [showPhotos, setShowPhotos] = useState(true); 
+    const [newItemDate, setNewItemDate] = useState(''); 
     const [filterType, setFilterType] = useState<string>('All');
     const [docSearchTerm, setDocSearchTerm] = useState('');
     const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(false);
@@ -194,7 +189,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
     });
 
-    // ★★★ 新增：合併單據專用 State ★★★
     const [selectedForMerge, setSelectedForMerge] = useState<string[]>([]);
     const [showMergeModal, setShowMergeModal] = useState(false);
     const [mergeCustomerOptions, setMergeCustomerOptions] = useState<string[]>([]);
@@ -218,7 +212,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             const merged = Array.from(new Set([...list, ...(invCar?.photos || [])]));
             setCarPhotos(merged);
 
-            // ★ 終極修復：使用 Callback 確保拿到最新狀態，不再被舊狀態（例如 Bentley 的相片）干擾
             setFormData((prev: any) => {
                 if (!docId && prev.contractPhotos.length === 0) {
                     return { ...prev, contractPhotos: merged.slice(0, 5) };
@@ -247,7 +240,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         return true;
     }).sort((a: any, b: any) => {
         if (sortMode === 'created') {
-            // ★ 核心修復：優先讀取您填寫的「單據日期 (docDate)」轉換成時間戳來比較
             const getTime = (doc: any) => {
                 if (doc.formData?.docDate) return new Date(doc.formData.docDate).getTime();
                 if (doc.createdAt?.seconds) return doc.createdAt.seconds * 1000;
@@ -257,16 +249,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             const timeA = getTime(a);
             const timeB = getTime(b);
             
-            // 如果兩張單據的「日期同一天」，再用系統的更新時間分出先後，確保不會亂跳
             if (timeB === timeA) {
                 const secA = a.updatedAt?.seconds || 0;
                 const secB = b.updatedAt?.seconds || 0;
                 return secB - secA;
             }
-            return timeB - timeA; // 由新到舊
-            
+            return timeB - timeA;
         } else {
-            // ★ 模式二：按「最後更新時間」，嚴格抓取系統秒數
             const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
             const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
             return timeB - timeA;
@@ -296,8 +285,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
    useEffect(() => {
         if (!db || !appId) return;
-        
-        // 🛑 核心修復：徹底移除 orderBy('updatedAt', 'desc')，先把所有單據（包含異常的）無條件抓下來！
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'));
         
         const unsubscribe = onSnapshot(q, (snapshot: any) => {
@@ -307,9 +294,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 if (isAdmin) return true; 
                 if (doc.createdBy === staffId) return true;
                 
-                // ★ 升級：如果是合併單據 (擁有多台車輛的車牌)
                 if (doc.formData?.linkedRegMarks && Array.isArray(doc.formData.linkedRegMarks)) {
-                    // 嚴格規則：只要其中有一台車不是該員工負責，整張單據就隱藏！
                     const hasPermissionForAll = doc.formData.linkedRegMarks.every((reg: string) => {
                         const car = inventory.find((v: any) => v.regMark === reg);
                         return car && car.managedBy === staffId;
@@ -317,17 +302,15 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     return hasPermissionForAll;
                 }
 
-                // 一般單一車輛單據
                 const relatedCar = inventory.find((v: any) => v.regMark && v.regMark === doc.formData?.regMark);
                 if (relatedCar && relatedCar.managedBy === staffId) return true;
                 return false;
             });
 
-            // ★ 前端智能排序：不管單據有沒有時間戳，都會乖乖用預設值排好，絕對不會搞失蹤！
             secureDocs.sort((a: any, b: any) => {
                 const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
                 const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
-                return timeB - timeA; // 新的排在上面
+                return timeB - timeA;
             });
 
             setSavedDocs(secureDocs);
@@ -340,10 +323,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         if (selectedDocType === 'sales_contract' || selectedDocType === 'quotation') {
             setFormData((prev: any) => ({ ...prev, remarks: prev.remarks || DEFAULT_REMARKS }));
         }
-        // ★ 新增：當切換為收據時，自動帶入車輛資料到 Remarks
         if (selectedDocType === 'receipt') {
             setFormData((prev: any) => {
-                // 如果目前是空的，或是還留著預設的銀行帳號，就覆蓋為收訖車輛字樣
                 if (!prev.remarks || prev.remarks === DEFAULT_REMARKS) {
                     return { ...prev, remarks: `收訖 ${prev.year || ''} ${prev.make || ''} ${prev.model || ''}`.trim() };
                 }
@@ -351,14 +332,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             });
         }
         
-        // ★ 防呆：如果正在編輯歷史單據，絕對不要用庫存資料洗掉客人的資料！
         if (docId) return;
 
-        // ★★★ 智能重抓對象 (當切換單據類型時，自動重新綁定收車或售車對象) ★★★
         if (selectedCarId && selectedCarId !== 'BLANK') {
             const car = inventory.find((v: any) => v.id === selectedCarId);
             if (car) {
-                // ★ 修正：將「收車」與「寄賣」都視為進貨向的合約
                 const isAcq = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
                 setFormData(prev => ({
                     ...prev,
@@ -386,13 +364,13 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setDocItems(doc.docItems || []);
         setDepositItems(doc.depositItems || [{ id: 'dep_1', label: 'Deposit (訂金)', amount: 0 }]);
         setShowTerms(doc.showTerms !== false); 
-        setShowAttachments(doc.showAttachments !== false); // ★ 讀取附件開關
+        setShowAttachments(doc.showAttachments !== false); 
         
         if (doc.formData?.regMark) {
             const invCar = inventory.find((v: any) => v.regMark === doc.formData.regMark);
             if (invCar) setSelectedCarId(invCar.id);
         }
-        setIsVehicleLocked(true); // ★ 讀取舊單時，強制鎖定左側列表保護資料！
+        setIsVehicleLocked(true); 
         setViewMode('edit');
     };
 
@@ -402,7 +380,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         catch (e) { console.error("刪除失敗", e); alert("刪除失敗"); }
     };
 
-    // ★★★ 新增：處理點擊「合併」按鈕 ★★★
     const handleInitMerge = () => {
         const docsToMerge = savedDocs.filter(d => selectedForMerge.includes(d.id));
         if (docsToMerge.length < 2) return showToast("請至少勾選兩張單據進行合併", "error");
@@ -412,14 +389,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             return showToast("只能合併【相同單據類型】的記錄！", "error");
         }
 
-        // 提取所有獨一無二的客戶名稱供下拉選擇
         const customers = Array.from(new Set(docsToMerge.map(d => d.formData?.customerName).filter(Boolean))) as string[];
         setMergeCustomerOptions(customers);
         setMergeCustomerName(customers[0] || '');
         setShowMergeModal(true);
     };
 
-    // ★★★ 新增：確認執行合併，並載入到編輯區 ★★★
     const executeMerge = () => {
         const docsToMerge = savedDocs.filter(d => selectedForMerge.includes(d.id));
         
@@ -431,33 +406,30 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             const vMark = doc.formData?.regMark || `車輛${docIndex+1}`;
             regMarks.push(vMark);
             
-            // 組合車價與項目
             if (doc.formData?.price) {
                 combinedDocItems.push({ id: `merge_p_${doc.id}`, desc: `[${vMark}] 車價`, amount: Number(String(doc.formData.price).replace(/,/g, '')), isSelected: true });
             }
             if (doc.docItems) {
                 doc.docItems.forEach((i: any) => combinedDocItems.push({ ...i, id: `merge_i_${doc.id}_${i.id}`, desc: `[${vMark}] ${i.desc}` }));
             }
-            // 組合已付訂金
             if (doc.depositItems) {
                 doc.depositItems.forEach((d: any) => combinedDepositItems.push({ ...d, id: `merge_d_${doc.id}_${d.id}`, label: `[${vMark}] ${d.label}` }));
             }
         });
 
-        // 載入至編輯區，轉化為一張全新的未儲存草稿
-        setDocId(null); // 強制為新單據
+        setDocId(null); 
         setSelectedDocType(docsToMerge[0].type);
-        setSelectedCarId('BLANK'); // 合併單據不單獨綁定單一車庫車輛
+        setSelectedCarId('BLANK'); 
         setIsVehicleLocked(false);
         
         setFormData(prev => ({
             ...prev,
             customerName: mergeCustomerName,
-            regMark: regMarks.join(', '), // 將多台車牌合併顯示
-            linkedRegMarks: regMarks,     // ★ 權限引擎專用隱藏陣列
+            regMark: regMarks.join(', '), 
+            linkedRegMarks: regMarks,     
             make: '合併單據 (Merged)',
             model: 'Multiple Vehicles',
-            price: '0', // 價格已全數轉入 docItems
+            price: '0', 
             remarks: `合併單據包含以下記錄：\n${docsToMerge.map(d => d.id).join(', ')}\n`
         }));
         
@@ -474,13 +446,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     const saveDocRecord = async () => {
         if (!db || !staffId) return null;
 
-        // ★★★ 新增：智能防重複開單機制 ★★★
-        // 只有在「新增單據」(沒有 docId) 時才做查重，編輯舊單就不擋了
         if (!docId && allSalesDocs && allSalesDocs.length > 0) {
             const isDuplicate = allSalesDocs.some((doc: any) => 
-                doc.formData?.regMark === formData.regMark &&       // 同車牌
-                doc.type === selectedDocType &&                     // 同種類型 (發票/收據等)
-                doc.formData?.docDate === formData.docDate          // 建立日期相同
+                doc.formData?.regMark === formData.regMark &&       
+                doc.type === selectedDocType &&                     
+                doc.formData?.docDate === formData.docDate          
             );
 
             if (isDuplicate) {
@@ -490,11 +460,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     "您確定要繼續儲存，重複多開一份嗎？"
                 );
                 if (!proceed) {
-                    return null; // 如果按「取消」，就立刻終止儲存與列印動作！
+                    return null; 
                 }
             }
         }
-        // ★★★ 查重結束 ★★★
 
         const summaryStr = `${formData.customerName || '無聯絡人'} - ${formData.regMark || '無車牌'} - ${formData.year || ''} ${formData.make} ${formData.model}`;
         const docData = { type: selectedDocType, formData, checklist, docItems, depositItems, showTerms, showStampAndSig, showAttachments, updatedAt: serverTimestamp(), summary: summaryStr, createdBy: staffId };
@@ -508,27 +477,22 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                 setDocId(ref.id); currentId = ref.id;
             }
             
-            // ★★★ 核心升級：智能同步客戶資料到資料庫中心 (Upsert 防重複引擎) ★★★
             if (formData.customerName && formData.customerName.trim() !== '') {
                 const customerName = formData.customerName.trim();
                 const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
                 
-                // 1. 精準比對名稱
                 const q = query(dbRef, where('name', '==', customerName));
                 const snap = await getDocs(q);
 
                 if (!snap.empty) {
-                    // 2. 發現重複資料 -> 執行「智能合併更新 (Merge Update)」
                     const existingDoc = snap.docs[0];
                     const existingData = existingDoc.data();
                     
-                    // 只有當舊資料沒有該欄位時，才用新資料補上，避免洗掉已豐富的資料
                     const updatedFields: any = { updatedAt: serverTimestamp() };
                     if (!existingData.phone && formData.customerPhone) updatedFields.phone = formData.customerPhone;
                     if (!existingData.idNumber && formData.customerId) updatedFields.idNumber = formData.customerId;
                     if (!existingData.address && formData.customerAddress) updatedFields.address = formData.customerAddress;
                     
-                    // 自動補上關聯車牌 (去重疊)
                     if (formData.regMark) {
                         const currentPlates = existingData.relatedPlateNo ? existingData.relatedPlateNo.split(',').map((p:string) => p.trim()) : [];
                         if (!currentPlates.includes(formData.regMark)) {
@@ -537,7 +501,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         }
                     }
 
-                    // 確保分類是 Person
                     if (!existingData.category) updatedFields.category = 'Person';
 
                     if (Object.keys(updatedFields).length > 1) {
@@ -545,7 +508,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         console.log(`✅ 已智能合併更新現有客戶資料: ${customerName}`);
                     }
                 } else {
-                    // 3. 完全沒找到 -> 執行「全新建立 (Insert)」
                     const isCompany = selectedDocType === 'purchase_contract' && formData.customerId?.includes('BR');
                     await addDoc(dbRef, {
                         name: customerName,
@@ -557,7 +519,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         relatedPlateNo: formData.regMark || '',
                         createdAt: serverTimestamp(),
                         updatedAt: serverTimestamp(),
-                        managedBy: staffId // 預設由開單業務負責
+                        managedBy: staffId 
                     });
                     console.log(`✅ 已在資料庫中自動建立新客戶: ${customerName}`);
                 }
@@ -570,16 +532,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
     const addItem = () => {
         if (!newItemDesc || !newItemAmount) return;
-        // ★ 如果有填到期日，自動將它無縫組合進描述裡，不破壞資料庫結構！
         const finalDesc = newItemDate ? `${newItemDesc} (到期日: ${newItemDate})` : newItemDesc;
         setDocItems([...docItems, { id: Date.now().toString(), desc: finalDesc, amount: Number(newItemAmount), isSelected: true }]);
-        setNewItemDesc(''); setNewItemAmount(''); setNewItemDate(''); // 清空
+        setNewItemDesc(''); setNewItemAmount(''); setNewItemDate(''); 
     };
     
     const toggleItem = (id: string) => setDocItems((prev: any[]) => prev.map((item: any) => item.id === id ? { ...item, isSelected: !item.isSelected } : item));
     const deleteItem = (id: string) => setDocItems((prev: any[]) => prev.filter((item: any) => item.id !== id));
 
-    // ★ 核心修復：開單系統車輛搜尋，加入「型號(Model)」、「年份(Year)」與「無大小寫區分」的精準比對
     const filteredInventory = inventory.filter((v: any) => {
         if (!searchTerm) return true;
         const term = searchTerm.toUpperCase();
@@ -592,7 +552,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
     });
 
     const handleSelectCar = (car: any) => {
-        // ★ 智能防護盾：檢查鎖定狀態與再次確認
         if (docId && isVehicleLocked) {
             alert("🔒 安全鎖已啟動！\n為防止資料遺失，左側車輛已鎖定。\n如需為本單據更換車輛，請先點擊左側藍色卡片上的「🔓 解鎖更換」按鈕。");
             return;
@@ -604,7 +563,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         
         const isAcq = selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract';
         
-        // ★ 終極修復：徹底放棄 `...prev`，改為「完全重新賦值」，徹底斬斷與上一台車的任何瓜葛！
         setFormData({
             companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
             companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
@@ -635,9 +593,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
             handoverTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-            // ★ 修改這行：根據類型自動產生預設的備註
             remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : (selectedDocType === 'receipt' ? `收訖 ${car.year || ''} ${car.make || ''} ${car.model || ''}`.trim() : ''), 
-            // 👇 補上這三行，確保符合 TypeScript 型別
             enablePaymentAuth: false,
             authPayeeName: '',
             authPayeeId: '',
@@ -685,7 +641,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             }
         }
         setDocItems(items); 
-        if (docId) setIsVehicleLocked(true); // ★ 更換成功後自動重新上鎖保護
+        if (docId) setIsVehicleLocked(true); 
         setMobileStep('edit');
     };
 
@@ -694,7 +650,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setCarPhotos([]); 
         setShowTerms(true); setShowStampAndSig(true); setShowAttachments(true);
         
-        // ★ 終極修復：補上所有必填型別結構，包含代收款授權欄位
         setFormData({ 
             companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', 
             companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
@@ -708,8 +663,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             chk_ov_price: true, chk_ov_local: true, chk_ov_auction: true, chk_ov_shipping: true, chk_ov_ins: true, chk_ov_tax: false, chk_ov_doc: true, chk_ov_misc: false, etaFormat: 'date', etaDays: '', etaDate: '',
             isFinance: false, financeBank: 'OCBC', financeAmount: '', financeMonths: '48', financeRate: '3.5', financeMonthly: '', financeCommission: '', financeType: 'HP',
             remarks: selectedDocType === 'sales_contract' || selectedDocType === 'quotation' ? DEFAULT_REMARKS : '',
-            
-            // 👇 補上這三行，確保符合 TypeScript 型別要求
             enablePaymentAuth: false,
             authPayeeName: '',
             authPayeeId: '',
@@ -722,23 +675,19 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         setMobileStep('edit');
     };
 
-    // ★★★ 新增：智能重置/還原表單功能 ★★★
     const handleResetForm = () => {
         if (!window.confirm("⚠️ 確定要重置表單嗎？\n所有您手動修改且未儲存的內容將會被還原！")) return;
         
         if (docId) {
-            // 情況 1：正在編輯歷史舊單 -> 重新讀取資料庫該單據的最後狀態
             const originalDoc = savedDocs.find((d: any) => d.id === docId);
             if (originalDoc) editDoc(originalDoc);
         } else if (selectedCarId && selectedCarId !== 'BLANK') {
-            // 情況 2：正在開新單 (有選車) -> 重新讀取該車輛的預設資料
             const originalCar = inventory.find((v: any) => v.id === selectedCarId);
             if (originalCar) {
-                setIsVehicleLocked(false); // 暫時解除安全鎖以允許重載
+                setIsVehicleLocked(false); 
                 handleSelectCar(originalCar);
             }
         } else {
-            // 情況 3：純空白單 -> 徹底清空
             handleSelectBlank();
         }
     };
@@ -752,8 +701,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const dummyVehicle: any = {
             id: finalId || docId || 'DRAFT', 
             ...formData, 
-            customerSignature: formData.customerSignature, // ★ 傳入簽名
-            // ★ 核心修復：如果關閉圖片列印，直接傳遞空陣列給列印引擎，從根本解決列印時無法隱藏的問題！
+            customerSignature: formData.customerSignature, 
             photos: showPhotos ? (formData.contractPhotos || []) : [], 
             price: Number(String(formData.price).replace(/,/g, '')) || 0,
             deposit: Math.round(depositItems.reduce((sum: number, item: any) => sum + (Number(String(item.amount).replace(/,/g, '')) || 0), 0) * 100) / 100,
@@ -767,15 +715,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             showPurchaseGuarantees: showPurchaseGuarantees, 
             showSalesGuarantees: showSalesGuarantees,       
             showAttachments: showAttachments, 
-            showStampAndSig: showStampAndSig, // ★ 核心修復：把電子簽名開關狀態傳給列印引擎！
-            showPhotos: showPhotos, // ★ 核心修復：把相片開關狀態傳給列印引擎，解決按了沒反應的問題！
+            showStampAndSig: showStampAndSig, 
+            showPhotos: showPhotos, 
             companyNameEn: formData.companyNameEn,
             companyNameCh: formData.companyNameCh, 
             companyEmail: formData.companyEmail, 
             companyPhone: formData.companyPhone, 
             paymentMethod: formData.paymentMethod 
         };
-        // ★ 動態修改 PDF 預設檔名 (例如: Quotation_2025 Lamborghini Urus SE)
         const typeMap: Record<string, string> = {
             'sales_contract': 'Sales_Contract', 
             'purchase_contract': 'Purchase_Contract', 
@@ -788,14 +735,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const prefix = typeMap[selectedDocType] || 'Document';
         const fileName = `${prefix}_${formData.year || ''} ${formData.make || ''} ${formData.model || ''}`.replace(/\s+/g, ' ').trim();
         
-        // 暫時更改網頁標題，讓瀏覽器的「儲存為 PDF」能精準抓到這個檔名
         const originalTitle = document.title;
         document.title = fileName;
 
-        // 若外層組件 (DocumentSystem) 支援第三個參數，一併傳入檔名
         openPrintPreview(selectedDocType, dummyVehicle, fileName);
 
-        // 監聽列印對話框關閉事件來恢復標題，若系統未觸發則 10 秒後自動安全恢復
         const restoreTitle = () => { 
             document.title = originalTitle; 
             window.removeEventListener('afterprint', restoreTitle); 
@@ -803,8 +747,8 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         window.addEventListener('afterprint', restoreTitle);
         setTimeout(restoreTitle, 10000);
     };
+
     const handleCalculateLoan = () => {
-        // ★ 修復：清除千分位逗號，確保貸款計算正確
         const price = Number(String(formData.price).replace(/,/g, '')) || 0;
         const extrasTotal = docItems.filter((i: any) => i.isSelected && !i.isFree).reduce((sum: number, i: any) => sum + i.amount, 0);
         const dep = depositItems.reduce((sum, item) => sum + item.amount, 0);
@@ -842,8 +786,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         }
     };
 
-    // ★★★ 確保這裡緊接在 handleCalculateLoan 的 }; 下方 ★★★
-
     const LivePreview = () => {
         const isSalesInvoice = selectedDocType === 'invoice';
         const isServiceInvoice = selectedDocType === 'service_invoice';
@@ -859,7 +801,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const hkFee = Number(String(formData.localTotalFee).replace(/,/g, '')) || 0;
         const orderFeesTotal = (formData.orderType === 'Overseas') ? (ovFee + hkFee) : 0;
         
-        // ★ 核心修復：防呆，如果海外費用為 0，強制退回使用填寫的車輛售價
         const basePrice = (formData.orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
         const balance = (basePrice + extrasTotal) - deposit;
 
@@ -905,6 +846,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         const partPaymentLabel = hasOrderDetails ? 'Part D: Payment Details' : 'Part C: Payment Details';
         const etaDisplay = formData.etaFormat === 'days' ? `${formData.etaDays || '___'} Days (天)` : (formData.etaDate || 'TBC (待定)');
 
+        // ★ 同步 curCustomer
+        const curCustomer = { 
+            name: formData.customerName || '', 
+            phone: formData.customerPhone || '', 
+            hkid: formData.customerId || '', 
+            address: formData.customerAddress || '' 
+        };
+
         const [containerWidth, setContainerWidth] = useState(380);
         const containerRef = useRef<HTMLDivElement>(null);
 
@@ -926,7 +875,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             <div ref={containerRef} className="w-full h-full bg-slate-200 overflow-y-auto overflow-x-hidden pt-4 pb-12 custom-scrollbar flex justify-center items-start">
                 <div className="relative flex-shrink-0 transition-all duration-200" style={{ width: `${794 * dynamicScale}px`, height: `${1123 * dynamicScale}px` }}>
                     <div className="bg-white shadow-2xl overflow-hidden box-border absolute top-0 left-0" style={{ width: '794px', height: '1123px', transform: `scale(${dynamicScale})`, transformOrigin: 'top left' }}>
-                        {/* ★ 排版優化：縮小四周 padding (p-8 -> p-6) 與底部空間 (pb-[38mm] -> pb-[25mm]) 爭取極大空間 */}
                         <div className="p-6 font-sans text-slate-900 h-full pb-[25mm] relative box-border">
                             
                             <div className="flex justify-between items-start mb-2 border-b-2 border-slate-800 pb-1.5">
@@ -951,7 +899,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     <div className="grid grid-cols-3 gap-2 mb-2">
                                         <div className="col-span-1">
                                             <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Part A: Customer</div>
-                                            <div className="border border-slate-300 p-1 text-[9px] min-h-[56px] flex flex-col justify-center space-y-1"><p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> {formData.customerName || '(Client)'}</p><p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {formData.customerPhone}</p><p className="truncate"><span className="text-slate-500 font-bold">ID:</span> {formData.customerId}</p></div>
+                                            <div className="border border-slate-300 p-1 text-[9px] min-h-[56px] flex flex-col justify-center space-y-1">
+                                                <p className="truncate"><span className="text-slate-500 font-bold">NAME:</span> {curCustomer.name || '(Client)'}</p>
+                                                <p className="truncate"><span className="text-slate-500 font-bold">TEL:</span> {curCustomer.phone}</p>
+                                                <p className="truncate"><span className="text-slate-500 font-bold">ID/BR:</span> {curCustomer.hkid}</p>
+                                            </div>
                                         </div>
                                         <div className="col-span-2">
                                             <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Part B: Vehicle Details</div>
@@ -967,7 +919,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         </div>
                                     </div>
 
-                                    {/* ★ 圖片顯示智能優化：關閉列印時，預覽圖會變淡並蓋上印章 */}
                                     {formData.contractPhotos.length > 0 && (
                                         <div className={`mb-2 relative ${!showPhotos ? 'print:hidden opacity-40 grayscale' : ''}`}>
                                             {!showPhotos && (
@@ -1026,6 +977,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             ) : (
                                 <>
                                     {isReceipt ? (
+                                        // ★★★ 收據 Receipt 全新排版 (包含明細與車輛資訊) ★★★
                                         <div className="border-[3px] border-double border-slate-800 p-6 mb-4 relative bg-white">
                                             <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
                                                 <img src={COMPANY_INFO?.logo_url || ''} className="w-64 h-64 object-contain grayscale" />
@@ -1036,36 +988,89 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 <h3 className="text-base font-bold tracking-[0.5em] text-slate-700 mt-1">正式收據</h3>
                                             </div>
                                             
-                                            <div className="space-y-4 text-[12px] relative z-10">
+                                            <div className="space-y-5 text-[12px] relative z-10">
                                                 <div className="flex items-end">
                                                     <div className="w-36 font-bold text-slate-700 leading-tight">Received from<br/><span className="text-[10px] font-medium text-slate-500">茲收到</span></div>
-                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[13px] text-slate-900 px-2 italic">{formData.customerName || '_________________________________'}</div>
+                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[13px] text-slate-900 px-2 italic">{curCustomer.name || '_________________________________'}</div>
                                                 </div>
                                                 <div className="flex items-end">
                                                     <div className="w-36 font-bold text-slate-700 leading-tight">the sum of H.K. Dollars<br/><span className="text-[10px] font-medium text-slate-500">港幣</span></div>
                                                     <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-[11px] text-slate-800 px-2 uppercase tracking-wide bg-slate-50">{numberToEnglishWords(deposit)}</div>
                                                 </div>
-                                                <div className="flex items-end">
-                                                    <div className="w-36 font-bold text-slate-700 leading-tight">in payment of<br/><span className="text-[10px] font-medium text-slate-500">係付</span></div>
-                                                    <div className="flex-1 border-b border-slate-400 pb-1 font-bold text-slate-800 px-2">{depositItems.map((d: any) => d.label).join(', ')} {formData.regMark && ` (Reg No.: ${formData.regMark})`}</div>
+                                                
+                                                {/* 升級版：多列明細清單 */}
+                                                <div className="flex items-start mt-2">
+                                                    <div className="w-36 font-bold text-slate-700 leading-tight pt-1">in payment of<br/><span className="text-[10px] font-medium text-slate-500">係付</span></div>
+                                                    <div className="flex-1 border-b border-slate-400 pb-2">
+                                                        <table className="w-full text-xs">
+                                                            <tbody>
+                                                                {depositItems.map((item: any, idx: number) => (
+                                                                    <tr key={idx}>
+                                                                        <td className="py-1 font-bold text-slate-800">• {item.label}</td>
+                                                                        <td className="py-1 text-right font-mono font-bold">{formatCurrency(item.amount)}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 </div>
 
-                                                <div className="flex items-end justify-between mt-6 pt-3">
+                                                {/* 收據的車輛明細區塊 */}
+                                                {(formData.regMark || formData.chassisNo) && (
+                                                    <div className="flex items-start mt-2">
+                                                        <div className="w-36 font-bold text-slate-700 leading-tight pt-1">Vehicle Ref.<br/><span className="text-[10px] font-medium text-slate-500">相關車輛</span></div>
+                                                        <div className="flex-1 border-b border-slate-400 pb-2 text-[11px] text-slate-600 leading-relaxed font-mono">
+                                                            {formData.year} {formData.make} {formData.model} <br/>
+                                                            {formData.regMark && <span>Reg Mark: <span className="font-bold text-slate-800 mr-4">{formData.regMark}</span></span>}
+                                                            {formData.chassisNo && <span>Chassis: <span className="font-bold text-slate-800">{formData.chassisNo}</span></span>}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex items-end justify-between mt-8 pt-3">
                                                     <div className="flex items-center">
                                                         <span className="text-xl font-black text-slate-800 mr-3 italic">HK$</span>
-                                                        <div className="border-y-4 border-slate-800 py-1 px-6 bg-slate-50 font-mono font-black text-lg text-slate-900 tracking-wider shadow-sm">
+                                                        <div className="border-y-4 border-slate-800 py-1 px-6 bg-slate-50 font-mono font-black text-lg text-slate-900 tracking-wider shadow-sm flex items-center gap-2">
                                                             {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(deposit)}
+                                                            <div className="border border-red-500 text-red-600 text-[10px] font-black uppercase px-1 py-0.5 rounded-sm transform -rotate-6">PAID</div>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <div className="text-[10px] text-slate-500 font-bold text-right">Payment Method<br/>交來</div>
-                                                        <div className="border-b border-slate-400 pb-1 px-4 font-mono font-bold text-slate-800 min-w-[100px] text-center">{formData.paymentMethod}</div>
+                                                        <div className="border-b border-slate-400 pb-1 px-4 font-mono font-bold text-slate-800 min-w-[100px] text-center">{formData.paymentMethod || 'Cheque'}</div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     ) : (
                                         <>
+                                            {/* ★★★ 發票 Invoice 升級版客戶渲染區塊 ★★★ */}
+                                            <div className="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-4 mt-2">
+                                                <div className="w-1/2 space-y-1.5">
+                                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Bill To / 致：</h4>
+                                                    <div className="text-base font-black text-slate-900 uppercase">
+                                                        {curCustomer.name || '________________________'}
+                                                    </div>
+                                                    
+                                                    {curCustomer.address && (
+                                                        <div className="text-[10px] text-slate-700">{curCustomer.address}</div>
+                                                    )}
+                                                    
+                                                    <div className="flex flex-col gap-0.5 mt-1">
+                                                        {curCustomer.phone && (
+                                                            <div className="text-[10px] text-slate-700 font-mono">
+                                                                <span className="text-[9px] text-slate-500 mr-1">TEL:</span>{curCustomer.phone}
+                                                            </div>
+                                                        )}
+                                                        {curCustomer.hkid && (
+                                                            <div className="text-[10px] text-slate-700 font-mono">
+                                                                <span className="text-[9px] text-slate-500 mr-1">ID/BR:</span>{curCustomer.hkid}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <div className="mb-2">
                                                 <div className="bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 uppercase mb-0.5">Vehicle Reference (車輛資料)</div>
                                                 <table className="w-full text-[9px] border-collapse border border-slate-300">
@@ -1077,7 +1082,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                 </table>
                                             </div>
                                             
-                                            {/* 發票模式下的圖片預覽處理 */}
                                             {formData.contractPhotos.length > 0 && (
                                                 <div className={`mb-2 relative ${!showPhotos ? 'print:hidden opacity-40 grayscale' : ''}`}>
                                                     {!showPhotos && (
@@ -1131,7 +1135,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </>
                             )}
 
-                            {/* ★ 新增修復：隨車附件區塊 (收據不顯示) */}
                             {showAttachments && !isReceipt && (
                                 <div className="mb-2">
                                     <div className="font-bold text-[9px] mb-1 text-slate-800">ATTACHMENTS (隨車附件):</div>
@@ -1145,7 +1148,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </div>
                             )}
 
-                            {/* ★ 壓縮版條款：大幅減少 padding 與 font-size 爭取空間 */}
                             {!isBill && showTerms && (
                                 <div className="mb-2 p-1.5 border-2 border-slate-800 bg-gray-50 text-[8px] leading-normal text-justify font-serif">
                                     {isQuotation ? (
@@ -1223,7 +1225,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             )}
                         </div>
 
-                        {/* ★ 簽名區塊優化：調整位置確保不會溢出 (absolute bottom-4) */}
                         <div className="absolute bottom-4 left-6 right-6 bg-transparent pointer-events-none">
                             <div className="grid grid-cols-2 gap-12 w-full">
                                 <div className="relative pt-1 border-t border-slate-800 text-center">
@@ -1254,7 +1255,7 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             </div>
         );
     }
-    // ★★★ 確保 if (viewMode === 'list') { 緊接在上面 LivePreview 的 }; 之後 ★★★
+
     if (viewMode === 'list') {
         return (
             <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -1298,7 +1299,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                 </div>
 
-                {/* ★ 新增：合併操作按鈕列 */}
                 {selectedForMerge.length > 0 && (
                     <div className="bg-indigo-50 border-b border-indigo-100 p-2.5 flex items-center justify-between z-10">
                         <span className="text-xs font-bold text-indigo-700">已選取 {selectedForMerge.length} 張單據</span>
@@ -1347,13 +1347,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     
                                     const docDateStr = doc.formData?.docDate || (doc.updatedAt?.toDate ? doc.updatedAt.toDate().toISOString().split('T')[0] : 'N/A');
 
-                                    // ★ 修復：清除千分位逗號，確保列表總金額讀取正確
                                     const price = Number(String(doc.formData?.price || '').replace(/,/g, '')) || 0;
                                     const ovFee = Number(String(doc.formData?.overseasTotalFee || '').replace(/,/g, '')) || 0;
                                     const hkFee = Number(String(doc.formData?.localTotalFee || '').replace(/,/g, '')) || 0;
                                     const orderFeesTotal = doc.formData?.orderType === 'Overseas' ? (ovFee + hkFee) : 0;
                                     
-                                    // ★ 同樣補上智能防呆：若無海外費用，強制使用車價本金
                                     const basePrice = (doc.formData?.orderType === 'Overseas' && orderFeesTotal > 0) ? orderFeesTotal : price;
                                     const extrasTotal = (doc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + (Number(String(i.amount).replace(/,/g, '')) || 0), 0);
                                     
@@ -1443,7 +1441,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
             <div className="flex flex-1 md:flex-row h-full gap-4 relative overflow-hidden md:p-0 p-2">
                 
-                {/* 🌟 智慧優化版左側欄：車輛置頂、全局安全鎖定，拒絕視線干擾 */}
                 <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex-col overflow-hidden ${mobileStep === 'list' ? 'flex' : 'hidden md:flex'}`}>
                     <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
                         <button onClick={() => setViewMode('list')} className="p-1.5 hover:bg-white rounded border bg-white shadow-sm transition-transform active:scale-95 text-slate-500"><ChevronLeft size={16}/></button>
@@ -1460,7 +1457,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                     <div className="flex-1 overflow-y-auto p-2 bg-slate-50/50 space-y-3">
                         
-                        {/* ★ 核心置頂卡片 */}
                         {docId && (() => {
                             const currentCar = inventory.find((car: any) => car.id === selectedCarId);
                             if (!currentCar && selectedCarId === 'BLANK') {
@@ -1498,7 +1494,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                         {docId && <div className="text-[9px] font-black text-slate-400 text-center border-b border-slate-200 pb-1">{isVehicleLocked ? '🔒 庫存列表已保護' : '🔓 請點擊下方更換'}</div>}
 
-                        {/* ★ 毛玻璃保護層 */}
                         <div className={`space-y-2 transition-all duration-300 ${docId && isVehicleLocked ? 'opacity-30 pointer-events-none select-none blur-[0.5px]' : 'opacity-100'}`}>
                             {filteredInventory.map((car: any) => {
                                 if (docId && car.id === selectedCarId) return null;
@@ -1520,7 +1515,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     <div className="p-3 border-b bg-slate-50 flex justify-between items-center shadow-sm z-10">
                         <span className="font-bold text-slate-700 text-sm">{docId ? '✏️ 編輯單據' : '📝 新增單據'}</span>
                         <div className="flex gap-2">
-                            {/* ★ 新增：觸發電子簽名板的按鈕 */}
                             <button type="button" onClick={() => setShowSignaturePad(true)} className="px-3 py-1.5 bg-yellow-500 text-yellow-950 rounded text-xs font-bold flex items-center shadow-sm active:scale-95 transition-transform hover:bg-yellow-400">
                                 <PenTool size={14} className="mr-1"/> 電子簽署
                             </button>
@@ -1733,13 +1727,11 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                         <label className="flex items-center text-[10px] cursor-pointer text-slate-500 font-bold hover:text-slate-700">
                                             <input type="checkbox" checked={showTerms} onChange={e => setShowTerms(e.target.checked)} className="mr-1.5 accent-yellow-600"/>法律條款
                                         </label>
-                                        {/* ★ 新增：收車合約專用的保障條款開關 */}
                                         {selectedDocType === 'purchase_contract' && (
                                             <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm">
                                                 <input type="checkbox" checked={showPurchaseGuarantees} onChange={e => setShowPurchaseGuarantees(e.target.checked)} className="mr-1.5 accent-blue-600"/>收車保障條款
                                             </label>
                                         )}
-                                        {/* ★ 新增：賣車/訂車合約專用的免責條款開關 */}
                                         {selectedDocType === 'sales_contract' && (
                                             <label className="flex items-center text-[10px] cursor-pointer text-blue-600 font-bold hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm">
                                                 <input type="checkbox" checked={showSalesGuarantees} onChange={e => setShowSalesGuarantees(e.target.checked)} className="mr-1.5 accent-blue-600"/>賣車/訂車條款
@@ -1754,7 +1746,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                     </div>
                                 )}
                                 
-                                {/* ★★★ 基礎車價欄位 (收據與服務發票不需要車價，自動隱藏) ★★★ */}
                                 {selectedDocType !== 'service_invoice' && selectedDocType !== 'receipt' && (
                                     <div className="bg-white p-2 rounded-lg border border-yellow-300 shadow-inner flex items-center mb-3">
                                         <span className="text-xs font-bold text-yellow-800 w-24">
@@ -1803,7 +1794,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 )}
                             </div>
 
-                            {/* ★ 新增：代收款委託授權設定 (主要用於收車/寄賣) */}
                             {(selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') && (
                                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mb-3">
                                     <label className="flex items-center space-x-2 cursor-pointer group mb-2">
@@ -1834,7 +1824,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 </div>
                             )}
                             
-                            {/* ★★★ 新增：上會計數機區塊 (收據/服務發票自動隱藏) ★★★ */}
                             {selectedDocType !== 'service_invoice' && selectedDocType !== 'receipt' && (
                                 <div className="p-3 bg-cyan-50/50 rounded-xl border border-cyan-200 mb-3 animate-in fade-in">
                                 <div className="flex justify-between items-center mb-2">
@@ -1851,7 +1840,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                                 {formData.isFinance && (
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-3 pt-3 border-t border-cyan-200">
-                                        {/* ★ 新增：合約模式 (HP / Lease) */}
                                         <div>
                                             <label className="text-[9px] font-bold text-cyan-600 mb-1 block">合約模式 (Type)</label>
                                             <select name="financeType" value={formData.financeType} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded bg-white outline-none cursor-pointer text-cyan-900 font-bold">
@@ -1890,7 +1878,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             <input name="financeRate" type="number" step="0.01" value={formData.financeRate} onChange={handleChange} className="w-full text-xs p-1.5 border border-cyan-300 rounded outline-none font-mono text-cyan-900 font-bold" />
                                         </div>
                                         
-                                        {/* 每月供款顯示 */}
                                         <div className="col-span-2 md:col-span-2 bg-white p-2 rounded border border-cyan-200 flex flex-col justify-center mt-1 shadow-sm">
                                             <label className="text-[9px] font-bold text-cyan-600 mb-0.5">每月供款 (Monthly)</label>
                                             <div className="text-base font-black text-red-600 font-mono">
@@ -1898,7 +1885,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                             </div>
                                         </div>
 
-                                        {/* ★ 機密區塊：回佣顯示 (僅限 BOSS 或擁有全權限者) ★ */}
                                         {isAdmin ? (
                                             <div className="col-span-2 md:col-span-3 bg-slate-800 p-2 rounded border border-slate-700 flex flex-col justify-center mt-1 shadow-sm">
                                                 <label className="text-[9px] font-bold text-slate-400 mb-0.5">內部參考: 預計車行回佣 (Comm.)</label>
@@ -1916,7 +1902,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                             </div>
                             )}
                                 
-                            {/* ★ 收據不需要附加項目清單，自動隱藏 ★ */}
                             {selectedDocType !== 'receipt' && (
                                 <div className="p-3 bg-green-50/50 rounded-xl border border-green-100 mb-3">
                                     <div className="text-[10px] font-bold text-green-700 mb-3 flex justify-between uppercase tracking-wider">
@@ -1974,17 +1959,14 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                     </div>
                 </div>
 
-                {/* --- 右欄：即時預覽 (整合手機版第 3 步專屬輸出/列印控制) --- */}
                 <div className={`flex-1 bg-slate-200/80 rounded-xl border border-slate-300 flex flex-col overflow-hidden items-center p-4 relative ${mobileStep === 'preview' ? 'flex' : 'hidden md:flex'}`}>
                     
-                    {/* ★ 桌面版 & 手機版通用：頂部狀態與印章/簽名控制列 */}
                     <div className="w-full max-w-[800px] flex justify-between items-center mb-3 flex-none">
                         <div className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center bg-white/80 px-3 py-1.5 rounded-full shadow-sm">
                             <Eye size={14} className="mr-1.5 text-blue-600"/> Live Preview 實時預覽
                         </div>
                         
                         <div className="flex items-center gap-2">
-                            {/* ★ 新增：電子印章/簽名 隱藏開關 */}
                             <button 
                                 type="button"
                                 onClick={() => setShowStampAndSig(!showStampAndSig)}
@@ -1995,7 +1977,6 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                 <span>{showStampAndSig ? '電子印章：顯示' : '電子印章：隱藏'}</span>
                             </button>
 
-                            {/* ★ 新增：手機版專屬頂部「輸出 PDF」快捷按鈕 */}
                             <button 
                                 type="button"
                                 onClick={handlePrint}
@@ -2007,13 +1988,10 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         </div>
                     </div>
 
-                    {/* 預覽主體 */}
                     <div className="w-full h-full flex justify-center overflow-hidden">
                         <LivePreview />
                     </div>
 
-                    {/* ★★★ 新增：手機版第 3 步專屬「底部懸浮操作列 (Sticky Bottom Bar)」 ★★★ */}
-                    {/* 解決使用者查看長篇 A4 預覽到底部後，必須往上滾動尋找操作按鈕的問題 */}
                     <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl border border-white/10 flex items-center justify-between print:hidden animate-fade-in">
                         <div className="flex flex-col pl-1">
                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Action Required</span>
