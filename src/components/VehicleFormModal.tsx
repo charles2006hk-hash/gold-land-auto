@@ -1762,7 +1762,7 @@ const VehicleFormModal = ({
                                                 }} 
                                                 className={`px-2 py-1 rounded-md text-[10px] font-bold outline-none cursor-pointer transition-colors border border-transparent ${p.method === 'Trade-in' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}
                                             >
-                                                <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數 (Trade-in)</option>
+                                                <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數 (Trade-in)</option><option value="Third-Party">第三方直付</option>
                                             </select>
                                             
                                             {/* ✅ 歷史紀錄中的 Trade-in 智能選單 (支援輸入搜尋) */}
@@ -1830,13 +1830,14 @@ const VehicleFormModal = ({
                                 <select 
                                     value={newPayment.method} 
                                     onChange={e => setNewPayment({...newPayment, method: e.target.value, note: '', tradeInVehicleId: '', amount: ''})} 
-                                    className={`w-full sm:col-span-2 lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold ${newPayment.method === 'Trade-in' ? 'text-orange-700 border-orange-300' : 'text-blue-700'}`}
+                                    className={`w-full sm:col-span-2 lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold ${newPayment.method === 'Trade-in' ? 'text-orange-700 border-orange-300' : 'text-blue-700'}`}
                                 >
                                     <option value="Cash">現金</option>
                                     <option value="Cheque">支票</option>
                                     <option value="Transfer">轉帳</option>
                                     <option value="USDT">USDT</option>
                                     <option value="Trade-in">對數 (Trade-in)</option>
+                                    <option value="Third-Party">第三方直付</option>
                                 </select>
                                 
                                 {/* ✅ 新增收款中的 Trade-in 智能選單 (支援輸入搜尋) */}
@@ -2142,6 +2143,7 @@ const VehicleFormModal = ({
                                                 
                                                 <select value={p.method || 'Cash'} onChange={(e) => handleUpdateAcqPayment(p.id, 'method', e.target.value)} className="bg-red-50 text-red-700 border border-transparent focus:border-red-300 px-2 py-1 rounded-md text-[10px] font-black flex-shrink-0 outline-none cursor-pointer hover:bg-red-100 transition-colors">
                                                     <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option>
+                                                    <option value="Third-Party">第三方直付 (銀行/客人)</option>
                                                 </select>
                                                 
                                                 <input type="text" value={p.note || ''} onChange={(e) => handleUpdateAcqPayment(p.id, 'note', e.target.value)} placeholder="備註..." className="text-gray-600 font-medium flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-red-300 rounded px-2 py-1 outline-none transition-colors" />
@@ -2160,8 +2162,9 @@ const VehicleFormModal = ({
                                 {/* 新增進貨付款 */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-2 w-full">
                                     <input type="date" value={newAcqPayment.date} onChange={e => setNewAcqPayment({...newAcqPayment, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold min-w-0"/>
-                                    <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
+                                    <select value={newAcqPayment.method} onChange={e => setNewAcqPayment({...newAcqPayment, method: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-red-700 min-w-0">
                                         <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option>
+                                        <option value="Third-Party">第三方直付</option>
                                     </select>
                                     <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
                                         <input list="acq_vendor_pay_list" placeholder="收款人 / 付款備註 (可選或自訂)..." value={newAcqPayment.note} onChange={e => setNewAcqPayment({...newAcqPayment, note: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white min-w-0"/>
