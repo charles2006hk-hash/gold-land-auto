@@ -9,7 +9,7 @@ export const OCBC_NEW_HP: Record<string, number[]> = {
     "4.75": [42.0, 41.0, 40.0, 39.0]
 };
 
-// 2. 新車 Lease 佣金表 (依據 Lease 圖片精準錄入)
+// 2. 新車 Lease 佣金表
 export const OCBC_NEW_LEASE: Record<string, number[]> = {
     "2.75": [4.0,  4.0,  4.0,  3.5], "3.00": [11.5, 11.5, 11.0, 10.5],
     "3.25": [18.0, 18.0, 17.5, 16.5], "3.50": [23.5, 23.0, 22.5, 21.5],
@@ -27,7 +27,7 @@ export const OCBC_USED_HP: Record<string, number[]> = {
     "5.25": [39.5, 39.0, 37.5, 36.5], "5.50": [42.0, 41.0, 40.0, 38.5]
 };
 
-// 4. 二手車 Lease 佣金表 (推算矩陣)
+// 4. 二手車 Lease 佣金表
 export const OCBC_USED_LEASE: Record<string, number[]> = {
     "3.25": [7.0,  7.0,  6.5,  6.0], "3.50": [13.0, 13.0, 12.5, 12.0],
     "3.75": [18.5, 18.5, 17.5, 17.0], "4.00": [23.0, 23.0, 22.0, 21.0],
@@ -36,6 +36,7 @@ export const OCBC_USED_LEASE: Record<string, number[]> = {
     "5.25": [40.0, 39.5, 38.0, 37.0], "5.50": [42.5, 41.5, 40.5, 39.0]
 };
 
+// ★ 核心上會計算
 export const calculateAutoLoan = (
     carPrice: number, 
     downPayment: number, 
@@ -43,26 +44,29 @@ export const calculateAutoLoan = (
     flatInterestRate: number,
     isDigitalAIP: boolean = true,
     isUsedCar: boolean = false,
-    financeType: 'HP' | 'Lease' = 'HP', // 區分 HP 或 Lease
-    customTables?: any // ★ 新增：接收從 Settings 傳入的動態佣金表
+    financeType: 'HP' | 'Lease' = 'HP',
+    customTables?: any,
+    advanceInstallments: number = 6 // Lease 專用：預設提前 6 期供款
 ) => {
-    const loanAmount = carPrice - downPayment;
-    if (loanAmount < 80000) {
-        return { error: "銀行規定：最低貸款額不得少於 HK$80,000" };
-    }
+    // Lease 模式：通常全數上會，downPayment 視為 0（或極少額），首期是「提前供款」
+    const principal = financeType === 'Lease' ? carPrice : (carPrice - downPayment);
+    
+    if (principal < 80000) return { error: "銀行規定：最低貸款本金不得少於 HK$80,000" };
 
     const years = months / 12;
-    const totalInterest = loanAmount * (flatInterestRate / 100) * years;
-    const totalRepayment = loanAmount + totalInterest;
+    const totalInterest = principal * (flatInterestRate / 100) * years;
+    const totalRepayment = principal + totalInterest;
     const monthlyInstallment = totalRepayment / months;
 
-    // ★ 智能讀取：優先使用設定庫的動態表，若無則降級使用預設硬編碼表
+    // Lease 模式計算客戶需準備的首期現金 (Advance Payment)
+    const requiredAdvancePayment = financeType === 'Lease' ? (monthlyInstallment * advanceInstallments) : downPayment;
+
+    // 智能讀取佣金表
     const table_new_hp = customTables?.OCBC_NEW_HP || OCBC_NEW_HP;
     const table_new_lease = customTables?.OCBC_NEW_LEASE || OCBC_NEW_LEASE;
     const table_used_hp = customTables?.OCBC_USED_HP || OCBC_USED_HP;
     const table_used_lease = customTables?.OCBC_USED_LEASE || OCBC_USED_LEASE;
 
-    // 根據 (新/舊) 與 (HP/Lease) 選擇對應的數據表
     let activeTable = table_new_hp;
     if (!isUsedCar && financeType === 'HP') activeTable = table_new_hp;
     else if (!isUsedCar && financeType === 'Lease') activeTable = table_new_lease;
@@ -74,25 +78,56 @@ export const calculateAutoLoan = (
     
     let commissionRate = 0;
     if (tableRow) {
-        // 陣列中的四個數字分別對應 [24個月, 36個月, 48個月, 60個月]
-        let monthIndex = 0; // 預設 24 個月
+        let monthIndex = 0; 
         if (months === 36) monthIndex = 1;
         if (months === 48) monthIndex = 2;
         if (months === 60) monthIndex = 3;
         
         commissionRate = tableRow[monthIndex];
-        
-        // AIP (自動審批) 規則：佣金比率額外 +2%，但最高不得超過 45%
         if (isDigitalAIP) commissionRate = Math.min(commissionRate + 2, 45.0); 
     }
 
     const dealerCommission = totalInterest * (commissionRate / 100);
 
     return {
-        loanAmount: Math.round(loanAmount),
+        loanAmount: Math.round(principal), // 銀行放款金額
         totalInterest: Math.round(totalInterest),
         monthlyInstallment: Math.round(monthlyInstallment),
+        requiredAdvancePayment: Math.round(requiredAdvancePayment), // 客戶實際要付的首期
         commissionRate: commissionRate,
         dealerCommission: Math.round(dealerCommission)
+    };
+};
+
+// ★ 新增：七十八法則 (Rule of 78) 提早贖會試算引擎
+export const calculateRuleOf78Settlement = (
+    totalInterest: number,
+    monthlyInstallment: number,
+    totalMonths: number,
+    monthsPaid: number,
+    penaltyFee: number = 0 // 銀行通常會收提早結清手續費或扣減部分回贈
+) => {
+    if (monthsPaid >= totalMonths) return { rebate: 0, outstanding: 0, settlement: 0 };
+    if (monthsPaid <= 0) monthsPaid = 1;
+
+    const remainingMonths = totalMonths - monthsPaid;
+
+    // 七十八法則公式：總利息 * [剩餘期數 * (剩餘期數 + 1)] / [總期數 * (總期數 + 1)]
+    const rebateFactor = (remainingMonths * (remainingMonths + 1)) / (totalMonths * (totalMonths + 1));
+    const rawInterestRebate = totalInterest * rebateFactor;
+
+    // 通常銀行會扣除 20% 回贈作為手續費 (Rule of thumb in HK)，這裡提供 penalty 彈性
+    const actualRebate = Math.max(0, rawInterestRebate - penaltyFee);
+    
+    // 剩餘未供本息總額
+    const remainingBalance = monthlyInstallment * remainingMonths;
+    
+    // 最終贖會金額 = 剩餘未供本息 - 利息回贈
+    const settlementAmount = remainingBalance - actualRebate;
+
+    return {
+        interestRebate: Math.round(actualRebate),
+        remainingBalance: Math.round(remainingBalance),
+        settlementAmount: Math.round(settlementAmount)
     };
 };
