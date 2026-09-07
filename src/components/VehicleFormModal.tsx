@@ -265,6 +265,11 @@ const VehicleFormModal = ({
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
 
+    const [financePriceInput, setFinancePriceInput] = useState((v as any).financePrice ? formatNumberInput(String((v as any).financePrice)) : '');
+    const [financeDepositInput, setFinanceDepositInput] = useState((v as any).financeDeposit ? formatNumberInput(String((v as any).financeDeposit)) : '');
+    const [financeCommOverride, setFinanceCommOverride] = useState((v as any).financeCommOverride ? String((v as any).financeCommOverride) : '');
+
+ 
     // ★★★ 新增：行政與出牌進度追蹤器狀態 ★★★
     // 預設展開條件：如果是進口車，或者已經有填過任何進度資料，就自動展開
     const [showLogisticsTracker, setShowLogisticsTracker] = useState((v as any).acquisition?.type === 'Import' || !!v.logistics?.arrivalDate || !!v.logistics?.inspectionPassedDate);
