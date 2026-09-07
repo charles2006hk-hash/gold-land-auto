@@ -2958,6 +2958,7 @@ const VehicleFormModal = ({
                             })()}
                         </div>
                     </div>
+             </div>
                 
                 {/* 底部儲存列 (吸底設計) - 加入 pb-8 避開 iOS Safe Area，並提升 z-index 到 100 */}
                 <div className="p-4 pb-8 md:pb-4 border-t border-slate-300 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between gap-4 items-start md:items-center flex-none w-full z-[100] relative overflow-x-hidden">
