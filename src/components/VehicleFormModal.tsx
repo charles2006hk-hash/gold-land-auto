@@ -2985,7 +2985,7 @@ const VehicleFormModal = ({
                                                                     <Building2 size={16} className="mr-2"/> 內部機密 (佣金預估)
                                                                 </h4>
                                                                 <p className="text-[10px] text-slate-400 mt-1 font-mono">
-                                                                    {isUsedCar ? '二手車表' : '新車表'} | {financeType} | 利率 {financeRate.toFixed(2)}% | 回佣率: {calcResult.commissionRate}%
+                                                                    {isUsedCar ? '二手車表' : '新車表'} | 利率 {financeRate.toFixed(2)}% | 回佣率: {calcResult.commissionRate}%
                                                                 </p>
                                                             </div>
                                                             <div className="text-3xl font-black text-green-400 font-mono">
@@ -3001,9 +3001,9 @@ const VehicleFormModal = ({
                             })()}
                         </div>
                     </div>
-             </div>
-                
-                {/* 底部儲存列 (吸底設計) - 加入 pb-8 避開 iOS Safe Area，並提升 z-index 到 100 */}
+                </div> {/* ⬅️ ✅ 核心修復：精確關閉「分頁內容滾動區」，釋放底部空間！ */}
+
+                {/* 底部儲存列 (吸底設計) */}
                 <div className="p-4 pb-8 md:pb-4 border-t border-slate-300 bg-white shadow-[0_-10px_20px_rgba(0,0,0,0.05)] flex flex-col md:flex-row justify-between gap-4 items-start md:items-center flex-none w-full z-[100] relative overflow-x-hidden">
                     <div className="w-full md:flex-1 max-w-2xl min-w-0">
                         <input name="remarks" defaultValue={v.remarks} placeholder="內部營運備註 (Internal Remarks)..." className="w-full text-sm md:text-xs p-3 md:p-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-400 bg-slate-50 font-mono font-bold text-slate-700"/>
@@ -3021,7 +3021,6 @@ const VehicleFormModal = ({
                                     return relatedDocs.map((doc: any) => {
                                         const typeMap: Record<string, string> = { 'sales_contract': '合約', 'purchase_contract': '收車', 'consignment_contract': '寄賣', 'invoice': '發票', 'receipt': '收據', 'service_invoice': '服務發票' };
                                         const typeLabel = typeMap[doc.type] || '單據';
-                                        // ★ 智能修正：優先抓取單據內的真實日期 (docDate)，沒有才退回用系統更新時間
                                         const dateStr = doc.formData?.docDate 
                                             ? doc.formData.docDate.replace(/-/g, '/') 
                                             : (doc.updatedAt?.seconds ? new Date(doc.updatedAt.seconds * 1000).toLocaleDateString('zh-HK') : 'N/A');
@@ -3036,9 +3035,8 @@ const VehicleFormModal = ({
                         </div>
                     )}
 
-                    {/* ★ 儲存與取消按鈕區塊修復 (Hit Area Fix) */}
+                    {/* ★ 儲存與取消按鈕區塊修復 */}
                     <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-2 md:mt-0 flex-none relative z-[100]">
-                        {/* 加入 touch-manipulation 防止 iOS 雙擊放大導致點擊延遲 */}
                         <button 
                             type="button" 
                             onClick={handleClose} 
@@ -3050,15 +3048,13 @@ const VehicleFormModal = ({
                             type="submit" 
                             className="w-full md:w-auto px-8 py-3.5 md:py-2.5 bg-gradient-to-r from-blue-600 to-blue-800 text-white font-black text-sm md:text-base rounded-xl shadow-lg hover:shadow-blue-500/30 transition-all transform active:scale-95 flex items-center justify-center whitespace-nowrap cursor-pointer select-none relative z-[100] touch-manipulation"
                         >
-                            {/* 確保內部元素不攔截點擊 */}
                             <Save size={20} className="mr-2 pointer-events-none flex-shrink-0" />
                             <span className="pointer-events-none">儲存變更</span>
                         </button>
                     </div>
                 </div>
-            </div>
+            </div> {/* ⬅️ ✅ 關閉「右側欄 (Tabs System)」的父容器 */}
 
-{/* 👇---------- 從這裡開始複製插入 ----------👇 */}
             {/* ★ 編輯與匯出對數單 Modal (Reconciliation) */}
             {showReconModal && (
                 <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -3165,9 +3161,7 @@ const VehicleFormModal = ({
                 </div>
             )}
             
-
-
-{/* ★ 中港指標轉移彈出視窗 */}
+            {/* ★ 中港指標轉移彈出視窗 */}
             {showTransferModal && (
                 <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh] overflow-hidden">
