@@ -235,15 +235,28 @@ export default function DocumentTemplate({ previewDoc, selectedVehicle, docType,
                             </div>
                         </div>
 
-                        {carPhotos.length > 0 && (
-                            <div className="mb-2 relative">
-                                <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
-                                    {carPhotos.map((url: string, idx: number) => (
-                                        <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                        {/* ★ 修復：發票車輛相片輸出 (支援開單系統單圖打勾，或降級顯示縮圖) */}
+                                {previewDoc?.formData?.includeImage && previewDoc?.formData?.selectedImage ? (
+                                    <div className="mb-4 break-inside-avoid w-full">
+                                        <div className="border border-slate-300 p-2 rounded-lg bg-slate-50 flex justify-center items-center overflow-hidden">
+                                            <img 
+                                                src={previewDoc.formData.selectedImage} 
+                                                alt="Vehicle Reference" 
+                                                className="max-h-[300px] w-auto object-contain rounded shadow-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    carPhotos.length > 0 && (
+                                        <div className="mb-2 relative">
+                                            <div className="bg-slate-50 border border-slate-200 rounded p-1 flex gap-1 justify-center items-center">
+                                                {carPhotos.map((url: string, idx: number) => (
+                                                    <div key={idx} className="w-[34mm] h-[22mm] rounded overflow-hidden border border-slate-300 bg-white shadow-sm flex-shrink-0"><img src={url} className="w-full h-full object-cover" alt="car-thumb" /></div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )
+                                )}
 
                         {hasOrderDetails && (
                             <div className="mb-2">
