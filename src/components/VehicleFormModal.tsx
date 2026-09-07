@@ -71,7 +71,7 @@ const VehicleFormModal = ({
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
     updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc,
     addSalesAddon = () => {}, deleteSalesAddon = () => {},
-    updateSettings, systemUsers, currentUser, updateSubItem
+    updateSettings, systemUsers, currentUser, updateSubItem, inventory
 }: any) => {
     if (!editingVehicle && activeTab !== 'inventory_add') return null; 
     
@@ -354,7 +354,7 @@ const VehicleFormModal = ({
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
-    const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' });
+    const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' , tradeInVehicleId: ''});
     const [newAddon, setNewAddon] = useState({ name: '文件費', amount: '' });
 
    // ★ 新增：維修保養狀態與函數
@@ -548,7 +548,8 @@ const VehicleFormModal = ({
             const obj = { id: Date.now().toString(), ...newPayment, amount: amt };
             if (v.id) { addPayment(v.id, obj as any); } 
             else { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] })); }
-            setNewPayment({ ...newPayment, amount: '', note: '', relatedTaskId: '', method: 'Cash' });
+            // ✅ 新增後重置 tradeInVehicleId
+            setNewPayment({ ...newPayment, amount: '', note: '', relatedTaskId: '', method: 'Cash', tradeInVehicleId: '' }); 
         }
     };
 
@@ -1753,18 +1754,63 @@ const VehicleFormModal = ({
                                                 {(settings.paymentTypes || ['Deposit', 'Balance']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}
                                             </select>
                                             
-                                            <select value={p.method || 'Cash'} onChange={(e) => handleUpdatePayment(p.id, 'method', e.target.value)} className="bg-blue-50 text-blue-700 border border-transparent focus:border-blue-300 px-2 py-1 rounded-md text-[10px] font-bold outline-none cursor-pointer hover:bg-blue-100 transition-colors">
-                                                <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數</option>
+                                            <select 
+                                                value={p.method || 'Cash'} 
+                                                onChange={(e) => {
+                                                    const method = e.target.value;
+                                                    if (v.id) {
+                                                        updateSubItem(v.id, 'payments', (v.payments || []).map((ex: any) => ex.id === p.id ? {...ex, method, note: method === 'Trade-in' ? '' : ex.note, tradeInVehicleId: method === 'Trade-in' ? ex.tradeInVehicleId : ''} : ex));
+                                                    } else {
+                                                        setEditingVehicle((prev: any) => prev ? ({...prev, payments: (prev.payments || []).map((ex: any) => ex.id === p.id ? {...ex, method, note: method === 'Trade-in' ? '' : ex.note, tradeInVehicleId: method === 'Trade-in' ? ex.tradeInVehicleId : ''} : ex)}) : null);
+                                                    }
+                                                }} 
+                                                className={`px-2 py-1 rounded-md text-[10px] font-bold outline-none cursor-pointer transition-colors border border-transparent ${p.method === 'Trade-in' ? 'bg-orange-100 text-orange-700' : 'bg-blue-50 text-blue-700'}`}
+                                            >
+                                                <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數 (Trade-in)</option>
                                             </select>
                                             
-                                            <input type="text" value={p.note || ''} onChange={(e) => handleUpdatePayment(p.id, 'note', e.target.value)} placeholder="備註..." className="text-gray-600 font-medium flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-slate-300 rounded px-2 py-1 outline-none transition-colors" />
+                                            {/* ✅ 歷史紀錄中的 Trade-in 智能選單 */}
+                                            {p.method === 'Trade-in' ? (
+                                                <select
+                                                    value={p.tradeInVehicleId || ''}
+                                                    onChange={(e) => {
+                                                        const vid = e.target.value;
+                                                        const tradeInCar = inventory?.find((car: any) => car.id === vid);
+                                                        if (tradeInCar) {
+                                                            const newArr = (v.payments || []).map((ex: any) =>
+                                                                ex.id === p.id ? { 
+                                                                    ...ex, 
+                                                                    tradeInVehicleId: vid, 
+                                                                    amount: tradeInCar.costPrice || 0, // 自動帶入舊車收車成本
+                                                                    note: `Trade-in: ${tradeInCar.regMark || '未出牌'} ${tradeInCar.make} ${tradeInCar.model}` 
+                                                                } : ex
+                                                            );
+                                                            if (v.id) updateSubItem(v.id, 'payments', newArr);
+                                                            else setEditingVehicle((prev: any) => prev ? { ...prev, payments: newArr } : null);
+                                                        }
+                                                    }}
+                                                    className="text-orange-700 font-bold flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-orange-50 border border-orange-200 focus:border-orange-400 rounded px-2 py-1 outline-none transition-colors"
+                                                >
+                                                    <option value="">🚗 選擇系統中的舊車...</option>
+                                                    {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
+                                                        <option key={car.id} value={car.id}>
+                                                            {car.regMark || '未出牌'} - {car.make} {car.model} (收車本金: ${formatCurrency(car.costPrice || 0)})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input type="text" value={p.note || ''} onChange={(e) => handleUpdatePayment(p.id, 'note', e.target.value)} placeholder="備註..." className="text-gray-600 font-medium flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-slate-300 rounded px-2 py-1 outline-none transition-colors" />
+                                            )}
                                         </div>
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
                                             <div className="flex items-center gap-1">
                                                 <span className="text-slate-400 font-bold">$</span>
-                                                <input type="text" value={formatNumberInput(String(p.amount))} onChange={(e) => handleUpdatePayment(p.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)} className="w-24 text-right font-mono font-black text-blue-700 text-lg md:text-base bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-blue-300 rounded outline-none transition-colors" />
+                                                <input type="text" value={formatNumberInput(String(p.amount))} onChange={(e) => {
+                                                    const newAmt = Number(e.target.value.replace(/,/g, '')) || 0;
+                                                    handleUpdatePayment(p.id, 'amount', newAmt);
+                                                }} className="w-24 text-right font-mono font-black text-blue-700 text-lg md:text-base bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-blue-300 rounded outline-none transition-colors" />
                                             </div>
-                                            {!p.relatedTaskId && <button type="button" onClick={() => handleDeletePaymentClick(p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><Trash2 size={16}/></button>}
+                                            {!p.relatedTaskId && <button type="button" onClick={() => handleDeletePaymentClick(p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><Trash2 size="{16}"/></button>}
                                         </div>
                                     </div>
                                 ))}
@@ -1773,23 +1819,56 @@ const VehicleFormModal = ({
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-gray-200 w-full">
                                 <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold"/>
                                 <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className="w-full lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-slate-700">{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
-                                <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value})} className="w-full sm:col-span-2 lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold text-blue-700">
+                                
+                                <select 
+                                    value={newPayment.method} 
+                                    onChange={e => setNewPayment({...newPayment, method: e.target.value, note: '', tradeInVehicleId: '', amount: ''})} 
+                                    className={`w-full sm:col-span-2 lg:w-28 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-bold ${newPayment.method === 'Trade-in' ? 'text-orange-700 border-orange-300' : 'text-blue-700'}`}
+                                >
                                     <option value="Cash">現金</option>
                                     <option value="Cheque">支票</option>
                                     <option value="Transfer">轉帳</option>
                                     <option value="USDT">USDT</option>
                                     <option value="Trade-in">對數 (Trade-in)</option>
                                 </select>
-                                <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white min-w-0"/>
                                 
-                                {/* ★ 修復：加入 lg:w-auto lg:flex-none，防止搶佔空間 */}
+                                {/* ✅ 新增收款中的 Trade-in 智能選單 */}
+                                {newPayment.method === 'Trade-in' ? (
+                                    <select
+                                        value={newPayment.tradeInVehicleId || ''}
+                                        onChange={e => {
+                                            const vid = e.target.value;
+                                            const tradeInCar = inventory?.find((car: any) => car.id === vid);
+                                            if (tradeInCar) {
+                                                setNewPayment({
+                                                    ...newPayment,
+                                                    tradeInVehicleId: vid,
+                                                    amount: formatNumberInput(String(tradeInCar.costPrice || 0)), // 自動帶入舊車收車成本
+                                                    note: `Trade-in: ${tradeInCar.regMark || '未出牌'} ${tradeInCar.make} ${tradeInCar.model}`
+                                                });
+                                            } else {
+                                                setNewPayment({...newPayment, tradeInVehicleId: '', amount: '', note: ''});
+                                            }
+                                        }}
+                                        className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-orange-50 focus:border-orange-400 font-bold text-orange-700 min-w-0"
+                                    >
+                                        <option value="">🚗 選擇系統中的舊車...</option>
+                                        {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
+                                            <option key={car.id} value={car.id}>
+                                                {car.regMark || '未出牌'} - {car.make} {car.model} (收車本金: ${formatCurrency(car.costPrice || 0)})
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white min-w-0"/>
+                                )}
+                                
                                 <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
                                     <input type="text" placeholder="$ 金額" value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border rounded-lg outline-none bg-white text-right font-mono font-black text-blue-600"/>
                                     <button type="button" onClick={handleAddPaymentClick} className="w-full sm:w-auto bg-slate-900 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-slate-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">新增收款</button>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
