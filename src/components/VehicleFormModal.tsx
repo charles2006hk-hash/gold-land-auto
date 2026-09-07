@@ -1765,34 +1765,46 @@ const VehicleFormModal = ({
                                                 <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數 (Trade-in)</option>
                                             </select>
                                             
+                                            {/* ✅ 歷史紀錄中的 Trade-in 智能選單 (支援輸入搜尋) */}
                                             {p.method === 'Trade-in' ? (
-                                                <select
-                                                    value={p.tradeInVehicleId || ''}
-                                                    onChange={(e) => {
-                                                        const vid = e.target.value;
-                                                        const tradeInCar = inventory?.find((car: any) => car.id === vid);
-                                                        if (tradeInCar) {
-                                                            const newArr = (v.payments || []).map((ex: any) =>
-                                                                ex.id === p.id ? { 
-                                                                    ...ex, 
-                                                                    tradeInVehicleId: vid, 
-                                                                    amount: tradeInCar.costPrice || 0,
-                                                                    note: `Trade-in: ${tradeInCar.regMark || '未出牌'} ${tradeInCar.make} ${tradeInCar.model}` 
-                                                                } : ex
-                                                            );
-                                                            if (v.id) updateSubItem(v.id, 'payments', newArr);
-                                                            else setEditingVehicle((prev: any) => prev ? { ...prev, payments: newArr } : null);
-                                                        }
-                                                    }}
-                                                    className="text-orange-700 font-bold flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-orange-50 border border-orange-200 focus:border-orange-400 rounded px-2 py-1 outline-none transition-colors"
-                                                >
-                                                    <option value="">🚗 選擇庫存舊車...</option>
-                                                    {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
-                                                        <option key={car.id} value={car.id}>
-                                                            {car.regMark || '未出牌'} - {car.make} {car.model} (${formatCurrency(car.costPrice || 0)})
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                <div className="flex-1 w-full sm:w-auto mt-1 sm:mt-0 relative min-w-0">
+                                                    <input
+                                                        list={`trade_in_history_${p.id}`}
+                                                        value={(p.note || '').replace(/^Trade-in:\s*/, '')}
+                                                        onChange={(e) => {
+                                                            const searchStr = e.target.value;
+                                                            const tradeInCar = inventory?.find((car: any) => `${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}` === searchStr);
+                                                            if (tradeInCar) {
+                                                                const newArr = (v.payments || []).map((ex: any) =>
+                                                                    ex.id === p.id ? { 
+                                                                        ...ex, 
+                                                                        tradeInVehicleId: tradeInCar.id, 
+                                                                        amount: tradeInCar.costPrice || 0,
+                                                                        note: `Trade-in: ${searchStr}` 
+                                                                    } : ex
+                                                                );
+                                                                if (v.id) updateSubItem(v.id, 'payments', newArr);
+                                                                else setEditingVehicle((prev: any) => prev ? { ...prev, payments: newArr } : null);
+                                                            } else {
+                                                                // 若未匹配到，仍允許自由修改備註
+                                                                const newArr = (v.payments || []).map((ex: any) =>
+                                                                    ex.id === p.id ? { ...ex, note: searchStr, tradeInVehicleId: '' } : ex
+                                                                );
+                                                                if (v.id) updateSubItem(v.id, 'payments', newArr);
+                                                                else setEditingVehicle((prev: any) => prev ? { ...prev, payments: newArr } : null);
+                                                            }
+                                                        }}
+                                                        placeholder="🔍 搜尋舊車車牌或型號..."
+                                                        className="w-full text-orange-700 font-bold bg-orange-50 border border-orange-200 focus:border-orange-400 rounded px-2 py-1 outline-none transition-colors"
+                                                    />
+                                                    <datalist id={`trade_in_history_${p.id}`}>
+                                                        {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
+                                                            <option key={car.id} value={`${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}`}>
+                                                                收車本金: {formatCurrency(car.costPrice || 0)}
+                                                            </option>
+                                                        ))}
+                                                    </datalist>
+                                                </div>
                                             ) : (
                                                 <input type="text" value={p.note || ''} onChange={(e) => handleUpdatePayment(p.id, 'note', e.target.value)} placeholder="備註..." className="text-gray-600 font-medium flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-slate-300 rounded px-2 py-1 outline-none transition-colors" />
                                             )}
@@ -1827,32 +1839,37 @@ const VehicleFormModal = ({
                                     <option value="Trade-in">對數 (Trade-in)</option>
                                 </select>
                                 
+                                {/* ✅ 新增收款中的 Trade-in 智能選單 (支援輸入搜尋) */}
                                 {newPayment.method === 'Trade-in' ? (
-                                    <select
-                                        value={newPayment.tradeInVehicleId || ''}
-                                        onChange={e => {
-                                            const vid = e.target.value;
-                                            const tradeInCar = inventory?.find((car: any) => car.id === vid);
-                                            if (tradeInCar) {
-                                                setNewPayment({
-                                                    ...newPayment,
-                                                    tradeInVehicleId: vid,
-                                                    amount: formatNumberInput(String(tradeInCar.costPrice || 0)),
-                                                    note: `Trade-in: ${tradeInCar.regMark || '未出牌'} ${tradeInCar.make} ${tradeInCar.model}`
-                                                });
-                                            } else {
-                                                setNewPayment({...newPayment, tradeInVehicleId: '', amount: '', note: ''});
-                                            }
-                                        }}
-                                        className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-orange-50 focus:border-orange-400 font-bold text-orange-700 min-w-0"
-                                    >
-                                        <option value="">🚗 選擇庫存舊車...</option>
-                                        {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
-                                            <option key={car.id} value={car.id}>
-                                                {car.regMark || '未出牌'} - {car.make} {car.model} (收車本金: ${formatCurrency(car.costPrice || 0)})
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0">
+                                        <input
+                                            list="trade_in_list_new"
+                                            placeholder="🔍 輸入車牌、廠牌或型號搜尋舊車..."
+                                            value={newPayment.note.replace(/^Trade-in:\s*/, '')}
+                                            onChange={e => {
+                                                const searchStr = e.target.value;
+                                                const tradeInCar = inventory?.find((car: any) => `${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}` === searchStr);
+                                                if (tradeInCar) {
+                                                    setNewPayment({
+                                                        ...newPayment,
+                                                        tradeInVehicleId: tradeInCar.id,
+                                                        amount: formatNumberInput(String(tradeInCar.costPrice || 0)), // 自動帶入舊車收車成本
+                                                        note: `Trade-in: ${searchStr}`
+                                                    });
+                                                } else {
+                                                    setNewPayment({...newPayment, tradeInVehicleId: '', amount: '', note: searchStr});
+                                                }
+                                            }}
+                                            className="w-full text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-orange-50 focus:border-orange-400 font-bold text-orange-700 min-w-0"
+                                        />
+                                        <datalist id="trade_in_list_new">
+                                            {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
+                                                <option key={car.id} value={`${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}`}>
+                                                    收車本金: {formatCurrency(car.costPrice || 0)}
+                                                </option>
+                                            ))}
+                                        </datalist>
+                                    </div>
                                 ) : (
                                     <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white min-w-0"/>
                                 )}
@@ -1863,7 +1880,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
                         </div>
-                    </div>
 
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
