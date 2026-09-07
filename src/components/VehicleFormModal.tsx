@@ -262,6 +262,8 @@ const VehicleFormModal = ({
     const [financeMonths, setFinanceMonths] = useState(48);
     const [financeRate, setFinanceRate] = useState(3.5); // ★★★ 就是漏了這一行！ ★★★
     const [financeType, setFinanceType] = useState<'HP' | 'Lease'>('HP'); // ★ 新增上會類別
+    // ✅ 在這下方補上缺失的這一行：
+    const [financeAdvanceMonths, setFinanceAdvanceMonths] = useState((v as any).financeAdvanceMonths || 6);
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
 
