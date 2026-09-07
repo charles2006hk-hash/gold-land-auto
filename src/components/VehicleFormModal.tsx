@@ -2796,8 +2796,12 @@ const VehicleFormModal = ({
                                 const calcResult = calculateAutoLoan(displayFinPrice, displayFinDep, financeMonths, financeRate, true, isUsedCar, financeType, settings.commissionTables, financeAdvanceMonths);
 
                                 // 贖會計算
-                                const settleResult = calcResult.error ? null : calculateRuleOf78Settlement(calcResult.totalInterest, calcResult.monthlyInstallment, financeMonths, settleMonthsPaid);
-
+                                const settleResult = calcResult.error ? null : calculateRuleOf78Settlement(
+                                    calcResult.totalInterest || 0, 
+                                    calcResult.monthlyInstallment || 0, 
+                                    financeMonths, 
+                                    settleMonthsPaid
+                                );
                                 return (
                                     <div className="space-y-5 relative z-10">
                                         <div className="grid grid-cols-2 gap-4">
