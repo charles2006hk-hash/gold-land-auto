@@ -264,6 +264,8 @@ const VehicleFormModal = ({
     const [financeType, setFinanceType] = useState<'HP' | 'Lease'>('HP'); // ★ 新增上會類別
     // ✅ 在這下方補上缺失的這一行：
     const [financeAdvanceMonths, setFinanceAdvanceMonths] = useState((v as any).financeAdvanceMonths || 6);
+    const [financeStatus, setFinanceStatus] = useState<'Pending' | 'Confirmed'>((v as any).financeStatus || 'Pending');
+    const [financeStartDate, setFinanceStartDate] = useState((v as any).financeStartDate || new Date().toISOString().split('T')[0]);
     const [cbEnabled, setCbEnabled] = useState(!!(v.crossBorder?.isEnabled));
     const [isPublic, setIsPublic] = useState(!!v.isPublic); 
 
@@ -1037,6 +1039,8 @@ const VehicleFormModal = ({
         appendHidden('financeType', financeType);
         appendHidden('financeAdvanceMonths', String(financeAdvanceMonths));
         appendHidden('financeCommOverride', financeCommOverride);
+        appendHidden('financeStatus', financeStatus);
+        appendHidden('financeStartDate', financeStartDate);
 
         const formData = new FormData(e.currentTarget);
         if(!formData.has('mileage')) { 
@@ -2893,22 +2897,61 @@ const VehicleFormModal = ({
                                                     <div className="flex flex-wrap justify-between items-center text-sm font-mono font-bold text-slate-600 gap-2">
                                                         <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex-1 text-center">銀行放款額: ${calcResult.loanAmount?.toLocaleString()}</span>
                                                         <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex-1 text-center">總利息: ${calcResult.totalInterest?.toLocaleString()}</span>
-                                                        
-                                                        {/* ★ 將銀行放款加入收款紀錄 (自動對數) */}
-                                                        <button 
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                const obj = { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], type: 'Bank Loan (銀行放款)', method: 'Transfer', amount: calcResult.loanAmount, note: `上會撥款抵扣車價` };
-                                                                if (v.id) { addPayment(v.id, obj as any); } else { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] })); }
-                                                                alert('✅ 銀行放款金額已成功轉入「銷售與收款」分頁中，可直接抵扣客人尾數！');
-                                                            }}
-                                                            className="w-full sm:w-auto bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[10px] uppercase font-black hover:bg-slate-700 shadow-sm active:scale-95 transition-transform flex items-center justify-center"
-                                                        >
-                                                            <DollarSign size={12} className="mr-1"/> 轉入收款抵銷尾數
-                                                        </button>
                                                     </div>
                                                 </div>
+
+                                                {/* ✅ 升級：上會執行與入帳控制台 */}
+                                                <div className="mt-5 border-t border-blue-200 pt-5">
+                                                    <h4 className="font-bold text-blue-900 mb-3 flex items-center">
+                                                        <CheckCircle size={18} className="mr-2"/> 上會狀態與放款入帳
+                                                    </h4>
+                                                    <div className="flex flex-wrap items-end gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">上會狀態</label>
+                                                            <select value={financeStatus} onChange={e => setFinanceStatus(e.target.value as any)} className={`p-2 rounded-lg text-sm font-bold outline-none border ${financeStatus === 'Confirmed' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-slate-50 text-slate-600 border-slate-300'}`}>
+                                                                <option value="Pending">📝 試算中 (Pending)</option>
+                                                                <option value="Confirmed">✅ 已確定上會 (Confirmed)</option>
+                                                            </select>
+                                                        </div>
+                                                        
+                                                        {financeStatus === 'Confirmed' && (
+                                                            <>
+                                                                <div>
+                                                                    <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">銀行放款日 / 起供日</label>
+                                                                    <input type="date" value={financeStartDate} onChange={e => setFinanceStartDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-700 outline-none" />
+                                                                </div>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        // 智能防呆：檢查是否已經入過帳
+                                                                        const isAlreadyAdded = (v.payments || []).some((p:any) => p.note === '銀行貸款放款');
+                                                                        if (isAlreadyAdded) {
+                                                                            alert('⚠️ 系統提示：此車輛已存在「銀行貸款放款」的收款紀錄，請勿重複入帳。');
+                                                                            return;
+                                                                        }
+                                                                        const obj = { 
+                                                                            id: `loan_${Date.now()}`, 
+                                                                            date: financeStartDate, 
+                                                                            type: 'Bank Loan (銀行放款)', 
+                                                                            method: 'Transfer', 
+                                                                            amount: calcResult.loanAmount, 
+                                                                            note: `銀行貸款放款` 
+                                                                        };
+                                                                        if (v.id) { addPayment(v.id, obj as any); } 
+                                                                        else { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] })); }
+                                                                        alert(`✅ 銀行放款金額 ($${calcResult.loanAmount.toLocaleString()}) 已成功轉入「銷售與收款」分頁中，抵扣客人尾數！\n請記得點擊右下角「儲存變更」。`);
+                                                                    }}
+                                                                    className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs uppercase font-black hover:bg-slate-700 shadow-sm active:scale-95 transition-transform flex items-center h-[38px]"
+                                                                >
+                                                                    <DollarSign size={14} className="mr-1"/> 轉入收款抵銷尾數
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* ★ 七十八法則 贖會試算引擎 (下方代碼保持不變) */}
 
                                                 {/* ★ 七十八法則 贖會試算引擎 */}
                                                 <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-200 mt-4 shadow-sm">
