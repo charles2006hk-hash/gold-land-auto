@@ -2935,12 +2935,13 @@ const VehicleFormModal = ({
                                                                             date: financeStartDate, 
                                                                             type: 'Bank Loan (銀行放款)', 
                                                                             method: 'Transfer', 
-                                                                            amount: calcResult.loanAmount, 
+                                                                            amount: calcResult.loanAmount || 0, // ✅ 加上預設值
                                                                             note: `銀行貸款放款` 
                                                                         };
                                                                         if (v.id) { addPayment(v.id, obj as any); } 
                                                                         else { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] })); }
-                                                                        alert(`✅ 銀行放款金額 ($${calcResult.loanAmount.toLocaleString()}) 已成功轉入「銷售與收款」分頁中，抵扣客人尾數！\n請記得點擊右下角「儲存變更」。`);
+                                                                        // ✅ 加上括號與預設值
+                                                                        alert(`✅ 銀行放款金額 ($${(calcResult.loanAmount || 0).toLocaleString()}) 已成功轉入「銷售與收款」分頁中，抵扣客人尾數！\n請記得點擊右下角「儲存變更」。`);
                                                                     }}
                                                                     className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs uppercase font-black hover:bg-slate-700 shadow-sm active:scale-95 transition-transform flex items-center h-[38px]"
                                                                 >
