@@ -13,6 +13,7 @@ import { doc, setDoc, collection, addDoc, serverTimestamp, query, orderBy, limit
 import { ref, uploadString } from 'firebase/storage';
 
 import { SystemSettings, Vehicle } from '@/types';
+import { OCBC_NEW_HP, OCBC_NEW_LEASE, OCBC_USED_HP, OCBC_USED_LEASE } from '@/utils/LoanCalculator';
 
 // ★ 補上系統預設大內總帳分類 (當設定檔沒有時墊底)
 const DEFAULT_LEDGER_CATEGORIES = [
@@ -938,9 +939,37 @@ const SettingsManager = ({
                             </div>
                             <button onClick={() => updateSettings('expenseTypes', [...(settings.expenseTypes||[]), { name: '新費用', defaultAmount: 0, defaultCompany: '', defaultDays: '0' }] as any)} className="mt-4 text-xs bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold shadow-sm transition-colors"><Plus size={14} className="mr-1"/> 新增車輛費用</button>
                         </div>
+
+                        {/* C. 上會佣金比例矩陣 (Bank Commission Tables) */}
+                        <div className="bg-slate-900 p-5 rounded-xl border border-slate-700 shadow-lg mt-6 text-white">
+                            <h3 className="font-bold text-lg mb-1 text-yellow-400">銀行上會佣金比例表 (Commission Matrices)</h3>
+                            <p className="text-xs text-slate-400 mb-4">進階設定：每年銀行調整佣金時，可在此直接修改 JSON 數據。</p>
+                            
+                            <div className="bg-slate-800 rounded-lg border border-slate-600 p-1">
+                                <textarea 
+                                    rows={10}
+                                    className="w-full bg-transparent text-green-400 font-mono text-[10px] md:text-xs outline-none p-3 custom-scrollbar"
+                                    defaultValue={JSON.stringify(settings.commissionTables || { OCBC_NEW_HP, OCBC_NEW_LEASE, OCBC_USED_HP, OCBC_USED_LEASE }, null, 2)}
+                                    onBlur={(e) => {
+                                        try {
+                                            const newTables = JSON.parse(e.target.value);
+                                            updateSettings('commissionTables', newTables);
+                                            alert("✅ 佣金表已成功更新！");
+                                        } catch (err) {
+                                            alert("❌ JSON 格式錯誤，請檢查是否有漏掉逗號或引號。");
+                                        }
+                                    }}
+                                />
+                            </div>
+                            <p className="text-[9px] text-slate-500 mt-2">
+                                💡 陣列中的四個數字分別代表: [24個月, 36個月, 48個月, 60個月] 的佣金百分比。
+                            </p>
+                        </div>
                     </div>
                 )}
 
+
+            
                 {/* 4. 中港業務 (完整功能) */}
                 {activeTab === 'crossborder_setup' && (
                     <div className="space-y-8 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
