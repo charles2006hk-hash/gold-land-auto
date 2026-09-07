@@ -624,7 +624,12 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
         
         if (!isAcq) {
             if (selectedDocType === 'service_invoice') {
-                if (car.crossBorder?.tasks) car.crossBorder.tasks.forEach((t: any, i: number) => { if (t.fee > 0) items.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true }); });
+                if (car.crossBorder?.tasks) car.crossBorder.tasks.forEach((t: any, i: number) => { 
+                    if (t.fee > 0) {
+                        const remarkText = (t.remark || t.note) ? ` (${t.remark || t.note})` : '';
+                        items.push({ id: `cb_${i}`, desc: `[中港] ${t.item}${remarkText}`.trim(), amount: t.fee, isSelected: true }); 
+                    }
+                });
             }
             if (car.salesAddons && car.salesAddons.length > 0) car.salesAddons.forEach((addon: any, i: number) => { if (addon.amount > 0) items.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false }); });
             if (car.maintenanceRecords && car.maintenanceRecords.length > 0) {
