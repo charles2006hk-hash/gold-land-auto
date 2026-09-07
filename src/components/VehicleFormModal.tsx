@@ -541,7 +541,6 @@ const VehicleFormModal = ({
         setAcqPayments(newAcqPayments);
     };
     // 👆---------- 到這裡結束 ----------👆
-    // ★★★ 智能雙軌收支管理器 (解決新舊車入數問題) ★★★
     const handleAddPaymentClick = () => {
         const amt = Number(newPayment.amount.replace(/,/g, ''));
         if (amt > 0) {
@@ -1681,7 +1680,6 @@ const VehicleFormModal = ({
                             <div className="space-y-2 mb-4">
                                 {((v as any).salesAddons || []).map((addon: any, idx: number) => (
                                     <div key={addon.id} className="flex items-center justify-between gap-2 text-sm md:text-xs p-3 md:p-2 bg-white border border-indigo-100 rounded-lg shadow-sm focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-100 transition-all">
-                                        {/* ★ 行內可點擊修改 Input */}
                                         <input 
                                             type="text" 
                                             value={addon.name} 
@@ -1715,7 +1713,6 @@ const VehicleFormModal = ({
                             </div>
                             
                             <div className="flex flex-col sm:flex-row gap-3 md:gap-2">
-                                {/* ★ 智能輸入框：綁定 datalist 實現下拉與搜尋 */}
                                 <div className="flex-1 w-full relative min-w-0">
                                     <input 
                                         list="smart_addon_list"
@@ -1725,7 +1722,6 @@ const VehicleFormModal = ({
                                         onChange={e => setNewAddon({...newAddon, name: e.target.value})} 
                                         className="w-full text-sm md:text-xs p-3 md:p-2 border border-indigo-200 rounded-lg outline-none bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
                                     />
-                                    {/* 隱藏的下拉選單資料庫 (合併預設值與系統記憶) */}
                                     <datalist id="smart_addon_list">
                                         {Array.from(new Set(['文件費', '轉名費', '過戶費', '上會手續費', '驗車費', ...(settings.salesAddonItems || [])])).map((item: any, idx: number) => (
                                             <option key={idx} value={item}>{item}</option>
@@ -1769,7 +1765,6 @@ const VehicleFormModal = ({
                                                 <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數 (Trade-in)</option>
                                             </select>
                                             
-                                            {/* ✅ 歷史紀錄中的 Trade-in 智能選單 */}
                                             {p.method === 'Trade-in' ? (
                                                 <select
                                                     value={p.tradeInVehicleId || ''}
@@ -1781,7 +1776,7 @@ const VehicleFormModal = ({
                                                                 ex.id === p.id ? { 
                                                                     ...ex, 
                                                                     tradeInVehicleId: vid, 
-                                                                    amount: tradeInCar.costPrice || 0, // 自動帶入舊車收車成本
+                                                                    amount: tradeInCar.costPrice || 0,
                                                                     note: `Trade-in: ${tradeInCar.regMark || '未出牌'} ${tradeInCar.make} ${tradeInCar.model}` 
                                                                 } : ex
                                                             );
@@ -1791,10 +1786,10 @@ const VehicleFormModal = ({
                                                     }}
                                                     className="text-orange-700 font-bold flex-1 w-full sm:w-auto mt-1 sm:mt-0 bg-orange-50 border border-orange-200 focus:border-orange-400 rounded px-2 py-1 outline-none transition-colors"
                                                 >
-                                                    <option value="">🚗 選擇系統中的舊車...</option>
+                                                    <option value="">🚗 選擇庫存舊車...</option>
                                                     {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
                                                         <option key={car.id} value={car.id}>
-                                                            {car.regMark || '未出牌'} - {car.make} {car.model} (收車本金: ${formatCurrency(car.costPrice || 0)})
+                                                            {car.regMark || '未出牌'} - {car.make} {car.model} (${formatCurrency(car.costPrice || 0)})
                                                         </option>
                                                     ))}
                                                 </select>
@@ -1810,7 +1805,7 @@ const VehicleFormModal = ({
                                                     handleUpdatePayment(p.id, 'amount', newAmt);
                                                 }} className="w-24 text-right font-mono font-black text-blue-700 text-lg md:text-base bg-transparent hover:bg-slate-50 focus:bg-white border border-transparent focus:border-blue-300 rounded outline-none transition-colors" />
                                             </div>
-                                            {!p.relatedTaskId && <button type="button" onClick={() => handleDeletePaymentClick(p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><Trash2 size="{16}"/></button>}
+                                            {!p.relatedTaskId && <button type="button" onClick={() => handleDeletePaymentClick(p.id)} className="text-red-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><Trash2 size={16}/></button>}
                                         </div>
                                     </div>
                                 ))}
@@ -1832,7 +1827,6 @@ const VehicleFormModal = ({
                                     <option value="Trade-in">對數 (Trade-in)</option>
                                 </select>
                                 
-                                {/* ✅ 新增收款中的 Trade-in 智能選單 */}
                                 {newPayment.method === 'Trade-in' ? (
                                     <select
                                         value={newPayment.tradeInVehicleId || ''}
@@ -1843,7 +1837,7 @@ const VehicleFormModal = ({
                                                 setNewPayment({
                                                     ...newPayment,
                                                     tradeInVehicleId: vid,
-                                                    amount: formatNumberInput(String(tradeInCar.costPrice || 0)), // 自動帶入舊車收車成本
+                                                    amount: formatNumberInput(String(tradeInCar.costPrice || 0)),
                                                     note: `Trade-in: ${tradeInCar.regMark || '未出牌'} ${tradeInCar.make} ${tradeInCar.model}`
                                                 });
                                             } else {
@@ -1852,7 +1846,7 @@ const VehicleFormModal = ({
                                         }}
                                         className="w-full sm:col-span-2 lg:flex-1 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-orange-50 focus:border-orange-400 font-bold text-orange-700 min-w-0"
                                     >
-                                        <option value="">🚗 選擇系統中的舊車...</option>
+                                        <option value="">🚗 選擇庫存舊車...</option>
                                         {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
                                             <option key={car.id} value={car.id}>
                                                 {car.regMark || '未出牌'} - {car.make} {car.model} (收車本金: ${formatCurrency(car.costPrice || 0)})
@@ -1869,6 +1863,7 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
                         </div>
+                    </div>
 
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
