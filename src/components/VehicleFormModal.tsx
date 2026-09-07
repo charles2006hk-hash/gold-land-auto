@@ -2923,11 +2923,11 @@ const VehicleFormModal = ({
                                                         </div>
                                                         <div className="flex-1 w-full bg-white p-3 rounded-lg border border-orange-200 text-center">
                                                             <div className="text-[10px] text-slate-500 font-bold mb-1">未到期利息回贈</div>
-                                                            <div className="text-lg font-mono font-bold text-green-600">-${settleResult?.interestRebate.toLocaleString()}</div>
+                                                            <div className="text-lg font-mono font-bold text-green-600">-${(settleResult?.interestRebate || 0).toLocaleString()}</div>
                                                         </div>
                                                         <div className="flex-1 w-full bg-orange-600 p-3 rounded-lg shadow-md text-center text-white">
                                                             <div className="text-[10px] font-bold opacity-80 mb-1">預估結清金額 (未計手續費)</div>
-                                                            <div className="text-xl font-mono font-black">${settleResult?.settlementAmount.toLocaleString()}</div>
+                                                            <div className="text-xl font-mono font-black">${(settleResult?.settlementAmount || 0).toLocaleString()}</div>
                                                         </div>
                                                     </div>
                                                 </div>
