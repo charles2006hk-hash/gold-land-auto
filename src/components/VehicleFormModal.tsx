@@ -2731,6 +2731,7 @@ const VehicleFormModal = ({
                                             <label className="text-sm md:text-xs text-blue-900 font-black flex items-center bg-blue-100 w-fit px-3 py-1 rounded-full shadow-sm">
                                                 <DollarSign size={16} className="mr-1.5"/> 中港業務收費 (Cross-Border Fees)
                                             </label>
+                                            
                                             {/* ★ 升級：全能單據同步選單 (支援合約、銷售發票、服務發票、收據) */}
                                             {pendingCbTasks.length > 0 && (
                                                 <div className="flex items-center gap-2">
@@ -2742,14 +2743,15 @@ const VehicleFormModal = ({
                                                             if (!onJumpToDoc) return alert("開單系統連動未就緒");
                                                             
                                                             const targetDocType = e.target.value;
+                                                            // ✅ 修復：將備註 (remark / note) 完美拼接到發票的描述中
                                                             const docItems = pendingCbTasks.map((t: any) => ({
                                                                 id: t.id,
-                                                                desc: `[中港代辦] ${t.item}`,
+                                                                desc: `[中港代辦] ${t.item} ${(t.remark || t.note) ? `(${t.remark || t.note})` : ''}`.trim(),
                                                                 amount: Number(t.fee) || 0,
                                                                 isSelected: true
                                                             }));
                                                             
-                                                            // 智能判斷：如果是合約或銷售發票，自動帶入車輛本金；否則車價設為 0
+                                                            // 智能判斷：如果是買賣合約或銷售發票，自動帶入車價；如果是服務發票或收據，車價設為 0
                                                             const includeCarPrice = targetDocType === 'sales_contract' || targetDocType === 'invoice';
 
                                                             onJumpToDoc({
@@ -2767,18 +2769,18 @@ const VehicleFormModal = ({
                                                                 },
                                                                 docItems: docItems,
                                                                 depositItems: [], 
-                                                                showTerms: targetDocType === 'sales_contract' // 合約預設展開條款
+                                                                showTerms: targetDocType === 'sales_contract' // 合約自動展開條款
                                                             });
                                                             
-                                                            e.target.value = ''; // 執行後將選單重置
+                                                            e.target.value = ''; // 執行後重置選單
                                                         }}
                                                         className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm font-bold hover:bg-indigo-700 outline-none cursor-pointer transition-colors"
                                                     >
                                                         <option value="">🧾 選擇同步單據類型...</option>
-                                                        <option value="sales_contract">📝 買賣合約 (連車價)</option>
-                                                        <option value="invoice">📑 銷售發票 (連車價)</option>
+                                                        <option value="sales_contract">📝 汽車買賣合約 (帶車價)</option>
+                                                        <option value="invoice">📑 銷售發票 (帶車價)</option>
                                                         <option value="service_invoice">🛠️ 服務發票 (僅服務費)</option>
-                                                        <option value="receipt">💰 正式收據</option>
+                                                        <option value="receipt">💰 正式收據 (Receipt)</option>
                                                     </select>
                                                 </div>
                                             )}
@@ -2786,27 +2788,20 @@ const VehicleFormModal = ({
                                         
                                         {(() => {
                                             const cbTasks = v.crossBorder?.tasks || [];
-                                            // 1. 自動分流：未付款(進行中) vs 已付款(歷史)
                                             const pendingTasks = cbTasks.filter((t: any) => !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
                                             const historyTasks = cbTasks.filter((t: any) => (v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
-                                            // 2. 歷史資料按日期分組 (方便批次複製)
                                             const historyByDate: Record<string, any[]> = {};
                                             historyTasks.forEach((t: any) => {
                                                 if (!historyByDate[t.date]) historyByDate[t.date] = [];
                                                 historyByDate[t.date].push(t);
                                             });
 
-                                            // 3. 智能複製引擎
                                             const duplicateTasks = (tasksToCopy: any[]) => {
                                                 if (!confirm(`確定要複製這 ${tasksToCopy.length} 個項目為「全新未繳費」的待辦事項嗎？\n(系統將自動把新項目的日期設為今日)`)) return;
-                                                
                                                 const newItems = tasksToCopy.map((t, i) => ({
-                                                    ...t,
-                                                    id: Date.now().toString() + '_' + i,
-                                                    date: new Date().toISOString().split('T')[0] // 自動更新為今天
+                                                    ...t, id: Date.now().toString() + '_' + i, date: new Date().toISOString().split('T')[0]
                                                 }));
-                                                
                                                 updateSubItem(v.id!, 'crossBorder', [...cbTasks, ...newItems]);
                                             };
 
@@ -2818,18 +2813,23 @@ const VehicleFormModal = ({
                                                         {pendingTasks.length === 0 && <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">目前無待繳費項目</div>}
                                                         
                                                         {pendingTasks.map((t: any) => (
-                                                            <div key={t.id} className="flex justify-between items-center p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg transition-colors group">
-                                                                <div className="flex items-center gap-3">
-                                                                    <span className="text-slate-400 font-mono text-xs">{t.date}</span>
-                                                                    <span className="font-bold text-slate-800 text-sm">{t.item}</span>
+                                                            <div key={t.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg transition-colors group gap-2">
+                                                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
+                                                                    <div className="flex items-center gap-3 shrink-0">
+                                                                        <span className="text-slate-400 font-mono text-xs">{t.date}</span>
+                                                                        <span className="font-bold text-slate-800 text-sm">{t.item}</span>
+                                                                    </div>
+                                                                    {/* ✅ 修復：將備註優雅地顯示在項目名稱旁邊 */}
+                                                                    {(t.remark || t.note) && (
+                                                                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate max-w-[200px]" title={t.remark || t.note}>
+                                                                            {t.remark || t.note}
+                                                                        </span>
+                                                                    )}
                                                                 </div>
-                                                                <div className="flex items-center gap-3">
+                                                                <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto mt-1 sm:mt-0">
                                                                     <span className="font-mono font-black text-blue-700">{formatCurrency(t.fee)}</span>
                                                                     <span className="px-2 py-0.5 rounded text-[10px] font-bold border shadow-sm bg-red-50 text-red-600 border-red-200 animate-pulse">未繳費</span>
-                                                                    {/* 單項複製按鈕 */}
-                                                                    <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-xs bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="複製此單一項目">
-                                                                        📋 複製
-                                                                    </button>
+                                                                    <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-xs bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="複製此單一項目">📋 複製</button>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -2847,20 +2847,22 @@ const VehicleFormModal = ({
                                                                     <div key={date} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
                                                                         <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
                                                                             <span className="text-xs font-bold text-slate-600 font-mono">📅 {date} 批次</span>
-                                                                            <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks(tasks); }} className="text-[10px] bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors">
-                                                                                📋 批量複製此批項目
-                                                                            </button>
+                                                                            <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks(tasks); }} className="text-[10px] bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors">📋 批量複製此批項目</button>
                                                                         </div>
                                                                         <div className="divide-y divide-slate-100">
                                                                             {tasks.map((t: any) => (
-                                                                                <div key={t.id} className="flex justify-between items-center p-2 hover:bg-slate-50 transition-colors group">
-                                                                                    <span className="font-bold text-slate-700 text-xs pl-2">{t.item}</span>
-                                                                                    <div className="flex items-center gap-3 pr-2">
+                                                                                <div key={t.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 hover:bg-slate-50 transition-colors group gap-1">
+                                                                                    <div className="flex flex-col sm:flex-row sm:items-center pl-2 min-w-0">
+                                                                                        <span className="font-bold text-slate-700 text-xs shrink-0">{t.item}</span>
+                                                                                        {/* ✅ 修復：將備註顯示在歷史紀錄中 */}
+                                                                                        {(t.remark || t.note) && (
+                                                                                            <span className="text-[9px] text-slate-400 sm:ml-2 truncate max-w-[150px]" title={t.remark || t.note}>({t.remark || t.note})</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-3 pr-2 self-end sm:self-auto">
                                                                                         <span className="font-mono font-bold text-slate-500 text-xs">{formatCurrency(t.fee)}</span>
                                                                                         <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-green-50 text-green-600 border-green-200">已付款</span>
-                                                                                        <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-[10px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="單獨複製">
-                                                                                            📋
-                                                                                        </button>
+                                                                                        <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-[10px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="單獨複製">📋</button>
                                                                                     </div>
                                                                                 </div>
                                                                             ))}
