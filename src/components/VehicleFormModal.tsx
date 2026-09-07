@@ -3035,7 +3035,7 @@ const VehicleFormModal = ({
                         </div>
                     )}
 
-                    {/* ★ 儲存與取消按鈕區塊修復 */}
+                    {/* ★ 儲存與取消按鈕區塊 */}
                     <div className="flex items-center gap-3 w-full md:w-auto justify-end mt-2 md:mt-0 flex-none relative z-[100]">
                         <button 
                             type="button" 
@@ -3053,7 +3053,7 @@ const VehicleFormModal = ({
                         </button>
                     </div>
                 </div>
-            </div> {/* ⬅️ ✅ 關閉「右側欄 (Tabs System)」的父容器 */}
+            </div> {/* ⬅️ ✅ 精確關閉「右側欄 (Tabs System)」的父容器 */}
 
             {/* ★ 編輯與匯出對數單 Modal (Reconciliation) */}
             {showReconModal && (
