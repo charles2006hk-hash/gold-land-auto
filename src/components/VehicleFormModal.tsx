@@ -1880,7 +1880,7 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
                         </div>
-
+                     </div>
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
 
