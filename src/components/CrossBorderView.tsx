@@ -962,8 +962,14 @@ export default function CrossBorderView({
                                             <React.Fragment key={task.id}>
                                                 <tr className={`hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''} ${isHistory ? 'opacity-80' : ''}`}>
                                                     <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td>
-                                                    <td className="p-2 font-bold text-slate-700">
-                                                        {task.item}
+                                                    <td className="p-2">
+                                                        <div className="font-bold text-slate-700">{task.item}</div>
+                                                        {/* ✅ 修復：將備註顯示在項目名稱下方 */}
+                                                        {(task.remark || task.note) && (
+                                                            <div className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[200px]" title={task.remark || task.note}>
+                                                                {task.remark || task.note}
+                                                            </div>
+                                                        )}
                                                         {/* 單項複製按鈕 */}
                                                         {isHistory && (
                                                             <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); duplicateTasks([task]); }} className="ml-2 text-[9px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors" title="複製此單一項目為未繳費">
@@ -1145,15 +1151,18 @@ export default function CrossBorderView({
                                         const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
                                         const combinedPlates = mainlandPlate ? `${activeCar.regMark} / ${mainlandPlate}` : activeCar.regMark || '';
                                         
-                                        // 🔍 只過濾出被勾選的項目送去發票
+                                        // 🔍 只過濾出被勾選的項目送去發票，並帶上備註
                                         const finalInvoiceItems = (activeCar.crossBorder?.tasks || [])
                                             .filter((t: any) => selectedTaskIds.includes(t.id))
-                                            .map((t: any) => ({
-                                                id: t.id,
-                                                desc: mainlandPlate ? `[中港代辦] ${t.item} (${mainlandPlate})` : `[中港代辦] ${t.item}`,
-                                                amount: t.fee, 
-                                                isSelected: true
-                                            }));
+                                            .map((t: any) => {
+                                                const remarkText = t.remark || t.note ? ` - ${t.remark || t.note}` : '';
+                                                return {
+                                                    id: t.id,
+                                                    desc: mainlandPlate ? `[中港代辦] ${t.item}${remarkText} (${mainlandPlate})` : `[中港代辦] ${t.item}${remarkText}`,
+                                                    amount: t.fee, 
+                                                    isSelected: true
+                                                };
+                                            });
 
                                         const invoiceData = {
                                             id: null,
