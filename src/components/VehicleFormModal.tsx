@@ -16,7 +16,7 @@ import { COMPANY_INFO, ALL_CB_PORTS, PORTS_HK_GD, PORTS_MO_GD } from '@/config/c
 import { Vehicle, CrossBorderData, Payment, Expense } from '@/types';
 import { compressImage } from '@/utils/imageHelpers';
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
-import { calculateAutoLoan } from '@/utils/LoanCalculator';
+import { calculateAutoLoan, calculateRuleOf78Settlement } from '@/utils/LoanCalculator';
 
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
