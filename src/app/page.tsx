@@ -2195,6 +2195,9 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             financeAdvanceMonths: getNum('financeAdvanceMonths', true, (editingVehicle as any)?.financeAdvanceMonths),
             financeCommOverride: (formData.get('financeCommOverride') as string) || (editingVehicle as any)?.financeCommOverride || '',
 
+            financeStatus: (formData.get('financeStatus') as string) || (editingVehicle as any)?.financeStatus || 'Pending',
+            financeStartDate: (formData.get('financeStartDate') as string) || (editingVehicle as any)?.financeStartDate || '',
+
             licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
             purchaseType: formData.get('purchaseType'),
             acquisition: acquisitionData,
