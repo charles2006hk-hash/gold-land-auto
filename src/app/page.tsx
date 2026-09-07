@@ -2377,7 +2377,16 @@ const deleteVehicle = async (id: string) => {
     const extraItems: any[] = [];
     if (v.crossBorder?.tasks) {
         v.crossBorder.tasks.forEach((t: any, i: number) => { 
-            if (t.fee > 0) extraItems.push({ id: `cb_${i}`, desc: `[中港] ${t.item}`, amount: t.fee, isSelected: true }); 
+            if (t.fee > 0) {
+                // ✅ 智能拼接備註
+                const remarkText = (t.remark || t.note) ? ` (${t.remark || t.note})` : '';
+                extraItems.push({ 
+                    id: `cb_${i}`, 
+                    desc: `[中港] ${t.item}${remarkText}`.trim(), 
+                    amount: t.fee, 
+                    isSelected: true 
+                }); 
+            }
         });
     }
     if ((v as any).salesAddons) {
