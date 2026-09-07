@@ -2779,25 +2779,45 @@ const VehicleFormModal = ({
                             </h3>
 
                             {(() => {
-                                // 自動抓取目前輸入的車價與已付訂金
                                 const currentPrice = Number(priceStr.replace(/,/g, '')) || 0;
                                 const currentPaid = (v.payments || []).reduce((acc:any, p:any) => acc + (p.amount || 0), 0);
                                 
-                                // ★ 智能判斷：如果狀態是二手或寄賣，就用二手車佣金表
+                                // ★ 智能狀態：如果 user 有手動覆寫，就用 user 的；否則預設抓訂單實際數字
+                                const displayFinPrice = financePriceInput !== '' ? Number(financePriceInput.replace(/,/g, '')) : currentPrice;
+                                const displayFinDep = financeDepositInput !== '' ? Number(financeDepositInput.replace(/,/g, '')) : currentPaid;
+
                                 const isUsedCar = v.purchaseType === 'Used' || v.purchaseType === 'Consignment';
-                                const calcResult = calculateAutoLoan(currentPrice, currentPaid, financeMonths, financeRate, true, isUsedCar, financeType);
+                                
+                                // ★ 將 settings.commissionTables 傳入引擎
+                                const calcResult = calculateAutoLoan(displayFinPrice, displayFinDep, financeMonths, financeRate, true, isUsedCar, financeType, settings.commissionTables);
 
                                 return (
                                     <div className="space-y-5 relative z-10">
-                                        {/* 輸入區塊 */}
+                                        {/* ★ 解鎖的輸入區塊 */}
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
                                                 <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">車價總額 (Price)</label>
-                                                <div className="text-xl font-mono font-bold text-slate-800">{formatCurrency(currentPrice)}</div>
+                                                <div className="relative">
+                                                    <span className="absolute left-2 top-1 text-slate-400 font-bold">$</span>
+                                                    <input 
+                                                        type="text" 
+                                                        value={financePriceInput !== '' ? financePriceInput : formatNumberInput(String(currentPrice))} 
+                                                        onChange={e => setFinancePriceInput(formatNumberInput(e.target.value))} 
+                                                        className="w-full bg-transparent pl-5 font-mono font-black text-xl text-slate-800 outline-none focus:border-b-2 focus:border-blue-400"
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                                                <label className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1 block">已付首期/訂金 (Paid Deposit)</label>
-                                                <div className="text-xl font-mono font-bold text-emerald-700">{formatCurrency(currentPaid)}</div>
+                                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 shadow-inner">
+                                                <label className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1 block">首期/訂金 (Deposit)</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-2 top-1 text-emerald-500 font-bold">$</span>
+                                                    <input 
+                                                        type="text" 
+                                                        value={financeDepositInput !== '' ? financeDepositInput : formatNumberInput(String(currentPaid))} 
+                                                        onChange={e => setFinanceDepositInput(formatNumberInput(e.target.value))} 
+                                                        className="w-full bg-transparent pl-5 font-mono font-black text-xl text-emerald-700 outline-none focus:border-b-2 focus:border-emerald-500"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
 
