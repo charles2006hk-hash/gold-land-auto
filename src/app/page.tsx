@@ -2984,6 +2984,7 @@ const DatabaseSelector = ({
                   systemUsers={systemUsers}
                   currentUser={currentUser}
                   updateSubItem={updateSubItem}
+                  inventory={visibleInventory}
               />
           )}
           
