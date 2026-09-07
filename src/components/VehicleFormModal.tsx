@@ -2731,39 +2731,56 @@ const VehicleFormModal = ({
                                             <label className="text-sm md:text-xs text-blue-900 font-black flex items-center bg-blue-100 w-fit px-3 py-1 rounded-full shadow-sm">
                                                 <DollarSign size={16} className="mr-1.5"/> 中港業務收費 (Cross-Border Fees)
                                             </label>
+                                            {/* ★ 升級：全能單據同步選單 (支援合約、銷售發票、服務發票、收據) */}
                                             {pendingCbTasks.length > 0 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        if (!onJumpToDoc) return alert("開單系統連動未就緒");
-                                                        const docItems = pendingCbTasks.map((t: any) => ({
-                                                            id: t.id,
-                                                            desc: `[中港代辦] ${t.item}`,
-                                                            amount: Number(t.fee) || 0,
-                                                            isSelected: true
-                                                        }));
-                                                        onJumpToDoc({
-                                                            id: null,
-                                                            type: 'service_invoice', // ★ 智能跳轉：強制使用「服務發票」
-                                                            vehicleId: v.id,
-                                                            formData: {
-                                                                companyNameEn: COMPANY_INFO?.name_en || '', companyNameCh: COMPANY_INFO?.name_ch || '',
-                                                                companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
-                                                                customerName: v.crossBorder?.hkCompany || v.customerName || '', // 優先使用香港公司名
-                                                                customerPhone: v.customerPhone || '',
-                                                                regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '',
-                                                                price: '0', // 隱藏車價
-                                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
-                                                            },
-                                                            docItems: docItems,
-                                                            depositItems: [], showTerms: false
-                                                        });
-                                                    }}
-                                                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm font-bold hover:bg-indigo-700 active:scale-95 transition-transform flex items-center"
-                                                >
-                                                    🧾 將未繳費合併為「服務發票」
-                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] text-indigo-800 font-bold hidden sm:inline">合併未繳費至：</span>
+                                                    <select
+                                                        onChange={(e) => {
+                                                            e.preventDefault();
+                                                            if (!e.target.value) return;
+                                                            if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                            
+                                                            const targetDocType = e.target.value;
+                                                            const docItems = pendingCbTasks.map((t: any) => ({
+                                                                id: t.id,
+                                                                desc: `[中港代辦] ${t.item}`,
+                                                                amount: Number(t.fee) || 0,
+                                                                isSelected: true
+                                                            }));
+                                                            
+                                                            // 智能判斷：如果是合約或銷售發票，自動帶入車輛本金；否則車價設為 0
+                                                            const includeCarPrice = targetDocType === 'sales_contract' || targetDocType === 'invoice';
+
+                                                            onJumpToDoc({
+                                                                id: null,
+                                                                type: targetDocType,
+                                                                vehicleId: v.id,
+                                                                formData: {
+                                                                    companyNameEn: COMPANY_INFO?.name_en || '', companyNameCh: COMPANY_INFO?.name_ch || '',
+                                                                    companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
+                                                                    customerName: v.crossBorder?.hkCompany || v.customerName || '',
+                                                                    customerPhone: v.customerPhone || '',
+                                                                    regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '',
+                                                                    price: includeCarPrice ? (v.price?.toString() || '0') : '0', 
+                                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
+                                                                },
+                                                                docItems: docItems,
+                                                                depositItems: [], 
+                                                                showTerms: targetDocType === 'sales_contract' // 合約預設展開條款
+                                                            });
+                                                            
+                                                            e.target.value = ''; // 執行後將選單重置
+                                                        }}
+                                                        className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm font-bold hover:bg-indigo-700 outline-none cursor-pointer transition-colors"
+                                                    >
+                                                        <option value="">🧾 選擇同步單據類型...</option>
+                                                        <option value="sales_contract">📝 買賣合約 (連車價)</option>
+                                                        <option value="invoice">📑 銷售發票 (連車價)</option>
+                                                        <option value="service_invoice">🛠️ 服務發票 (僅服務費)</option>
+                                                        <option value="receipt">💰 正式收據</option>
+                                                    </select>
+                                                </div>
                                             )}
                                         </div>
                                         
