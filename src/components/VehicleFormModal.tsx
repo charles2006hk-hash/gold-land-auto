@@ -2777,7 +2777,7 @@ const VehicleFormModal = ({
                             )}
                         </div>
                     </div>
-                </div>
+                
 
                 {/* ===== Tab 5: 上會計數機 (Finance & Insurance) ===== */}
                     <div className={`${rightTab === 'finance' ? 'block' : 'hidden'} animate-fade-in pb-28 w-full`}>
