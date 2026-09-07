@@ -2185,6 +2185,15 @@ const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
             // ★★★ 修正 2：確保正確存入行家歸屬與名稱 ★★★
             sourceType: (formData.get('sourceType') as string) || 'own',
             partnerName: (formData.get('sourceType') === 'partner') ? (formData.get('acq_vendor') as string || '') : '',
+    
+            // ★★★ 新增：接收來自 Modal 的上會計數機資料並存入 Firebase ★★★
+            financePrice: getNum('financePrice', true, (editingVehicle as any)?.financePrice),
+            financeDeposit: getNum('financeDeposit', true, (editingVehicle as any)?.financeDeposit),
+            financeMonths: getNum('financeMonths', true, (editingVehicle as any)?.financeMonths),
+            financeRate: parseFloat(formData.get('financeRate') as string) || (editingVehicle as any)?.financeRate || 0,
+            financeType: (formData.get('financeType') as string) || (editingVehicle as any)?.financeType || 'HP',
+            financeAdvanceMonths: getNum('financeAdvanceMonths', true, (editingVehicle as any)?.financeAdvanceMonths),
+            financeCommOverride: (formData.get('financeCommOverride') as string) || (editingVehicle as any)?.financeCommOverride || '',
 
             licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
             purchaseType: formData.get('purchaseType'),
