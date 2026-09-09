@@ -2996,7 +2996,7 @@ const DatabaseSelector = ({
             />
         )}
         
-        {/* ★ 手機版頂部 Header (完美適配動態島，擴大左右屏佔比) */}
+       {/* ★ 手機版頂部 Header (完美適配動態島，擴大左右屏佔比) */}
           <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
               <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
               <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
@@ -3006,7 +3006,7 @@ const DatabaseSelector = ({
                       settings={settings} 
                       triggerSmartPrint={triggerSmartPrint} 
                       currentUser={currentUser} 
-                      databaseReminders={databaseReminders} /* ★ 新增傳入資料庫提醒 */
+                      databaseReminders={databaseReminders} /* ★ 補上這行 */
                   />
               </div>
           </div>
