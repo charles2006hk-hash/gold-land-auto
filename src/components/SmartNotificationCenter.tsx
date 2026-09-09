@@ -8,8 +8,8 @@ interface SmartNotificationCenterProps {
     settings: SystemSettings;
     triggerSmartPrint: (htmlContent: string, title: string) => void;
     currentUser: { email: string, modules: string[] } | null; 
-    databaseReminders: { expired: any[], soon: any[] }; 
-    // ★ 加入可選的跳轉函數
+    databaseReminders?: { expired: any[], soon: any[] }; 
+    // ★ 接收跳轉所需的屬性
     dbEntries?: DatabaseEntry[];
     setActiveTab?: (tab: any) => void;
     setEditingVehicle?: (v: any) => void;
@@ -25,14 +25,14 @@ const SmartNotificationCenter = ({
     const [isOpen, setIsOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [showAIBubble, setShowAIBubble] = useState(false); 
-    const [searchTerm, setSearchTerm] = useState(''); // ★ 新增搜尋狀態
+    const [searchTerm, setSearchTerm] = useState(''); 
 
     useEffect(() => setMounted(true), []);
     
-    // --- 1. 全域掃描邏輯 ---
+    // --- 1. 車輛庫存全域掃描邏輯 ---
     const useScanReminders = () => {
         const today = new Date();
-        const alerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number, source: string, raw: any }[] = [];
+        const vehicleAlerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number, source: string, raw: any }[] = [];
         const daysThreshold = settings.reminders?.daysBefore || 30;
 
         const isAdmin = currentUser?.email?.toUpperCase() === 'BOSS' || currentUser?.modules?.includes('all');
@@ -42,11 +42,12 @@ const SmartNotificationCenter = ({
             : inventory.filter(car => 
                 (car as any).createdBy === currentUser?.email || 
                 (car as any).assignedTo === currentUser?.email ||
-                (car as any).sales === currentUser?.email
+                (car as any).sales === currentUser?.email ||
+                car.managedBy === currentUser?.email // 加入負責人判斷
               );
 
         visibleInventory.forEach(car => {
-            // A. 一般證件
+            // A. 一般車務證件
             const genDocs = [
                 { key: 'licenseExpiry', reminderKey: 'licenseReminderEnabled', label: '車輛牌費 (License)' }, 
                 { key: 'insuranceExpiry', reminderKey: 'insuranceReminderEnabled', label: '車輛保險 (Insurance)' }
@@ -58,7 +59,7 @@ const SmartNotificationCenter = ({
                 if (dateVal && isRemind) {
                     const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     if (diff <= daysThreshold) {
-                        alerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'General', item: d.label, date: dateVal, days: diff, source: 'vehicle', raw: car });
+                        vehicleAlerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || '未出牌', type: 'General', item: d.label, date: dateVal, days: diff, source: 'vehicle', raw: car });
                     }
                 }
             });
@@ -79,27 +80,53 @@ const SmartNotificationCenter = ({
                     if (dateVal && isRemind) {
                         const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                         if (diff <= daysThreshold) {
-                            alerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'CrossBorder', item: label, date: dateVal, days: diff, source: 'vehicle', raw: car });
+                            vehicleAlerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || '未出牌', type: 'CrossBorder', item: label, date: dateVal, days: diff, source: 'vehicle', raw: car });
                         }
                     }
                 });
             }
         });
         
-        return alerts; 
+        return vehicleAlerts; 
     };
 
-    // ★ 將車輛提醒與資料庫提醒合併
+    // ★ 2. 資料庫提醒格式化邏輯 (智能解析名稱與車牌)
+    const formatDbAlert = (i: any) => {
+        const raw = dbEntries?.find(e => e.id === i.vid) || {} as any;
+        const plate = raw.plateNoHK || raw.plateNoCN || '';
+        const name = raw.name || raw.hkCompany || raw.mainlandCompany || '未命名紀錄';
+        
+        // 處理原本傳進來的 item 字串 (例如 "陳大文 - 留牌紙" -> 提取出 "留牌紙")
+        const docType = i.item && i.item.includes('-') ? i.item.split('-').pop().trim() : (raw.docType || raw.category || '文件');
+        
+        // 智能顯示：有車牌就主標題顯示車牌，副標題顯示「名字 - 文件類別」
+        const regMark = plate ? plate : name;
+        const itemDesc = plate ? `${name} - ${docType}` : docType;
+
+        return { 
+            id: i.id, 
+            vid: i.vid, 
+            regMark, 
+            type: 'General' as 'General', 
+            item: itemDesc, 
+            date: i.date, 
+            days: i.days, 
+            source: 'database', 
+            raw 
+        };
+    };
+
+    // ★ 3. 將車輛提醒與資料庫提醒合併並排序
     const alerts = [
         ...useScanReminders(),
-        ...(databaseReminders?.expired || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days, source: 'database', raw: null })),
-        ...(databaseReminders?.soon || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days, source: 'database', raw: null }))
+        ...(databaseReminders?.expired || []).map(formatDbAlert),
+        ...(databaseReminders?.soon || []).map(formatDbAlert)
     ].sort((a, b) => a.days - b.days); 
 
     const expiredCount = alerts.filter(a => a.days < 0).length;
     const warningCount = alerts.length - expiredCount;
 
-    // ★ 新增：根據搜尋框過濾
+    // ★ 4. 根據搜尋框過濾
     const filteredAlerts = alerts.filter(item => {
         if (!searchTerm) return true;
         const searchLower = searchTerm.toLowerCase();
@@ -107,7 +134,7 @@ const SmartNotificationCenter = ({
                (item.item || '').toLowerCase().includes(searchLower);
     });
 
-    // --- 2. AI 氣泡彈窗定時器 ---
+    // --- AI 氣泡彈窗定時器 ---
     useEffect(() => {
         if (alerts.length > 0) {
             const showTimer = setTimeout(() => setShowAIBubble(true), 1500);
@@ -129,8 +156,8 @@ const SmartNotificationCenter = ({
                     <thead>
                         <tr>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 15%;">類別 (Type)</th>
-                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">車牌/名稱 (Ref)</th>
-                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 30%;">到期項目 (Item)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 25%;">車牌/名稱 (Ref)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 25%;">到期項目 (Item)</th>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">到期日 (Date)</th>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: right; background-color: #f8f9fa; font-weight: bold; color: #555; width: 15%;">狀態 (Status)</th>
                         </tr>
@@ -139,7 +166,7 @@ const SmartNotificationCenter = ({
                         ${alerts.map(it => `
                             <tr>
                                 <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left;">
-                                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; ${it.type === 'General' ? 'background: #e0f2fe; color: #0369a1;' : 'background: #f3e8ff; color: #7e22ce;'}">${it.type === 'General' ? '車輛/文件' : '中港業務'}</span>
+                                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; ${it.type === 'General' ? 'background: #e0f2fe; color: #0369a1;' : 'background: #f3e8ff; color: #7e22ce;'}">${it.source === 'database' ? '資料庫' : (it.type === 'General' ? '車輛車務' : '中港業務')}</span>
                                 </td>
                                 <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; font-family:monospace; font-weight:bold;">${it.regMark}</td>
                                 <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left;">${it.item}</td>
@@ -178,18 +205,12 @@ const SmartNotificationCenter = ({
                 )}
             </button>
 
-            {/* ★★★ 2. AI 智能對話氣泡 ★★★ */}
+            {/* 2. AI 智能對話氣泡 */}
             {showAIBubble && alerts.length > 0 && (
                 <div className="absolute top-full right-0 mt-3 w-64 md:w-72 animate-in fade-in slide-in-from-top-4 duration-500 origin-top-right z-50">
-                    
-                    {/* 氣泡尾巴 (小三角形：修正層級確保能正確露出) */}
                     <div className="absolute -top-1.5 right-4 w-4 h-4 bg-white border-t border-l border-blue-200 transform rotate-45 z-10 rounded-tl-sm"></div>
-                    
-                    {/* 氣泡主體 */}
                     <div className="relative z-20 bg-white rounded-2xl shadow-xl border border-blue-100 p-4">
-                        {/* 頂部裝飾光暈 */}
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-t-2xl"></div>
-                        
                         <div className="flex justify-between items-start mb-2">
                             <div className="flex items-center gap-1.5 text-blue-600 font-black text-xs">
                                 <Sparkles size={14} className="animate-pulse" />
@@ -199,7 +220,6 @@ const SmartNotificationCenter = ({
                                 <X size={14} />
                             </button>
                         </div>
-                        
                         <div className="text-sm text-slate-700 font-medium leading-relaxed">
                             您好！目前系統有 <span className="text-red-600 font-black text-base mx-1">{alerts.length}</span> 件待辦事項。
                             <br/>
@@ -235,12 +255,12 @@ const SmartNotificationCenter = ({
                                 <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"><X size={20}/></button>
                             </div>
                             
-                            {/* ★ 新增：小鈴鐺專用搜尋框 */}
+                            {/* ★ 小鈴鐺專用搜尋框 */}
                             <div className="relative mt-2">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                 <input 
                                     type="text" 
-                                    placeholder="🔍 搜尋車牌、項目關鍵字..." 
+                                    placeholder="🔍 搜尋車牌、對象、項目關鍵字..." 
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all bg-white shadow-sm"
@@ -267,7 +287,7 @@ const SmartNotificationCenter = ({
                                     {filteredAlerts.map((item, idx) => (
                                         <div 
                                             key={`${item.id}-${idx}`} 
-                                            /* ★ 加入跳轉邏輯 */
+                                            /* ★ 加入跳轉邏輯：依照資料來源路由至不同的分頁 */
                                             onClick={() => {
                                                 if (item.source === 'database' && setActiveTab && setEditingEntry && setIsDbEditing) {
                                                     const rawEntry = dbEntries?.find(e => e.id === item.vid);
@@ -291,13 +311,13 @@ const SmartNotificationCenter = ({
                                             className={`p-3 rounded-xl border flex justify-between items-center bg-white shadow-sm transition-all hover:scale-[1.01] hover:bg-slate-50 cursor-pointer ${item.days < 0 ? 'border-red-100 border-l-4 border-l-red-500' : 'border-amber-100 border-l-4 border-l-amber-500'}`}
                                         >
                                             <div className="flex items-center gap-4">
-                                                <div className={`p-2 rounded-lg ${item.type === 'General' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-                                                    {item.type === 'General' ? <FileText size={18}/> : <Globe size={18}/>}
+                                                <div className={`p-2 rounded-lg ${item.source === 'database' ? 'bg-indigo-50 text-indigo-600' : (item.type === 'General' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600')}`}>
+                                                    {item.source === 'database' ? <Database size={18}/> : (item.type === 'General' ? <FileText size={18}/> : <Globe size={18}/>)}
                                                 </div>
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-sm text-slate-800 font-mono">{item.regMark}</span>
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold">{item.type === 'General' ? '車務/文件' : '中港'}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold">{item.source === 'database' ? '資料庫' : (item.type === 'General' ? '車務/文件' : '中港')}</span>
                                                     </div>
                                                     <p className="text-xs text-slate-600 font-medium">{item.item}</p>
                                                 </div>
