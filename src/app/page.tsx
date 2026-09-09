@@ -3001,7 +3001,13 @@ const DatabaseSelector = ({
               <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
               <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
               <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
-                  <SmartNotificationCenter inventory={inventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} />
+                  <SmartNotificationCenter 
+                      inventory={inventory} 
+                      settings={settings} 
+                      triggerSmartPrint={triggerSmartPrint} 
+                      currentUser={currentUser} 
+                      databaseReminders={databaseReminders} /* ★ 新增傳入資料庫提醒 */
+                  />
               </div>
           </div>
 
@@ -3152,6 +3158,7 @@ const DatabaseSelector = ({
                 primaryImages={primaryImages}
                 unpaidCompanyExpenses={unpaidCompanyExpenses}
                 loopReminders={loopReminders}
+                databaseReminders={databaseReminders} /* ★ 新增傳入資料庫提醒 */
                 setActiveTab={setActiveTab}
                 setEditingVehicle={setEditingVehicle}
                 setActiveCbVehicleId={setActiveCbVehicleId}
