@@ -8,9 +8,10 @@ interface SmartNotificationCenterProps {
     settings: SystemSettings;
     triggerSmartPrint: (htmlContent: string, title: string) => void;
     currentUser: { email: string, modules: string[] } | null; 
+    databaseReminders: { expired: any[], soon: any[] }; // ★ 新增這行：接收資料庫提醒
 }
 
-const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, currentUser }: SmartNotificationCenterProps) => {
+const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, currentUser, databaseReminders }: SmartNotificationCenterProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [showAIBubble, setShowAIBubble] = useState(false); 
@@ -73,10 +74,17 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                 });
             }
         });
-        return alerts.sort((a, b) => a.days - b.days);
+        
+        return alerts; // ★ 移除原本的排序，稍後統一排序
     };
 
-    const alerts = useScanReminders();
+    // ★ 將車輛提醒與資料庫提醒合併
+    const alerts = [
+        ...useScanReminders(),
+        ...databaseReminders.expired.map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days })),
+        ...databaseReminders.soon.map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days }))
+    ].sort((a, b) => a.days - b.days); // ★ 統一在這裡進行排序，確保最緊急的排最上面
+
     const expiredCount = alerts.filter(a => a.days < 0).length;
     const warningCount = alerts.length - expiredCount;
 
@@ -104,7 +112,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                     <thead>
                         <tr>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 15%;">類別 (Type)</th>
-                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">車牌 (Plate)</th>
+                            <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">車牌/名稱 (Ref)</th>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 30%;">到期項目 (Item)</th>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; background-color: #f8f9fa; font-weight: bold; color: #555; width: 20%;">到期日 (Date)</th>
                             <th style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: right; background-color: #f8f9fa; font-weight: bold; color: #555; width: 15%;">狀態 (Status)</th>
@@ -114,7 +122,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                         ${alerts.map(it => `
                             <tr>
                                 <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left;">
-                                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; ${it.type === 'General' ? 'background: #e0f2fe; color: #0369a1;' : 'background: #f3e8ff; color: #7e22ce;'}">${it.type === 'General' ? '車輛文件' : '中港業務'}</span>
+                                    <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; ${it.type === 'General' ? 'background: #e0f2fe; color: #0369a1;' : 'background: #f3e8ff; color: #7e22ce;'}">${it.type === 'General' ? '車輛/文件' : '中港業務'}</span>
                                 </td>
                                 <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left; font-family:monospace; font-weight:bold;">${it.regMark}</td>
                                 <td style="border-bottom: 1px solid #ddd; padding: 10px 8px; text-align: left;">${it.item}</td>
@@ -179,7 +187,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                             您好！目前系統有 <span className="text-red-600 font-black text-base mx-1">{alerts.length}</span> 件待辦事項。
                             <br/>
                             <span className="text-xs text-slate-500 mt-2 block bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                最緊急：車牌 <span className="font-mono font-bold text-slate-800 bg-white px-1 border border-slate-200 rounded shadow-sm">{alerts[0]?.regMark}</span> 的 {alerts[0]?.item} 
+                                最緊急：車牌/對象 <span className="font-mono font-bold text-slate-800 bg-white px-1 border border-slate-200 rounded shadow-sm">{alerts[0]?.regMark}</span> 的 {alerts[0]?.item} 
                                 {alerts[0]?.days < 0 
                                     ? <span className="text-red-500 font-bold ml-1">(已過期 {Math.abs(alerts[0]?.days)} 天)</span> 
                                     : <span className="text-amber-500 font-bold ml-1">(剩 {alerts[0]?.days} 天)</span>
@@ -225,7 +233,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold text-sm text-slate-800 font-mono">{item.regMark}</span>
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold">{item.type === 'General' ? '車務' : '中港'}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold">{item.type === 'General' ? '車務/文件' : '中港'}</span>
                                                     </div>
                                                     <p className="text-xs text-slate-600 font-medium">{item.item}</p>
                                                 </div>
