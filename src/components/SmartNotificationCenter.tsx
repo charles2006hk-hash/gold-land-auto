@@ -78,12 +78,12 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
         return alerts; // ★ 移除原本的排序，稍後統一排序
     };
 
-    // ★ 將車輛提醒與資料庫提醒合併
+    // ★ 將車輛提醒與資料庫提醒合併 (加入 ? 防呆保護，防止 Props 未傳遞時崩潰)
     const alerts = [
         ...useScanReminders(),
-        ...databaseReminders.expired.map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days })),
-        ...databaseReminders.soon.map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days }))
-    ].sort((a, b) => a.days - b.days); // ★ 統一在這裡進行排序，確保最緊急的排最上面
+        ...(databaseReminders?.expired || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days })),
+        ...(databaseReminders?.soon || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days }))
+    ].sort((a, b) => a.days - b.days);
 
     const expiredCount = alerts.filter(a => a.days < 0).length;
     const warningCount = alerts.length - expiredCount;
