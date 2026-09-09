@@ -42,6 +42,7 @@ export interface DashboardModuleProps {
   primaryImages: Record<string, string>;
   unpaidCompanyExpenses: any[];
   loopReminders: any[];
+  databaseReminders: { expired: any[], soon: any[] }; // ★ 新增這行
   setActiveTab: (tab: any) => void;
   setEditingVehicle: (v: Vehicle | null) => void;
   setActiveCbVehicleId: (id: string | null) => void;
@@ -65,6 +66,7 @@ export default function DashboardModule({
   primaryImages,
   unpaidCompanyExpenses,
   loopReminders,
+  databaseReminders, // ★ 新增這行
   setActiveTab,
   setEditingVehicle,
   setActiveCbVehicleId,
@@ -172,8 +174,8 @@ export default function DashboardModule({
   const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
   const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
   const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
-  const totalUrgentAlerts = cbExpiredCount + docExpiredCount + loopReminders.length;
-  const totalSoonAlerts = cbSoonCount + docSoonCount;
+  const totalUrgentAlerts = cbExpiredCount + docExpiredCount + loopReminders.length + databaseReminders.expired.length; // ★ 加入資料庫過期數
+  const totalSoonAlerts = cbSoonCount + docSoonCount + databaseReminders.soon.length; // ★ 加入資料庫臨期數
 
   // ============================================================================
   // 2. 雙欄車輛列表篩選與過濾
@@ -551,7 +553,7 @@ export default function DashboardModule({
                   </div>
                 </div>
                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1">
-                  {docAlerts.map((item: any, idx: number) => (
+                  {[...docAlerts, ...databaseReminders.expired.map(i => ({...i, status: 'expired', source: 'database', raw: dbEntries.find(e => e.id === i.vid)})), ...databaseReminders.soon.map(i => ({...i, status: 'soon', source: 'database', raw: dbEntries.find(e => e.id === i.vid)}))].sort((a,b) => a.days - b.days).map((item: any, idx: number) => (
                     <div 
                       key={idx}
                       onClick={() => {
