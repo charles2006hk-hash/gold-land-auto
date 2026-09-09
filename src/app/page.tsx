@@ -2608,6 +2608,66 @@ const deleteVehicle = async (id: string) => {
   };
 
   // --- Dashboard Logic ---
+
+  // ★★★ 新增：計算資料庫中心的提醒 (文件/執照) ★★★
+  const databaseReminders = useMemo(() => {
+      const expired: any[] = [];
+      const soon: any[] = [];
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      dbEntries.forEach(entry => {
+          if (entry.reminderEnabled && entry.expiryDate) {
+              const target = new Date(entry.expiryDate);
+              const diffTime = target.getTime() - today.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              const alertItem = {
+                  id: entry.id,
+                  plate: entry.plateNoHK || entry.plateNoCN || '-',
+                  item: `${entry.name} - ${entry.docType || entry.category}`,
+                  date: entry.expiryDate,
+                  days: diffDays,
+                  category: 'document', // 標記為文件類別
+                  vid: entry.id // 點擊時可以用來跳轉
+              };
+
+              if (diffDays < 0) expired.push(alertItem);
+              else if (diffDays <= 30) soon.push(alertItem);
+          }
+          
+          // 檢查自訂提醒 (customReminders)
+          if (entry.customReminders && Array.isArray(entry.customReminders)) {
+              entry.customReminders.forEach((rem: any) => {
+                  if (rem.expiryDate) {
+                      const target = new Date(rem.expiryDate);
+                      const diffTime = target.getTime() - today.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      
+                      const alertItem = {
+                          id: `${entry.id}_${rem.id}`,
+                          plate: entry.plateNoHK || entry.plateNoCN || '-',
+                          item: `${entry.name} - ${rem.title}`,
+                          date: rem.expiryDate,
+                          days: diffDays,
+                          category: 'document',
+                          vid: entry.id
+                      };
+                      
+                      if (diffDays < 0) expired.push(alertItem);
+                      else if (diffDays <= 30) soon.push(alertItem);
+                  }
+              });
+          }
+      });
+
+      // 依照天數排序，最緊急的排前面
+      return { 
+          expired: expired.sort((a, b) => a.days - b.days), 
+          soon: soon.sort((a, b) => a.days - b.days) 
+      };
+  }, [dbEntries]);
+
   // ★★★ 升級 Dashboard 統計邏輯：加入「進貨車價」的未付尾數 ★★★
   const dashboardStats = () => {
     let totalStockValue = 0;
