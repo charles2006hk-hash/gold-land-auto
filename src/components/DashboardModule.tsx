@@ -90,25 +90,8 @@ export default function DashboardModule({
   // 1. 戰情警報數據過濾 (Alerts Filtering)
   // ============================================================================
   const docAlerts: any[] = [];
-  dbEntries.forEach(d => {
-    if (d.reminderEnabled && d.expiryDate) {
-      const days = getDaysRemaining(d.expiryDate);
-      if (days !== null && days <= 30) {
-        docAlerts.push({ id: d.id, title: d.name, desc: d.docType || '文件', date: d.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d, source: 'database' });
-      }
-    }
-    if (d.customReminders && d.customReminders.length > 0) {
-      d.customReminders.forEach((rem: any) => {
-        if (rem.expiryDate) {
-          const days = getDaysRemaining(rem.expiryDate);
-          if (days !== null && days <= 30) {
-            docAlerts.push({ id: `${d.id}_${rem.id}`, title: d.name, desc: rem.title || '附加文件', date: rem.expiryDate, days, status: days < 0 ? 'expired' : 'soon', raw: d, source: 'database' });
-          }
-        }
-      });
-    }
-  });
-
+  
+  // ★ 移除重複的 dbEntries 掃描，直接處理庫存車輛的牌費/保險/驗車
   inventory.forEach(v => {
     const anyV = v as any;
     if (anyV.licenseExpiry && anyV.licenseReminderEnabled !== false) {
@@ -144,7 +127,6 @@ export default function DashboardModule({
       }
     }
   });
-  docAlerts.sort((a, b) => a.days - b.days);
 
   const cbAlerts: any[] = [];
   const cbDateFields = { 
@@ -164,26 +146,48 @@ export default function DashboardModule({
       if (dateStr && isRemind) {
         const days = getDaysRemaining(dateStr);
         if (days !== null && days <= 30) {
-          cbAlerts.push({ id: v.id, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v });
+          cbAlerts.push({ id: v.id + field, title: v.regMark || '未出牌', desc: label, date: dateStr, days, status: days < 0 ? 'expired' : 'soon', raw: v });
         }
       }
     });
   });
   cbAlerts.sort((a, b) => a.days - b.days);
 
+  // ★ 智能解析資料庫項目的標題與描述，徹底解決 () 的問題
+  const formatDbAlert = (i: any, status: string) => {
+    const raw = dbEntries.find(e => e.id === i.vid) || {} as any;
+    const plate = raw.plateNoHK || raw.plateNoCN || '';
+    const name = raw.name || raw.hkCompany || raw.mainlandCompany || '未命名紀錄';
+    const docType = i.item.includes('-') ? i.item.split('-').pop().trim() : (raw.docType || '文件');
+    
+    // 如果有車牌就用車牌當大標題，否則用名字
+    const title = plate ? plate : name;
+    // 如果標題是車牌，副標題就顯示名字跟類型；如果標題是名字，副標題就顯示類型
+    const desc = plate ? `${name} (${docType})` : docType;
+
+    return { id: i.id, title, desc, date: i.date, days: i.days, status, source: 'database', raw };
+  };
+
+  const dbAlertsToMerge = [
+    ...(databaseReminders?.expired || []).map(i => formatDbAlert(i, 'expired')),
+    ...(databaseReminders?.soon || []).map(i => formatDbAlert(i, 'soon'))
+  ];
+
+  const combinedDocAlerts = [...docAlerts, ...dbAlertsToMerge].sort((a,b) => a.days - b.days);
+
   const cbExpiredCount = cbAlerts.filter(a => a.status === 'expired').length;
   const cbSoonCount = cbAlerts.filter(a => a.status === 'soon').length;
-  const docExpiredCount = docAlerts.filter(a => a.status === 'expired').length;
-  const docSoonCount = docAlerts.filter(a => a.status === 'soon').length;
-  const totalUrgentAlerts = cbExpiredCount + docExpiredCount + loopReminders.length + databaseReminders.expired.length;
-  const totalSoonAlerts = cbSoonCount + docSoonCount + databaseReminders.soon.length;
+  const docExpiredCount = combinedDocAlerts.filter(a => a.status === 'expired').length;
+  const docSoonCount = combinedDocAlerts.filter(a => a.status === 'soon').length;
+  const totalUrgentAlerts = cbExpiredCount + docExpiredCount + loopReminders.length;
+  const totalSoonAlerts = cbSoonCount + docSoonCount;
 
-  // ★ 加入警報區域搜尋過濾邏輯
+  // ★ 警報區域搜尋過濾邏輯
   const alertSearchLower = alertSearchTerm.toLowerCase();
   const filteredLoop = loopReminders.filter((car: any) => !alertSearchLower || (car.regMark || '').toLowerCase().includes(alertSearchLower));
   const filteredCb = cbAlerts.filter((item: any) => !alertSearchLower || (item.title || '').toLowerCase().includes(alertSearchLower) || (item.desc || '').toLowerCase().includes(alertSearchLower));
-  const combinedDocAlerts = [...docAlerts, ...databaseReminders.expired.map(i => ({...i, status: 'expired', source: 'database', raw: dbEntries.find(e => e.id === i.vid)})), ...databaseReminders.soon.map(i => ({...i, status: 'soon', source: 'database', raw: dbEntries.find(e => e.id === i.vid)}))].sort((a,b) => a.days - b.days);
   const filteredDoc = combinedDocAlerts.filter((item: any) => !alertSearchLower || (item.title || '').toLowerCase().includes(alertSearchLower) || (item.desc || '').toLowerCase().includes(alertSearchLower));
+
 
   // ============================================================================
   // 2. 雙欄車輛列表篩選與過濾
