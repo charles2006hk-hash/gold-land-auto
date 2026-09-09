@@ -1,27 +1,38 @@
 import React, { useState, useEffect } from 'react'; 
 import { createPortal } from 'react-dom'; 
-import { Bell, CheckCircle, X, FileText, Globe, Printer, Sparkles, AlertTriangle, Clock } from 'lucide-react';
-import { Vehicle, SystemSettings } from '@/types';
+import { Bell, CheckCircle, X, FileText, Globe, Printer, Sparkles, Search } from 'lucide-react';
+import { Vehicle, SystemSettings, DatabaseEntry } from '@/types';
 
 interface SmartNotificationCenterProps {
     inventory: Vehicle[];
     settings: SystemSettings;
     triggerSmartPrint: (htmlContent: string, title: string) => void;
     currentUser: { email: string, modules: string[] } | null; 
-    databaseReminders: { expired: any[], soon: any[] }; // ★ 新增這行：接收資料庫提醒
+    databaseReminders: { expired: any[], soon: any[] }; 
+    // ★ 加入可選的跳轉函數
+    dbEntries?: DatabaseEntry[];
+    setActiveTab?: (tab: any) => void;
+    setEditingVehicle?: (v: any) => void;
+    setEditingEntry?: (e: any) => void;
+    setIsDbEditing?: (edit: boolean) => void;
+    setActiveCbVehicleId?: (id: string | null) => void;
 }
 
-const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, currentUser, databaseReminders }: SmartNotificationCenterProps) => {
+const SmartNotificationCenter = ({ 
+    inventory, settings, triggerSmartPrint, currentUser, databaseReminders,
+    dbEntries, setActiveTab, setEditingVehicle, setEditingEntry, setIsDbEditing, setActiveCbVehicleId
+}: SmartNotificationCenterProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
     const [showAIBubble, setShowAIBubble] = useState(false); 
+    const [searchTerm, setSearchTerm] = useState(''); // ★ 新增搜尋狀態
 
     useEffect(() => setMounted(true), []);
     
     // --- 1. 全域掃描邏輯 ---
     const useScanReminders = () => {
         const today = new Date();
-        const alerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number }[] = [];
+        const alerts: { id: string, vid: string, regMark: string, type: 'General' | 'CrossBorder', item: string, date: string, days: number, source: string, raw: any }[] = [];
         const daysThreshold = settings.reminders?.daysBefore || 30;
 
         const isAdmin = currentUser?.email?.toUpperCase() === 'BOSS' || currentUser?.modules?.includes('all');
@@ -47,7 +58,7 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                 if (dateVal && isRemind) {
                     const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     if (diff <= daysThreshold) {
-                        alerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'General', item: d.label, date: dateVal, days: diff });
+                        alerts.push({ id: `${car.id}-${d.key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'General', item: d.label, date: dateVal, days: diff, source: 'vehicle', raw: car });
                     }
                 }
             });
@@ -68,32 +79,38 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                     if (dateVal && isRemind) {
                         const diff = Math.ceil((new Date(dateVal).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                         if (diff <= daysThreshold) {
-                            alerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'CrossBorder', item: label, date: dateVal, days: diff });
+                            alerts.push({ id: `${car.id}-${key}`, vid: car.id!, regMark: car.regMark || 'No Plate', type: 'CrossBorder', item: label, date: dateVal, days: diff, source: 'vehicle', raw: car });
                         }
                     }
                 });
             }
         });
         
-        return alerts; // ★ 移除原本的排序，稍後統一排序
+        return alerts; 
     };
 
-    // ★ 將車輛提醒與資料庫提醒合併 (加入 ? 防呆保護，防止 Props 未傳遞時崩潰)
+    // ★ 將車輛提醒與資料庫提醒合併
     const alerts = [
         ...useScanReminders(),
-        ...(databaseReminders?.expired || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days })),
-        ...(databaseReminders?.soon || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days }))
-    ].sort((a, b) => a.days - b.days);
+        ...(databaseReminders?.expired || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days, source: 'database', raw: null })),
+        ...(databaseReminders?.soon || []).map(i => ({ id: i.id, vid: i.vid, regMark: i.plate, type: 'General' as 'General', item: i.item, date: i.date, days: i.days, source: 'database', raw: null }))
+    ].sort((a, b) => a.days - b.days); 
 
     const expiredCount = alerts.filter(a => a.days < 0).length;
     const warningCount = alerts.length - expiredCount;
 
+    // ★ 新增：根據搜尋框過濾
+    const filteredAlerts = alerts.filter(item => {
+        if (!searchTerm) return true;
+        const searchLower = searchTerm.toLowerCase();
+        return (item.regMark || '').toLowerCase().includes(searchLower) || 
+               (item.item || '').toLowerCase().includes(searchLower);
+    });
+
     // --- 2. AI 氣泡彈窗定時器 ---
     useEffect(() => {
         if (alerts.length > 0) {
-            // 載入後 1.5 秒彈出
             const showTimer = setTimeout(() => setShowAIBubble(true), 1500);
-            // 10 秒後自動隱藏
             const hideTimer = setTimeout(() => setShowAIBubble(false), 11500);
             return () => { clearTimeout(showTimer); clearTimeout(hideTimer); };
         }
@@ -203,17 +220,35 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsOpen(false)}>
                     <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
                         
-                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div>
-                                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                    <Bell size={20} className={expiredCount > 0 ? "text-red-500" : "text-amber-500"} />
-                                    提醒中心 (Notification Center)
-                                </h3>
-                                <p className="text-xs text-slate-500 mt-1">
-                                    共發現 <span className="font-bold text-red-500">{expiredCount}</span> 個過期項目，<span className="font-bold text-amber-500">{warningCount}</span> 個即將到期。
-                                </p>
+                        {/* ★ 包含搜尋框的頭部 */}
+                        <div className="p-5 border-b border-slate-100 flex flex-col gap-3 bg-slate-50">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                        <Bell size={20} className={expiredCount > 0 ? "text-red-500" : "text-amber-500"} />
+                                        提醒中心 (Notification Center)
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        共發現 <span className="font-bold text-red-500">{expiredCount}</span> 個過期項目，<span className="font-bold text-amber-500">{warningCount}</span> 個即將到期。
+                                    </p>
+                                </div>
+                                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"><X size={20}/></button>
                             </div>
-                            <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white rounded-full transition-colors text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                            
+                            {/* ★ 新增：小鈴鐺專用搜尋框 */}
+                            <div className="relative mt-2">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder="🔍 搜尋車牌、項目關鍵字..." 
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition-all bg-white shadow-sm"
+                                />
+                                {searchTerm && (
+                                    <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14}/></button>
+                                )}
+                            </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-2 bg-slate-100/50">
@@ -222,10 +257,39 @@ const SmartNotificationCenter = ({ inventory, settings, triggerSmartPrint, curre
                                     <CheckCircle size={48} className="mb-4 text-green-500/50"/>
                                     <p>目前沒有任何急需處理的項目</p>
                                 </div>
+                            ) : filteredAlerts.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                                    <Search size={36} className="mb-4 text-slate-300"/>
+                                    <p>找不到符合的提醒事項</p>
+                                </div>
                             ) : (
                                 <div className="space-y-2">
-                                    {alerts.map((item, idx) => (
-                                        <div key={`${item.id}-${idx}`} className={`p-3 rounded-xl border flex justify-between items-center bg-white shadow-sm transition-transform hover:scale-[1.01] ${item.days < 0 ? 'border-red-100 border-l-4 border-l-red-500' : 'border-amber-100 border-l-4 border-l-amber-500'}`}>
+                                    {filteredAlerts.map((item, idx) => (
+                                        <div 
+                                            key={`${item.id}-${idx}`} 
+                                            /* ★ 加入跳轉邏輯 */
+                                            onClick={() => {
+                                                if (item.source === 'database' && setActiveTab && setEditingEntry && setIsDbEditing) {
+                                                    const rawEntry = dbEntries?.find(e => e.id === item.vid);
+                                                    if (rawEntry) {
+                                                        setActiveTab('database');
+                                                        setEditingEntry(rawEntry);
+                                                        setIsDbEditing(true);
+                                                        setIsOpen(false);
+                                                    }
+                                                } else if (item.source === 'vehicle' && setActiveTab && setEditingVehicle) {
+                                                    if (item.type === 'CrossBorder' && setActiveCbVehicleId) {
+                                                        setActiveTab('cross_border');
+                                                        setActiveCbVehicleId(item.vid);
+                                                    } else {
+                                                        setActiveTab('inventory');
+                                                        setEditingVehicle(item.raw);
+                                                    }
+                                                    setIsOpen(false);
+                                                }
+                                            }}
+                                            className={`p-3 rounded-xl border flex justify-between items-center bg-white shadow-sm transition-all hover:scale-[1.01] hover:bg-slate-50 cursor-pointer ${item.days < 0 ? 'border-red-100 border-l-4 border-l-red-500' : 'border-amber-100 border-l-4 border-l-amber-500'}`}
+                                        >
                                             <div className="flex items-center gap-4">
                                                 <div className={`p-2 rounded-lg ${item.type === 'General' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
                                                     {item.type === 'General' ? <FileText size={18}/> : <Globe size={18}/>}
