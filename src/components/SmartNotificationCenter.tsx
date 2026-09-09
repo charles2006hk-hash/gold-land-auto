@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'; 
 import { createPortal } from 'react-dom'; 
-import { Bell, CheckCircle, X, FileText, Globe, Printer, Sparkles, Search } from 'lucide-react';
+import { Bell, CheckCircle, X, FileText, Globe, Printer, Sparkles, Search, Database } from 'lucide-react';
 import { Vehicle, SystemSettings, DatabaseEntry } from '@/types';
 
 interface SmartNotificationCenterProps {
