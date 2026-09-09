@@ -431,7 +431,13 @@ export default function DashboardModule({
           <SmartNewsTicker dbEntries={dbEntries} inventory={inventory} staffId={staffId} currentUser={currentUser} />
         </div>
         <div className="hidden md:block">
-          <SmartNotificationCenter inventory={inventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} />
+          <SmartNotificationCenter 
+              inventory={inventory} 
+              settings={settings} 
+              triggerSmartPrint={triggerSmartPrint} 
+              currentUser={currentUser} 
+              databaseReminders={databaseReminders} 
+          />
         </div>
       </div>
 
