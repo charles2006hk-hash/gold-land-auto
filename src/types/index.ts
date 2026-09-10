@@ -213,8 +213,8 @@ export type Vehicle = {
   licenseFee?: number; 
   price: number; 
   costPrice?: number; 
-  status: 'In Stock' | 'Sold' | 'Reserved' | 'Withdrawn';
-  stockInDate?: string; 
+  status: 'Pending' | 'In Stock' | 'Sold' | 'Reserved' | 'Withdrawn';
+  stockInDate?: string;
   stockOutDate?: string; 
   expenses: Expense[]; 
   customerName?: string;
