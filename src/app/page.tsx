@@ -3205,9 +3205,9 @@ const DatabaseSelector = ({
                   
                   {/* 原有的狀態過濾器 */}
                   <div className="flex gap-2 shrink-0">
-                      {['All', 'In Stock', 'Sold', 'Reserved', 'Withdrawn'].map(s => (
+                      {['All', 'Pending', 'In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(s => (
                           <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>
-                              {s === 'All' ? '全部狀態' : (s === 'Withdrawn' ? '撤回' : s)}
+                              {s === 'All' ? '全部狀態' : (s === 'Pending' ? '待收/報價' : (s === 'In Stock' ? '在庫' : (s === 'Reserved' ? '已訂' : (s === 'Sold' ? '已售' : '撤回'))))}
                           </button>
                       ))}
                   </div>
@@ -3291,7 +3291,8 @@ const DatabaseSelector = ({
 
                         let statusText = '在庫';
                         let statusClass = "bg-green-500 text-white";
-                        if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
+                        if (car.status === 'Pending') { statusText = '待收'; statusClass = "bg-purple-100 text-purple-700 border border-purple-300"; }
+                        else if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
                         else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
                         else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-500 text-white"; }
 
