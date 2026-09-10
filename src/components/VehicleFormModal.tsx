@@ -79,7 +79,7 @@ const VehicleFormModal = ({
     const isNew = !v.id; 
     
     const [selectedMake, setSelectedMake] = useState(v.make || '');
-    const [currentStatus, setCurrentStatus] = useState<'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
+    const [currentStatus, setCurrentStatus] = useState<'Pending' | 'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
 
     // ★ 中港指標轉移 (套牌) 專用狀態
@@ -229,7 +229,8 @@ const VehicleFormModal = ({
  
     // ★★★ 升級：智能狀態日期追蹤 ★★★
     const [statusDates, setStatusDates] = useState({
-        'In Stock': v.stockInDate || new Date().toISOString().split('T')[0],
+        'Pending': (v as any).pendingDate || new Date().toISOString().split('T')[0], // ★ 新增：報價錄入日
+        'In Stock': v.stockInDate || '',
         'Reserved': (v as any).reservedDate || '',
         'Sold': v.stockOutDate || '',
         'Withdrawn': (v as any).withdrawnDate || ''
@@ -1529,54 +1530,47 @@ const VehicleFormModal = ({
                     {/* ★★★ 升級版：動態變形狀態按鈕 (整合專屬日期) ★★★ */}
                     <div className="flex flex-wrap bg-slate-100 rounded-lg p-1 border border-slate-200 shadow-inner w-full md:w-auto min-h-[44px]">
                         <input type="hidden" name="status" value={currentStatus} />
+                        <input type="hidden" name="pendingDate" value={statusDates['Pending'] || ''} />
                         <input type="hidden" name="stockInDate" value={statusDates['In Stock'] || ''} />
                         <input type="hidden" name="reservedDate" value={statusDates['Reserved'] || ''} />
                         <input type="hidden" name="stockOutDate" value={statusDates['Sold'] || ''} />
                         <input type="hidden" name="withdrawnDate" value={statusDates['Withdrawn'] || ''} />
                         
-                        {(['In Stock', 'Reserved', 'Sold', 'Withdrawn'] as const).map(status => (
+                        {(['Pending', 'In Stock', 'Reserved', 'Sold', 'Withdrawn'] as const).map(status => (
                             <button 
                                 key={status} 
                                 type="button" 
                                 onClick={() => {
                                     setCurrentStatus(status as any);
                                     
-                                    // ★★★ 終極智能日期推算 ★★★
                                     if (!statusDates[status]) {
-                                        let autoDate = new Date().toISOString().split('T')[0]; // 預設今日
-                                        
-                                        if (status === 'In Stock' && v.stockInDate) {
-                                            // 在庫：永遠以最原始入庫日為準
-                                            autoDate = v.stockInDate; 
-                                        } 
+                                        let autoDate = new Date().toISOString().split('T')[0];
+                                        if (status === 'Pending' && (v as any).pendingDate) autoDate = (v as any).pendingDate;
+                                        else if (status === 'In Stock' && v.stockInDate) autoDate = v.stockInDate; 
                                         else if (status === 'Reserved' && v.payments && v.payments.length > 0) {
-                                            // 已訂：找第一筆收款的日期 (落訂日)
                                             const sorted = [...v.payments].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                             autoDate = sorted[0].date;
                                         } 
                                         else if (status === 'Sold' && v.payments && v.payments.length > 0) {
-                                            // 已售：找最後一筆收款的日期 (結清日)
                                             const sorted = [...v.payments].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                                             autoDate = sorted[sorted.length - 1].date;
                                         }
-                                        
                                         setStatusDates(prev => ({...prev, [status]: autoDate}));
                                     }
                                 }} 
-                                className={`flex-1 md:flex-none px-3 py-1.5 rounded-md transition-all flex flex-col items-center justify-center gap-1 ${currentStatus === status ? 'bg-white text-blue-700 shadow border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+                                className={`flex-1 md:flex-none px-2 md:px-2.5 py-1.5 rounded-md transition-all flex flex-col items-center justify-center gap-1 ${currentStatus === status ? 'bg-white text-blue-700 shadow border border-slate-200' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
                             >
-                                <span className="font-bold text-sm md:text-xs">
-                                    {status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回'))}
+                                <span className="font-bold text-[11px]">
+                                    {status === 'Pending' ? '待收' : (status === 'In Stock' ? '在庫' : (status === 'Reserved' ? '已訂' : (status === 'Sold' ? '已售' : '撤回')))}
                                 </span>
-                                {/* 被選中時，底部展開專屬日期框 */}
                                 {currentStatus === status && (
                                     <input 
                                         type="date"
                                         value={statusDates[status] || ''}
                                         onChange={(e) => setStatusDates({...statusDates, [status]: e.target.value})}
-                                        onClick={(e) => e.stopPropagation()} // 防止點擊輸入框時觸發按鈕
-                                        className="text-[10px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded outline-none font-mono font-bold cursor-pointer border border-blue-200 shadow-inner w-full md:w-[95px] text-center"
-                                        title={`${status === 'In Stock' ? '入庫' : (status === 'Reserved' ? '落訂' : (status === 'Sold' ? '售出' : '撤回'))}日期`}
+                                        onClick={(e) => e.stopPropagation()} 
+                                        className="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded outline-none font-mono font-bold cursor-pointer border border-blue-200 shadow-inner w-full text-center"
+                                        title={`${status === 'Pending' ? '報價' : (status === 'In Stock' ? '入庫' : (status === 'Reserved' ? '落訂' : (status === 'Sold' ? '售出' : '撤回')))}日期`}
                                     />
                                 )}
                             </button>
