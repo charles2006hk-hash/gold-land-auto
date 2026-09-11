@@ -2,18 +2,31 @@ import { NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
 
 // ============================================================================
-// 1. 初始化 Firebase Admin (Singleton 模式，防止 Vercel Serverless 重複連線)
+// 1. 初始化 Firebase Admin (Singleton 模式 + 防呆檢測)
 // ============================================================================
 if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            // 處理環境變數中換行符號被轉義的問題
-            privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-        }),
-        storageBucket: 'gold-land-auto.firebasestorage.app'
-    });
+    // 防呆：檢查環境變數是否確實載入
+    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+        console.error('❌ 缺少 Firebase Admin 環境變數！');
+        console.error('PROJECT_ID:', !!process.env.FIREBASE_PROJECT_ID);
+        console.error('CLIENT_EMAIL:', !!process.env.FIREBASE_CLIENT_EMAIL);
+        console.error('PRIVATE_KEY:', !!process.env.FIREBASE_PRIVATE_KEY);
+    } else {
+        try {
+            admin.initializeApp({
+                credential: admin.credential.cert({
+                    projectId: process.env.FIREBASE_PROJECT_ID,
+                    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                    // 處理 Vercel 環境變數中換行符號被轉義的問題
+                    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+                }),
+                storageBucket: 'gold-land-auto.firebasestorage.app'
+            });
+            console.log('✅ Firebase Admin 初始化成功');
+        } catch (error) {
+            console.error('❌ Firebase Admin 初始化失敗:', error);
+        }
+    }
 }
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
