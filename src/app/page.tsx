@@ -321,24 +321,45 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
     setIsLoading(true);
 
     const inputId = userId.trim();
-    // 自動補全內部網域憑證
-    const authEmail = inputId.includes('@') ? inputId : `${inputId}@gla.local`;
-
-    // 1. 超級管理員通道 (BOSS)
-    if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
-        const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all', defaultTab: 'dashboard' };
-        handleSuccess(adminUser);
-        setIsLoading(false);
-        return;
-    }
+    // 自動補全內部網域 Email 格式
+    const authEmail = inputId.includes('@') ? inputId : `${inputId.toLowerCase()}@gla.local`;
 
     try {
         if (!auth) throw new Error("系統連線尚未準備好");
 
-        // 2. 標準 Firebase Email/Password 登入 (絕不觸發匿名驗證)
-        const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
+        let userCredential;
 
-        // 3. 登入成功後，直接讀取個人權限表
+        // ====================================================
+        // 1. BOSS 超級管理員通道 (自動同步 Firebase Auth 憑證)
+        // ====================================================
+        if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
+            const bossEmail = 'boss@gla.local';
+            const bossAuthPassword = 'boss888888'; // Firebase Auth 密碼最少需 6 碼
+
+            try {
+                // 嘗試以 BOSS 的 Firebase 憑證簽核登入
+                userCredential = await signInWithEmailAndPassword(auth, bossEmail, bossAuthPassword);
+            } catch (bossAuthErr: any) {
+                // 若 Firebase Auth 尚未存在 boss 帳號，則自動註冊創建
+                if (bossAuthErr.code === 'auth/user-not-found' || bossAuthErr.code === 'auth/invalid-credential') {
+                    userCredential = await createUserWithEmailAndPassword(auth, bossEmail, bossAuthPassword);
+                } else {
+                    console.warn("BOSS Firebase Auth 同步警告:", bossAuthErr);
+                }
+            }
+
+            const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all', defaultTab: 'dashboard' };
+            handleSuccess(adminUser);
+            setIsLoading(false);
+            return;
+        }
+
+        // ====================================================
+        // 2. 普通員工 Email/Password 標準簽核登入
+        // ====================================================
+        userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
+
+        // 登入成功後讀取個人權限表
         let finalUser = { email: inputId, modules: [], dataAccess: 'all', defaultTab: 'dashboard' };
         try {
             const currentDb = getFirestore();
@@ -356,13 +377,13 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
                 }
             }
         } catch (dbErr) {
-            console.warn("讀取權限配置失敗 (將採用預設權限):", dbErr);
+            console.warn("讀取權限配置失敗:", dbErr);
         }
 
         handleSuccess(finalUser);
 
     } catch (err: any) {
-        console.error("Login failed:", err);
+        console.error("Login Error:", err);
         setError('帳號或密碼錯誤 (Invalid Credentials)');
     } finally {
         setIsLoading(false);
