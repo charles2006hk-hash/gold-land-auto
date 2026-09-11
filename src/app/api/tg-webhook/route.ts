@@ -34,7 +34,7 @@ function initFirebaseAdmin() {
 }
 
 // ============================================================================
-// 2. 處理 Telegram Webhook POST 請求 (高穩定原生直傳版)
+// 2. 處理 Telegram Webhook POST 請求
 // ============================================================================
 export async function POST(req: Request) {
     try {
@@ -52,52 +52,25 @@ export async function POST(req: Request) {
         const caption = message.caption || ''; 
 
         // ====================================================
-        // 1. Telegram ID 對應內部系統帳號 (Staff ID)
+        // A. Telegram ID 對應內部系統帳號 (Staff ID)
         // ====================================================
         const STAFF_MAPPING: Record<string, string> = {
-            // 請將左側的數字替換為你們真實的 Telegram ID
             '808508159': 'BOSS',    
             '987654321': 'CHARLES', 
             '112233445': 'EDWIN',
             '556677889': 'TOLLOY'
         };
 
-        // 根據對應表找出上傳者，找不到則標記為 UNKNOWN 以防錯誤覆蓋
         const uploaderId = STAFF_MAPPING[chatId.toString()] || 'UNKNOWN';
 
-        // ... (中間下載、轉 Buffer、上傳 Storage 與產生 Token 的代碼保持不變) ...
-
-        // ====================================================
-        // 2. 寫入共用圖庫 (CHARLES_data)
-        // ====================================================
-        const db = firebaseAdmin.firestore();
-        // 保持全公司寫入同一個中央圖庫節點
-        const docRef = db.collection('artifacts').doc('gold-land-auto').collection('staff').doc('CHARLES_data').collection('media_library').doc();
-
-        const tags = ['TG極速傳圖'];
-        if (caption) tags.push(caption);
-
-        await docRef.set({
-            id: docRef.id,
-            url: publicUrl,
-            path: fileName,
-            fileName: `tg_upload_${Date.now()}.${fileExt}`,
-            tags: tags,
-            status: 'unassigned',
-            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-            // ★ 動態寫入真正的上傳者 ID
-            uploadedBy: uploaderId, 
-            mediaType: mediaType 
-        });
-        
         let fileId = null;
         let fileExt = '';
         let contentType = '';
         let mediaType = 'vehicle'; 
 
-        // ----------------------------------------------------
-        // A. 判斷傳入的是「圖片」還是「PDF檔案」
-        // ----------------------------------------------------
+        // ====================================================
+        // B. 判斷傳入的是「圖片」還是「PDF檔案」
+        // ====================================================
         if (message.photo) {
             const photoArray = message.photo;
             fileId = photoArray[photoArray.length - 1].file_id;
@@ -124,10 +97,11 @@ export async function POST(req: Request) {
             }
         }
 
-        // ----------------------------------------------------
-        // B. 執行下載與穩定上傳邏輯 (拔除 sharp，防止 Buffer 損壞)
-        // ----------------------------------------------------
+        // ====================================================
+        // C. 執行下載、上傳與資料庫寫入邏輯
+        // ====================================================
         if (fileId) {
+            // ★ 修正重點：在這裡才初始化 Firebase Admin，取得 firebaseAdmin 物件
             const firebaseAdmin = initFirebaseAdmin();
 
             // 1. 取得檔案真實路徑
@@ -149,7 +123,6 @@ export async function POST(req: Request) {
 
             // 4. 上傳至 Firebase Storage
             const bucket = firebaseAdmin.storage().bucket();
-            // ★ 修正為系統正確的 Storage 路徑
             const fileName = `media/gold-land-auto/tg_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
             const file = bucket.file(fileName);
 
@@ -166,7 +139,7 @@ export async function POST(req: Request) {
             const bucketName = bucket.name;
             const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(fileName)}?alt=media&token=${downloadToken}`;
 
-            // 6. 寫入 Firestore 智能圖庫
+            // 6. 寫入 Firestore 智能圖庫 (使用共用 CHARLES_data 節點)
             const db = firebaseAdmin.firestore();
             const docRef = db.collection('artifacts').doc('gold-land-auto').collection('staff').doc('CHARLES_data').collection('media_library').doc();
 
@@ -181,7 +154,8 @@ export async function POST(req: Request) {
                 tags: tags,
                 status: 'unassigned',
                 createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-                uploadedBy: 'TelegramBot',
+                // ★ 將上傳者精準設定為動態抓取到的員工 ID
+                uploadedBy: uploaderId, 
                 mediaType: mediaType 
             });
 
@@ -199,9 +173,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true });
         }
 
-        // ----------------------------------------------------
-        // C. 處理純文字對話
-        // ----------------------------------------------------
+        // ====================================================
+        // D. 處理純文字對話
+        // ====================================================
         if (message.text) {
             await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
