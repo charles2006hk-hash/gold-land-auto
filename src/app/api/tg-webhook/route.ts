@@ -19,8 +19,8 @@ function initFirebaseAdmin() {
                     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
                     privateKey: privateKey,
                 }),
-                // ✅ 直接替換成你專案預設的 Bucket 名稱
-                storageBucket: 'gold-land-auto.appspot.com' 
+                // ✅ 填入精確的 Bucket 名稱 (務必去除 gs:// 前綴)
+                storageBucket: 'gold-land-auto.firebasestorage.app' 
             });
             console.log('✅ Firebase Admin 初始化成功');
         } catch (error) {
