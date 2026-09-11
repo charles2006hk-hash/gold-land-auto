@@ -51,6 +51,45 @@ export async function POST(req: Request) {
         const chatId = message.chat.id;
         const caption = message.caption || ''; 
 
+        // ====================================================
+        // 1. Telegram ID 對應內部系統帳號 (Staff ID)
+        // ====================================================
+        const STAFF_MAPPING: Record<string, string> = {
+            // 請將左側的數字替換為你們真實的 Telegram ID
+            '808508159': 'BOSS',    
+            '987654321': 'CHARLES', 
+            '112233445': 'EDWIN',
+            '556677889': 'TOLLOY'
+        };
+
+        // 根據對應表找出上傳者，找不到則標記為 UNKNOWN 以防錯誤覆蓋
+        const uploaderId = STAFF_MAPPING[chatId.toString()] || 'UNKNOWN';
+
+        // ... (中間下載、轉 Buffer、上傳 Storage 與產生 Token 的代碼保持不變) ...
+
+        // ====================================================
+        // 2. 寫入共用圖庫 (CHARLES_data)
+        // ====================================================
+        const db = firebaseAdmin.firestore();
+        // 保持全公司寫入同一個中央圖庫節點
+        const docRef = db.collection('artifacts').doc('gold-land-auto').collection('staff').doc('CHARLES_data').collection('media_library').doc();
+
+        const tags = ['TG極速傳圖'];
+        if (caption) tags.push(caption);
+
+        await docRef.set({
+            id: docRef.id,
+            url: publicUrl,
+            path: fileName,
+            fileName: `tg_upload_${Date.now()}.${fileExt}`,
+            tags: tags,
+            status: 'unassigned',
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            // ★ 動態寫入真正的上傳者 ID
+            uploadedBy: uploaderId, 
+            mediaType: mediaType 
+        });
+        
         let fileId = null;
         let fileExt = '';
         let contentType = '';
