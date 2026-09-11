@@ -1567,10 +1567,9 @@ useEffect(() => {
   }, [db, appId, user]); // ★ 必須包含 user 依賴，登入完成後才會自動觸發資料同步
 
   // ★★★ 終極智能背景自動備份 (Lazy Cron) ★★★
-  // 邏輯：每次開機/重整頁面，延遲 15 秒後偷偷檢查，如果到期就自動在背景備份！
   useEffect(() => {
-      // 如果未開自動雲端備份，或者資料庫未準備好，就中止
-      if (!db || !storage || !appId || !settings.backup?.autoCloud || inventory.length === 0) return;
+      // ★ 加入 !user 防護，避免無權限時觸發備份被 Firebase Storage 阻擋
+      if (!db || !storage || !appId || !user || !settings.backup?.autoCloud || inventory.length === 0) return;
 
       const checkAndRunBackup = async () => {
           const freq = settings.backup?.frequency || 'manual';
@@ -1580,13 +1579,11 @@ useEffect(() => {
           const now = new Date();
           let shouldBackup = false;
 
-          // 判斷是否到期需要備份
           if (!lastBackup) {
               shouldBackup = true;
           } else {
               const lastD = new Date(lastBackup);
-              const diffTime = Math.abs(now.getTime() - lastD.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              const diffDays = Math.ceil(Math.abs(now.getTime() - lastD.getTime()) / (1000 * 60 * 60 * 24));
 
               if (freq === 'daily' && diffDays >= 1) shouldBackup = true;
               if (freq === 'weekly' && diffDays >= 7) shouldBackup = true;
@@ -1599,30 +1596,23 @@ useEffect(() => {
                   const dataStr = JSON.stringify({ version: "2.0", type: "auto", timestamp: now.toISOString(), settings, inventory });
                   const fileName = `backups/auto_${freq}_${now.toISOString().slice(0,10)}_${Date.now()}.json`;
                   
-                  // ★ storage 加 !
-                  const storageRef = ref(storage!, fileName); 
+                  const storageRef = ref(storage, fileName); 
                   await uploadString(storageRef, dataStr);
 
-                  // ★ db 加 !
-                  const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings'); 
+                  const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings'); 
                   await setDoc(docRef, { backup: { ...settings.backup, lastBackupDate: now.toISOString() } }, { merge: true });
                   
-                  // 更新前端畫面狀態 (不打擾用戶，只顯示個小 Toast)
                   setSettings(prev => ({ ...prev, backup: { ...prev.backup!, lastBackupDate: now.toISOString() } }));
                   showGlobalToast(`✅ 系統已自動完成 ${freq === 'daily' ? '每日' : (freq === 'weekly' ? '每週' : '每月')} 雲端備份！`, 'success');
               } catch (e) {
-                  console.error("❌ 背景自動備份失敗", e);
+                  console.warn("⚠️ 背景自動備份中斷 (權限或網路問題):", e);
               }
           }
       };
 
-      // 延遲 15 秒執行，確保不影響用戶剛登入時的系統流暢度
-      const timer = setTimeout(() => {
-          checkAndRunBackup();
-      }, 15000);
-
+      const timer = setTimeout(() => { checkAndRunBackup(); }, 15000);
       return () => clearTimeout(timer);
-  }, [db, storage, appId, settings.backup?.frequency, settings.backup?.autoCloud, inventory.length]);
+  }, [db, storage, appId, user, settings.backup?.frequency, settings.backup?.autoCloud, inventory.length]); // ★ 補全 user 依賴
   
   // --- Auth & Data Loading ---
   useEffect(() => {
@@ -1716,15 +1706,13 @@ useEffect(() => {
     return () => unsubscribe();
   }, []);
 
-  // Fetch Inventory & Settings
+  // --- Fetch Inventory ---
   useEffect(() => {
-    if (!db || !staffId) return;
-    const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+    // ★ 加入 !user 防護，徹底杜絕 LocalStorage 快於 Firebase Auth 的時間差報錯
+    if (!db || !appId || !staffId || !user) return;
     
     const invRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory');
     const q = query(invRef, orderBy('createdAt', 'desc')); 
-    
-    // ★ 為了避免網路極快時畫面閃爍，強制 Loading 畫面最少顯示 1.5 秒
     const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
     
     const unsubInv = onSnapshot(q, async (snapshot) => {
@@ -1732,83 +1720,59 @@ useEffect(() => {
       snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() } as Vehicle));
       setInventory(list);
       
-      // 等待最少 1.5 秒，且確保資料已經塞入 state 後，才關閉 Loading 畫面
       await minLoadingTime;
       setIsDataSyncing(false);
-      
     }, (err) => {
-        console.error("Inv sync error", err);
-        setIsDataSyncing(false); // 如果發生斷線錯誤，也要解除 Loading，免得畫面卡死
+        console.warn("車輛庫存同步警告:", err);
+        setIsDataSyncing(false); 
     });
 
     return () => { unsubInv(); };
-  }, [staffId, db, appId]);
+  }, [staffId, db, appId, user]); // ★ 補全 user 依賴
 
-useEffect(() => {
-        if (!db || !staffId) return;
-        const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
+  // --- Fetch Database ---
+  useEffect(() => {
+        // ★ 加入 !user 防護
+        if (!db || !appId || !staffId || !user) return;
         const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
         
-        // 這裡只需要監聽，不用太複雜的排序，減輕負載
         const unsubDb = onSnapshot(dbRef, (snapshot) => {
             const list: DatabaseEntry[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // ★★★ 修正重點：使用 ...data 完整讀取所有欄位，確保搜尋功能可用 ★★★
                 list.push({ 
                     id: doc.id, 
-                    ...data, // 這行最重要！把資料庫裡有的 tags, plateNoHK 全部複製過來
-                    
-                    // 以下是防呆預設值 (避免資料庫缺欄位導致報錯)
+                    ...data,
                     category: data.category || 'Person',
                     name: data.name || '',
                     reminderEnabled: data.reminderEnabled || false,
                     expiryDate: data.expiryDate || '',
-                    tags: data.tags || [], // ★ 確保讀取標籤
-                    plateNoHK: data.plateNoHK || '', // ★ 確保讀取車牌
+                    tags: data.tags || [],
+                    plateNoHK: data.plateNoHK || '',
                     relatedPlateNo: data.relatedPlateNo || '',
-                    
-                    // 其他 VRD 常用欄位確保
                     make: data.make || '',
                     model: data.model || '',
                     chassisNo: data.chassisNo || '',
                     engineNo: data.engineNo || '',
                     attachments: data.attachments || [],
                     roles: data.roles || [],
-                    
-                    // ★ 讀取負責人欄位 (過濾關鍵)
                     managedBy: data.managedBy || ''
                 } as DatabaseEntry);
             });
 
-            // ★★★ 核心新增：全域資料快取過濾 ★★★
             const filteredDbList = list.filter(entry => {
-                // 1. 管理員 (BOSS / all 權限 / 資料視角=all) -> 看全部
-                if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') {
-                    return true;
-                }
-
-                // ★ 放行「市場大數據」，確保所有員工的雷達圖都有數據
-                if (entry.docType === '市場大數據') {
-                    return true;
-                }
-
-                // 2. 普通員工 -> ★ 嚴格模式：只看負責人是自己的資料 ★
+                if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') return true;
+                if (entry.docType === '市場大數據') return true;
                 return entry.managedBy === staffId;
             });
 
-            // ★★★ 核心新增：使用 updatedAt (最後更新時間) 降序排序 (最新修改的排最上面) ★★★
-            filteredDbList.sort((a, b) => {
-                const timeA = a.updatedAt?.seconds || 0;
-                const timeB = b.updatedAt?.seconds || 0;
-                return timeB - timeA;
-            });
-         
-            setDbEntries(filteredDbList); // ★ 改存過濾後的清單
-        }, (err) => console.error("Db sync error", err));
+            filteredDbList.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+            setDbEntries(filteredDbList); 
+        }, (err) => console.warn("資料庫中心同步警告:", err));
 
         return () => unsubDb();
-    }, [staffId, db, appId, currentUser]); // ★ 必須加入 currentUser 依賴
+    }, [staffId, db, appId, currentUser, user]); // ★ 補全 user 依賴
+
 
 // ★★★ 核心修復：把 Hooks 移到 Early Return 之前，解決 Error #310 崩潰問題 ★★★
   const databaseReminders = useMemo(() => {
@@ -2742,39 +2706,30 @@ const deleteVehicle = async (id: string) => {
           });
 
       // 3. 應付未付 B：【新增】進貨與收車的「未付尾數」
-                  // ★ 核心修復：從總成本中扣除雜費，得出真實的買車本金
-                  const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
-                  const baseAcqCost = (car.costPrice || 0) - totalExpenses;
-                  
-                  const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-                  const acqOffset = Number(car.acquisition?.offsetAmount || 0);
-                  
-                  // 買車本金的真實欠款
-                  const acqBalance = baseAcqCost - acqPaid - acqOffset;
-                  if (acqBalance > 0) {
-                      totalPayable += acqBalance; // 將進貨欠款加入首頁的紅色「未付費用」總額
-                  }
+      const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+      const baseAcqCost = (car.costPrice || 0) - totalExpenses;
+      
+      const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+      const acqOffset = Number(car.acquisition?.offsetAmount || 0);
+      
+      // ★ 浮點數精度修復：使用 Math.round() 確保為整數，避免出現 HKD 0.000000004
+      const acqBalance = Math.round(baseAcqCost - acqPaid - acqOffset);
+      if (acqBalance > 0) {
+          totalPayable += acqBalance; 
+      }
 
       // 4. 應收尾數邏輯 (已售 OR 已訂)
       if (car.status === 'Sold' || car.status === 'Reserved') {
         const received = (car.payments || []).reduce((acc: any, p: any) => acc + (Number(p.amount) || 0), 0);
-        
-        // --- 修正開始：只計算「對客」的收費項目 ---
-        
-        // A. 對客附加費 (排除贈送項目)
         const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.isFree ? 0 : (Number(addon.amount) || 0)), 0);
-        
-        // C. 售後維修/服務對客收費 (只計算未找數的 Charge)
         const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
         
-        // --- 修正結束：總應收 = 車價 + 附加費 + 維修費 (剔除中港費，獨立計算) ---
-        const totalDue = (Number(car.price) || 0) + salesAddonsTotal + maintCharge;
-        const balance = totalDue - received;
+        // ★ 浮點數精度修復：同樣確保最終金額為絕對整數
+        const totalDue = Math.round((Number(car.price) || 0) + salesAddonsTotal + maintCharge);
+        const balance = totalDue - Math.round(received);
         
         if (balance > 0) totalReceivable += balance;
-
-        // 本月銷售額
-        if (car.status === 'Sold') totalSoldThisMonth += (Number(car.price) || 0);
+        if (car.status === 'Sold') totalSoldThisMonth += Math.round(Number(car.price) || 0);
       }
     });
 
