@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
-import sharp from 'sharp';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid'; 
 
+// ============================================================================
+// 1. 建立安全的 Firebase 初始化函數
+// ============================================================================
 function initFirebaseAdmin() {
     if (!admin.apps.length) {
         try {
@@ -19,7 +21,7 @@ function initFirebaseAdmin() {
                     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
                     privateKey: privateKey,
                 }),
-                // ✅ 填入精確的 Bucket 名稱 (務必去除 gs:// 前綴)
+                // 您的真實 Bucket 名稱
                 storageBucket: 'gold-land-auto.firebasestorage.app' 
             });
             console.log('✅ Firebase Admin 初始化成功');
@@ -30,8 +32,9 @@ function initFirebaseAdmin() {
     }
     return admin;
 }
+
 // ============================================================================
-// 2. 處理 Telegram Webhook POST 請求 (支援圖片自動壓縮與 PDF)
+// 2. 處理 Telegram Webhook POST 請求 (高穩定原生直傳版)
 // ============================================================================
 export async function POST(req: Request) {
     try {
@@ -39,7 +42,6 @@ export async function POST(req: Request) {
         const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
         if (!TELEGRAM_BOT_TOKEN) {
-            console.error('Missing TELEGRAM_BOT_TOKEN');
             return NextResponse.json({ error: 'System config error' }, { status: 500 });
         }
 
@@ -52,34 +54,28 @@ export async function POST(req: Request) {
         let fileId = null;
         let fileExt = '';
         let contentType = '';
-        let mediaType = 'vehicle'; // 預設歸類為車輛照片
-        let isImage = false;
+        let mediaType = 'vehicle'; 
 
         // ----------------------------------------------------
         // A. 判斷傳入的是「圖片」還是「PDF檔案」
         // ----------------------------------------------------
         if (message.photo) {
-            // 處理一般發送的照片 (取最高畫質)
             const photoArray = message.photo;
             fileId = photoArray[photoArray.length - 1].file_id;
             fileExt = 'jpg';
             contentType = 'image/jpeg';
-            isImage = true;
         } else if (message.document) {
-            // 處理以「檔案」形式發送的物件 (PDF 或 原畫質圖片)
             const doc = message.document;
             if (doc.mime_type === 'application/pdf') {
                 fileId = doc.file_id;
                 fileExt = 'pdf';
                 contentType = 'application/pdf';
-                mediaType = 'document'; // 將其歸類為文件，方便智能圖庫分區
+                mediaType = 'document'; 
             } else if (doc.mime_type?.startsWith('image/')) {
                 fileId = doc.file_id;
                 fileExt = 'jpg';
                 contentType = 'image/jpeg';
-                isImage = true;
             } else {
-                // 不支援的檔案格式，回覆提示
                 await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -90,7 +86,7 @@ export async function POST(req: Request) {
         }
 
         // ----------------------------------------------------
-        // B. 執行下載、壓縮與上傳邏輯
+        // B. 執行下載與穩定上傳邏輯 (拔除 sharp，防止 Buffer 損壞)
         // ----------------------------------------------------
         if (fileId) {
             const firebaseAdmin = initFirebaseAdmin();
@@ -104,45 +100,37 @@ export async function POST(req: Request) {
             const filePath = fileUrlData.result.file_path;
             const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
 
-            // 2. 下載檔案為 Buffer
+            // 2. 下載檔案為 ArrayBuffer 並轉為 Node Buffer
             const fileRes = await fetch(downloadUrl);
             const arrayBuffer = await fileRes.arrayBuffer();
-            // 顯式宣告為 any 或明確轉型，繞過 TS 嚴格的 ArrayBufferLike 檢查
-            let finalBuffer: any = Buffer.from(arrayBuffer);
+            const finalBuffer = Buffer.from(arrayBuffer);
 
-            // 3. ★ AI 智能壓縮引擎：如果是圖片，透過 sharp 進行極速壓縮
-            if (isImage) {
-                finalBuffer = (await sharp(finalBuffer)
-                    .resize({ width: 1600, withoutEnlargement: true }) // 限制最大寬度，防止超大圖佔空間
-                    .jpeg({ quality: 80, mozjpeg: true })              // 轉換為 JPEG 並以 80% 質量壓縮
-                    .toBuffer()) as Buffer;
-            }
-            // 4. 上傳至 Firebase Storage 並注入授權 Token
+            // 3. 生成專屬 Firebase 下載權杖
+            const downloadToken = uuidv4();
+
+            // 4. 上傳至 Firebase Storage
             const bucket = firebaseAdmin.storage().bucket();
             const fileName = `media_library/tg_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
             const file = bucket.file(fileName);
-
-            // ★ 核心修復：手動生成 Firebase Download Token
-            const downloadToken = uuidv4();
 
             await file.save(finalBuffer, {
                 metadata: { 
                     contentType: contentType,
                     metadata: {
-                        firebaseStorageDownloadTokens: downloadToken // 注入 Token 繞過安全規則
+                        firebaseStorageDownloadTokens: downloadToken
                     }
                 }
             });
 
-            // ★ 動態獲取當前的 bucket 名稱，確保下載網址絕對正確
-                const bucketName = firebaseAdmin.storage().bucket().name;
-                const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
+            // 5. 組合帶有 Token 的正式公開網址
+            const bucketName = bucket.name;
+            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(fileName)}?alt=media&token=${downloadToken}`;
 
-            // 5. 寫入 Firestore 智能圖庫 (補回這兩行！)
+            // 6. 寫入 Firestore 智能圖庫
             const db = firebaseAdmin.firestore();
             const docRef = db.collection('artifacts').doc('gold-land-auto').collection('staff').doc('CHARLES_data').collection('media_library').doc();
 
-            const tags = ['TG極速傳遞'];
+            const tags = ['TG極速傳圖'];
             if (caption) tags.push(caption);
 
             await docRef.set({
@@ -154,17 +142,17 @@ export async function POST(req: Request) {
                 status: 'unassigned',
                 createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
                 uploadedBy: 'TelegramBot',
-                mediaType: mediaType // 智能區分是 vehicle (照片) 還是 document (PDF)
+                mediaType: mediaType 
             });
 
-            // 6. 回傳成功訊息
-            const typeText = isImage ? '圖片' : 'PDF 檔案';
+            // 7. 回傳成功訊息
+            const typeText = mediaType === 'document' ? 'PDF 檔案' : '圖片';
             await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chat_id: chatId,
-                    text: `✅ ${typeText} 已成功壓縮並存入 DMS 圖庫！\n(系統標籤: ${caption || '無'})`
+                    text: `✅ ${typeText} 已成功存入 DMS 圖庫！\n(系統標籤: ${caption || '無'})`
                 })
             });
 
@@ -172,7 +160,7 @@ export async function POST(req: Request) {
         }
 
         // ----------------------------------------------------
-        // C. 處理純文字對話 (歡迎與提示語)
+        // C. 處理純文字對話
         // ----------------------------------------------------
         if (message.text) {
             await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -180,7 +168,7 @@ export async function POST(req: Request) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     chat_id: chatId,
-                    text: `👋 歡迎使用金田汽車 DMS 傳圖助手。\n\n📸 傳送「相片」：系統會自動為您壓縮並歸類為車輛圖庫。\n📄 傳送「檔案」：支援 PDF 格式，會自動歸類為文件資料庫。\n\n(發送前附上文字，系統會自動轉換為標籤喔 🏷️)`
+                    text: `👋 歡迎使用金田汽車 DMS 傳圖助手。\n\n📸 傳送「相片」：自動歸類為車輛圖庫。\n📄 傳送「檔案」：支援 PDF，自動歸類為文件資料庫。\n\n(發送前附上文字，會自動轉換為標籤喔 🏷️)`
                 })
             });
         }
