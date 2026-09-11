@@ -117,16 +117,16 @@ export async function POST(req: Request) {
             // 2. 下載檔案為 Buffer
             const fileRes = await fetch(downloadUrl);
             const arrayBuffer = await fileRes.arrayBuffer();
-            let finalBuffer = Buffer.from(arrayBuffer);
+            // 顯式宣告為 any 或明確轉型，繞過 TS 嚴格的 ArrayBufferLike 檢查
+            let finalBuffer: any = Buffer.from(arrayBuffer);
 
             // 3. ★ AI 智能壓縮引擎：如果是圖片，透過 sharp 進行極速壓縮
             if (isImage) {
-                finalBuffer = await sharp(finalBuffer)
+                finalBuffer = (await sharp(finalBuffer)
                     .resize({ width: 1600, withoutEnlargement: true }) // 限制最大寬度，防止超大圖佔空間
                     .jpeg({ quality: 80, mozjpeg: true })              // 轉換為 JPEG 並以 80% 質量壓縮
-                    .toBuffer();
+                    .toBuffer()) as Buffer;
             }
-
             // 4. 上傳至 Firebase Storage
             const bucket = firebaseAdmin.storage().bucket();
             const fileName = `media_library/tg_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
