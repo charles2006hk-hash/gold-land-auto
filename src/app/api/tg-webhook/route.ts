@@ -3,12 +3,6 @@ import * as admin from 'firebase-admin';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 
-// ============================================================================
-// 1. 建立安全的 Firebase 初始化函數 (對齊 Vercel 環境變數版)
-// ============================================================================
-// ============================================================================
-// 1. 建立安全的 Firebase 初始化函數
-// ============================================================================
 function initFirebaseAdmin() {
     if (!admin.apps.length) {
         try {
@@ -25,8 +19,8 @@ function initFirebaseAdmin() {
                     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
                     privateKey: privateKey,
                 }),
-                // ★ 請將下方替換為你在 Firebase 後台複製的準確名稱 (不要包含 gs://)
-                storageBucket: '這裡貼上你真正的Bucket名稱' 
+                // ✅ 直接替換成你專案預設的 Bucket 名稱
+                storageBucket: 'gold-land-auto.appspot.com' 
             });
             console.log('✅ Firebase Admin 初始化成功');
         } catch (error) {
@@ -36,7 +30,6 @@ function initFirebaseAdmin() {
     }
     return admin;
 }
-
 // ============================================================================
 // 2. 處理 Telegram Webhook POST 請求 (支援圖片自動壓縮與 PDF)
 // ============================================================================
