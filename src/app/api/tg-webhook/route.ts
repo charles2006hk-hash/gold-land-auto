@@ -144,6 +144,10 @@ export async function POST(req: Request) {
             // ★ 將 Token 附加到網址尾端，完美模擬前端上傳網址格式
             const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media&token=${downloadToken}`;
 
+            // 5. 寫入 Firestore 智能圖庫 (補回這兩行！)
+            const db = firebaseAdmin.firestore();
+            const docRef = db.collection('artifacts').doc('gold-land-auto').collection('staff').doc('CHARLES_data').collection('media_library').doc();
+
             const tags = ['TG極速傳遞'];
             if (caption) tags.push(caption);
 
