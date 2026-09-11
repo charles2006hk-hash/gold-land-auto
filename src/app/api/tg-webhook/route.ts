@@ -25,8 +25,8 @@ function initFirebaseAdmin() {
                     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
                     privateKey: privateKey,
                 }),
-                // ★ 修正：標準 Firebase 預設 Bucket 通常是 .appspot.com
-                storageBucket: `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.appspot.com` 
+                // ★ 修正：Firebase 預設的 Bucket 後綴通常是 .appspot.com
+                storageBucket: 'gold-land-auto.appspot.com' 
             });
             console.log('✅ Firebase Admin 初始化成功');
         } catch (error) {
