@@ -1176,18 +1176,32 @@ export default function GoldLandAutoDMS() {
     } catch (e) { console.error("Log error:", e); }
     };
 
-  // ★ 新增：首頁實時監聽「公司營運總帳」未付項目，為了在卡片上顯示提醒
-  const [unpaidCompanyExpenses, setUnpaidCompanyExpenses] = useState<any[]>([]);
-  useEffect(() => {
-      if (!db || !appId) return;
-      const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), where('status', '==', 'Unpaid'));
-      const unsub = onSnapshot(q, (snapshot) => {
-          const list: any[] = [];
-          snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-          setUnpaidCompanyExpenses(list);
-      });
-      return () => unsub();
-  }, [db, appId]);
+  // ★ 第一段重構：公司營運總帳未付項目監聽 (補全 !user 防護與錯誤處理)
+const [unpaidCompanyExpenses, setUnpaidCompanyExpenses] = useState<any[]>([]);
+
+useEffect(() => {
+    // 1. 未登入 (!user) 前絕對不上傳請求，徹底消除 403 權限報錯
+    if (!db || !appId || !user) return;
+
+    const q = query(
+        collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), 
+        where('status', '==', 'Unpaid')
+    );
+
+    const unsub = onSnapshot(
+        q, 
+        (snapshot) => {
+            const list: any[] = [];
+            snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+            setUnpaidCompanyExpenses(list);
+        },
+        (err) => {
+            console.warn("公司營運總帳監聽警告:", err);
+        }
+    );
+
+    return () => unsub();
+}, [db, appId, user]); // 2. 補全 user 依賴項
   
   // Data States
   const [inventory, setInventory] = useState<Vehicle[]>([]);
@@ -1372,20 +1386,32 @@ export default function GoldLandAutoDMS() {
 
   const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
 
-  // ★★★ 效能優化：延遲監聽所有銷售單據 (只在需要時下載) ★★★
-  useEffect(() => {
-      if (!db || !appId) return;
-      
-      // ★ 只有當「打開車輛詳情 (需要睇關聯單據)」或「進入開單系統」時，才向數據庫請求資料
-      if (!editingVehicle && activeTab !== 'create_doc') return;
+  // ★ 第二段重構：延遲監聽所有銷售單據 (補全 !user 防護與簡化依賴)
+useEffect(() => {
+    // 1. 未登入 (!user) 前立即攔截
+    if (!db || !appId || !user) return;
+    
+    // 2. 惰性加載邏輯：僅在打開車輛詳情或開單模組時才發起監聽
+    if (!editingVehicle && activeTab !== 'create_doc') return;
 
-      const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), orderBy('updatedAt', 'desc'));
-      const unsub = onSnapshot(q, (snapshot) => {
-          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setAllSalesDocs(list);
-      });
-      return () => unsub();
-  }, [db, appId, activeTab, editingVehicle !== null]);
+    const q = query(
+        collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), 
+        orderBy('updatedAt', 'desc')
+    );
+
+    const unsub = onSnapshot(
+        q, 
+        (snapshot) => {
+            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllSalesDocs(list);
+        },
+        (err) => {
+            console.warn("銷售單據監聽警告:", err);
+        }
+    );
+
+    return () => unsub();
+}, [db, appId, user, activeTab, editingVehicle]); // 3. 簡化並補全 user 與 editingVehicle 依賴
 
   // ★★★ 新增：處理從車輛詳情跳轉到開單系統 ★★★
   const handleJumpToDoc = (docData: any) => {
@@ -1395,10 +1421,12 @@ export default function GoldLandAutoDMS() {
   };
 
   useEffect(() => {
-    if (!db || !appId) return;
-    
-    // 注意：這裡應該已經被替換為 'charles_data'
-    const unsub = onSnapshot(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users'), (docSnap) => {
+    // ★ 修復 1：加入 !user 防護，未完成登入前絕對不向資料庫發起請求 (消除 403 報錯)
+    if (!db || !appId || !user) return;
+
+    const unsub = onSnapshot(
+      doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users'), 
+      (docSnap) => {
         if (docSnap.exists()) {
             const rawList = docSnap.data().list || [];
             setSystemUsers(rawList);
@@ -1406,60 +1434,65 @@ export default function GoldLandAutoDMS() {
             // 如果還沒有用戶名單，預設建立一個 BOSS 帳號 (密碼 8888)
             setSystemUsers([{ email: 'BOSS', password: '8888', modules: ['all'] }]);
         }
-    });
+      },
+      // ★ 修復 2：加入錯誤回傳處理 (Error Callback)，避免網絡短暫斷連時拋出未捕獲例外
+      (err) => {
+        console.warn("系統用戶名單同步提示:", err);
+      }
+    );
+
     return () => unsub();
-  }, [db, appId]);
+  }, [db, appId, user]); // ★ 修復 3：依賴項必須補上 user，登入成功時才能自動觸發監聽
 
 
-  // ★★★ 智能首圖修復版：多層降級比對機制 (isPrimary -> 最新關聯圖片) ★★★
+  // ★★★ 智能首圖修復：加入未登入防護 + 優先級降級比對 (isPrimary -> 最新相片) ★★★
   useEffect(() => {
-      if (!db || !appId) return;
+      // 核心防護：未登入 (user === null) 時絕對不對資料庫發起請求，避免 403 錯誤
+      if (!db || !appId || !user) return;
 
-      // 監聽中央圖庫所有已綁定車輛的圖片
       const q = query(
-          collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library')
+          collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'),
+          where('status', '==', 'linked')
       );
 
       const unsub = onSnapshot(q, (snapshot) => {
           const map: Record<string, string> = {};
-          const itemsByVehicle: Record<string, any[]> = {};
+          const vehicleMediaMap: Record<string, any[]> = {};
 
-          // 1. 按車輛 ID 進行圖片歸類
+          // 1. 依車輛 ID 分組整理所有關聯圖片 (自動剔除 PDF 文件)
           snapshot.forEach(docSnap => {
               const data = docSnap.data();
-              if (data.relatedVehicleId && data.url) {
-                  if (!itemsByVehicle[data.relatedVehicleId]) {
-                      itemsByVehicle[data.relatedVehicleId] = [];
+              if (data.relatedVehicleId && data.url && data.mediaType !== 'document') {
+                  if (!vehicleMediaMap[data.relatedVehicleId]) {
+                      vehicleMediaMap[data.relatedVehicleId] = [];
                   }
-                  itemsByVehicle[data.relatedVehicleId].push(data);
+                  vehicleMediaMap[data.relatedVehicleId].push(data);
               }
           });
 
-          // 2. 智能選取最合適的首圖
-          Object.keys(itemsByVehicle).forEach(vId => {
-              const list = itemsByVehicle[vId];
+          // 2. 為每台車算出一張最合適的首圖
+          Object.keys(vehicleMediaMap).forEach(vId => {
+              const mediaList = vehicleMediaMap[vId];
               
-              // 優先級 A: 帶有星星標記 (isPrimary) 的圖片
-              const primary = list.find(i => i.isPrimary === true);
+              // 優先級 A：有星星標記 (isPrimary === true) 的封面圖
+              const primaryItem = mediaList.find(m => m.isPrimary === true);
               
-              if (primary) {
-                  map[vId] = primary.url;
+              if (primaryItem) {
+                  map[vId] = primaryItem.url;
               } else {
-                  // 優先級 B: 剔除 PDF/文件類，取最新上傳的一張相片
-                  const validPhotos = list.filter(i => i.mediaType !== 'document');
-                  if (validPhotos.length > 0) {
-                      // 按時間降序排序
-                      validPhotos.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-                      map[vId] = validPhotos[0].url;
-                  }
+                  // 優先級 B：若無設定封面，自動取最新上傳的一張相片
+                  mediaList.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                  map[vId] = mediaList[0].url;
               }
           });
 
           setPrimaryImages(map);
+      }, (err) => {
+          console.warn("圖庫首圖同步警告:", err);
       });
 
       return () => unsub();
-  }, [db, appId]);
+  }, [db, appId, user]); // ★ 必須加入 user 依賴項
   
   // -------------------------------------------------------------
   // ★★★ 系統設定讀取 (v14.5 修正版：修復 defaultSettings 可選屬性報錯) ★★★
@@ -3305,10 +3338,19 @@ const DatabaseSelector = ({
                         };
                         const cbTags = getRefinedTags();
                         
-                        // ★ 保留原來的縮圖與一換一邏輯
-                        const baseThumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? car.photos[0] : null);
-                        const isOneForOne = (car as any).acquisition?.vendor?.includes('一換一');
+                        // ★★★ 智能車輛首圖獲取引擎 (多層安全降級備援) ★★★
+                        // 1. 優先使用智能圖庫 (primaryImages) 比對出的合規相片
+                        // 2. 次選車輛 document 內部儲存的歷史照片陣列 (car.photos)
+                        // 3. 第三順位觸發「一換一」專屬向量圖案 (SVG)
+                        // 4. 無任何圖片時回退為 null，由 UI 層渲染標準 No-Image 佔位區
+
+                        const primaryUrl = primaryImages[car.id];
+                        const legacyArrayUrl = (car.photos && Array.isArray(car.photos) && car.photos.length > 0) ? car.photos[0] : null;
+                        const baseThumbUrl = primaryUrl || legacyArrayUrl;
+
+                        const isOneForOne = Boolean((car as any).acquisition?.vendor?.includes('一換一'));
                         const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
+
                         const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
 
                         let statusText = '在庫';
