@@ -1594,10 +1594,12 @@ useEffect(() => {
                   const dataStr = JSON.stringify({ version: "2.0", type: "auto", timestamp: now.toISOString(), settings, inventory });
                   const fileName = `backups/auto_${freq}_${now.toISOString().slice(0,10)}_${Date.now()}.json`;
                   
-                  const storageRef = ref(storage, fileName); 
+                  // ★ 修復：補上 storage!
+                  const storageRef = ref(storage!, fileName); 
                   await uploadString(storageRef, dataStr);
 
-                  const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings'); 
+                  // ★ 修復：補上 db! 與 appId!
+                  const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings'); 
                   await setDoc(docRef, { backup: { ...settings.backup, lastBackupDate: now.toISOString() } }, { merge: true });
                   
                   setSettings(prev => ({ ...prev, backup: { ...prev.backup!, lastBackupDate: now.toISOString() } }));
