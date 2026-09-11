@@ -25,8 +25,8 @@ function initFirebaseAdmin() {
                     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
                     privateKey: privateKey,
                 }),
-                // ★ 修正：Firebase 預設的 Bucket 後綴通常是 .appspot.com
-                storageBucket: 'gold-land-auto.appspot.com' 
+                // ★ 請將下方替換為你在 Firebase 後台複製的準確名稱 (不要包含 gs://)
+                storageBucket: '這裡貼上你真正的Bucket名稱' 
             });
             console.log('✅ Firebase Admin 初始化成功');
         } catch (error) {
@@ -141,8 +141,9 @@ export async function POST(req: Request) {
                 }
             });
 
-            // ★ 將 Token 附加到網址尾端，完美模擬前端上傳網址格式
-            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media&token=${downloadToken}`;
+            // ★ 動態獲取當前的 bucket 名稱，確保下載網址絕對正確
+                const bucketName = firebaseAdmin.storage().bucket().name;
+                const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
 
             // 5. 寫入 Firestore 智能圖庫 (補回這兩行！)
             const db = firebaseAdmin.firestore();
