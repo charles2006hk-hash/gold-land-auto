@@ -55,7 +55,7 @@ import DashboardModule from '@/components/DashboardModule';
 // --- Firebase Imports ---
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { 
-  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, 
+  getAuth, onAuthStateChanged, signInWithCustomToken, 
   initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth,
   signInWithEmailAndPassword, createUserWithEmailAndPassword 
 } from "firebase/auth";
@@ -321,10 +321,10 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
     setIsLoading(true);
 
     const inputId = userId.trim();
-    // ★ 魔術轉換：自動為沒有 @ 的帳號加上內部網域，滿足 Google 格式要求
+    // 自動補全內部網域憑證
     const authEmail = inputId.includes('@') ? inputId : `${inputId}@gla.local`;
 
-    // 1. 超級管理員後門
+    // 1. 超級管理員通道 (BOSS)
     if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
         const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all', defaultTab: 'dashboard' };
         handleSuccess(adminUser);
@@ -335,48 +335,17 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
     try {
         if (!auth) throw new Error("系統連線尚未準備好");
 
-        let userCredential;
-        try {
-            // 2. 嘗試用正規 Firebase 方式登入
-            userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
-        } catch (loginErr: any) {
-            
-            // ★ 3. 核心修復：如果帳號不存在 (代表是剛在後台新增的員工)
-            if (loginErr.code === 'auth/user-not-found' || loginErr.code === 'auth/invalid-credential' || loginErr.code === 'auth/invalid-email') {
-                
-                // 啟動訪客通行證 (匿名登入) 去資料庫查名單
-                await signInAnonymously(auth);
-                const db = getFirestore();
-                const docSnap = await getDoc(doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
-                
-                if (docSnap.exists()) {
-                    const usersList = docSnap.data().list || [];
-                    const dbUserConfig = usersList.find((u:any) => u.email.toLowerCase() === inputId.toLowerCase());
-                    
-                    // 如果名單裡有這個人，且密碼符合 BOSS 設定的初始密碼
-                    if (dbUserConfig && dbUserConfig.password === password) {
-                        // 系統自動幫他在 Google Auth 註冊實體帳號
-                        userCredential = await createUserWithEmailAndPassword(auth, authEmail, password);
-                        console.log("新用戶/舊用戶 同步至 Auth 成功！");
-                    } else {
-                        throw new Error("密碼錯誤或未經授權");
-                    }
-                } else {
-                    throw new Error("無法讀取權限名單");
-                }
-            } else {
-                throw loginErr; // 其他未知的登入錯誤
-            }
-        }
+        // 2. 標準 Firebase Email/Password 登入 (絕不觸發匿名驗證)
+        const userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
 
-        // 4. 登入/註冊成功後，去資料庫拿他最新的權限
+        // 3. 登入成功後，直接讀取個人權限表
         let finalUser = { email: inputId, modules: [], dataAccess: 'all', defaultTab: 'dashboard' };
         try {
-            const db = getFirestore();
-            const docSnap = await getDoc(doc(db, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
+            const currentDb = getFirestore();
+            const docSnap = await getDoc(doc(currentDb, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
             if (docSnap.exists()) {
                 const usersList = docSnap.data().list || [];
-                const dbUserConfig = usersList.find((u:any) => u.email.toLowerCase() === inputId.toLowerCase());
+                const dbUserConfig = usersList.find((u: any) => u.email.toLowerCase() === inputId.toLowerCase());
                 if (dbUserConfig) {
                     finalUser = {
                         ...finalUser,
@@ -387,13 +356,13 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
                 }
             }
         } catch (dbErr) {
-            console.warn("讀取權限失敗", dbErr);
+            console.warn("讀取權限配置失敗 (將採用預設權限):", dbErr);
         }
 
         handleSuccess(finalUser);
 
     } catch (err: any) {
-        console.error(err);
+        console.error("Login failed:", err);
         setError('帳號或密碼錯誤 (Invalid Credentials)');
     } finally {
         setIsLoading(false);
@@ -1639,23 +1608,30 @@ export default function GoldLandAutoDMS() {
     });
     observer.observe(document.querySelector('title') || document.head, { subtree: true, characterData: true, childList: true });
 
-    // ... (後續 Auth 邏輯保持不變)
+    // --- Auth & Data Loading (安全重構版：徹底移除匿名授權) ---
     const currentAuth = auth;
-    if (!currentAuth) { setLoading(false); return; }
+    if (!currentAuth) { 
+      setLoading(false); 
+      return; 
+    }
 
+    // 1. 純粹監聽 Auth 狀態，將驗證邏輯完整交給登入表單與 Firebase
+    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { 
+      setUser(u); 
+      setLoading(false); 
+    });
+
+    // 2. 僅在存在 SSR Token 時才進行憑證簽核，否則靜默交由用戶手動登入
     const initAuth = async () => {
       try {
         if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
           await signInWithCustomToken(currentAuth, (window as any).__initial_auth_token);
-        } else {
-          await signInAnonymously(currentAuth);
         }
       } catch (error: any) {
         if (!error.message?.includes('storage')) setAuthError(error.message);
-        setLoading(false);
       }
     };
-    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { setUser(u); setLoading(false); });
+
     initAuth();
     return () => unsubscribe();
   }, []);
