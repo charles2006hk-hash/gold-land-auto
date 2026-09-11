@@ -1411,25 +1411,50 @@ export default function GoldLandAutoDMS() {
   }, [db, appId]);
 
 
-  // ★★★ 2. 新增：監聽智能圖庫的封面圖 (只讀取有標記 isPrimary 的圖) ★★★
+  // ★★★ 智能首圖修復版：多層降級比對機制 (isPrimary -> 最新關聯圖片) ★★★
   useEffect(() => {
       if (!db || !appId) return;
-      
-      // 查詢條件：狀態是已連結 (linked) 且 是封面 (isPrimary)
+
+      // 監聽中央圖庫所有已綁定車輛的圖片
       const q = query(
-          collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'),
-          where('status', '==', 'linked'),
-          where('isPrimary', '==', true)
+          collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library')
       );
 
       const unsub = onSnapshot(q, (snapshot) => {
           const map: Record<string, string> = {};
-          snapshot.forEach(doc => {
-              const data = doc.data();
+          const itemsByVehicle: Record<string, any[]> = {};
+
+          // 1. 按車輛 ID 進行圖片歸類
+          snapshot.forEach(docSnap => {
+              const data = docSnap.data();
               if (data.relatedVehicleId && data.url) {
-                  map[data.relatedVehicleId] = data.url;
+                  if (!itemsByVehicle[data.relatedVehicleId]) {
+                      itemsByVehicle[data.relatedVehicleId] = [];
+                  }
+                  itemsByVehicle[data.relatedVehicleId].push(data);
               }
           });
+
+          // 2. 智能選取最合適的首圖
+          Object.keys(itemsByVehicle).forEach(vId => {
+              const list = itemsByVehicle[vId];
+              
+              // 優先級 A: 帶有星星標記 (isPrimary) 的圖片
+              const primary = list.find(i => i.isPrimary === true);
+              
+              if (primary) {
+                  map[vId] = primary.url;
+              } else {
+                  // 優先級 B: 剔除 PDF/文件類，取最新上傳的一張相片
+                  const validPhotos = list.filter(i => i.mediaType !== 'document');
+                  if (validPhotos.length > 0) {
+                      // 按時間降序排序
+                      validPhotos.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                      map[vId] = validPhotos[0].url;
+                  }
+              }
+          });
+
           setPrimaryImages(map);
       });
 
