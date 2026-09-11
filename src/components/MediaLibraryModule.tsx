@@ -494,12 +494,21 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         const confirmDelete = window.confirm("確定要永久刪除這張圖片嗎？\n此操作無法復原。");
         if (!confirmDelete) return;
         try {
+            // 1. 嘗試刪除 Storage 實體檔案 (加上獨立 catch，若檔案已不存在則略過，不阻礙後續動作)
             if (item.path) {
                 const storageRef = ref(storage, item.path);
-                await deleteObject(storageRef);
+                await deleteObject(storageRef).catch(err => {
+                    console.warn("⚠️ Storage 檔案可能已不存在或無權限，略過並繼續刪除資料庫紀錄:", err);
+                });
             }
+            
+            // 2. 刪除 Firestore 紀錄 (這才是讓破圖從畫面上消失的關鍵)
             await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id));
-        } catch (error) { console.error("Error deleting image:", error); alert("刪除失敗，可能是權限不足或檔案不存在。"); }
+            
+        } catch (error) { 
+            console.error("Error deleting image doc:", error); 
+            alert("資料庫紀錄刪除失敗，請檢查網路連線。"); 
+        }
     };
 
     const handleReturnToInbox = async (item: MediaLibraryItem) => {
