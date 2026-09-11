@@ -1503,7 +1503,8 @@ useEffect(() => {
 
       const fetchSettings = async () => {
           try {
-              const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+              // ★ 修復：加回 db! 與 appId!，滿足 TypeScript 嚴格模式的要求
+              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
@@ -1520,7 +1521,7 @@ useEffect(() => {
                       cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
                       cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
                       
-                      // 2. 物件保護 (加入強力陣列轉換，防止 Firebase 舊資料格式錯誤導致 .map 當機)
+                      // 2. 物件保護
                       models: (() => {
                           const merged: Record<string, string[]> = { ...defaultSettings.models };
                           if (dbData.models) {
@@ -1531,7 +1532,7 @@ useEffect(() => {
                           return merged;
                       })(),
                       
-                      // 3. Reminders 全欄位保護
+                      // 3. Reminders 保護
                       reminders: { 
                           isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders?.isEnabled ?? true,
                           daysBefore: dbData.reminders?.daysBefore ?? defaultSettings.reminders?.daysBefore ?? 30,
@@ -1544,17 +1545,14 @@ useEffect(() => {
                           }
                       },
                       
-                      // 4. Backup 全欄位保護
+                      // 4. Backup 保護
                       backup: { 
                           frequency: dbData.backup?.frequency ?? defaultSettings.backup?.frequency ?? 'monthly',
                           lastBackupDate: dbData.backup?.lastBackupDate ?? defaultSettings.backup?.lastBackupDate ?? '',
                           autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup?.autoCloud ?? true
                       }
                   }));
-                  
-                  console.log("✅ 系統設定已從資料庫同步");
               } else {
-                  console.log("⚠️ 首次運行：寫入預設設定到資料庫");
                   await setDoc(docRef, defaultSettings);
                   setSettings(defaultSettings);
               }
