@@ -1494,15 +1494,16 @@ useEffect(() => {
       return () => unsub();
   }, [db, appId, user]); // ★ 必須加入 user 依賴項
   
-  // -------------------------------------------------------------
-  // ★★★ 系統設定讀取 (v14.5 修正版：修復 defaultSettings 可選屬性報錯) ★★★
+ // -------------------------------------------------------------
+  // ★★★ 系統設定讀取 (v14.6 安全修復版：加入 Auth 登入防護) ★★★
   // -------------------------------------------------------------
   useEffect(() => {
-      if (!db || !appId) return;
+      // ★ 核心修復：未完成 Firebase Auth 驗證 (!user) 前絕不發起請求，徹底消除 403 權限錯誤
+      if (!db || !appId || !user) return;
 
       const fetchSettings = async () => {
           try {
-              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
+              const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
               const docSnap = await getDoc(docRef);
 
               if (docSnap.exists()) {
@@ -1512,7 +1513,7 @@ useEffect(() => {
                       ...defaultSettings, 
                       ...dbData,          
                       
-                      // 1. 陣列保護 (★ 加咗 warrantyTypes 喺度)
+                      // 1. 陣列保護
                       warrantyTypes: dbData.warrantyTypes?.length ? dbData.warrantyTypes : defaultSettings.warrantyTypes,
                       expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
                       expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
@@ -1530,7 +1531,7 @@ useEffect(() => {
                           return merged;
                       })(),
                       
-                      // 3. Reminders 全欄位保護 (加上 ?. 和最終預設值)
+                      // 3. Reminders 全欄位保護
                       reminders: { 
                           isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders?.isEnabled ?? true,
                           daysBefore: dbData.reminders?.daysBefore ?? defaultSettings.reminders?.daysBefore ?? 30,
@@ -1563,7 +1564,7 @@ useEffect(() => {
       };
 
       fetchSettings();
-  }, [db, appId]);
+  }, [db, appId, user]); // ★ 必須包含 user 依賴，登入完成後才會自動觸發資料同步
 
   // ★★★ 終極智能背景自動備份 (Lazy Cron) ★★★
   // 邏輯：每次開機/重整頁面，延遲 15 秒後偷偷檢查，如果到期就自動在背景備份！
