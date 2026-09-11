@@ -110,7 +110,8 @@ export async function POST(req: Request) {
 
             // 4. 上傳至 Firebase Storage
             const bucket = firebaseAdmin.storage().bucket();
-            const fileName = `media_library/tg_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
+            // ★ 修正為系統正確的 Storage 路徑
+            const fileName = `media/gold-land-auto/tg_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
             const file = bucket.file(fileName);
 
             await file.save(finalBuffer, {
