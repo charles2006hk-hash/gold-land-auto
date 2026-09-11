@@ -1,35 +1,32 @@
 import { NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
 import sharp from 'sharp';
+import { v4 as uuidv4 } from 'uuid';
 
 // ============================================================================
 // 1. 建立安全的 Firebase 初始化函數 (對齊 Vercel 環境變數版)
 // ============================================================================
+// ============================================================================
+// 1. 建立安全的 Firebase 初始化函數
+// ============================================================================
 function initFirebaseAdmin() {
     if (!admin.apps.length) {
         try {
-            // ★ 修改點 1：對齊 Vercel 上的 NEXT_PUBLIC_FIREBASE_PROJECT_ID
             if (!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
-                console.error('🚨 環境變數檢查:', {
-                    PROJECT_ID: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-                    CLIENT_EMAIL: !!process.env.FIREBASE_CLIENT_EMAIL,
-                    PRIVATE_KEY: !!process.env.FIREBASE_PRIVATE_KEY
-                });
                 throw new Error('缺少 Firebase 環境變數');
             }
 
             let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-            // 終極防呆：去除頭尾雙引號，解析換行符號
             privateKey = privateKey.replace(/^"|"$/g, '').replace(/\\n/g, '\n');
 
             admin.initializeApp({
                 credential: admin.credential.cert({
-                    // ★ 修改點 2：對齊變數名稱
                     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
                     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
                     privateKey: privateKey,
                 }),
-                storageBucket: 'gold-land-auto.firebasestorage.app'
+                // ★ 修正：標準 Firebase 預設 Bucket 通常是 .appspot.com
+                storageBucket: `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.appspot.com` 
             });
             console.log('✅ Firebase Admin 初始化成功');
         } catch (error) {
@@ -127,20 +124,25 @@ export async function POST(req: Request) {
                     .jpeg({ quality: 80, mozjpeg: true })              // 轉換為 JPEG 並以 80% 質量壓縮
                     .toBuffer()) as Buffer;
             }
-            // 4. 上傳至 Firebase Storage
+            // 4. 上傳至 Firebase Storage 並注入授權 Token
             const bucket = firebaseAdmin.storage().bucket();
             const fileName = `media_library/tg_${Date.now()}_${Math.floor(Math.random() * 1000)}.${fileExt}`;
             const file = bucket.file(fileName);
 
+            // ★ 核心修復：手動生成 Firebase Download Token
+            const downloadToken = uuidv4();
+
             await file.save(finalBuffer, {
-                metadata: { contentType: contentType }
+                metadata: { 
+                    contentType: contentType,
+                    metadata: {
+                        firebaseStorageDownloadTokens: downloadToken // 注入 Token 繞過安全規則
+                    }
+                }
             });
 
-            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/gold-land-auto.firebasestorage.app/o/${encodeURIComponent(fileName)}?alt=media`;
-
-            // 5. 寫入 Firestore 智能圖庫
-            const db = firebaseAdmin.firestore();
-            const docRef = db.collection('artifacts').doc('gold-land-auto').collection('staff').doc('CHARLES_data').collection('media_library').doc();
+            // ★ 將 Token 附加到網址尾端，完美模擬前端上傳網址格式
+            const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(fileName)}?alt=media&token=${downloadToken}`;
 
             const tags = ['TG極速傳遞'];
             if (caption) tags.push(caption);
