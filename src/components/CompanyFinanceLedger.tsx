@@ -591,7 +591,9 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                             <td className="p-3 text-center">
                                                 {/* ★ AI 對帳狀態 */}
                                                 {item.isReconciled ? (
-                                                    <CheckCircle className="text-emerald-500 mx-auto" size={16} title={`已與銀行結單核對無誤 (${item.bankDesc || ''})`}/>
+                                                    <div title={`已與銀行結單核對無誤 (${item.bankDesc || ''})`} className="flex justify-center">
+                                                        <CheckCircle className="text-emerald-500" size={16} />
+                                                    </div>
                                                 ) : (
                                                     <div className="w-4 h-4 rounded-full border-2 border-slate-300 mx-auto" title="未核對"></div>
                                                 )}
