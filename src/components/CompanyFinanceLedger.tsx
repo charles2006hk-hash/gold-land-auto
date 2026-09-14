@@ -7,9 +7,9 @@ import {
     Download, Copy, Trash2, Loader2, ShieldAlert, Building2, 
     TrendingUp, ArrowUpRight, ArrowDownRight, FileSpreadsheet, RefreshCw,
     ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark, Edit, Lock,
-    Bot, UploadCloud, CheckCircle // ★ 新增 AI 相關圖標
+    Bot, UploadCloud, CheckCircle, DatabaseZap
 } from 'lucide-react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 const DEFAULT_LEDGER_CATEGORIES = [
     { name: '公司租金', defaultFlow: 'OUT', defaultAmount: '' },
@@ -20,8 +20,10 @@ const DEFAULT_LEDGER_CATEGORIES = [
     { name: '文具雜項/軟體訂閱', defaultFlow: 'OUT', defaultAmount: '' },
     { name: '政府資助/補貼', defaultFlow: 'IN', defaultAmount: '' },
     { name: '其他收入', defaultFlow: 'IN', defaultAmount: '' },
-    { name: '進貨成本 (COGS)', defaultFlow: 'OUT', defaultAmount: '' }, // ★ 補齊車輛相關
-    { name: '營業收入 (Sales)', defaultFlow: 'IN', defaultAmount: '' }, // ★ 補齊車輛相關
+    { name: '進貨成本 (COGS)', defaultFlow: 'OUT', defaultAmount: '' }, 
+    { name: '營業收入 (Sales)', defaultFlow: 'IN', defaultAmount: '' }, 
+    { name: '營運開支 (Expenses)', defaultFlow: 'OUT', defaultAmount: '' },
+    { name: '售後服務 (Service)', defaultFlow: 'IN', defaultAmount: '' },
     { name: '其他雜支', defaultFlow: 'OUT', defaultAmount: '' }
 ];
 
@@ -56,7 +58,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
     const [vehicles, setVehicles] = useState<any[]>([]); 
     const [loading, setLoading] = useState(true);
     
-    // ★ 升級 1：讀取與寫入 Local Storage，實現日期區間「鎖定」
     const [startDate, setStartDate] = useState(() => {
         if (typeof window !== 'undefined') return localStorage.getItem('gla_finance_start') || getFirstDay();
         return getFirstDay();
@@ -66,10 +67,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         return getLastDay();
     });
 
-    // ★ AI 對帳中心專用狀態
     const [showReconModal, setShowReconModal] = useState(false);
     const [aiJsonInput, setAiJsonInput] = useState('');
     const [reconResult, setReconResult] = useState<{ matched: number, skipped: number } | null>(null);
+    const [isBatchSyncing, setIsBatchSyncing] = useState(false);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -135,7 +136,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list: any[] = [];
-            snapshot.forEach(doc => list.push(doc.data()));
+            snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
             setVehicles(list);
         });
         return () => unsubscribe();
@@ -143,22 +144,17 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
     const filteredItems = useMemo(() => {
         if (!startDate || !endDate) return ledgerItems;
-        // 兼容手工帳的 dueDate 以及自動同步帳目的 date
         return ledgerItems.filter(item => {
-            const itemDate = item.dueDate || item.date || item.paymentDate;
+            const itemDate = item.paymentDate || item.dueDate || item.date;
             return itemDate >= startDate && itemDate <= endDate;
         });
     }, [ledgerItems, startDate, endDate]);
-
-    const unpaidItems = useMemo(() => {
-        return ledgerItems.filter(item => item.status === 'Unpaid' && (item.flow === 'OUT' || item.type === 'OUT')).sort((a,b) => new Date(a.dueDate || a.date).getTime() - new Date(b.dueDate || b.date).getTime());
-    }, [ledgerItems]);
 
     const summary = useMemo(() => {
         let totalOutPaid = 0, totalInPaid = 0, totalUnpaidOut = 0;
         filteredItems.forEach(item => {
             const amt = Number(item.amount) || 0;
-            const isOut = item.flow === 'OUT' || item.type === 'OUT'; // 兼容兩種格式
+            const isOut = item.flow === 'OUT' || item.type === 'OUT'; 
             const isIn = item.flow === 'IN' || item.type === 'IN';
             
             if (item.status === 'Unpaid') {
@@ -169,7 +165,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             }
         });
 
-        // 原本的車輛預期利潤保留
         let totalCarProfit = 0;
         vehicles.forEach(v => {
             const outDate = v.stockOutDate || '';
@@ -182,9 +177,89 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             }
         });
         
-        // 這裡的淨利單純是整個戶口的存入 - 流出
         return { totalOutPaid, totalInPaid, unpaidOut: totalUnpaidOut, carProfit: totalCarProfit, netProfit: totalInPaid - totalOutPaid };
     }, [filteredItems, vehicles, startDate, endDate]);
+
+    // ==================================================================
+    // ★★★ 核心引擎：一鍵全庫歷史帳目強制清洗至總帳 ★★★
+    // ==================================================================
+    const handleForceSyncAllHistoricalData = async () => {
+        if (!confirm("⚠️ 警告：這將會把系統內所有的舊車輛收支（買車、賣車、維修、雜費）強制洗入公司營運總帳。\n\n這個過程是安全的，不會重複計算，但可能需要 5 ~ 10 秒鐘。\n確定要執行嗎？")) return;
+        
+        setIsBatchSyncing(true);
+        try {
+            const ledgerRefBase = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses');
+            const cleanNum = (val: any) => Math.round(Number(String(val || '0').replace(/,/g, '')));
+            const cleanDateStr = (val: any) => (val || new Date().toISOString().split('T')[0]).replace(/\//g, '-');
+
+            let processedCount = 0;
+
+            for (const v of vehicles) {
+                if (!v.id) continue;
+                const batch = writeBatch(db);
+
+                // 1. 維修 (Maintenance)
+                (v.maintenanceRecords || []).forEach((m: any) => {
+                    if (m.costStatus === 'Paid' && cleanNum(m.cost) > 0) {
+                        batch.set(doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'OUT', category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, amount: cleanNum(m.cost), date: cleanDateStr(m.costDate), method: m.costMethod || 'Transfer', remark: m.costRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                    if (m.chargeStatus === 'Paid' && cleanNum(m.charge) > 0) {
+                        batch.set(doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'IN', category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, amount: cleanNum(m.charge), date: cleanDateStr(m.chargeDate), method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                });
+
+                // 2. 銷售收款 (Sales Payments)
+                (v.payments || []).forEach((p: any, idx: number) => {
+                    const safeId = p.id || `pay_auto_${idx}_${new Date(p.date || Date.now()).getTime()}`;
+                    if (cleanNum(p.amount) > 0) {
+                        batch.set(doc(ledgerRefBase, `sales_in_${v.id}_${safeId}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'sales', type: 'IN', category: '營業收入 (Sales)', desc: `[車輛收款] ${v.regMark || ''} ${v.make || ''} ${v.model || ''} - ${p.type || '定金/尾數'}`, amount: cleanNum(p.amount), date: cleanDateStr(p.date), method: p.method || 'Transfer', remark: p.note || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                });
+
+                // 3. 進貨付款 (Acquisition)
+                (v.acquisition?.payments || []).forEach((p: any, idx: number) => {
+                    const safeId = p.id || `acq_${idx}_${new Date(p.date || Date.now()).getTime()}`;
+                    if (cleanNum(p.amount) > 0) {
+                        batch.set(doc(ledgerRefBase, `acq_cost_${v.id}_${safeId}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'acquisition', type: 'OUT', category: '進貨成本 (COGS)', desc: `[買車付款] ${v.make || ''} ${v.model || ''} - ${v.acquisition?.vendor || '供應商'}`, amount: cleanNum(p.amount), date: cleanDateStr(p.date), method: p.method || 'Transfer', remark: p.note || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                });
+
+                // 4. 車輛雜費 (Expenses)
+                (v.expenses || []).forEach((e: any) => {
+                    if (e.status === 'Paid' && cleanNum(e.amount) > 0) {
+                        batch.set(doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'expenses', type: 'OUT', category: '營運開支 (Expenses)', desc: `[車輛雜費] ${e.type} - ${e.company}`, amount: cleanNum(e.amount), date: cleanDateStr(e.date), method: e.paymentMethod || 'Transfer', remark: e.invoiceNo || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                });
+
+                // 5. 中港代辦 (CrossBorder)
+                (v.crossBorder?.crossings || []).forEach((c: any) => {
+                    if (c.costStatus === 'Paid' && cleanNum(c.cost) > 0) {
+                        batch.set(doc(ledgerRefBase, `cb_cost_${v.id}_${c.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'OUT', category: '營運開支 (Expenses)', desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'}`, amount: cleanNum(c.cost), date: cleanDateStr(c.costDate), method: c.costMethod || 'Transfer', remark: c.costRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                    if (c.chargeStatus === 'Paid' && cleanNum(c.charge) > 0) {
+                        batch.set(doc(ledgerRefBase, `cb_charge_${v.id}_${c.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'IN', category: '售後服務 (Service)', desc: `[中港收費] ${c.serviceItem || '代辦手續'}`, amount: cleanNum(c.charge), date: cleanDateStr(c.chargeDate), method: c.chargeMethod || 'Transfer', remark: c.chargeRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                });
+
+                // 6. 墊資利息 (Financing)
+                (v.financingRecords || []).forEach((f: any) => {
+                    if (f.status === 'Settled' && cleanNum(f.actualInterest) > 0) {
+                        batch.set(doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'financing', type: 'OUT', category: '營運開支 (Expenses)', desc: `[墊資利息] ${f.lenderName} (${f.actualDays}天)`, amount: cleanNum(f.actualInterest), date: cleanDateStr(f.endDate), method: 'Transfer', remark: `本金: $${cleanNum(f.principal).toLocaleString()} | 年息: ${f.annualRate}%`, status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                    }
+                });
+
+                await batch.commit();
+                processedCount++;
+            }
+
+            alert(`✅ 同步大成功！已完成掃描並更新 ${processedCount} 台車輛的歷史帳目，總帳已反映最新現金流。`);
+        } catch (e) {
+            console.error(e);
+            alert("❌ 同步過程發生錯誤，請檢查網路。");
+        } finally {
+            setIsBatchSyncing(false);
+        }
+    };
 
     const handleCategoryChange = (catName: string) => {
         const setting = ledgerCategories.find((c: any) => c.name === catName);
@@ -267,7 +342,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             await setDoc(docRef, {
                 status: nextStatus,
                 paymentDate: nextStatus === 'Paid' ? new Date().toISOString().split('T')[0] : '',
-                isReconciled: false // 狀態變更時，自動解除銀行核對狀態
+                isReconciled: false
             }, { merge: true });
 
             if (nextStatus === 'Paid' && item.recurring && item.recurring !== 'none') {
@@ -300,14 +375,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         catch (err) { alert('刪除失敗: ' + err); }
     };
 
-    // ==================================================================
-    // ★★★ 輸出給會計師的標準流水帳 (CPA Export) ★★★
-    // ==================================================================
     const handleExportCPA = () => {
         let csvContent = "\uFEFF"; 
         csvContent += "日期 (Date),財務類別 (Category),項目明細 (Description),對象/車牌 (Reference),收入 IN (HKD),支出 OUT (HKD),支付方式 (Method),銀行對帳狀態 (Reconciled)\n";
 
-        // 只匯出「已結清 (Paid)」的真實金流
         const paidItems = filteredItems.filter(item => item.status === 'Paid');
 
         paidItems.forEach(item => {
@@ -328,13 +399,9 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
-    // ==================================================================
-    // ★★★ AI 銀行結單智能對帳引擎 (Auto-Reconciliation) ★★★
-    // ==================================================================
     const handleAutoReconcile = async () => {
         if (!db) return;
         try {
-            // 預期 JSON 格式: [ { "date": "2026-09-09", "amount": 91710, "desc": "入公司HSBC" }, ... ]
             const bankRecords = JSON.parse(aiJsonInput);
             if (!Array.isArray(bankRecords)) throw new Error("JSON 必須是一個陣列");
 
@@ -346,28 +413,26 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 const bankType = Number(bankTx.amount) > 0 ? 'IN' : 'OUT';
                 const bankDate = new Date(bankTx.date).getTime();
 
-                // 尋找系統中「未核銷」、金額一致、且日期在 +/- 5 天內的紀錄
                 const matchedItem = ledgerItems.find(item => {
                     if (item.isReconciled) return false;
                     const itemAmt = Number(item.amount);
-                    const itemType = item.flow || item.type; // 兼容手工帳與系統自動帳
+                    const itemType = item.flow || item.type; 
                     
                     if (itemAmt !== bankAmt || itemType !== bankType) return false;
 
                     const itemDate = new Date(item.paymentDate || item.dueDate || item.date).getTime();
                     const diffDays = Math.abs((bankDate - itemDate) / (1000 * 60 * 60 * 24));
                     
-                    return diffDays <= 5; // 容忍 5 天的時間差 (例如週末跨帳)
+                    return diffDays <= 5; 
                 });
 
                 if (matchedItem) {
-                    // 找到對應，寫入 Firebase 標記為已核銷
                     const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', matchedItem.id);
                     await setDoc(docRef, { 
                         isReconciled: true, 
                         reconciledDate: bankTx.date,
                         bankDesc: bankTx.desc,
-                        status: 'Paid', // 強制轉為已收付
+                        status: 'Paid', 
                         updatedAt: serverTimestamp() 
                     }, { merge: true });
                     matchedCount++;
@@ -454,7 +519,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             {/* 2. 中間主要區塊：記帳與清單 */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 
-                {/* 左側：手工記帳表單 (維持不變) */}
+                {/* 左側：手工記帳表單 */}
                 <div className={`bg-white rounded-xl border ${editingExpenseId ? 'border-amber-400 ring-2 ring-amber-100' : 'border-slate-200'} shadow-sm p-4 space-y-4 transition-all`}>
                     <h3 className="font-black text-slate-800 text-sm border-b pb-2 flex items-center gap-2">
                         {editingExpenseId ? <><Edit size={18} className="text-amber-600"/> 編輯日常帳目</> : <><Plus size={18} className="text-blue-600"/> 日常帳目登錄</>}
@@ -561,9 +626,18 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                         </div>
                         
                         <div className="flex gap-2">
-                            {/* ★ AI 對帳與會計輸出按鈕 */}
-                            <button onClick={() => setShowReconModal(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-sm transition-all"><Bot size={14} className="mr-1.5"/> AI 結單對帳</button>
-                            <button onClick={handleExportCPA} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-md transition-all"><FileSpreadsheet size={14} className="mr-1.5"/> CPA 會計報表</button>
+                            {/* ★ 一鍵重整歷史數據的按鈕 (限老闆使用) */}
+                            <button 
+                                onClick={handleForceSyncAllHistoricalData} 
+                                disabled={isBatchSyncing}
+                                className="bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-sm transition-all disabled:opacity-50"
+                                title="強制將庫存內所有歷史帳目洗入總帳"
+                            >
+                                {isBatchSyncing ? <Loader2 size={14} className="mr-1.5 animate-spin"/> : <DatabaseZap size={14} className="mr-1.5"/>}
+                                同步歷史帳目
+                            </button>
+                            <button onClick={() => setShowReconModal(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-sm transition-all"><Bot size={14} className="mr-1.5"/> AI 對帳</button>
+                            <button onClick={handleExportCPA} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-md transition-all"><FileSpreadsheet size={14} className="mr-1.5"/> CPA 報表</button>
                         </div>
                     </div>
 
@@ -575,21 +649,19 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                     <th className="p-3">日期</th>
                                     <th className="p-3">科目/方式</th>
                                     <th className="p-3">項目明細</th>
-                                    <th className="p-3 text-right">交易金額</th>
-                                    <th className="p-3 text-center">狀態</th>
-                                    <th className="p-3 text-center">操作</th>
+                                    <th className="p-3 text-right">收入 (IN)</th>
+                                    <th className="p-3 text-right text-red-600">支出 (OUT)</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100">
                                 {filteredItems.map(item => {
-                                    const flow = item.flow || item.type; // 兼容兩種格式
+                                    const flow = item.flow || item.type; 
                                     const itemDate = item.dueDate || item.date || item.paymentDate;
-                                    const isFromSystem = !!item.sourceModule; // 判斷是否為系統自動產生 (不能手動刪除)
+                                    const isFromSystem = !!item.sourceModule; 
 
                                     return (
                                         <tr key={item.id} className={`border-b transition-colors font-medium text-slate-700 ${editingExpenseId === item.id ? 'bg-amber-50/50 border-amber-200' : (item.isReconciled ? 'bg-emerald-50/20' : 'hover:bg-slate-50/80')}`}>
                                             <td className="p-3 text-center">
-                                                {/* ★ AI 對帳狀態 */}
                                                 {item.isReconciled ? (
                                                     <div title={`已與銀行結單核對無誤 (${item.bankDesc || ''})`} className="flex justify-center">
                                                         <CheckCircle className="text-emerald-500" size={16} />
