@@ -1773,17 +1773,20 @@ useEffect(() => {
         return () => unsubDb();
     }, [staffId, db, appId, currentUser, user]); // ★ 補全 user 依賴
 
+ // ==================================================================
+  // ✅ 終極修復：強制同步 Firebase Auth 與前端 LocalStorage 狀態 (防誤殺版)
+  // ==================================================================
   useEffect(() => {
-      // 如果 Firebase 判定未登入 (Token 失效)，但前端卻因 LocalStorage 殘留 staffId
-      // 這會導致畫面卡在 Loading。此時必須強制清除殘留狀態，踢回登入頁。
-      if (user === null && staffId !== null) {
-          console.warn("Firebase Auth 憑證失效或未就緒，清除殘留狀態並返回登入頁");
+      // ★ 核心修復：加入 !loading 判斷！
+      // 必須等待 Firebase Auth 完全初始化結束後 (!loading)，才能斷定 user 真的是 null
+      if (!loading && user === null && staffId !== null) {
+          console.warn("Firebase Auth 憑證真正失效，清除殘留狀態並返回登入頁");
           setStaffId(null);
           setCurrentUser(null);
           localStorage.removeItem('gla_saved_user');
           setIsDataSyncing(true); // 重置載入狀態以供下次使用
       }
-  }, [user, staffId]);
+  }, [user, staffId, loading]); // 👈 必須補上 loading 依賴項
 
 // ★★★ 核心修復：把 Hooks 移到 Early Return 之前，解決 Error #310 崩潰問題 ★★★
   const databaseReminders = useMemo(() => {
