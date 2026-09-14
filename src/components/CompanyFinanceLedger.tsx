@@ -6,9 +6,10 @@ import {
     DollarSign, CalendarDays, Plus, CheckCircle2, AlertTriangle, 
     Download, Copy, Trash2, Loader2, ShieldAlert, Building2, 
     TrendingUp, ArrowUpRight, ArrowDownRight, FileSpreadsheet, RefreshCw,
-    ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark, Edit, Lock
+    ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark, Edit, Lock,
+    Bot, UploadCloud, CheckCircle // ★ 新增 AI 相關圖標
 } from 'lucide-react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy, serverTimestamp } from 'firebase/firestore';
 
 const DEFAULT_LEDGER_CATEGORIES = [
     { name: '公司租金', defaultFlow: 'OUT', defaultAmount: '' },
@@ -19,6 +20,8 @@ const DEFAULT_LEDGER_CATEGORIES = [
     { name: '文具雜項/軟體訂閱', defaultFlow: 'OUT', defaultAmount: '' },
     { name: '政府資助/補貼', defaultFlow: 'IN', defaultAmount: '' },
     { name: '其他收入', defaultFlow: 'IN', defaultAmount: '' },
+    { name: '進貨成本 (COGS)', defaultFlow: 'OUT', defaultAmount: '' }, // ★ 補齊車輛相關
+    { name: '營業收入 (Sales)', defaultFlow: 'IN', defaultAmount: '' }, // ★ 補齊車輛相關
     { name: '其他雜支', defaultFlow: 'OUT', defaultAmount: '' }
 ];
 
@@ -63,6 +66,11 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         return getLastDay();
     });
 
+    // ★ AI 對帳中心專用狀態
+    const [showReconModal, setShowReconModal] = useState(false);
+    const [aiJsonInput, setAiJsonInput] = useState('');
+    const [reconResult, setReconResult] = useState<{ matched: number, skipped: number } | null>(null);
+
     useEffect(() => {
         if (typeof window !== 'undefined') {
             localStorage.setItem('gla_finance_start', startDate);
@@ -86,7 +94,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         paymentDate: '',
         paymentMethod: 'Transfer', 
         chequeNo: '',
-        recurring: 'none' // ★ 升級 2：週期設定 (none, monthly, quarterly, yearly)
+        recurring: 'none'
     };
     const [newExpense, setNewExpense] = useState(initialFormState);
 
@@ -135,25 +143,33 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
     const filteredItems = useMemo(() => {
         if (!startDate || !endDate) return ledgerItems;
-        return ledgerItems.filter(item => item.dueDate >= startDate && item.dueDate <= endDate);
+        // 兼容手工帳的 dueDate 以及自動同步帳目的 date
+        return ledgerItems.filter(item => {
+            const itemDate = item.dueDate || item.date || item.paymentDate;
+            return itemDate >= startDate && itemDate <= endDate;
+        });
     }, [ledgerItems, startDate, endDate]);
 
     const unpaidItems = useMemo(() => {
-        return ledgerItems.filter(item => item.status === 'Unpaid' && item.flow === 'OUT').sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+        return ledgerItems.filter(item => item.status === 'Unpaid' && (item.flow === 'OUT' || item.type === 'OUT')).sort((a,b) => new Date(a.dueDate || a.date).getTime() - new Date(b.dueDate || b.date).getTime());
     }, [ledgerItems]);
 
     const summary = useMemo(() => {
         let totalOutPaid = 0, totalInPaid = 0, totalUnpaidOut = 0;
         filteredItems.forEach(item => {
             const amt = Number(item.amount) || 0;
+            const isOut = item.flow === 'OUT' || item.type === 'OUT'; // 兼容兩種格式
+            const isIn = item.flow === 'IN' || item.type === 'IN';
+            
             if (item.status === 'Unpaid') {
-                if (item.flow === 'OUT') totalUnpaidOut += amt;
+                if (isOut) totalUnpaidOut += amt;
             } else {
-                if (item.flow === 'IN') totalInPaid += amt;
-                else totalOutPaid += amt;
+                if (isIn) totalInPaid += amt;
+                else if (isOut) totalOutPaid += amt;
             }
         });
 
+        // 原本的車輛預期利潤保留
         let totalCarProfit = 0;
         vehicles.forEach(v => {
             const outDate = v.stockOutDate || '';
@@ -165,7 +181,9 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 totalCarProfit += (sellPrice + addonsTotal) - (costPrice + expensesTotal);
             }
         });
-        return { totalOutPaid, totalInPaid, unpaidOut: totalUnpaidOut, carProfit: totalCarProfit, netProfit: totalCarProfit + totalInPaid - totalOutPaid };
+        
+        // 這裡的淨利單純是整個戶口的存入 - 流出
+        return { totalOutPaid, totalInPaid, unpaidOut: totalUnpaidOut, carProfit: totalCarProfit, netProfit: totalInPaid - totalOutPaid };
     }, [filteredItems, vehicles, startDate, endDate]);
 
     const handleCategoryChange = (catName: string) => {
@@ -202,7 +220,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 ...(!editingExpenseId && { createdAt: new Date().toISOString() })
             }, { merge: true });
 
-            // ★ 升級 2：如果在新增時直接標記為 Paid 且設定了週期，自動產生下一期
             if (!editingExpenseId && newExpense.status === 'Paid' && newExpense.recurring && newExpense.recurring !== 'none') {
                 await generateNextRecurringItem(newExpense);
             }
@@ -214,7 +231,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         setIsSubmitting(false);
     };
 
-    // ★ 自動生成下一期循環帳目的核心函數
     const generateNextRecurringItem = async (itemData: any) => {
         const oldDate = new Date(itemData.dueDate);
         if (itemData.recurring === 'monthly') oldDate.setMonth(oldDate.getMonth() + 1);
@@ -238,7 +254,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         showGlobalToast(`系統已為您自動產生下一期帳單：${nextDueDate}`, 'success');
     };
     
-    // 全域 Toast 支援
     const showGlobalToast = (text: string, type: 'success' | 'error' = 'success') => {
         if (typeof window !== 'undefined' && (window as any).alert) {
             (window as any).alert(text);
@@ -251,10 +266,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             const nextStatus = item.status === 'Paid' ? 'Unpaid' : 'Paid';
             await setDoc(docRef, {
                 status: nextStatus,
-                paymentDate: nextStatus === 'Paid' ? new Date().toISOString().split('T')[0] : ''
+                paymentDate: nextStatus === 'Paid' ? new Date().toISOString().split('T')[0] : '',
+                isReconciled: false // 狀態變更時，自動解除銀行核對狀態
             }, { merge: true });
 
-            // ★ 升級 2：如果標記為結清，且設定了週期，自動產生下一期
             if (nextStatus === 'Paid' && item.recurring && item.recurring !== 'none') {
                 await generateNextRecurringItem(item);
             }
@@ -265,14 +280,14 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         setEditingExpenseId(item.id);
         setNewExpense({
             category: item.category || '公司租金',
-            flow: item.flow || 'OUT',
+            flow: item.flow || item.type || 'OUT',
             type: item.type || 'Fixed',
-            title: item.title || '',
+            title: item.title || item.desc || '',
             amount: formatInputAmount(String(item.amount || '')),
-            dueDate: item.dueDate || new Date().toISOString().split('T')[0],
+            dueDate: item.dueDate || item.date || new Date().toISOString().split('T')[0],
             status: item.status || 'Unpaid',
             paymentDate: item.paymentDate || '',
-            paymentMethod: item.paymentMethod || 'Transfer',
+            paymentMethod: item.paymentMethod || item.method || 'Transfer',
             chequeNo: item.chequeNo || '',
             recurring: item.recurring || 'none'
         });
@@ -280,37 +295,95 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
     };
 
     const handleDeleteItem = async (id: string) => {
-        if (!confirm('確定要永久刪除此筆日常帳目紀錄嗎？')) return;
+        if (!confirm('確定要永久刪除此筆紀錄嗎？')) return;
         try { await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id)); } 
         catch (err) { alert('刪除失敗: ' + err); }
     };
 
-    const handleExportCSV = () => {
+    // ==================================================================
+    // ★★★ 輸出給會計師的標準流水帳 (CPA Export) ★★★
+    // ==================================================================
+    const handleExportCPA = () => {
         let csvContent = "\uFEFF"; 
-        csvContent += "到期日,週期,帳目方向,費用科目,項目名稱,交易金額(HKD),交易狀態,實際收款/付款日,金流方式,支票號碼,最後經手人\n";
+        csvContent += "日期 (Date),財務類別 (Category),項目明細 (Description),對象/車牌 (Reference),收入 IN (HKD),支出 OUT (HKD),支付方式 (Method),銀行對帳狀態 (Reconciled)\n";
 
-        filteredItems.forEach(item => {
-            const flowStr = item.flow === 'IN' ? '收入(IN)' : '支出(OUT)';
-            const recurringMap: any = { 'none': '單次', 'monthly': '每月', 'quarterly': '每季', 'yearly': '每年' };
-            const recurringStr = recurringMap[item.recurring] || '單次';
-            const statusStr = item.status === 'Paid' ? '已結清' : '🔴待處理';
-            const methodMap: any = { 'Cash': '現金', 'Transfer': '轉帳', 'Cheque': '支票' };
-            const methodStr = methodMap[item.paymentMethod] || item.paymentMethod;
+        // 只匯出「已結清 (Paid)」的真實金流
+        const paidItems = filteredItems.filter(item => item.status === 'Paid');
+
+        paidItems.forEach(item => {
+            const flow = item.flow || item.type;
+            const inAmt = flow === 'IN' ? item.amount : '';
+            const outAmt = flow === 'OUT' ? item.amount : '';
+            const reconStatus = item.isReconciled ? `✅ Yes (${item.reconciledDate})` : '❌ No';
+            const desc = (item.desc || item.title || '').replace(/"/g, '""');
+            const ref = (item.refRegMark || item.chequeNo || '-').replace(/"/g, '""');
             
-            csvContent += `${item.dueDate},${recurringStr},${flowStr},${item.category},"${item.title.replace(/"/g, '""')}",${item.amount},${statusStr},${item.paymentDate || '-'},${methodStr},${item.chequeNo || '-'},${item.updatedBy || '-'}\n`;
+            csvContent += `${item.paymentDate || item.dueDate || item.date},${item.category},"${desc}","${ref}",${inAmt},${outAmt},${item.paymentMethod || item.method},${reconStatus}\n`;
         });
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", `金田汽車_營運總帳_${startDate}_至_${endDate}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        link.setAttribute("href", URL.createObjectURL(blob));
+        link.setAttribute("download", `會計標準流水帳_HSBC_${startDate}_至_${endDate}.csv`);
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
-    // ★ 升級 1：快捷日期區間設定
+    // ==================================================================
+    // ★★★ AI 銀行結單智能對帳引擎 (Auto-Reconciliation) ★★★
+    // ==================================================================
+    const handleAutoReconcile = async () => {
+        if (!db) return;
+        try {
+            // 預期 JSON 格式: [ { "date": "2026-09-09", "amount": 91710, "desc": "入公司HSBC" }, ... ]
+            const bankRecords = JSON.parse(aiJsonInput);
+            if (!Array.isArray(bankRecords)) throw new Error("JSON 必須是一個陣列");
+
+            let matchedCount = 0;
+            let skippedCount = 0;
+
+            for (const bankTx of bankRecords) {
+                const bankAmt = Math.abs(Number(bankTx.amount));
+                const bankType = Number(bankTx.amount) > 0 ? 'IN' : 'OUT';
+                const bankDate = new Date(bankTx.date).getTime();
+
+                // 尋找系統中「未核銷」、金額一致、且日期在 +/- 5 天內的紀錄
+                const matchedItem = ledgerItems.find(item => {
+                    if (item.isReconciled) return false;
+                    const itemAmt = Number(item.amount);
+                    const itemType = item.flow || item.type; // 兼容手工帳與系統自動帳
+                    
+                    if (itemAmt !== bankAmt || itemType !== bankType) return false;
+
+                    const itemDate = new Date(item.paymentDate || item.dueDate || item.date).getTime();
+                    const diffDays = Math.abs((bankDate - itemDate) / (1000 * 60 * 60 * 24));
+                    
+                    return diffDays <= 5; // 容忍 5 天的時間差 (例如週末跨帳)
+                });
+
+                if (matchedItem) {
+                    // 找到對應，寫入 Firebase 標記為已核銷
+                    const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', matchedItem.id);
+                    await setDoc(docRef, { 
+                        isReconciled: true, 
+                        reconciledDate: bankTx.date,
+                        bankDesc: bankTx.desc,
+                        status: 'Paid', // 強制轉為已收付
+                        updatedAt: serverTimestamp() 
+                    }, { merge: true });
+                    matchedCount++;
+                } else {
+                    skippedCount++;
+                }
+            }
+
+            setReconResult({ matched: matchedCount, skipped: skippedCount });
+            if(matchedCount > 0) alert(`✅ 智能對帳完成！成功核銷 ${matchedCount} 筆帳目。`);
+            
+        } catch (e) {
+            alert("❌ JSON 格式錯誤，請檢查 AI 輸出的內容是否正確。");
+        }
+    };
+
     const setQuickDate = (type: string) => {
         const d = new Date();
         if (type === 'thisMonth') {
@@ -342,7 +415,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             
             {/* 1. 頂部大戰情室數據庫看板 */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden hidden md:flex">
                     <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
                     <div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間車輛售出毛利</span>
@@ -351,24 +424,25 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                     <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg"><TrendingUp size={20}/></div>
                 </div>
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
+                    <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間存入 (IN)</span>
+                        <span className="text-xl font-black font-mono text-emerald-600 mt-1 block">${formatDisplayAmount(summary.totalInPaid)}</span>
+                    </div>
+                    <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-lg"><ArrowDownToLine size={20}/></div>
+                </div>
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
                     <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間已付支出 (OUT)</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間流出 (OUT)</span>
                         <span className="text-xl font-black font-mono text-red-600 mt-1 block">${formatDisplayAmount(summary.totalOutPaid)}</span>
                     </div>
                     <div className="p-2.5 bg-red-50 text-red-600 rounded-lg"><ArrowUpRight size={20}/></div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
-                    <div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">區間其他存入 (IN)</span>
-                        <span className="text-xl font-black font-mono text-blue-600 mt-1 block">${formatDisplayAmount(summary.totalInPaid)}</span>
-                    </div>
-                    <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg"><ArrowDownToLine size={20}/></div>
-                </div>
+                
                 <div className={`p-4 rounded-xl border shadow-sm flex items-center justify-between relative overflow-hidden ${summary.netProfit >= 0 ? 'bg-blue-900 border-blue-950 text-white' : 'bg-rose-950 border-red-950 text-white'}`}>
                     <div>
-                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest block">區間公司真實淨利 (Net)</span>
+                        <span className="text-[10px] font-bold text-blue-200 uppercase tracking-widest block">銀行帳戶淨變化 (Net)</span>
                         <span className="text-2xl font-black font-mono mt-1 block tracking-tight">${formatDisplayAmount(summary.netProfit)}</span>
                     </div>
                     <div className={`p-2.5 rounded-lg ${summary.netProfit >= 0 ? 'bg-blue-800 text-blue-200' : 'bg-rose-800 text-rose-200'}`}>
@@ -380,7 +454,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             {/* 2. 中間主要區塊：記帳與清單 */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 
-                {/* 左側：記帳表單 */}
+                {/* 左側：手工記帳表單 (維持不變) */}
                 <div className={`bg-white rounded-xl border ${editingExpenseId ? 'border-amber-400 ring-2 ring-amber-100' : 'border-slate-200'} shadow-sm p-4 space-y-4 transition-all`}>
                     <h3 className="font-black text-slate-800 text-sm border-b pb-2 flex items-center gap-2">
                         {editingExpenseId ? <><Edit size={18} className="text-amber-600"/> 編輯日常帳目</> : <><Plus size={18} className="text-blue-600"/> 日常帳目登錄</>}
@@ -404,7 +478,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                 </select>
                             </div>
                             <div>
-                                {/* ★ 升級 2：週期提醒設定 */}
                                 <label className="block text-xs font-bold text-slate-500 mb-1">週期設定 (自動下一期)</label>
                                 <select value={newExpense.recurring} onChange={e => setNewExpense({...newExpense, recurring: e.target.value})} className="w-full text-xs p-2.5 border rounded-lg bg-slate-50 font-bold text-blue-700 outline-none">
                                     <option value="none">單次 (不重複)</option>
@@ -447,7 +520,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">到期日</label>
+                                <label className="block text-xs font-bold text-slate-500 mb-1">到期/發生日</label>
                                 <input type="date" value={newExpense.dueDate} onChange={e => setNewExpense({...newExpense, dueDate: e.target.value})} className="w-full p-2.5 border rounded-lg text-xs font-mono bg-slate-50 outline-none"/>
                             </div>
                             <div>
@@ -472,7 +545,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 lg:col-span-2 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3 border-b pb-3 flex-none">
                         
-                        {/* ★ 升級 1：快捷鎖定日期區間 UI */}
                         <div className="flex items-center gap-2">
                             <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200 relative">
                                 <Lock size={14} className="absolute -top-2 -right-2 text-yellow-500 bg-white rounded-full" />
@@ -489,9 +561,9 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                         </div>
                         
                         <div className="flex gap-2">
-                            <button type="button" onClick={handleExportCSV} className="flex-1 md:flex-none text-[11px] bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold px-4 py-2 md:py-1.5 rounded-lg shadow-sm flex items-center justify-center gap-1 transition-colors">
-                                <FileSpreadsheet size={12}/> 匯出區間 Excel
-                            </button>
+                            {/* ★ AI 對帳與會計輸出按鈕 */}
+                            <button onClick={() => setShowReconModal(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-sm transition-all"><Bot size={14} className="mr-1.5"/> AI 結單對帳</button>
+                            <button onClick={handleExportCPA} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-md transition-all"><FileSpreadsheet size={14} className="mr-1.5"/> CPA 會計報表</button>
                         </div>
                     </div>
 
@@ -499,7 +571,8 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                         <table className="w-full text-left text-xs border-collapse">
                             <thead>
                                 <tr className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200">
-                                    <th className="p-3">應繳日</th>
+                                    <th className="p-3 w-10 text-center">核對</th>
+                                    <th className="p-3">日期</th>
                                     <th className="p-3">科目/方式</th>
                                     <th className="p-3">項目明細</th>
                                     <th className="p-3 text-right">交易金額</th>
@@ -508,56 +581,104 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredItems.map(item => (
-                                    <tr key={item.id} className={`border-b hover:bg-slate-50/80 transition-colors font-medium text-slate-700 ${editingExpenseId === item.id ? 'bg-amber-50/50 border-amber-200' : 'border-slate-100'}`}>
-                                        <td className="p-3 font-mono tracking-tight">
-                                            {item.dueDate}
-                                            {item.recurring !== 'none' && <div className="text-[8px] bg-blue-100 text-blue-700 mt-1 rounded text-center font-bold px-1 py-0.5">🔄 週期提醒</div>}
-                                        </td>
-                                        <td className="p-3">
-                                            <div className="flex flex-col gap-1 items-start">
-                                                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600">{item.category}</span>
-                                                <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400">
-                                                    {item.paymentMethod === 'Cheque' ? <Banknote size={10}/> : item.paymentMethod === 'Cash' ? <Banknote size={10}/> : <Landmark size={10}/>}
-                                                    {item.paymentMethod === 'Cheque' ? `支票: ${item.chequeNo}` : item.paymentMethod === 'Cash' ? '現金' : '轉帳'}
+                                {filteredItems.map(item => {
+                                    const flow = item.flow || item.type; // 兼容兩種格式
+                                    const itemDate = item.dueDate || item.date || item.paymentDate;
+                                    const isFromSystem = !!item.sourceModule; // 判斷是否為系統自動產生 (不能手動刪除)
+
+                                    return (
+                                        <tr key={item.id} className={`border-b transition-colors font-medium text-slate-700 ${editingExpenseId === item.id ? 'bg-amber-50/50 border-amber-200' : (item.isReconciled ? 'bg-emerald-50/20' : 'hover:bg-slate-50/80')}`}>
+                                            <td className="p-3 text-center">
+                                                {/* ★ AI 對帳狀態 */}
+                                                {item.isReconciled ? (
+                                                    <CheckCircle className="text-emerald-500 mx-auto" size={16} title={`已與銀行結單核對無誤 (${item.bankDesc || ''})`}/>
+                                                ) : (
+                                                    <div className="w-4 h-4 rounded-full border-2 border-slate-300 mx-auto" title="未核對"></div>
+                                                )}
+                                            </td>
+                                            <td className="p-3 font-mono tracking-tight">
+                                                {itemDate}
+                                                {item.recurring && item.recurring !== 'none' && <div className="text-[8px] bg-blue-100 text-blue-700 mt-1 rounded text-center font-bold px-1 py-0.5">🔄 週期</div>}
+                                            </td>
+                                            <td className="p-3">
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${flow === 'IN' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'}`}>{item.category}</span>
+                                                    <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400">
+                                                        {item.paymentMethod === 'Cheque' ? <Banknote size={10}/> : (item.paymentMethod === 'Cash' ? <Banknote size={10}/> : <Landmark size={10}/>)}
+                                                        {item.paymentMethod === 'Cheque' ? `支票: ${item.chequeNo}` : (item.paymentMethod === 'Cash' ? '現金' : '轉帳')}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-3">
-                                            <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                                                {item.flow === 'IN' ? <ArrowDownToLine size={12} className="text-emerald-500"/> : <ArrowUpFromLine size={12} className="text-red-500"/>}
-                                                {item.title}
-                                            </div>
-                                            {item.status === 'Paid' && <div className="text-[9px] text-emerald-500 font-mono mt-0.5">結清日: {item.paymentDate}</div>}
-                                        </td>
-                                        <td className={`p-3 text-right font-mono font-black text-base md:text-sm ${item.flow === 'IN' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                                            {item.flow === 'IN' ? '+' : '-'}${formatDisplayAmount(Number(item.amount))}
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <button 
-                                                type="button" 
-                                                onClick={() => handleToggleStatus(item)}
-                                                className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider transition-all border active:scale-95 ${item.status === 'Paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 border-red-200 text-red-600 hover:bg-rose-100 animate-pulse'}`}
-                                            >
-                                                {item.status === 'Paid' ? '已結清 🟢' : '🔴 待處理'}
-                                            </button>
-                                        </td>
-                                        <td className="p-3 text-center">
-                                            <div className="flex items-center justify-center gap-1">
-                                                <button type="button" onClick={() => handleEditItem(item)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"><Edit size={14}/></button>
-                                                <button type="button" onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14}/></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="p-3">
+                                                <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                                                    {flow === 'IN' ? <ArrowDownToLine size={12} className="text-emerald-500"/> : <ArrowUpFromLine size={12} className="text-red-500"/>}
+                                                    {item.title || item.desc}
+                                                    {item.refRegMark && <span className="ml-1 font-mono text-[9px] bg-slate-100 border px-1 rounded text-slate-500">{item.refRegMark}</span>}
+                                                </div>
+                                                {item.status === 'Paid' && <div className="text-[9px] text-emerald-500 font-mono mt-0.5">收付日: {item.paymentDate || itemDate}</div>}
+                                            </td>
+                                            <td className={`p-3 text-right font-mono font-black text-base md:text-sm ${flow === 'IN' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                                                {flow === 'IN' ? '+' : '-'}${formatDisplayAmount(Number(item.amount))}
+                                            </td>
+                                            <td className="p-3 text-center">
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => handleToggleStatus(item)}
+                                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider transition-all border active:scale-95 ${item.status === 'Paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 border-red-200 text-red-600 hover:bg-rose-100 animate-pulse'}`}
+                                                >
+                                                    {item.status === 'Paid' ? '已結清 🟢' : '🔴 待處理'}
+                                                </button>
+                                            </td>
+                                            <td className="p-3 text-center">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button type="button" onClick={() => handleEditItem(item)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"><Edit size={14}/></button>
+                                                    {!isFromSystem && <button type="button" onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14}/></button>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                                 {filteredItems.length === 0 && (
-                                    <tr><td colSpan={6} className="text-center text-slate-400 py-16 font-bold border-2 border-dashed rounded-xl bg-slate-50/50">📬 該日期區間無帳目紀錄。</td></tr>
+                                    <tr><td colSpan={7} className="text-center text-slate-400 py-16 font-bold border-2 border-dashed rounded-xl bg-slate-50/50">📬 該日期區間無帳目紀錄。</td></tr>
                                 )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
+
+            {/* ★ AI 對帳 Modal */}
+            {showReconModal && (
+                <div className="fixed inset-0 bg-black/60 z-[999] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
+                        <div className="p-4 bg-indigo-900 text-white flex justify-between items-center">
+                            <h3 className="font-bold flex items-center"><Bot className="mr-2 text-indigo-400"/> AI 結單自動對帳中心</h3>
+                            <button onClick={() => setShowReconModal(false)} className="hover:bg-white/20 p-1 rounded"><Trash2 size={18}/></button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-xs text-indigo-800 leading-relaxed">
+                                <strong>操作說明：</strong> 請將 AI 辨識出的銀行結單 JSON 貼在下方。系統會自動利用金額與日期尋找並核銷總帳中的帳目。<br/>
+                                <span className="text-slate-500 font-mono mt-1 block">格式範例: [ {`{"date":"2026-09-09", "amount":91710, "desc":"入公司HSBC"}`} ]</span>
+                            </div>
+                            <textarea 
+                                value={aiJsonInput} 
+                                onChange={e => setAiJsonInput(e.target.value)}
+                                className="w-full h-48 p-3 font-mono text-xs border rounded-xl outline-none focus:ring-2 ring-indigo-500 bg-slate-900 text-green-400"
+                                placeholder="在此貼上 JSON 陣列..."
+                            />
+                            {reconResult && (
+                                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm font-bold text-emerald-800 flex justify-between">
+                                    <span>🎉 對帳完畢！</span>
+                                    <span>成功核對: {reconResult.matched} 筆 | 未找到匹配: {reconResult.skipped} 筆</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t bg-slate-50 flex justify-end">
+                            <button onClick={handleAutoReconcile} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow-md flex items-center"><UploadCloud size={16} className="mr-2"/> 開始智能核對</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
