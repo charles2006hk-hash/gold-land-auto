@@ -2019,7 +2019,7 @@ useEffect(() => {
     };
 
 // ==================================================================
-  // ★★★ 終極中心化財務引擎 (v32.0 統一總帳版)：自動同步至「公司營運總帳」 ★★★
+  // ★★★ 終極中心化財務引擎 (v33.0 全面進貨+雜費版)：自動同步至「公司營運總帳」 ★★★
   // ==================================================================
   const syncVehicleFinanceToLedger = async (v: any) => {
       if (!db || !v.id || !appId) return;
@@ -2043,8 +2043,7 @@ useEffect(() => {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'OUT',
                           category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, amount: costAmt,
                           date: cleanDateStr(m.costDate), method: m.costMethod || 'Transfer', remark: m.costRemark || '', 
-                          status: 'Paid', // 👈 新增狀態，讓總帳顯示為綠色「已結清」
-                          updatedAt: serverTimestamp()
+                          status: 'Paid', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(costLedgerRef); }
 
@@ -2055,8 +2054,7 @@ useEffect(() => {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'IN',
                           category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, amount: chargeAmt,
                           date: cleanDateStr(m.chargeDate), method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', 
-                          status: 'Paid', 
-                          updatedAt: serverTimestamp()
+                          status: 'Paid', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(chargeLedgerRef); }
               });
@@ -2078,13 +2076,12 @@ useEffect(() => {
                           sourceModule: 'sales',
                           type: 'IN', 
                           category: '營業收入 (Sales)',
-                          desc: `[車輛收款] ${v.regMark || ''} ${v.make || ''} ${v.model || ''} - ${p.type || '定金/尾數'}`, // 優化了總帳的顯示標題
+                          desc: `[車輛收款] ${v.regMark || ''} ${v.make || ''} ${v.model || ''} - ${p.type || '定金/尾數'}`, 
                           amount: pAmount,
                           date: cleanDateStr(p.date),
                           method: p.method || 'Transfer', 
                           remark: p.note || '', 
-                          status: 'Paid', // 👈 確保總帳認列為已收
-                          updatedAt: serverTimestamp()
+                          status: 'Paid', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else {
                       batch.delete(salesLedgerRef);
@@ -2104,8 +2101,7 @@ useEffect(() => {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'OUT',
                           category: '營運開支 (Expenses)', desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'}`,
                           amount: cbCostAmt, date: cleanDateStr(c.costDate), method: c.costMethod || 'Transfer', remark: c.costRemark || '', 
-                          status: 'Paid',
-                          updatedAt: serverTimestamp()
+                          status: 'Paid', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(cbCostLedgerRef); }
 
@@ -2116,8 +2112,7 @@ useEffect(() => {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'IN',
                           category: '售後服務 (Service)', desc: `[中港收費] ${c.serviceItem || '代辦手續'}`,
                           amount: cbChargeAmt, date: cleanDateStr(c.chargeDate), method: c.chargeMethod || 'Transfer', remark: c.chargeRemark || '', 
-                          status: 'Paid',
-                          updatedAt: serverTimestamp()
+                          status: 'Paid', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(cbChargeLedgerRef); }
               });
@@ -2136,19 +2131,11 @@ useEffect(() => {
                           category: '營運開支 (Expenses)', desc: `[墊資利息] ${f.lenderName} (${f.actualDays}天)`,
                           amount: finAmt, date: cleanDateStr(f.endDate), method: 'Transfer', 
                           remark: `本金: ${formatCurrency(f.principal)} | 年息: ${f.annualRate}%`, 
-                          status: 'Paid',
-                          updatedAt: serverTimestamp()
+                          status: 'Paid', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(finLedgerRef); }
               });
           }
-        
-          await batch.commit();
-          console.log(`🚀 [終極財務引擎] 車輛 ${v.regMark} 流水已完美同步至「公司營運總帳」！`);
-      } catch (error) {
-          console.error("❌ 同步財務流水失敗:", error);
-      }
-  };
 
           // --------------------------------------------------------------
           // ✨【模組五：車輛進貨付款 (Acquisition Payments)】
@@ -2178,7 +2165,6 @@ useEffect(() => {
                   const expLedgerRef = doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`);
                   const eAmount = cleanNum(e.amount);
                   
-                  // 只有標記為 Paid 的才算真實流出
                   if (e.status === 'Paid' && eAmount > 0) {
                       batch.set(expLedgerRef, {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'expenses', type: 'OUT',
@@ -2191,6 +2177,11 @@ useEffect(() => {
           }
         
           await batch.commit();
+          console.log(`🚀 [終極財務引擎] 車輛 ${v.regMark} 流水已完美同步至「公司營運總帳」！`);
+      } catch (error) {
+          console.error("❌ 同步財務流水失敗:", error);
+      }
+  };
  
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
