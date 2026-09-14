@@ -2150,6 +2150,47 @@ useEffect(() => {
       }
   };
 
+          // --------------------------------------------------------------
+          // ✨【模組五：車輛進貨付款 (Acquisition Payments)】
+          // --------------------------------------------------------------
+          if (v.acquisition?.payments && Array.isArray(v.acquisition.payments)) {
+              v.acquisition.payments.forEach((p: any, idx: number) => {
+                  const safePaymentId = p.id || `acq_${idx}_${new Date(p.date || Date.now()).getTime()}`;
+                  const acqLedgerRef = doc(ledgerRefBase, `acq_cost_${v.id}_${safePaymentId}`);
+                  const pAmount = cleanNum(p.amount);
+                  
+                  if (pAmount > 0) {
+                      batch.set(acqLedgerRef, {
+                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'acquisition', type: 'OUT',
+                          category: '進貨成本 (COGS)', desc: `[買車付款] ${v.make || ''} ${v.model || ''} - ${v.acquisition?.vendor || '供應商'}`,
+                          amount: pAmount, date: cleanDateStr(p.date), method: p.method || 'Transfer', remark: p.note || '',
+                          status: 'Paid', updatedAt: serverTimestamp()
+                      }, { merge: true });
+                  } else { batch.delete(acqLedgerRef); }
+              });
+          }
+
+          // --------------------------------------------------------------
+          // ✨【模組六：一般車輛雜費支出 (Vehicle Expenses)】
+          // --------------------------------------------------------------
+          if (v.expenses && Array.isArray(v.expenses)) {
+              v.expenses.forEach((e: any) => {
+                  const expLedgerRef = doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`);
+                  const eAmount = cleanNum(e.amount);
+                  
+                  // 只有標記為 Paid 的才算真實流出
+                  if (e.status === 'Paid' && eAmount > 0) {
+                      batch.set(expLedgerRef, {
+                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'expenses', type: 'OUT',
+                          category: '營運開支 (Expenses)', desc: `[車輛雜費] ${e.type} - ${e.company}`,
+                          amount: eAmount, date: cleanDateStr(e.date), method: e.paymentMethod || 'Transfer', remark: e.invoiceNo || '',
+                          status: 'Paid', updatedAt: serverTimestamp()
+                      }, { merge: true });
+                  } else { batch.delete(expLedgerRef); }
+              });
+          }
+        
+          await batch.commit();
  
 const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
