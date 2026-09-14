@@ -2055,21 +2055,24 @@ useEffect(() => {
           // ✨【新接入模組二：車輛銷售收款 (Sales Payments)】
           // --------------------------------------------------------------
           if (v.payments && Array.isArray(v.payments)) {
-              v.payments.forEach((p: any) => {
-                  const salesLedgerRef = doc(ledgerRefBase, `sales_in_${v.id}_${p.id}`);
-                  // 只要收款紀錄存在且有金額，即視為已入帳收入
+              v.payments.forEach((p: any, idx: number) => { // ★ 加入 idx 參數
+                  // ★ 防呆機制：如果 p.id 遺失，使用索引與時間戳生成絕對唯一 ID，防止帳目覆蓋
+                  const safePaymentId = p.id || `pay_auto_${idx}_${new Date(p.date || Date.now()).getTime()}`;
+                  const salesLedgerRef = doc(ledgerRefBase, `sales_in_${v.id}_${safePaymentId}`);
+                  
                   if (p.amount && Number(p.amount) > 0) {
                       batch.set(salesLedgerRef, {
                           refVehicleId: v.id,
                           refRegMark: v.regMark || '未出牌',
                           sourceModule: 'sales',
-                          type: 'IN', // ★ 營業收入
+                          type: 'IN', 
                           category: '營業收入 (Sales)',
                           desc: `[車輛銷售收款] ${p.type || '定金/尾數'} - ${v.make || ''} ${v.model || ''}`,
-                          amount: Number(p.amount),
+                          // ★ 確保浮點數精確轉換為整數
+                          amount: Math.round(Number(p.amount)),
                           date: p.date || new Date().toISOString().split('T')[0],
-                          method: p.method || 'Transfer', // 銀行轉帳 / 現金 等
-                          remark: p.note || '', // 帶入銷售收款備註
+                          method: p.method || 'Transfer', 
+                          remark: p.note || '', 
                           updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else {
@@ -2429,7 +2432,7 @@ const deleteVehicle = async (id: string) => {
     if (!db || !staffId) return;
     const currentDb = db;
     
-    // 1. 立即安全地更新畫面 (只更新對應的陣列，絕對保留其他未 Save 的輸入資料)
+    // 1. 立即安全地更新畫面
     if (editingVehicle && editingVehicle.id === vehicleId) {
         setEditingVehicle(prev => {
              if (!prev) return null;
@@ -2441,7 +2444,7 @@ const deleteVehicle = async (id: string) => {
         });
     }
 
-    // 2. 背景寫入 Firebase (只更新指定的陣列欄位，不影響整台車的其他數據)
+    // 2. 背景寫入 Firebase Inventory
     const v = inventory.find(v => v.id === vehicleId);
     if (!v) return;
 
@@ -2453,6 +2456,16 @@ const deleteVehicle = async (id: string) => {
     }
 
     await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), updateData);
+
+    // ★★★ 核心修復：無論是新增/刪除收款或維修，強制觸發財務總帳同步引擎 ★★★
+    const updatedVehicleData = { ...v };
+    if (field === 'crossBorder') {
+        updatedVehicleData.crossBorder = { ...(v.crossBorder || {} as any), tasks: newItems };
+    } else {
+        (updatedVehicleData as any)[field] = newItems;
+    }
+    // 執行同步，確保總帳與車輛內部資料絕對一致
+    await syncVehicleFinanceToLedger(updatedVehicleData);
   };
 
   const addPayment = async (vehicleId: string, payment: Payment) => {
