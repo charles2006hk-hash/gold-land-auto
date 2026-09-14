@@ -2016,7 +2016,7 @@ useEffect(() => {
     };
 
 // ==================================================================
-  // ★★★ 終極中心化財務引擎：自動同步【維修+銷售+中港】至全域總帳 (v30.0) ★★★
+  // ★★★ 終極中心化財務引擎 (v31.0 防呆清洗版)：自動同步【維修+銷售+中港】至全域總帳 ★★★
   // ==================================================================
   const syncVehicleFinanceToLedger = async (v: any) => {
       if (!db || !v.id || !appId) return;
@@ -2024,28 +2024,34 @@ useEffect(() => {
           const batch = writeBatch(db);
           const ledgerRefBase = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'financial_ledger');
           
+          // 🛡️ 核心防護 1：強制清理金額 (移除逗號，確保為絕對整數)
+          const cleanNum = (val: any) => Math.round(Number(String(val || '0').replace(/,/g, '')));
+          
+          // 🛡️ 核心防護 2：強制標準化日期格式 (將 / 轉為 -，確保報表篩選器不漏單)
+          const cleanDateStr = (val: any) => (val || new Date().toISOString().split('T')[0]).replace(/\//g, '-');
+
           // --------------------------------------------------------------
           // 【模組一：維修保養 (Maintenance)】
           // --------------------------------------------------------------
           if (v.maintenanceRecords && Array.isArray(v.maintenanceRecords)) {
               v.maintenanceRecords.forEach((m: any) => {
-                  // 成本 (支出 OUT)
+                  const costAmt = cleanNum(m.cost);
                   const costLedgerRef = doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`);
-                  if (m.costStatus === 'Paid' && Number(m.cost) > 0) {
+                  if (m.costStatus === 'Paid' && costAmt > 0) {
                       batch.set(costLedgerRef, {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'OUT',
-                          category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, amount: Number(m.cost),
-                          date: m.costDate || new Date().toISOString().split('T')[0], method: m.costMethod || 'Transfer', remark: m.costRemark || '', updatedAt: serverTimestamp()
+                          category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, amount: costAmt,
+                          date: cleanDateStr(m.costDate), method: m.costMethod || 'Transfer', remark: m.costRemark || '', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(costLedgerRef); }
 
-                  // 收費 (收入 IN)
+                  const chargeAmt = cleanNum(m.charge);
                   const chargeLedgerRef = doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`);
-                  if (m.chargeStatus === 'Paid' && Number(m.charge) > 0) {
+                  if (m.chargeStatus === 'Paid' && chargeAmt > 0) {
                       batch.set(chargeLedgerRef, {
                           refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'IN',
-                          category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, amount: Number(m.charge),
-                          date: m.chargeDate || new Date().toISOString().split('T')[0], method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', updatedAt: serverTimestamp()
+                          category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, amount: chargeAmt,
+                          date: cleanDateStr(m.chargeDate), method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', updatedAt: serverTimestamp()
                       }, { merge: true });
                   } else { batch.delete(chargeLedgerRef); }
               });
@@ -2055,12 +2061,13 @@ useEffect(() => {
           // ✨【新接入模組二：車輛銷售收款 (Sales Payments)】
           // --------------------------------------------------------------
           if (v.payments && Array.isArray(v.payments)) {
-              v.payments.forEach((p: any, idx: number) => { // ★ 加入 idx 參數
-                  // ★ 防呆機制：如果 p.id 遺失，使用索引與時間戳生成絕對唯一 ID，防止帳目覆蓋
-                  const safePaymentId = p.id || `pay_auto_${idx}_${new Date(p.date || Date.now()).getTime()}`;
+              v.payments.forEach((p: any, idx: number) => {
+                  // 防呆：產生絕對唯一的 Payment ID，防止互相覆蓋
+                  const safePaymentId = p.id || `pay_auto_${idx}_${new Date().getTime()}`;
                   const salesLedgerRef = doc(ledgerRefBase, `sales_in_${v.id}_${safePaymentId}`);
                   
-                  if (p.amount && Number(p.amount) > 0) {
+                  const pAmount = cleanNum(p.amount);
+                  if (pAmount > 0) {
                       batch.set(salesLedgerRef, {
                           refVehicleId: v.id,
                           refRegMark: v.regMark || '未出牌',
@@ -2068,9 +2075,8 @@ useEffect(() => {
                           type: 'IN', 
                           category: '營業收入 (Sales)',
                           desc: `[車輛銷售收款] ${p.type || '定金/尾數'} - ${v.make || ''} ${v.model || ''}`,
-                          // ★ 確保浮點數精確轉換為整數
-                          amount: Math.round(Number(p.amount)),
-                          date: p.date || new Date().toISOString().split('T')[0],
+                          amount: pAmount,
+                          date: cleanDateStr(p.date), // 強制轉換為 YYYY-MM-DD
                           method: p.method || 'Transfer', 
                           remark: p.note || '', 
                           updatedAt: serverTimestamp()
@@ -2084,48 +2090,27 @@ useEffect(() => {
           // --------------------------------------------------------------
           // ✨【新接入模組三：中港業務代辦費 (Cross Border Crossings/Tasks)】
           // --------------------------------------------------------------
-          // 檢查中港業務的主結構是否存在
           if (v.crossBorder && v.crossBorder.crossings && Array.isArray(v.crossBorder.crossings)) {
               v.crossBorder.crossings.forEach((c: any) => {
-                  // --- 處理中港代辦成本 (給內地代理/政府的支出 OUT) ---
+                  const cbCostAmt = cleanNum(c.cost);
                   const cbCostLedgerRef = doc(ledgerRefBase, `cb_cost_${v.id}_${c.id}`);
-                  if (c.costStatus === 'Paid' && Number(c.cost) > 0) {
+                  if (c.costStatus === 'Paid' && cbCostAmt > 0) {
                       batch.set(cbCostLedgerRef, {
-                          refVehicleId: v.id,
-                          refRegMark: v.regMark || '未出牌',
-                          sourceModule: 'crossBorder',
-                          type: 'OUT',
-                          category: '營運開支 (Expenses)',
-                          desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'} (內地車牌: ${v.crossBorder.mainlandPlate || '未綁'})`,
-                          amount: Number(c.cost),
-                          date: c.costDate || new Date().toISOString().split('T')[0],
-                          method: c.costMethod || 'Transfer',
-                          remark: c.costRemark || '',
-                          updatedAt: serverTimestamp()
+                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'OUT',
+                          category: '營運開支 (Expenses)', desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'}`,
+                          amount: cbCostAmt, date: cleanDateStr(c.costDate), method: c.costMethod || 'Transfer', remark: c.costRemark || '', updatedAt: serverTimestamp()
                       }, { merge: true });
-                  } else {
-                      batch.delete(cbCostLedgerRef);
-                  }
+                  } else { batch.delete(cbCostLedgerRef); }
 
-                  // --- 處理中港對客收費 (對客戶收取的收入 IN) ---
+                  const cbChargeAmt = cleanNum(c.charge);
                   const cbChargeLedgerRef = doc(ledgerRefBase, `cb_charge_${v.id}_${c.id}`);
-                  if (c.chargeStatus === 'Paid' && Number(c.charge) > 0) {
+                  if (c.chargeStatus === 'Paid' && cbChargeAmt > 0) {
                       batch.set(cbChargeLedgerRef, {
-                          refVehicleId: v.id,
-                          refRegMark: v.regMark || '未出牌',
-                          sourceModule: 'crossBorder',
-                          type: 'IN',
-                          category: '售後服務 (Service)',
-                          desc: `[中港收費] ${c.serviceItem || '代辦手續'} (指標號: ${v.crossBorder.quotaNumber || '無'})`,
-                          amount: Number(c.charge),
-                          date: c.chargeDate || new Date().toISOString().split('T')[0],
-                          method: c.chargeMethod || 'Transfer',
-                          remark: c.chargeRemark || '',
-                          updatedAt: serverTimestamp()
+                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'IN',
+                          category: '售後服務 (Service)', desc: `[中港收費] ${c.serviceItem || '代辦手續'}`,
+                          amount: cbChargeAmt, date: cleanDateStr(c.chargeDate), method: c.chargeMethod || 'Transfer', remark: c.chargeRemark || '', updatedAt: serverTimestamp()
                       }, { merge: true });
-                  } else {
-                      batch.delete(cbChargeLedgerRef);
-                  }
+                  } else { batch.delete(cbChargeLedgerRef); }
               });
           }
 
@@ -2134,29 +2119,19 @@ useEffect(() => {
           // --------------------------------------------------------------
           if (v.financingRecords && Array.isArray(v.financingRecords)) {
               v.financingRecords.forEach((f: any) => {
+                  const finAmt = cleanNum(f.actualInterest);
                   const finLedgerRef = doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`);
-                  // ★ 只有當狀態為「已結算」且產生了實際利息時，才列入正式開支
-                  if (f.status === 'Settled' && Number(f.actualInterest) > 0) {
+                  if (f.status === 'Settled' && finAmt > 0) {
                       batch.set(finLedgerRef, {
-                          refVehicleId: v.id,
-                          refRegMark: v.regMark || '未出牌',
-                          sourceModule: 'financing',
-                          type: 'OUT', // ★ 利息屬於支出，會扣減車輛淨利
-                          category: '營運開支 (Expenses)',
-                          desc: `[墊資利息結算] ${f.lenderName} (${f.actualDays}天)`,
-                          amount: Number(f.actualInterest),
-                          date: f.endDate || new Date().toISOString().split('T')[0],
-                          method: 'Transfer', 
-                          remark: `本金: ${formatCurrency(f.principal)} | 年息: ${f.annualRate}%`,
-                          updatedAt: serverTimestamp()
+                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'financing', type: 'OUT',
+                          category: '營運開支 (Expenses)', desc: `[墊資利息結算] ${f.lenderName} (${f.actualDays}天)`,
+                          amount: finAmt, date: cleanDateStr(f.endDate), method: 'Transfer', 
+                          remark: `本金: ${formatCurrency(f.principal)} | 年息: ${f.annualRate}%`, updatedAt: serverTimestamp()
                       }, { merge: true });
-                  } else {
-                      batch.delete(finLedgerRef);
-                  }
+                  } else { batch.delete(finLedgerRef); }
               });
           }
         
-          // 一次性全自動原子提交，確保三個模組的帳目絕對不會同步失敗！
           await batch.commit();
           console.log(`🚀 [終極財務引擎] 車輛 ${v.regMark} 的【維修+銷售+中港】流水已完美同步至總帳本！`);
       } catch (error) {
