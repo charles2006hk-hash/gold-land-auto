@@ -625,12 +625,25 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 3.5: 資金池/墊資結算 (Lender Statements) */}
             {/* ========================================== */}
             {financeTab === 'lender' && (() => {
-                const lendersList = settings.lenders || [];
+                
+                // 🛡️ 終極修復：無死角動態掃描全庫金主 (取代寫死的 settings.lenders)
+                const lendersSet = new Set<string>();
+                inventory.forEach((v: any) => {
+                    if (v.financingRecords && Array.isArray(v.financingRecords)) {
+                        v.financingRecords.forEach((f: any) => {
+                            const name = f.lenderName?.trim();
+                            if (name) lendersSet.add(name);
+                        });
+                    }
+                });
+                // 轉為陣列並排序
+                const lendersList = Array.from(lendersSet).sort();
                 
                 // 找出選定金主的所有紀錄
                 let activePrincipalTotal = 0;
                 let currentMonthInterest = 0;
                 let lenderHistory: any[] = [];
+              
 
                 const currentMonthPrefix = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
 
