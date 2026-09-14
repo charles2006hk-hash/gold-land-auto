@@ -9,7 +9,7 @@ import {
     ArrowDownToLine, ArrowUpFromLine, CreditCard, Banknote, Landmark, Edit, Lock,
     Bot, UploadCloud, CheckCircle, DatabaseZap
 } from 'lucide-react';
-import { collection, query, onSnapshot, doc, setDoc, deleteDoc, orderBy, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, setDoc, deleteDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 const DEFAULT_LEDGER_CATEGORIES = [
     { name: '公司租金', defaultFlow: 'OUT', defaultAmount: '' },
@@ -119,9 +119,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         }
     }, [settings?.ledgerCategories, editingExpenseId]);
 
+    // ★★★ 核心修復：拔除 orderBy，防止 Firestore 把沒有 dueDate 欄位的自動帳目全部吃掉 ★★★
     useEffect(() => {
         if (!db || !appId || !isManager) return;
-        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), orderBy('dueDate', 'desc'));
+        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const list: any[] = [];
             snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
@@ -142,11 +143,20 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         return () => unsubscribe();
     }, [db, appId, isManager]);
 
+    // ★★★ 前端接管排序：完美兼容 date 與 dueDate ★★★
     const filteredItems = useMemo(() => {
         if (!startDate || !endDate) return ledgerItems;
-        return ledgerItems.filter(item => {
+        
+        const filtered = ledgerItems.filter(item => {
             const itemDate = item.paymentDate || item.dueDate || item.date;
             return itemDate >= startDate && itemDate <= endDate;
+        });
+
+        // 依據時間降序排列 (新的在上面)
+        return filtered.sort((a, b) => {
+            const dateA = new Date(a.paymentDate || a.dueDate || a.date || 0).getTime();
+            const dateB = new Date(b.paymentDate || b.dueDate || b.date || 0).getTime();
+            return dateB - dateA;
         });
     }, [ledgerItems, startDate, endDate]);
 
@@ -198,13 +208,22 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 if (!v.id) continue;
                 const batch = writeBatch(db);
 
+                // ★ 雙核相容升級：確保寫入時同時帶有 dueDate 與 date，讓各種檢視完美對齊
+                const syncData = (baseObj: any, dateVal: any) => ({
+                    ...baseObj,
+                    date: cleanDateStr(dateVal),
+                    dueDate: cleanDateStr(dateVal), // ★ 保障相容性
+                    paymentDate: cleanDateStr(dateVal), // 已付項目直接填滿
+                    updatedAt: serverTimestamp()
+                });
+
                 // 1. 維修 (Maintenance)
                 (v.maintenanceRecords || []).forEach((m: any) => {
                     if (m.costStatus === 'Paid' && cleanNum(m.cost) > 0) {
-                        batch.set(doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'OUT', category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, amount: cleanNum(m.cost), date: cleanDateStr(m.costDate), method: m.costMethod || 'Transfer', remark: m.costRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'OUT', category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, amount: cleanNum(m.cost), method: m.costMethod || 'Transfer', remark: m.costRemark || '', status: 'Paid' }, m.costDate || m.date || new Date().toISOString()), { merge: true });
                     }
                     if (m.chargeStatus === 'Paid' && cleanNum(m.charge) > 0) {
-                        batch.set(doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'IN', category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, amount: cleanNum(m.charge), date: cleanDateStr(m.chargeDate), method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'IN', category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, amount: cleanNum(m.charge), method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', status: 'Paid' }, m.chargeDate || m.date || new Date().toISOString()), { merge: true });
                     }
                 });
 
@@ -212,7 +231,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 (v.payments || []).forEach((p: any, idx: number) => {
                     const safeId = p.id || `pay_auto_${idx}_${new Date(p.date || Date.now()).getTime()}`;
                     if (cleanNum(p.amount) > 0) {
-                        batch.set(doc(ledgerRefBase, `sales_in_${v.id}_${safeId}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'sales', type: 'IN', category: '營業收入 (Sales)', desc: `[車輛收款] ${v.regMark || ''} ${v.make || ''} ${v.model || ''} - ${p.type || '定金/尾數'}`, amount: cleanNum(p.amount), date: cleanDateStr(p.date), method: p.method || 'Transfer', remark: p.note || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `sales_in_${v.id}_${safeId}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'sales', type: 'IN', category: '營業收入 (Sales)', desc: `[車輛收款] ${v.regMark || ''} ${v.make || ''} ${v.model || ''} - ${p.type || '定金/尾數'}`, amount: cleanNum(p.amount), method: p.method || 'Transfer', remark: p.note || '', status: 'Paid' }, p.date || new Date().toISOString()), { merge: true });
                     }
                 });
 
@@ -220,31 +239,31 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                 (v.acquisition?.payments || []).forEach((p: any, idx: number) => {
                     const safeId = p.id || `acq_${idx}_${new Date(p.date || Date.now()).getTime()}`;
                     if (cleanNum(p.amount) > 0) {
-                        batch.set(doc(ledgerRefBase, `acq_cost_${v.id}_${safeId}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'acquisition', type: 'OUT', category: '進貨成本 (COGS)', desc: `[買車付款] ${v.make || ''} ${v.model || ''} - ${v.acquisition?.vendor || '供應商'}`, amount: cleanNum(p.amount), date: cleanDateStr(p.date), method: p.method || 'Transfer', remark: p.note || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `acq_cost_${v.id}_${safeId}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'acquisition', type: 'OUT', category: '進貨成本 (COGS)', desc: `[買車付款] ${v.make || ''} ${v.model || ''} - ${v.acquisition?.vendor || '供應商'}`, amount: cleanNum(p.amount), method: p.method || 'Transfer', remark: p.note || '', status: 'Paid' }, p.date || new Date().toISOString()), { merge: true });
                     }
                 });
 
                 // 4. 車輛雜費 (Expenses)
                 (v.expenses || []).forEach((e: any) => {
                     if (e.status === 'Paid' && cleanNum(e.amount) > 0) {
-                        batch.set(doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'expenses', type: 'OUT', category: '營運開支 (Expenses)', desc: `[車輛雜費] ${e.type} - ${e.company}`, amount: cleanNum(e.amount), date: cleanDateStr(e.date), method: e.paymentMethod || 'Transfer', remark: e.invoiceNo || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'expenses', type: 'OUT', category: '營運開支 (Expenses)', desc: `[車輛雜費] ${e.type} - ${e.company}`, amount: cleanNum(e.amount), method: e.paymentMethod || 'Transfer', remark: e.invoiceNo || '', status: 'Paid' }, e.date || new Date().toISOString()), { merge: true });
                     }
                 });
 
                 // 5. 中港代辦 (CrossBorder)
                 (v.crossBorder?.crossings || []).forEach((c: any) => {
                     if (c.costStatus === 'Paid' && cleanNum(c.cost) > 0) {
-                        batch.set(doc(ledgerRefBase, `cb_cost_${v.id}_${c.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'OUT', category: '營運開支 (Expenses)', desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'}`, amount: cleanNum(c.cost), date: cleanDateStr(c.costDate), method: c.costMethod || 'Transfer', remark: c.costRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `cb_cost_${v.id}_${c.id}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'OUT', category: '營運開支 (Expenses)', desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'}`, amount: cleanNum(c.cost), method: c.costMethod || 'Transfer', remark: c.costRemark || '', status: 'Paid' }, c.costDate || new Date().toISOString()), { merge: true });
                     }
                     if (c.chargeStatus === 'Paid' && cleanNum(c.charge) > 0) {
-                        batch.set(doc(ledgerRefBase, `cb_charge_${v.id}_${c.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'IN', category: '售後服務 (Service)', desc: `[中港收費] ${c.serviceItem || '代辦手續'}`, amount: cleanNum(c.charge), date: cleanDateStr(c.chargeDate), method: c.chargeMethod || 'Transfer', remark: c.chargeRemark || '', status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `cb_charge_${v.id}_${c.id}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'IN', category: '售後服務 (Service)', desc: `[中港收費] ${c.serviceItem || '代辦手續'}`, amount: cleanNum(c.charge), method: c.chargeMethod || 'Transfer', remark: c.chargeRemark || '', status: 'Paid' }, c.chargeDate || new Date().toISOString()), { merge: true });
                     }
                 });
 
                 // 6. 墊資利息 (Financing)
                 (v.financingRecords || []).forEach((f: any) => {
                     if (f.status === 'Settled' && cleanNum(f.actualInterest) > 0) {
-                        batch.set(doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`), { refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'financing', type: 'OUT', category: '營運開支 (Expenses)', desc: `[墊資利息] ${f.lenderName} (${f.actualDays}天)`, amount: cleanNum(f.actualInterest), date: cleanDateStr(f.endDate), method: 'Transfer', remark: `本金: $${cleanNum(f.principal).toLocaleString()} | 年息: ${f.annualRate}%`, status: 'Paid', updatedAt: serverTimestamp() }, { merge: true });
+                        batch.set(doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`), syncData({ refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'financing', type: 'OUT', category: '營運開支 (Expenses)', desc: `[墊資利息] ${f.lenderName} (${f.actualDays}天)`, amount: cleanNum(f.actualInterest), method: 'Transfer', remark: `本金: $${cleanNum(f.principal).toLocaleString()} | 年息: ${f.annualRate}%`, status: 'Paid' }, f.endDate || new Date().toISOString()), { merge: true });
                     }
                 });
 
@@ -656,7 +675,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             <tbody className="divide-y divide-slate-100">
                                 {filteredItems.map(item => {
                                     const flow = item.flow || item.type; 
-                                    const itemDate = item.dueDate || item.date || item.paymentDate;
+                                    const itemDate = item.paymentDate || item.dueDate || item.date;
                                     const isFromSystem = !!item.sourceModule; 
 
                                     return (
