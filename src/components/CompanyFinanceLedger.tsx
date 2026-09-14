@@ -118,7 +118,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         }
     }, [settings?.ledgerCategories, editingExpenseId]);
 
-    // ★ 移除 orderBy 避免隱藏自動同步帳目
     useEffect(() => {
         if (!db || !appId || !isManager) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'));
@@ -142,7 +141,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         return () => unsubscribe();
     }, [db, appId, isManager]);
 
-    // ★ 前端接管排序
     const filteredItems = useMemo(() => {
         if (!startDate || !endDate) return ledgerItems;
         
@@ -263,6 +261,12 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
     };
 
     const handleToggleStatus = async (item: any) => {
+        // 防止使用者修改系統同步的狀態
+        if (item.sourceModule) {
+            alert('系統同步帳目預設為「已結清」，不可在總帳修改。若有誤請修改車輛源頭數據。');
+            return;
+        }
+
         try {
             const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', item.id);
             const nextStatus = item.status === 'Paid' ? 'Unpaid' : 'Paid';
@@ -297,7 +301,7 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
     };
 
     const handleDeleteItem = async (id: string) => {
-        if (!confirm('確定要永久刪除此筆紀錄嗎？')) return;
+        if (!confirm('確定要永久刪除此筆日常帳目紀錄嗎？')) return;
         try { await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id)); } 
         catch (err) { alert('刪除失敗: ' + err); }
     };
@@ -553,7 +557,6 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                         </div>
                         
                         <div className="flex gap-2">
-                            {/* ★ 按鈕已移除 */}
                             <button onClick={() => setShowReconModal(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-sm transition-all"><Bot size={14} className="mr-1.5"/> AI 對帳</button>
                             <button onClick={handleExportCPA} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-[11px] flex items-center shadow-md transition-all"><FileSpreadsheet size={14} className="mr-1.5"/> CPA 報表</button>
                         </div>
@@ -561,21 +564,24 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
 
                     <div className="overflow-x-auto min-h-[300px]">
                         <table className="w-full text-left text-xs border-collapse">
+                            {/* ★ 核心修復：表格排版 100% 對齊 (8欄) */}
                             <thead>
                                 <tr className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200">
                                     <th className="p-3 w-10 text-center">核對</th>
-                                    <th className="p-3">日期</th>
-                                    <th className="p-3">科目/方式</th>
-                                    <th className="p-3">項目明細</th>
-                                    <th className="p-3 text-right">收入 (IN)</th>
-                                    <th className="p-3 text-right text-red-600">支出 (OUT)</th>
+                                    <th className="p-3 w-24">日期</th>
+                                    <th className="p-3 w-32">科目/方式</th>
+                                    <th className="p-3 max-w-[250px]">項目明細</th>
+                                    <th className="p-3 text-right w-24">收入 (IN)</th>
+                                    <th className="p-3 text-right text-red-600 w-24">支出 (OUT)</th>
+                                    <th className="p-3 text-center w-24">狀態</th>
+                                    <th className="p-3 text-center w-20">操作</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredItems.map(item => {
                                     const flow = item.flow || item.type; 
                                     const itemDate = item.paymentDate || item.dueDate || item.date;
-                                    const isFromSystem = !!item.sourceModule; 
+                                    const isFromSystem = !!item.sourceModule; // 判斷是否為車輛庫存自動同步過來的
 
                                     return (
                                         <tr key={item.id} className={`border-b transition-colors font-medium text-slate-700 ${editingExpenseId === item.id ? 'bg-amber-50/50 border-amber-200' : (item.isReconciled ? 'bg-emerald-50/20' : 'hover:bg-slate-50/80')}`}>
@@ -601,37 +607,48 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="p-3">
-                                                <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                                                    {flow === 'IN' ? <ArrowDownToLine size={12} className="text-emerald-500"/> : <ArrowUpFromLine size={12} className="text-red-500"/>}
+                                            <td className="p-3 truncate max-w-[250px] text-slate-600" title={item.desc || item.title}>
+                                                <div className="font-bold text-slate-800 flex items-center gap-1.5 truncate">
+                                                    {flow === 'IN' ? <ArrowDownToLine size={12} className="text-emerald-500 shrink-0"/> : <ArrowUpFromLine size={12} className="text-red-500 shrink-0"/>}
                                                     {item.title || item.desc}
-                                                    {item.refRegMark && <span className="ml-1 font-mono text-[9px] bg-slate-100 border px-1 rounded text-slate-500">{item.refRegMark}</span>}
                                                 </div>
-                                                {item.status === 'Paid' && <div className="text-[9px] text-emerald-500 font-mono mt-0.5">收付日: {item.paymentDate || itemDate}</div>}
+                                                {item.refRegMark && <span className="mt-0.5 block font-mono text-[9px] bg-slate-100 border px-1 rounded text-slate-500 w-fit">{item.refRegMark}</span>}
                                             </td>
-                                            <td className={`p-3 text-right font-mono font-black text-base md:text-sm ${flow === 'IN' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                                                {flow === 'IN' ? '+' : '-'}${formatDisplayAmount(Number(item.amount))}
+                                            {/* ★ IN 欄位 */}
+                                            <td className="p-3 text-right font-mono font-black text-emerald-600">
+                                                {flow === 'IN' ? `+${formatDisplayAmount(Number(item.amount))}` : ''}
+                                            </td>
+                                            {/* ★ OUT 欄位 */}
+                                            <td className="p-3 text-right font-mono font-black text-red-600">
+                                                {flow === 'OUT' ? `-${formatDisplayAmount(Number(item.amount))}` : ''}
                                             </td>
                                             <td className="p-3 text-center">
                                                 <button 
                                                     type="button" 
                                                     onClick={() => handleToggleStatus(item)}
-                                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider transition-all border active:scale-95 ${item.status === 'Paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 border-red-200 text-red-600 hover:bg-rose-100 animate-pulse'}`}
+                                                    className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider transition-all border ${item.status === 'Paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100' : 'bg-rose-50 border-red-200 text-red-600 hover:bg-rose-100 animate-pulse'}`}
                                                 >
                                                     {item.status === 'Paid' ? '已結清 🟢' : '🔴 待處理'}
                                                 </button>
                                             </td>
                                             <td className="p-3 text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <button type="button" onClick={() => handleEditItem(item)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"><Edit size={14}/></button>
-                                                    {!isFromSystem && <button type="button" onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14}/></button>}
-                                                </div>
+                                                {isFromSystem ? (
+                                                    // ★ 系統保護鎖：不可直接在總帳刪除車輛紀錄
+                                                    <div className="flex items-center justify-center text-slate-300 cursor-help" title="此為系統自動同步帳目。如需修改，請至【車輛庫存管理】編輯源頭數據。">
+                                                        <Lock size={16} />
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button type="button" onClick={() => handleEditItem(item)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"><Edit size={14}/></button>
+                                                        <button type="button" onClick={() => handleDeleteItem(item.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14}/></button>
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     );
                                 })}
                                 {filteredItems.length === 0 && (
-                                    <tr><td colSpan={7} className="text-center text-slate-400 py-16 font-bold border-2 border-dashed rounded-xl bg-slate-50/50">📬 該日期區間無帳目紀錄。</td></tr>
+                                    <tr><td colSpan={8} className="text-center text-slate-400 py-16 font-bold border-2 border-dashed rounded-xl bg-slate-50/50">📬 該日期區間無帳目紀錄。</td></tr>
                                 )}
                             </tbody>
                         </table>
