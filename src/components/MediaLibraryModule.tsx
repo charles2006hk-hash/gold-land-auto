@@ -3,11 +3,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     Upload, Settings, ImageIcon, Clipboard, Loader2, Plus, 
     Car, FileText, Check, Maximize2, Edit, Trash2, Star, 
-    Minimize2, X, Move, MousePointer2, Save, PenTool,
+    Minimize2, X, Move, Save, PenTool, Crop, Shield
 } from 'lucide-react';
 import { 
     collection, query, orderBy, onSnapshot, doc, updateDoc, 
-    serverTimestamp, deleteDoc, writeBatch, where, addDoc 
+    serverTimestamp, deleteDoc, writeBatch, addDoc 
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '@/utils/imageHelpers';
@@ -16,7 +16,6 @@ import { MediaLibraryItem, Vehicle, SystemSettings } from '@/types';
 // ==================================================================
 // 1. 圖片/文件智能分流壓縮工具函數
 // ==================================================================
-// ★ 新增 type 參數，讓系統知道這是一般照片還是重要文件
 export const compressImageSmart = (file: File, type: 'vehicle' | 'document' = 'vehicle'): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -29,9 +28,6 @@ export const compressImageSmart = (file: File, type: 'vehicle' | 'document' = 'v
                 let width = img.width;
                 let height = img.height;
                 
-                // ★ 智能解析度：
-                // 如果是 document (文件/牌簿)，最大邊保留至 2400px，確保小字清晰
-                // 如果是 vehicle (車輛照片)，最大邊縮至 1280px，節省空間
                 const MAX_SIZE = type === 'document' ? 2400 : 1280;
                 
                 if (width > height) {
@@ -45,15 +41,11 @@ export const compressImageSmart = (file: File, type: 'vehicle' | 'document' = 'v
                 const ctx = canvas.getContext('2d');
                 
                 if (ctx) {
-                    // 啟用高畫質平滑演算法
                     ctx.imageSmoothingEnabled = true;
                     ctx.imageSmoothingQuality = 'high';
                     ctx.drawImage(img, 0, 0, width, height);
                 }
                 
-                // ★ 智能品質：
-                // 文件使用 0.92 極高畫質，避免文字邊緣模糊
-                // 照片維持 0.6，快速載入
                 const quality = type === 'document' ? 0.92 : 0.6;
                 
                 canvas.toBlob((blob) => {
@@ -66,21 +58,28 @@ export const compressImageSmart = (file: File, type: 'vehicle' | 'document' = 'v
     });
 };
 
-// ★★★ 終極版：圖片編輯器 (精準 4 點透視遮罩，專剋斜角車牌) ★★★
+// ==================================================================
+// 2. ★★★ 終極雙軌版：圖片編輯器 (精準 4 點透視遮罩 + 拖曳裁剪) ★★★
+// ==================================================================
 const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onClose: () => void, onSave: (dataUrl: string) => void }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     
+    // 核心影像資料
     const [snapshot, setSnapshot] = useState<ImageData | null>(null);
     const [originalImg, setOriginalImg] = useState<HTMLImageElement | null>(null);
     
-    // 工具狀態：毛玻璃、前牌(白)、後牌(黃)
-    const [toolType, setToolType] = useState<'blur' | 'front' | 'rear'>('blur');
+    // 編輯模式
+    const [mode, setMode] = useState<'mask' | 'crop'>('mask');
+    const [maskStyle, setMaskStyle] = useState<'blur' | 'front' | 'rear'>('blur');
     
-    // 記錄使用者點擊的 4 個透視頂點
+    // 遮罩與裁剪座標狀態
     const [points, setPoints] = useState<{x: number, y: number}[]>([]);
+    const [cropStart, setCropStart] = useState<{x: number, y: number} | null>(null);
+    const [cropEnd, setCropEnd] = useState<{x: number, y: number} | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
 
-    // 初始化畫布與圖片 (保持原圖高解析度，確保儲存後清晰)
+    // 1. 初始化畫布與圖片
     useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d', { willReadFrequently: true });
@@ -98,27 +97,22 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         };
     }, [imageUrl]);
 
-    // 實時渲染：當使用者點擊頂點時，畫出紅色引導線
-    useEffect(() => {
+    // 2. 共用繪製引擎 (處理紅點、紅線、以及半透明裁剪遮罩)
+    const drawOverlay = () => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx || !snapshot) return;
 
-        // 1. 永遠先還原到乾淨的底圖 (抹除上一幀的紅點)
+        // 永遠先還原乾淨底圖
         ctx.putImageData(snapshot, 0, 0);
 
-        // 2. 如果有點位，畫出連線與標記
-        if (points.length > 0) {
-            // 動態計算紅線粗細，適應不同解析度的照片
+        if (mode === 'mask' && points.length > 0) {
             const dynamicLineWidth = Math.max(4, canvas.width / 250);
-
-            ctx.strokeStyle = '#ef4444'; // 紅色
+            ctx.strokeStyle = '#ef4444';
             ctx.lineWidth = dynamicLineWidth;
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
             ctx.stroke();
 
             points.forEach((p, idx) => {
@@ -127,49 +121,82 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
                 ctx.arc(p.x, p.y, dynamicLineWidth * 1.5, 0, Math.PI * 2);
                 ctx.fill();
 
-                // 數字標記
                 ctx.fillStyle = '#ffffff';
                 ctx.font = `bold ${dynamicLineWidth * 3}px sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText((idx + 1).toString(), p.x, p.y - (dynamicLineWidth * 3.5));
             });
-        }
-    }, [points, snapshot]);
+        } else if (mode === 'crop' && cropStart && cropEnd) {
+            const x = Math.min(cropStart.x, cropEnd.x);
+            const y = Math.min(cropStart.y, cropEnd.y);
+            const w = Math.abs(cropEnd.x - cropStart.x);
+            const h = Math.abs(cropEnd.y - cropStart.y);
 
-    // 完美轉換點擊坐標到圖片實際像素
+            // 畫出半透明黑底
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(0, 0, canvas.width, y);
+            ctx.fillRect(0, y + h, canvas.width, canvas.height - y - h);
+            ctx.fillRect(0, y, x, h);
+            ctx.fillRect(x + w, y, canvas.width - x - w, h);
+
+            // 畫出虛線裁剪框
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = Math.max(3, canvas.width / 400);
+            ctx.setLineDash([10, 10]);
+            ctx.strokeRect(x, y, w, h);
+            ctx.setLineDash([]);
+        }
+    };
+
+    // 監聽狀態改變並觸發重繪
+    useEffect(() => { drawOverlay(); }, [points, cropStart, cropEnd, mode, snapshot]);
+
+    // 3. 處理游標與觸控事件
     const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-        return {
-            x: (e.clientX - rect.left) * scaleX,
-            y: (e.clientY - rect.top) * scaleY
-        };
+        return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
     };
 
     const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
         e.preventDefault();
-        if (points.length >= 4) return;
-
         const { x, y } = getCoordinates(e);
-        const newPoints = [...points, { x, y }];
-        setPoints(newPoints);
 
-        // ★ 當點滿 4 個點時，自動執行透視變形遮罩！
-        if (newPoints.length === 4) {
-            applyMask(newPoints);
+        if (mode === 'mask') {
+            if (points.length >= 4) return;
+            const newPoints = [...points, { x, y }];
+            setPoints(newPoints);
+            if (newPoints.length === 4) applyMask(newPoints);
+        } else if (mode === 'crop') {
+            setIsDragging(true);
+            setCropStart({ x, y });
+            setCropEnd({ x, y });
         }
     };
 
+    const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        e.preventDefault();
+        if (mode === 'crop' && isDragging) {
+            setCropEnd(getCoordinates(e));
+        }
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        e.preventDefault();
+        if (mode === 'crop') setIsDragging(false);
+    };
+
+    // 4. 執行透視遮罩 (專剋斜角車牌)
     const applyMask = (quad: {x: number, y: number}[]) => {
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx || !snapshot || !originalImg) return;
 
-        // 先還原底圖，擦掉所有紅點跟紅線
+        // 還原底圖，擦除紅點
         ctx.putImageData(snapshot, 0, 0);
 
         ctx.save();
@@ -180,31 +207,72 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         ctx.lineTo(quad[3].x, quad[3].y);
         ctx.closePath();
 
-        if (toolType === 'blur') {
-            // ★ 高階毛玻璃模式
+        if (maskStyle === 'blur') {
             ctx.clip();
-            ctx.filter = `blur(${Math.max(15, canvas.width / 40)}px)`; // 動態模糊強度
+            ctx.filter = `blur(${Math.max(15, canvas.width / 40)}px)`;
             ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
         } else {
-            // ★ 純色車牌模式 (前牌白/後牌黃)
-            ctx.fillStyle = toolType === 'front' ? 'rgba(250, 250, 252, 0.98)' : 'rgba(250, 204, 21, 0.98)';
+            ctx.fillStyle = maskStyle === 'front' ? 'rgba(250, 250, 252, 0.98)' : 'rgba(250, 204, 21, 0.98)';
             ctx.fill();
             ctx.lineWidth = Math.max(2, canvas.width / 500);
-            ctx.strokeStyle = 'rgba(0,0,0,0.15)'; // 模擬車牌立體邊框陰影
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
             ctx.stroke();
         }
         ctx.restore();
 
-        // 儲存結果，讓使用者可以繼續點下一個車牌
-        setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
+        // 寫入新的 Snapshot，讓下一次操作(或裁剪)基於已遮罩的圖
+        const newSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        setSnapshot(newSnapshot);
+        // 更新 originalImg 確保連續操作不出錯
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
+        tempCanvas.getContext('2d')?.putImageData(newSnapshot, 0, 0);
+        const newImg = new Image();
+        newImg.onload = () => setOriginalImg(newImg);
+        newImg.src = tempCanvas.toDataURL();
+
         setPoints([]); 
     };
 
-    // UI 動態提示文字
-    const promptText = points.length === 0 ? "👆 請點擊車牌【左上角】(第 1 點)" :
-                       points.length === 1 ? "👆 請點擊車牌【右上角】(第 2 點)" :
-                       points.length === 2 ? "👆 請點擊車牌【右下角】(第 3 點)" :
-                       "👆 請點擊車牌【左下角】(第 4 點) 即可完成！";
+    // 5. 輸出儲存邏輯 (智能判定裁剪範圍)
+    const handleSaveClick = () => {
+        const canvas = canvasRef.current;
+        if (!canvas || !snapshot) return;
+
+        // 建立乾淨的離線畫布，避免將 UI 框線存入圖片
+        const cleanCanvas = document.createElement('canvas');
+        cleanCanvas.width = canvas.width;
+        cleanCanvas.height = canvas.height;
+        cleanCanvas.getContext('2d')?.putImageData(snapshot, 0, 0);
+
+        if (mode === 'crop' && cropStart && cropEnd) {
+            const x = Math.min(cropStart.x, cropEnd.x);
+            const y = Math.min(cropStart.y, cropEnd.y);
+            const w = Math.abs(cropEnd.x - cropStart.x);
+            const h = Math.abs(cropEnd.y - cropStart.y);
+
+            // 防呆：避免使用者點擊一下產生過小的無效圖片
+            if (w > 50 && h > 50) { 
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = w;
+                cropCanvas.height = h;
+                const cropCtx = cropCanvas.getContext('2d');
+                cropCtx?.drawImage(cleanCanvas, x, y, w, h, 0, 0, w, h);
+                onSave(cropCanvas.toDataURL('image/jpeg', 0.92));
+                return;
+            }
+        }
+        
+        // 如果沒有裁剪或無效裁剪，直接輸出包含遮罩的整張圖片
+        onSave(cleanCanvas.toDataURL('image/jpeg', 0.92));
+    };
+
+    const promptText = mode === 'crop' 
+        ? "🖱️ 請在圖片上拖曳框選要保留的區域"
+        : points.length === 0 ? "👆 請點擊車牌【左上角】(第 1 點)" :
+          points.length === 1 ? "👆 請點擊車牌【右上角】(第 2 點)" :
+          points.length === 2 ? "👆 請點擊車牌【右下角】(第 3 點)" :
+          "👆 請點擊車牌【左下角】(第 4 點) 即可完成！";
 
     return (
         <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-sm animate-in fade-in">
@@ -212,39 +280,47 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
                 
                 {/* 頂部工具列 */}
                 <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
-                    <div>
-                        <h3 className="text-white font-bold text-sm md:text-base flex items-center">
-                            <span className="bg-blue-600 p-1.5 rounded-lg mr-2"><PenTool size={16}/></span> 
-                            四點智能透視遮罩 (專剋斜角車牌)
-                        </h3>
-                    </div>
+                    <h3 className="text-white font-bold text-sm md:text-base flex items-center">
+                        <span className="bg-blue-600 p-1.5 rounded-lg mr-2"><PenTool size={16}/></span> 
+                        智能圖片編輯器
+                    </h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full transition-colors"><X size={18}/></button>
                 </div>
 
-                {/* 模式選擇區 */}
-                <div className="bg-slate-800 p-3 flex flex-wrap justify-center gap-3 border-b border-slate-700 shrink-0">
-                    <button onClick={() => { setToolType('blur'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${toolType === 'blur' ? 'bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                        💧 質感毛玻璃
-                    </button>
-                    <button onClick={() => { setToolType('front'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${toolType === 'front' ? 'bg-white text-slate-800 shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                        ⬜ 前牌 (純白)
-                    </button>
-                    <button onClick={() => { setToolType('rear'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-bold transition-all ${toolType === 'rear' ? 'bg-yellow-400 text-yellow-950 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                        🟨 後牌 (純黃)
-                    </button>
+                {/* 雙軌模式切換區 */}
+                <div className="bg-slate-800 p-2 flex justify-center border-b border-slate-700 shrink-0">
+                    <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                        <button onClick={() => { setMode('mask'); setPoints([]); }} className={`flex items-center gap-2 px-6 py-2 rounded-md text-sm font-bold transition-all ${mode === 'mask' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                            <Shield size={16}/> 四點透視遮罩
+                        </button>
+                        <button onClick={() => { setMode('crop'); setCropStart(null); setCropEnd(null); }} className={`flex items-center gap-2 px-6 py-2 rounded-md text-sm font-bold transition-all ${mode === 'crop' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                            <Crop size={16}/> 裁剪 / 縮放
+                        </button>
+                    </div>
                 </div>
+
+                {/* 遮罩專屬設定 */}
+                {mode === 'mask' && (
+                    <div className="bg-slate-800 p-2 flex flex-wrap justify-center gap-3 border-b border-slate-700 shrink-0 animate-in fade-in">
+                        <button onClick={() => { setMaskStyle('blur'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'blur' ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>💧 質感毛玻璃</button>
+                        <button onClick={() => { setMaskStyle('front'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'front' ? 'bg-white text-slate-800' : 'bg-slate-700 text-slate-300'}`}>⬜ 前牌 (純白)</button>
+                        <button onClick={() => { setMaskStyle('rear'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'rear' ? 'bg-yellow-400 text-yellow-950' : 'bg-slate-700 text-slate-300'}`}>🟨 後牌 (純黃)</button>
+                    </div>
+                )}
 
                 {/* 畫布區塊 */}
                 <div ref={containerRef} className="flex-1 overflow-hidden bg-black/80 relative flex items-center justify-center p-2 touch-none select-none">
                     <canvas
                         ref={canvasRef}
                         onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
                         className="cursor-crosshair shadow-2xl touch-none rounded-sm max-w-full max-h-full object-contain"
                         style={{ display: 'block' }}
                     />
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white font-bold pointer-events-none drop-shadow-md bg-black/60 px-5 py-2.5 rounded-full flex items-center shadow-lg border border-white/10">
                         {promptText}
-                        {points.length > 0 && (
+                        {mode === 'mask' && points.length > 0 && (
                             <span 
                                 className="ml-4 pl-4 border-l border-white/30 text-red-400 pointer-events-auto cursor-pointer hover:text-red-300 underline"
                                 onPointerDown={(e) => { e.stopPropagation(); setPoints(prev => prev.slice(0, -1)); }}
@@ -264,14 +340,13 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
                             ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
                             setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
                             setPoints([]);
+                            setCropStart(null);
+                            setCropEnd(null);
                         }
                     }} className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-xl transition-colors">
                         還原重來
                     </button>
-                    <button onClick={() => {
-                        const canvas = canvasRef.current;
-                        if (canvas) onSave(canvas.toDataURL('image/jpeg', 0.95)); // 高畫質儲存
-                    }} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-2">
+                    <button onClick={handleSaveClick} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-2">
                         <Check size={18}/> 儲存並替換
                     </button>
                 </div>
@@ -329,7 +404,6 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                 const uploader = String(img.uploadedBy || '').toUpperCase();
                 if (currentStaff === 'BOSS') return true;
                 
-                // ★ 強制將 status 轉為字串，避開 TypeScript 嚴格型別檢查
                 const currentStatus = img.status as string;
                 const isAssigned = currentStatus === 'linked' || currentStatus === 'assigned';
                 const targetId = img.relatedVehicleId || (img as any).vehicleId;
@@ -345,14 +419,12 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
         const filteredItems = mediaItems.filter(i => {
-            // ★ 強制將 status 轉為字串，避開 TypeScript 嚴格型別檢查
             const currentStatus = i.status as string;
             if (currentStatus !== 'linked' && currentStatus !== 'assigned') return false;
             
             if (!searchQuery) return true;
             const query = searchQuery.toLowerCase();
             const aiText = `${i.aiData?.year} ${i.aiData?.make} ${i.aiData?.model} ${i.aiData?.color}`.toLowerCase();
-            // ★ 加上 (i as any)
             const targetId = i.relatedVehicleId || (i as any).vehicleId;
             const car = inventory.find((v:any) => v.id === targetId);
             const regMark = car ? (car.regMark || '').toLowerCase() : '';
@@ -360,7 +432,6 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         });
 
         filteredItems.forEach(item => {
-            // ★ 升級包容度：抓取正確的關聯 ID，並加上 (item as any)
             const targetId = item.relatedVehicleId || (item as any).vehicleId;
             let groupKey = targetId || `${item.aiData?.year}-${item.aiData?.make}-${item.aiData?.model}`;
             let groupTitle = `${item.aiData?.year || ''} ${item.aiData?.make || ''} ${item.aiData?.model || ''}`.trim() || '未分類車輛';
@@ -424,10 +495,7 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                     file = new window.File([convertedBlob], file.name.replace(/\.hei[cf]$/i, '.jpg'), { type: 'image/jpeg' });
                 }
 
-                // ★ 使用剛升級的智能分流壓縮 (傳入 autoType 判斷是文件還是車照)
                 const compressedBlob = await compressImageSmart(file, autoType); 
-                
-                // 將 Blob 轉回 base64 (因為 uploadToStorage 目前設計接收字串)
                 const base64Data = await new Promise<string>((resolve) => {
                     const r = new FileReader();
                     r.onloadend = () => resolve(r.result as string);
@@ -494,17 +562,13 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         const confirmDelete = window.confirm("確定要永久刪除這張圖片嗎？\n此操作無法復原。");
         if (!confirmDelete) return;
         try {
-            // 1. 嘗試刪除 Storage 實體檔案 (加上獨立 catch，若檔案已不存在則略過，不阻礙後續動作)
             if (item.path) {
                 const storageRef = ref(storage, item.path);
                 await deleteObject(storageRef).catch(err => {
                     console.warn("⚠️ Storage 檔案可能已不存在或無權限，略過並繼續刪除資料庫紀錄:", err);
                 });
             }
-            
-            // 2. 刪除 Firestore 紀錄 (這才是讓破圖從畫面上消失的關鍵)
             await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id));
-            
         } catch (error) { 
             console.error("Error deleting image doc:", error); 
             alert("資料庫紀錄刪除失敗，請檢查網路連線。"); 
@@ -516,11 +580,9 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         if (!db) return;
         try {
             const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
-            // ★ 同時將兩種 ID 清空
             await updateDoc(docRef, { status: 'unassigned', relatedVehicleId: null, vehicleId: null, updatedAt: serverTimestamp() });
             setActiveGroupImages(prev => {
                 const newState = { ...prev };
-                // ★ 加上 (item as any)
                 delete newState[item.relatedVehicleId || (item as any).vehicleId || ''];
                 return newState;
             });
@@ -536,12 +598,10 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             if (matchCar) finalRelatedId = matchCar.id;
         }
 
-        // 準備歸檔的圖片項目
         const itemsToClassify = mediaItems.filter(i => selectedInboxIds.includes(i.id));
 
         itemsToClassify.forEach(item => {
             const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
-            // 歸類時，如果是手動選擇的標籤，嘗試更新為對應的類型 (文件 or 車輛)
             const finalMediaType = classifyForm.type.includes('文件') ? 'document' : 'vehicle';
             batch.update(ref, { 
                 status: 'linked', 
@@ -552,17 +612,14 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             });
         });
 
-        // ★ 自動同步非文件的圖片到車輛卡片 (供推介單使用)
         if (finalRelatedId) {
             const existingCar = inventory.find((v:any) => v.id === finalRelatedId);
             if (existingCar) {
-                // 找出該車現有 + 新歸檔中「非文件」的所有圖片 URL
                 const existingPhotos = existingCar.photos || [];
                 const newVehiclePhotos = itemsToClassify
                     .filter(i => (!classifyForm.type.includes('文件') && i.mediaType !== 'document'))
                     .map(i => i.url);
                 
-                // 去除重複 URL
                 const mergedPhotos = Array.from(new Set([...existingPhotos, ...newVehiclePhotos]));
                 
                 const invRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', finalRelatedId);
@@ -574,7 +631,6 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         setSelectedInboxIds([]); setTargetVehicleId('');
     };
 
-    // ★ 新增：一鍵切換區域函數 (專門拯救 iPhone 無法拖曳的問題)
     const handleSwitchZone = async (item: MediaLibraryItem) => {
         if (!db) return;
         const newZone = item.mediaType === 'document' ? 'vehicle' : 'document';
@@ -615,14 +671,11 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                     <div className={`flex-1 overflow-y-auto p-2 columns-2 md:columns-3 gap-2 space-y-2 ${zoneType === 'vehicle' ? 'bg-slate-100' : 'bg-indigo-50/50'}`}>
                                         {zoneItems.map(item => (
                                             <div key={item.id} draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)} onClick={() => setSelectedInboxIds(p => p.includes(item.id) ? p.filter(i=>i!==item.id) : [...p, item.id])} className={`relative rounded-lg overflow-hidden cursor-grab active:cursor-grabbing transition-all group shadow-sm break-inside-avoid inline-block w-full ${selectedInboxIds.includes(item.id) ? 'ring-4 ring-blue-500 opacity-100 scale-95' : 'opacity-90 hover:opacity-100 hover:shadow-md'}`}>
-                                                {/* ★ 解除電腦版拖曳鎖定：關閉圖片原生拖曳干擾 */}
                                                 <img src={item.url} draggable={false} className="w-full h-auto block bg-black/5 pointer-events-none select-none"/>
                                                 
                                                 {selectedInboxIds.includes(item.id) && <div className="absolute top-0 right-0 bg-blue-600 text-white p-0.5 z-10 rounded-bl-md"><Check size={12}/></div>}
                                                 
-                                                {/* ★ iPhone 友善：手機端按鈕永遠顯示 (opacity-100)，電腦端保持 hover 顯示 */}
                                                 <div className="absolute top-1 right-1 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-20">
-                                                    {/* ★ 新增：一鍵互換按鈕 (解決手機無法 Drag & Drop 的問題) */}
                                                     <button onClick={(e) => { e.stopPropagation(); handleSwitchZone(item); }} className="p-1 rounded-full bg-black/60 hover:bg-emerald-500 text-white backdrop-blur-sm shadow-sm" title={zoneType === 'vehicle' ? "移至文件區" : "移至車輛相片區"}>
                                                         <Move size={12} className="transform rotate-90" />
                                                     </button>
@@ -712,7 +765,6 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                             <div className="p-4 bg-slate-50/50 flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
                                                 <div className="w-full max-w-4xl mb-3 flex justify-between items-center px-1"><span className="text-sm font-bold text-slate-700 bg-white px-4 py-1.5 rounded-full shadow-sm border border-slate-200 flex items-center"><Car size={14} className="mr-2 text-blue-500"/>{group.title.split(' (')[0] || '未分類車輛'}</span><span className="text-[10px] text-slate-400 hidden md:block">點擊圖片可全螢幕預覽</span></div>
                                                 <div className="w-full max-w-4xl aspect-[4/3] bg-slate-900 rounded-xl relative overflow-hidden shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] cursor-zoom-in group mb-4" onClick={() => setPreviewImage(activeItem.url)}><img src={activeItem.url} className="absolute inset-0 w-full h-full object-cover blur-xl opacity-40 scale-125 transition-transform duration-700" /><img src={activeItem.url} className="relative z-10 w-full h-full object-contain drop-shadow-2xl transition-transform duration-500 group-hover:scale-105" /><div className="absolute bottom-3 right-3 z-20 bg-black/60 text-white text-[10px] px-3 py-1.5 rounded-full backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity">點擊全螢幕放大</div></div>
-                                                {/* ★ 升級：支援拖曳排序，並同步更新至庫存 (過濾文件) */}
                                                 <div className="w-full max-w-4xl bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                                                     <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-300">
                                                         {group.items.map((img, index) => (
@@ -726,27 +778,22 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                                                     const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
                                                                     if (isNaN(sourceIndex) || sourceIndex === index) return;
                                                                     
-                                                                    // 1. 本地更新順序
                                                                     const newItems = [...group.items];
                                                                     const [movedItem] = newItems.splice(sourceIndex, 1);
                                                                     newItems.splice(index, 0, movedItem);
                                                                     
-                                                                    // 2. 過濾文件：提取所有「非文件 (vehicle)」的圖片 URL 準備寫入 inventory
                                                                     const vehiclePhotosToSync = newItems
                                                                         .filter(i => i.mediaType !== 'document')
                                                                         .map(i => i.url);
 
-                                                                    // 3. 同步至 Firebase (更新 Media Library 的 Timestamp 確保排序 & 同步 Inventory)
                                                                     if (db) {
                                                                         const batch = writeBatch(db);
-                                                                        // 更新圖庫本身的時間戳順序 (微調毫秒)
                                                                         const baseTime = Date.now();
                                                                         newItems.forEach((item, idx) => {
                                                                             const ref = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library', item.id);
                                                                             batch.update(ref, { createdAt: { seconds: Math.floor((baseTime - idx * 1000) / 1000), nanoseconds: 0 } });
                                                                         });
                                                                         
-                                                                        // 更新關聯的車輛庫存 (只存入非文件照片，供對客推介單使用)
                                                                         const targetVehicleId = img.relatedVehicleId || (img as any).vehicleId;
                                                                         if (targetVehicleId && inventory.some((v:any) => v.id === targetVehicleId)) {
                                                                             const invRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetVehicleId);
@@ -761,7 +808,6 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                                             >
                                                                 <img src={img.url} draggable={false} className="w-full h-full object-cover pointer-events-none" />
                                                                 {img.isPrimary && (<div className="absolute top-1 left-1 bg-yellow-500/90 rounded-full p-1 backdrop-blur-sm shadow-sm"><Star size={10} className="text-white fill-white"/></div>)}
-                                                                {/* ★ 新增：標示文件類型，提醒業務這張圖不會出現在推介單 */}
                                                                 {img.mediaType === 'document' && <div className="absolute bottom-1 right-1 bg-indigo-600/90 text-white text-[8px] px-1.5 py-0.5 rounded backdrop-blur-sm">文件</div>}
                                                             </div>
                                                         ))}
@@ -778,6 +824,7 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             </div>
 
             {previewImage && (<div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}><img src={previewImage} className="max-w-full max-h-[90vh] object-contain"/><button className="absolute top-4 right-4 text-white"><X size={32}/></button></div>)}
+            
             {editingMedia && (
                 <ImageEditorModal 
                     imageUrl={editingMedia.url} 
