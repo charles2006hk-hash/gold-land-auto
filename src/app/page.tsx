@@ -1773,6 +1773,17 @@ useEffect(() => {
         return () => unsubDb();
     }, [staffId, db, appId, currentUser, user]); // ★ 補全 user 依賴
 
+  useEffect(() => {
+      // 如果 Firebase 判定未登入 (Token 失效)，但前端卻因 LocalStorage 殘留 staffId
+      // 這會導致畫面卡在 Loading。此時必須強制清除殘留狀態，踢回登入頁。
+      if (user === null && staffId !== null) {
+          console.warn("Firebase Auth 憑證失效或未就緒，清除殘留狀態並返回登入頁");
+          setStaffId(null);
+          setCurrentUser(null);
+          localStorage.removeItem('gla_saved_user');
+          setIsDataSyncing(true); // 重置載入狀態以供下次使用
+      }
+  }, [user, staffId]);
 
 // ★★★ 核心修復：把 Hooks 移到 Early Return 之前，解決 Error #310 崩潰問題 ★★★
   const databaseReminders = useMemo(() => {
@@ -1842,9 +1853,11 @@ useEffect(() => {
                 setCurrentUser(userObj); 
 
                 // 2. 登入時記錄日誌
-                if (db) addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
-                    user: uid, action: 'Login', detail: 'User logged in successfully', timestamp: serverTimestamp()
-                });
+                if (db) {
+                    addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
+                        user: uid, action: 'Login', detail: 'User logged in successfully', timestamp: serverTimestamp()
+                    }).catch(err => console.warn("系統日誌寫入失敗 (可忽略):", err));
+                }
 
                 // ★★★ 修改：優先使用用戶設定的「預設首頁」 ★★★
                 if (userObj.defaultTab) {
