@@ -2483,8 +2483,8 @@ const VehicleFormModal = ({
                                                         </div>
                                                     </div>
 
-                                                    {/* 展開後的完整編輯表單 */}
-                                                    {isExpanded && !isHistory && (
+                                                    {/* ★ 核心修復：移除了 !isHistory 的限制，讓歷史紀錄也可以展開檢視與修改 */}
+                                                    {isExpanded && (
                                                         <div className="p-4 bg-slate-50 border-t border-slate-100 space-y-4">
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                                 {/* 成本區 */}
@@ -2504,6 +2504,7 @@ const VehicleFormModal = ({
                                                                                         <option value="Cash">現金 (Cash)</option>
                                                                                         <option value="Cheque">支票 (Cheque)</option>
                                                                                         <option value="Shareholder">股東墊付</option>
+                                                                                        <option value="Offset">對數抵銷 (Offset)</option>
                                                                                     </select>
                                                                                 </div>
                                                                                 <div>
