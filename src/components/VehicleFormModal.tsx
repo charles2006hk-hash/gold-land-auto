@@ -361,6 +361,9 @@ const VehicleFormModal = ({
    // ★ 新增：維修保養狀態與函數
     const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
 
+   // 👇 新增這個 State，用來控制手風琴展開 👇
+    const [expandedMaintId, setExpandedMaintId] = useState<string | null>(null);
+ 
     // ★ 新增：車輛墊資/貸款狀態與函數
     const [newFinancing, setNewFinancing] = useState({ 
         startDate: new Date().toISOString().split('T')[0], 
@@ -2418,143 +2421,128 @@ const VehicleFormModal = ({
                                 {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
                                 <div className="space-y-6 mb-6">
                                     {(() => {
-                                        const allMaint = v.maintenanceRecords || [];
-                                        
-                                        // ★ 痛點 1 完美修復：智能結清判斷！
-                                        // 如果成本係 0 (或者無填)，系統自動當佢已經找清；收費同理。
-                                        // 只有真正要畀/要收嘅錢都變成 'Paid'，先會跌入歷史區！
-                                        const isSettled = (m: any) => {
-                                            const costOk = !m.cost || Number(m.cost) === 0 || m.costStatus === 'Paid';
-                                            const chargeOk = !m.charge || Number(m.charge) === 0 || m.chargeStatus === 'Paid';
-                                            return costOk && chargeOk;
-                                        };
-
-                                        const pendingMaint = allMaint.filter((m: any) => !isSettled(m));
-                                        const historyMaint = allMaint.filter((m: any) => isSettled(m));
-
-                                        // 共用渲染函數 (Render Card)
+                                        // 共用渲染函數 (折疊式優化版)
                                         const renderMaintCard = (m: any, isHistory: boolean) => {
-                                            const isEditing = editingMaintenanceId === m.id;
-                                            if (isEditing && !isHistory) {
-                                                return (
-                                                    <div key={m.id} className="flex flex-col md:flex-row gap-2 p-3 bg-blue-50 border border-blue-300 rounded-lg shadow-md animate-fade-in">
-                                                        <input type="date" value={editMaintenanceForm.date} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, date: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32 font-bold"/>
-                                                        <input type="text" value={editMaintenanceForm.item} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, item: e.target.value})} className="text-xs p-2 border rounded outline-none flex-1 font-bold"/>
-                                                        <input type="text" value={editMaintenanceForm.vendor} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, vendor: e.target.value})} className="text-xs p-2 border rounded outline-none w-full md:w-32"/>
-                                                        <div className="flex items-center gap-2 w-full md:w-auto">
-                                                            <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-red-500 font-bold">成本</span><input type="text" value={editMaintenanceForm.cost} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, cost: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-red-600 font-mono text-right"/></div>
-                                                            <div className="relative"><span className="absolute -top-3 left-1 text-[8px] text-blue-500 font-bold">收費</span><input type="text" value={editMaintenanceForm.charge} onChange={e => setEditMaintenanceForm({...editMaintenanceForm, charge: formatNumberInput(e.target.value)})} className="text-xs p-2 border rounded outline-none w-24 text-blue-600 font-mono text-right"/></div>
-                                                            {/* ★ 痛點 2 修復：加入 e.preventDefault() 攔截表單閃退 */}
-                                                            <button type="button" onClick={(e) => { e.preventDefault(); saveEditMaintenance(); }} className="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow-sm"><Check size={14}/></button>
-                                                            <button type="button" onClick={(e) => { e.preventDefault(); setEditingMaintenanceId(null); }} className="bg-gray-400 text-white p-2 rounded hover:bg-gray-500 shadow-sm"><X size={14}/></button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
+                                            const isExpanded = expandedMaintId === m.id;
 
                                             return (
-                                                <div key={m.id} className={`flex flex-col gap-2 p-3 rounded-lg shadow-sm transition-colors border ${isHistory ? 'bg-slate-100/50 border-slate-200 opacity-70 hover:opacity-100' : 'bg-slate-50 border-slate-200 hover:border-blue-200'}`}>
-                                                    
-                                                    {/* 上半部：原本的主資訊列 */}
-                                                    <div className="flex flex-col md:flex-row justify-between gap-3">
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <span className="text-gray-500 font-mono text-xs font-bold">{m.date}</span>
-                                                                <span className="font-bold text-slate-800 text-sm">{m.item}</span>
-                                                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px]">{m.vendor || '自理'}</span>
-                                                            </div>
-                                                            {m.note && <div className="text-xs text-gray-500 truncate">{m.note}</div>}
+                                                <div key={m.id} className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden transition-all mb-3">
+                                                    {/* 預設顯示的摘要列 (點擊可展開/折疊) */}
+                                                    <div 
+                                                        className="flex flex-col md:flex-row justify-between md:items-center p-3 cursor-pointer hover:bg-slate-50 gap-2"
+                                                        onClick={() => setExpandedMaintId(isExpanded ? null : m.id)}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="font-mono text-xs font-bold text-slate-500">{m.date}</span>
+                                                            <span className="font-bold text-slate-800 text-sm">{m.item}</span>
+                                                            <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border">{m.vendor || '未指定車房'}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-4 md:border-l md:pl-4 border-t md:border-t-0 pt-2 md:pt-0">
-                                                            <div className="flex flex-col items-end">
-                                                                <span className="text-[9px] text-red-500 font-bold uppercase">成本 (給車房)</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-mono font-bold text-red-600">{formatCurrency(m.cost || 0)}</span>
-                                                                    <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'costStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{m.costStatus === 'Paid' ? '已付' : '未付'}</button>
+                                                        
+                                                        <div className="flex items-center gap-4 border-t md:border-t-0 pt-2 md:pt-0 mt-1 md:mt-0">
+                                                            <div className="text-right flex items-center gap-2">
+                                                                <div className="flex flex-col items-end">
+                                                                    <span className="text-[9px] text-slate-400 font-bold uppercase">成本 (OUT)</span>
+                                                                    <span className="font-bold text-red-600 text-sm">{formatCurrency(m.cost || 0)}</span>
                                                                 </div>
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${m.costStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                                    {m.costStatus === 'Paid' ? '已付' : '未付'}
+                                                                </span>
                                                             </div>
-                                                            <div className="flex flex-col items-end">
-                                                                <span className="text-[9px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-mono font-black text-blue-700">{formatCurrency(m.charge || 0)}</span>
-                                                                    <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'chargeStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{m.chargeStatus === 'Paid' ? '已收' : '未收'}</button>
+                                                            <div className="text-right flex items-center gap-2 border-l pl-4">
+                                                                <div className="flex flex-col items-end">
+                                                                    <span className="text-[9px] text-slate-400 font-bold uppercase">收費 (IN)</span>
+                                                                    <span className="font-bold text-blue-600 text-sm">{formatCurrency(m.charge || 0)}</span>
+                                                                </div>
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${m.chargeStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                                    {m.chargeStatus === 'Paid' ? '已收' : '未收'}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            {!isHistory && (
+                                                                <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteMaintenance(m.id); }} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-colors ml-2">
+                                                                    <Trash2 size={16}/>
+                                                                </button>
+                                                            )}
+                                                            
+                                                            {/* 箭頭圖標 */}
+                                                            <div className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                                                <ChevronDown size={16} />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* 展開後的完整編輯表單 */}
+                                                    {isExpanded && !isHistory && (
+                                                        <div className="p-4 bg-slate-50 border-t border-slate-100 space-y-4">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                {/* 成本區 */}
+                                                                <div className="space-y-3 bg-white p-3 rounded-lg border border-red-100 shadow-sm">
+                                                                    <div className="flex justify-between items-center border-b border-red-100 pb-1 mb-2">
+                                                                        <h4 className="text-xs font-bold text-red-600 uppercase tracking-widest">成本支付詳情</h4>
+                                                                        <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'costStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.costStatus === 'Paid' ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'}`}>切換為 {m.costStatus === 'Paid' ? '未付' : '已付'}</button>
+                                                                    </div>
                                                                     
-                                                                    {!isHistory && Number(m.charge) > 0 && (
-                                                                        <button 
-                                                                            type="button" 
-                                                                            onClick={(e) => { 
-                                                                                e.preventDefault(); 
-                                                                                if (!onJumpToDoc) return alert("開單系統連動未就緒");
-                                                                                onJumpToDoc({
-                                                                                    id: null, type: 'invoice', vehicleId: v.id,
-                                                                                    formData: {
-                                                                                        companyNameEn: COMPANY_INFO?.name_en || 'GOLD LAND AUTO', companyNameCh: COMPANY_INFO?.name_ch || '金田汽車',
-                                                                                        companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
-                                                                                        customerName: v.customerName || '', customerPhone: v.customerPhone || '',
-                                                                                        customerId: v.customerID || '', customerAddress: v.customerAddress || '',
-                                                                                        regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', year: v.year || '',
-                                                                                        price: '0', docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
-                                                                                    },
-                                                                                    docItems: [{ id: m.id, desc: `[維修保養] ${m.item} ${m.vendor ? `(${m.vendor})` : ''}`, amount: Number(m.charge), isSelected: true }],
-                                                                                    depositItems: [], showTerms: false
-                                                                                });
-                                                                            }} 
-                                                                            className="px-2 py-0.5 rounded text-[9px] font-bold border bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 shadow-sm transition-colors"
-                                                                            title="為此項目開立獨立發票"
-                                                                        >
-                                                                            🧾 發票
-                                                                        </button>
+                                                                    {m.costStatus === 'Paid' ? (
+                                                                        <>
+                                                                            <div className="grid grid-cols-2 gap-2">
+                                                                                <div>
+                                                                                    <label className="block text-[10px] text-slate-500 font-bold mb-1">支付方式</label>
+                                                                                    <select value={m.costMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'costMethod', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer">
+                                                                                        <option value="Transfer">轉帳 (Bank Transfer)</option>
+                                                                                        <option value="Cash">現金 (Cash)</option>
+                                                                                        <option value="Cheque">支票 (Cheque)</option>
+                                                                                        <option value="Shareholder">股東墊付</option>
+                                                                                    </select>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="block text-[10px] text-slate-500 font-bold mb-1">實際付款日</label>
+                                                                                    <input type="date" value={m.costDate || m.date} onChange={(e) => updateMaintDetail(m.id, 'costDate', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer"/>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <input type="text" placeholder="財務備註 (例如：支票號碼、墊付人)..." value={m.costRemark || ''} onChange={(e) => updateMaintDetail(m.id, 'costRemark', e.target.value)} className="w-full text-xs p-2 border rounded outline-none bg-slate-50"/>
+                                                                            </div>
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="text-center text-xs text-red-400/70 py-4 font-bold border-2 border-dashed border-red-100 rounded">目前尚未付款給車房</div>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* 收費區 */}
+                                                                <div className="space-y-3 bg-white p-3 rounded-lg border border-blue-100 shadow-sm">
+                                                                    <div className="flex justify-between items-center border-b border-blue-100 pb-1 mb-2">
+                                                                        <h4 className="text-xs font-bold text-blue-600 uppercase tracking-widest">客戶收款詳情</h4>
+                                                                        <button type="button" onClick={(e) => { e.preventDefault(); toggleMaintenanceStatus(m, 'chargeStatus'); }} className={`px-2 py-0.5 rounded text-[9px] font-bold border transition-colors ${m.chargeStatus === 'Paid' ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200'}`}>切換為 {m.chargeStatus === 'Paid' ? '未收' : '已收'}</button>
+                                                                    </div>
+                                                                    
+                                                                    {m.chargeStatus === 'Paid' ? (
+                                                                        <>
+                                                                            <div className="grid grid-cols-2 gap-2">
+                                                                                <div>
+                                                                                    <label className="block text-[10px] text-slate-500 font-bold mb-1">收款方式</label>
+                                                                                    <select value={m.chargeMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'chargeMethod', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer">
+                                                                                        <option value="Transfer">轉帳 (Bank Transfer)</option>
+                                                                                        <option value="Cash">現金 (Cash)</option>
+                                                                                        <option value="Cheque">支票 (Cheque)</option>
+                                                                                        <option value="Offset">從車價扣除 (Offset)</option>
+                                                                                    </select>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="block text-[10px] text-slate-500 font-bold mb-1">實際收款日</label>
+                                                                                    <input type="date" value={m.chargeDate || m.date} onChange={(e) => updateMaintDetail(m.id, 'chargeDate', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer"/>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <input type="text" placeholder="財務備註 (例如：客入恆生戶口、支票待兌現)..." value={m.chargeRemark || ''} onChange={(e) => updateMaintDetail(m.id, 'chargeRemark', e.target.value)} className="w-full text-xs p-2 border rounded outline-none bg-slate-50"/>
+                                                                            </div>
+                                                                        </>
+                                                                    ) : (
+                                                                        <div className="text-center text-xs text-blue-400/70 py-4 font-bold border-2 border-dashed border-blue-100 rounded">目前尚未向客戶收款</div>
                                                                     )}
                                                                 </div>
                                                             </div>
-                                                            <div className="flex items-center border-l pl-2 ml-2">
-                                                                {!isHistory && <button type="button" onClick={(e) => { e.preventDefault(); startEditMaintenance(m); }} className="text-blue-400 hover:text-blue-600 p-1"><Edit size={14}/></button>}
-                                                                <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteMaintenance(m.id); }} className="text-gray-400 hover:text-red-500 p-1 ml-1"><Trash2 size={16}/></button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* ★ 下半部：成本已付細節面板 */}
-                                                    {m.costStatus === 'Paid' && (
-                                                        <div className="mt-1 p-2.5 bg-red-50/50 border border-red-100 rounded-lg flex flex-wrap gap-2 animate-fade-in shadow-inner">
-                                                            <div className="flex-1 min-w-[120px]">
-                                                                <label className="text-[9px] text-red-500 font-bold uppercase mb-0.5 block">成本支付方式</label>
-                                                                <select value={m.costMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'costMethod', e.target.value)} className="w-full text-xs p-1.5 border border-red-200 rounded bg-white text-slate-700 outline-none focus:border-red-400 shadow-sm cursor-pointer">
-                                                                    <option value="Transfer">銀行轉帳 (Bank Transfer)</option>
-                                                                    <option value="Cash">現金 (Cash)</option>
-                                                                    <option value="Cheque">公司支票 (Cheque)</option>
-                                                                    <option value="Shareholder">股東墊付 (Shareholder)</option>
-                                                                    <option value="Offset">對數抵銷 (Offset)</option>
-                                                                </select>
-                                                            </div>
-                                                            <div className="flex-1 min-w-[120px]">
-                                                                <label className="text-[9px] text-red-500 font-bold uppercase mb-0.5 block">付款日期</label>
-                                                                <input type="date" value={m.costDate || ''} onChange={(e) => updateMaintDetail(m.id, 'costDate', e.target.value)} className="w-full text-xs p-1.5 border border-red-200 rounded bg-white text-slate-700 outline-none focus:border-red-400 shadow-sm cursor-pointer" />
-                                                            </div>
-                                                            <div className="w-full">
-                                                                <input type="text" placeholder="財務備註 (例如：支票號碼、入數戶口、墊付人)..." value={m.costRemark || ''} onChange={(e) => updateMaintDetail(m.id, 'costRemark', e.target.value)} className="w-full text-xs p-1.5 border border-red-200 rounded bg-white text-slate-700 outline-none focus:border-red-400 placeholder-slate-400 shadow-sm" />
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* ★ 下半部：收費已收細節面板 */}
-                                                    {m.chargeStatus === 'Paid' && Number(m.charge) > 0 && (
-                                                        <div className="mt-1 p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg flex flex-wrap gap-2 animate-fade-in shadow-inner">
-                                                            <div className="flex-1 min-w-[120px]">
-                                                                <label className="text-[9px] text-blue-500 font-bold uppercase mb-0.5 block">收款方式</label>
-                                                                <select value={m.chargeMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'chargeMethod', e.target.value)} className="w-full text-xs p-1.5 border border-blue-200 rounded bg-white text-slate-700 outline-none focus:border-blue-400 shadow-sm cursor-pointer">
-                                                                    <option value="Transfer">銀行轉帳 (Bank Transfer)</option>
-                                                                    <option value="Cash">現金 (Cash)</option>
-                                                                    <option value="Cheque">支票 (Cheque)</option>
-                                                                    <option value="Offset">從車價扣除 (Offset)</option>
-                                                                </select>
-                                                            </div>
-                                                            <div className="flex-1 min-w-[120px]">
-                                                                <label className="text-[9px] text-blue-500 font-bold uppercase mb-0.5 block">收款日期</label>
-                                                                <input type="date" value={m.chargeDate || ''} onChange={(e) => updateMaintDetail(m.id, 'chargeDate', e.target.value)} className="w-full text-xs p-1.5 border border-blue-200 rounded bg-white text-slate-700 outline-none focus:border-blue-400 shadow-sm cursor-pointer" />
-                                                            </div>
-                                                            <div className="w-full">
-                                                                <input type="text" placeholder="財務備註 (例如：客入恆生戶口、支票待兌現)..." value={m.chargeRemark || ''} onChange={(e) => updateMaintDetail(m.id, 'chargeRemark', e.target.value)} className="w-full text-xs p-1.5 border border-blue-200 rounded bg-white text-slate-700 outline-none focus:border-blue-400 placeholder-slate-400 shadow-sm" />
+                                                            <div className="flex justify-end pt-2">
+                                                                <button type="button" onClick={(e) => { e.preventDefault(); setExpandedMaintId(null); }} className="bg-blue-600 text-white px-4 py-2 rounded shadow-sm text-xs font-bold hover:bg-blue-700">完成編輯</button>
                                                             </div>
                                                         </div>
                                                     )}
