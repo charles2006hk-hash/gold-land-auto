@@ -2418,9 +2418,21 @@ const VehicleFormModal = ({
                                     })()}
                                 </h3>
                                 
-                                {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
+                               {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
                                 <div className="space-y-6 mb-6">
                                     {(() => {
+                                        const allMaint = v.maintenanceRecords || [];
+                                        
+                                        // ★ 智能結清判斷！
+                                        const isSettled = (m: any) => {
+                                            const costOk = !m.cost || Number(m.cost) === 0 || m.costStatus === 'Paid';
+                                            const chargeOk = !m.charge || Number(m.charge) === 0 || m.chargeStatus === 'Paid';
+                                            return costOk && chargeOk;
+                                        };
+
+                                        const pendingMaint = allMaint.filter((m: any) => !isSettled(m));
+                                        const historyMaint = allMaint.filter((m: any) => isSettled(m));
+
                                         // 共用渲染函數 (折疊式優化版)
                                         const renderMaintCard = (m: any, isHistory: boolean) => {
                                             const isExpanded = expandedMaintId === m.id;
@@ -2496,6 +2508,7 @@ const VehicleFormModal = ({
                                                                                 </div>
                                                                                 <div>
                                                                                     <label className="block text-[10px] text-slate-500 font-bold mb-1">實際付款日</label>
+                                                                                    {/* 🛡️ 日期優先取 costDate，沒有則取發生日 m.date */}
                                                                                     <input type="date" value={m.costDate || m.date} onChange={(e) => updateMaintDetail(m.id, 'costDate', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer"/>
                                                                                 </div>
                                                                             </div>
@@ -2529,6 +2542,7 @@ const VehicleFormModal = ({
                                                                                 </div>
                                                                                 <div>
                                                                                     <label className="block text-[10px] text-slate-500 font-bold mb-1">實際收款日</label>
+                                                                                    {/* 🛡️ 日期優先取 chargeDate，沒有則取發生日 m.date */}
                                                                                     <input type="date" value={m.chargeDate || m.date} onChange={(e) => updateMaintDetail(m.id, 'chargeDate', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer"/>
                                                                                 </div>
                                                                             </div>
