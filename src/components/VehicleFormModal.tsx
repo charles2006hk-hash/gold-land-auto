@@ -18,6 +18,18 @@ import { compressImage } from '@/utils/imageHelpers';
 import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 import { calculateAutoLoan, calculateRuleOf78Settlement } from '@/utils/LoanCalculator';
 
+// --- 車輛專屬賣點與設備種子數據庫 ---
+const EQUIPMENT_DB: Record<string, string[]> = {
+    'Toyota': ['行貨', '雙側電門', '雙天窗', '中排大班椅', '360泊車鏡頭', 'JBL高級音響', 'HUD投射錶板', '電尾門', '防撞系統', '原廠大包圍', '七座有通道'],
+    'Honda': ['行貨', '雙側電門', 'Honda Sensing', 'WakuWaku尾門', '七座', '八座', '後排冷氣'],
+    'BMW': ['M-Sport包圍', '全景天窗', 'Harmon Kardon音響', '氣氛燈', '雷射大燈', 'M-Sport軚盤', 'Head-up Display', '記憶皮座'],
+    'Mercedes-Benz': ['AMG包圍', 'Burmester柏林之聲', '全景天窗', '64色氣氛燈', '360鏡頭', '氣壓避震', 'Keyless-Go'],
+    'Porsche': ['PDLS+矩陣大燈', 'Sport Chrono組件', '跑車排氣系統', 'BOSE音響', '全景天窗', 'PASM懸掛', '14向電動記憶座椅', '全真皮內飾'],
+    'Tesla': ['EAP增強版自動輔助駕駛', 'FSD全自動駕駛', '白內飾', '20吋輪圈', '全景玻璃車頂', 'AMD Ryzen處理器'],
+    // 如果找不到對應品牌，就會顯示通用標籤
+    'General': ['0手', '1手', '行貨', '水貨', '原廠保養', '牌費長', '直版任驗', '剛做大保養', '新車一樣', '無中港紀錄', '全原裝', '家庭車']
+};
+
 // --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
@@ -556,6 +568,27 @@ const VehicleFormModal = ({
         }
     };
 
+    // ★ 處理標籤點擊：自動附加到 textarea 尾端
+    const handleTagClick = (tag: string) => {
+        const textarea = document.querySelector('textarea[name="salesRemarks"]') as HTMLTextAreaElement;
+        if (textarea) {
+            let currentVal = textarea.value.trim();
+            // 智能判斷：如果已經有文字，自動加上逗號分隔
+            if (currentVal && !currentVal.endsWith(',')) {
+                currentVal += ', ';
+            } else if (currentVal && currentVal.endsWith(',')) {
+                currentVal += ' ';
+            }
+            
+            // 如果這個標籤已經存在，就不重複加入
+            if (!textarea.value.includes(tag)) {
+                textarea.value = currentVal + tag;
+                // 觸發 React 的 onChange 偵測
+                textarea.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+    };
+ 
     const handleDeletePaymentClick = (pid: string) => {
         if (v.id) deletePayment(v.id, pid);
         else setEditingVehicle((prev: any) => ({ ...prev, payments: (prev.payments || []).filter((p: any) => p.id !== pid) }));
@@ -1508,17 +1541,48 @@ const VehicleFormModal = ({
                         </div>
                     </div>
 
-                          <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-3 mt-4 relative group hover:border-amber-300 transition-colors">
-                                <div className="flex justify-between items-center mb-1.5">
-                                    <h3 className="font-bold text-amber-800 text-[11px] flex items-center uppercase tracking-wider">
-                                        <Star size={12} className="mr-1 text-amber-500"/> 車輛專屬賣點
+                          {/* ★★★ 升級版：車輛專屬賣點與智能設備標籤 ★★★ */}
+                          <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-4 mt-4 relative group hover:border-amber-300 transition-colors w-full">
+                                <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-3 gap-2 border-b border-amber-200/50 pb-2">
+                                    <h3 className="font-bold text-amber-800 text-[12px] flex items-center uppercase tracking-wider">
+                                        <Star size={14} className="mr-1 text-amber-500"/> 車輛專屬賣點與設備 (Selling Points)
                                     </h3>
+                                    <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-bold">點擊下方標籤快速輸入 👇</span>
                                 </div>
+                                
+                                {/* 智能推薦標籤列 */}
+                                <div className="flex flex-wrap gap-1.5 mb-3">
+                                    {/* 1. 先顯示當前品牌 (Make) 的專屬設備 */}
+                                    {(EQUIPMENT_DB[selectedMake] || []).map((tag: string, idx: number) => (
+                                        <button 
+                                            key={`make_${idx}`} 
+                                            type="button" 
+                                            onClick={(e) => { e.preventDefault(); handleTagClick(tag); }}
+                                            className="text-[10px] bg-white text-blue-700 border border-blue-200 px-2 py-1 rounded-md hover:bg-blue-50 hover:border-blue-300 shadow-sm transition-all active:scale-95 font-bold"
+                                        >
+                                            + {tag}
+                                        </button>
+                                    ))}
+                                    
+                                    {/* 2. 接著顯示通用狀態 (General) */}
+                                    {EQUIPMENT_DB['General'].map((tag: string, idx: number) => (
+                                        <button 
+                                            key={`gen_${idx}`} 
+                                            type="button" 
+                                            onClick={(e) => { e.preventDefault(); handleTagClick(tag); }}
+                                            className="text-[10px] bg-white text-amber-700 border border-amber-200 px-2 py-1 rounded-md hover:bg-amber-50 hover:border-amber-300 shadow-sm transition-all active:scale-95 font-bold"
+                                        >
+                                            + {tag}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* 文字輸入區 */}
                                 <textarea 
                                     name="salesRemarks"
                                     defaultValue={v.salesRemarks}
-                                    placeholder="輸入車輛亮點 (例如：直版任驗、送一年牌費)..."
-                                    className="w-full h-16 p-2 bg-white border border-amber-200 rounded text-xs text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none shadow-inner font-medium transition-all"
+                                    placeholder="可點擊上方標籤快速組合，或在此手動輸入其他亮點 (例如：直版任驗、送一年牌費)..."
+                                    className="w-full min-h-[80px] p-3 bg-white border border-amber-200 rounded-lg text-sm text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-y shadow-inner font-medium transition-all leading-relaxed"
                                 />
                             </div>
                   
