@@ -588,7 +588,36 @@ const VehicleFormModal = ({
             }
         }
     };
- 
+
+    // ★ 智能標籤推薦引擎：結合「庫存歷史大數據」與「系統預設字庫」
+    const recommendedTags = useMemo(() => {
+        // 1. 從歷史庫存中尋找同廠牌、同型號的車，並統計最高頻率的賣點
+        const similarCars = inventory?.filter((c: any) => c.make === selectedMake && c.model === v.model) || [];
+        const wordsFreq: Record<string, number> = {};
+        
+        similarCars.forEach((c: any) => {
+            if (c.salesRemarks) {
+                // 拆解逗號、移除前綴的減號或空白，進行頻率統計
+                c.salesRemarks.split(',').map((s: string) => s.replace(/^[-\s]+/, '').trim()).filter(Boolean).forEach((w: string) => {
+                    wordsFreq[w] = (wordsFreq[w] || 0) + 1;
+                });
+            }
+        });
+        
+        // 排序出同型號最常用的前 6 個標籤 (大數據自動學習)
+        const topUsedByModel = Object.entries(wordsFreq).sort((a, b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);
+
+        // 2. 抓取 Firebase Settings 裡的自訂字庫，沒有則退回靜態種子庫 EQUIPMENT_DB
+        const dbTags = settings?.equipmentTags?.[selectedMake] || EQUIPMENT_DB[selectedMake] || [];
+        const generalTags = settings?.equipmentTags?.['General'] || EQUIPMENT_DB['General'] || [];
+
+        // 3. 去重複合併 (最常用的排前面，接著是品牌專屬)
+        return {
+            smart: Array.from(new Set([...topUsedByModel, ...dbTags])),
+            general: generalTags
+        };
+    }, [selectedMake, v.model, inventory, settings?.equipmentTags]);
+    
     const handleDeletePaymentClick = (pid: string) => {
         if (v.id) deletePayment(v.id, pid);
         else setEditingVehicle((prev: any) => ({ ...prev, payments: (prev.payments || []).filter((p: any) => p.id !== pid) }));
@@ -1116,6 +1145,27 @@ const VehicleFormModal = ({
             // 1. 先執行原本的車輛儲存動作
             await saveVehicle(e); 
             
+            // ★★★ 自動學習引擎：擷取手動輸入的新設備標籤，寫入系統庫 ★★★
+            const currentRemarks = formData.get('salesRemarks') as string;
+            const currentMake = formData.get('make') as string;
+            if (currentRemarks && currentMake && db) {
+                // 將輸入框的內容用逗號切開，清理多餘符號
+                const newTags = currentRemarks.split(',').map(s => s.replace(/^[-\s]+/, '').trim()).filter(Boolean);
+                const currentEquipDB = settings?.equipmentTags || EQUIPMENT_DB;
+                const existingBrandTags = currentEquipDB[currentMake] || [];
+                const existingGeneralTags = currentEquipDB['General'] || [];
+                
+                // 找出系統字庫中「還沒有」的新詞
+                const tagsToLearn = newTags.filter(t => !existingBrandTags.includes(t) && !existingGeneralTags.includes(t));
+
+                if (tagsToLearn.length > 0) {
+                    // 自動擴充該品牌的標籤庫
+                    const updatedMakeTags = [...existingBrandTags, ...tagsToLearn];
+                    updateSettings('equipmentTags', { ...currentEquipDB, [currentMake]: updatedMakeTags });
+                    console.log(`✅ 系統已自動學習 ${currentMake} 的新標籤:`, tagsToLearn);
+                }
+            }
+            
             // 2. ★★★ 核心升級：智能同步收車/售車客戶至資料庫中心 (Upsert 防重複引擎) ★★★
             if (db && staffId) {
                 // 動態載入 Firebase 方法避免依賴衝突
@@ -1552,8 +1602,8 @@ const VehicleFormModal = ({
                                 
                                 {/* 智能推薦標籤列 */}
                                 <div className="flex flex-wrap gap-1.5 mb-3">
-                                    {/* 1. 先顯示當前品牌 (Make) 的專屬設備 */}
-                                    {(EQUIPMENT_DB[selectedMake] || []).map((tag: string, idx: number) => (
+                                    {/* 1. 智能推薦：包含該車型的歷史高頻詞彙 + 品牌庫 */}
+                                    {recommendedTags.smart.map((tag: string, idx: number) => (
                                         <button 
                                             key={`make_${idx}`} 
                                             type="button" 
@@ -1564,8 +1614,8 @@ const VehicleFormModal = ({
                                         </button>
                                     ))}
                                     
-                                    {/* 2. 接著顯示通用狀態 (General) */}
-                                    {EQUIPMENT_DB['General'].map((tag: string, idx: number) => (
+                                    {/* 2. 顯示通用狀態 (General) */}
+                                    {recommendedTags.general.map((tag: string, idx: number) => (
                                         <button 
                                             key={`gen_${idx}`} 
                                             type="button" 
