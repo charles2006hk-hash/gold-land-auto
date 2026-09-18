@@ -1,7 +1,7 @@
 // src/components/VehicleFormModal.tsx
 'use client';
  
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     ChevronLeft, Car, X, FileText, DollarSign, DownloadCloud, Wrench, Globe, 
     Database, Search, Link, Bell, Eye, Share2, Trash2, User as UserIcon, Check, 
