@@ -28,6 +28,17 @@ const DEFAULT_LEDGER_CATEGORIES = [
     { name: '其他雜支', defaultFlow: 'OUT', defaultAmount: '' }
 ];
 
+// ★ 新增：車輛專屬賣點與設備預設種子庫
+const DEFAULT_EQUIPMENT_DB: Record<string, string[]> = {
+    'Toyota': ['行貨', '雙側電門', '雙天窗', '中排大班椅', '360泊車鏡頭', 'JBL高級音響', 'HUD投射錶板', '電尾門', '防撞系統', '原廠大包圍', '七座有通道'],
+    'Honda': ['行貨', '雙側電門', 'Honda Sensing', 'WakuWaku尾門', '七座', '八座', '後排冷氣'],
+    'BMW': ['M-Sport包圍', '全景天窗', 'Harmon Kardon音響', '氣氛燈', '雷射大燈', 'M-Sport軚盤', 'Head-up Display', '記憶皮座'],
+    'Mercedes-Benz': ['AMG包圍', 'Burmester柏林之聲', '全景天窗', '64色氣氛燈', '360鏡頭', '氣壓避震', 'Keyless-Go'],
+    'Porsche': ['PDLS+矩陣大燈', 'Sport Chrono組件', '跑車排氣系統', 'BOSE音響', '全景天窗', 'PASM懸掛', '14向電動記憶座椅', '全真皮內飾'],
+    'Tesla': ['EAP增強版自動輔助駕駛', 'FSD全自動駕駛', '白內飾', '20吋輪圈', '全景玻璃車頂', 'AMD Ryzen處理器'],
+    'General': ['0手', '1手', '行貨', '水貨', '原廠保養', '牌費長', '直版任驗', '剛做大保養', '新車一樣', '無中港紀錄', '全原裝', '家庭車']
+};
+
 const SettingsManager = ({ 
     settings, updateSettings, setSettings, systemUsers, updateSystemUsers, db, storage, staffId, appId, inventory, addSystemLog 
 }: any) => {
@@ -96,7 +107,47 @@ const SettingsManager = ({
     const [newSetupMake, setNewSetupMake] = useState('');
     const [newSetupModel, setNewSetupModel] = useState('');
     const [newSetupCode, setNewSetupCode] = useState('');
-    // =========================================================
+    // --- ★ 新增：車輛賣點標籤管理函數 ★ ---
+    const [activeEquipMake, setActiveEquipMake] = useState<string>('General');
+    const [newEquipTag, setNewEquipTag] = useState('');
+
+    const currentEquipTags = settings.equipmentTags || DEFAULT_EQUIPMENT_DB;
+
+    const handleAddEquipTag = () => {
+        const val = newEquipTag.trim();
+        if (!val) return;
+        const currentList = currentEquipTags[activeEquipMake] || [];
+        if (currentList.includes(val)) {
+            alert(`⚠️ 標籤「${val}」已存在！`);
+            return;
+        }
+        updateSettings('equipmentTags', { ...currentEquipTags, [activeEquipMake]: [...currentList, val] } as any);
+        setNewEquipTag('');
+    };
+
+    const handleRemoveEquipTag = (idx: number) => {
+        const currentList = [...(currentEquipTags[activeEquipMake] || [])];
+        currentList.splice(idx, 1);
+        updateSettings('equipmentTags', { ...currentEquipTags, [activeEquipMake]: currentList } as any);
+    };
+
+    const handleMoveEquipTag = (idx: number, direction: 'up' | 'down') => {
+        const currentList = [...(currentEquipTags[activeEquipMake] || [])];
+        if (direction === 'up' && idx > 0) {
+            [currentList[idx - 1], currentList[idx]] = [currentList[idx], currentList[idx - 1]];
+        } else if (direction === 'down' && idx < currentList.length - 1) {
+            [currentList[idx + 1], currentList[idx]] = [currentList[idx], currentList[idx + 1]];
+        }
+        updateSettings('equipmentTags', { ...currentEquipTags, [activeEquipMake]: currentList } as any);
+    };
+    
+    const handleEditEquipTag = (idx: number, newVal: string) => {
+        const val = newVal.trim();
+        if (!val) return;
+        const currentList = [...(currentEquipTags[activeEquipMake] || [])];
+        currentList[idx] = val;
+        updateSettings('equipmentTags', { ...currentEquipTags, [activeEquipMake]: currentList } as any);
+    };
 
     useEffect(() => {
         if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -821,6 +872,85 @@ const SettingsManager = ({
                                 )}
                             </div>
                         </div>
+
+                        {/* ★★★ 升級版：車輛專屬賣點與設備標籤管理庫 (Smart Tags) ★★★ */}
+                        <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-xl mb-6 shadow-sm">
+                            <h3 className="font-bold text-amber-800 flex items-center mb-1"><Star size={18} className="mr-2 text-amber-500"/> 智能設備標籤庫 (Smart Selling Points)</h3>
+                            <p className="text-[10px] text-amber-600 mb-3">設定每個品牌建立車輛時自動推薦的快捷標籤。系統會自動學習新標籤，您可在此手動整理與排序。</p>
+                            
+                            <div className="flex flex-col md:flex-row gap-4 h-[400px]">
+                                {/* 品牌選擇清單 */}
+                                <div className="w-full md:w-1/3 bg-white border border-amber-200 rounded-lg flex flex-col overflow-hidden">
+                                    <div className="bg-amber-100/50 p-2 font-bold text-xs text-amber-800 border-b border-amber-200">1. 選擇分類 / 品牌</div>
+                                    <div className="flex-1 overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
+                                        <div 
+                                            onClick={() => setActiveEquipMake('General')} 
+                                            className={`px-3 py-2 text-xs font-bold rounded cursor-pointer transition-colors ${activeEquipMake === 'General' ? 'bg-amber-500 text-white shadow-sm' : 'hover:bg-amber-50 text-slate-700'}`}
+                                        >
+                                            🌟 通用標籤 (General)
+                                        </div>
+                                        <div className="my-1 border-b border-dashed border-amber-200 mx-2"></div>
+                                        {/* 抓取當前已建立的所有品牌 */}
+                                        {Array.from(new Set([...(settings.makes || []), ...Object.keys(currentEquipTags).filter(k => k !== 'General')])).sort().map((m: any) => (
+                                            <div 
+                                                key={m} 
+                                                onClick={() => setActiveEquipMake(m)} 
+                                                className={`px-3 py-2 text-xs font-bold rounded cursor-pointer transition-colors ${activeEquipMake === m ? 'bg-amber-500 text-white shadow-sm' : 'hover:bg-amber-50 text-slate-700'}`}
+                                            >
+                                                {m}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 該品牌下的標籤管理 */}
+                                <div className="w-full md:w-2/3 bg-white border border-amber-200 rounded-lg flex flex-col overflow-hidden">
+                                    <div className="bg-amber-100/50 p-2 font-bold text-xs text-amber-800 border-b border-amber-200 flex justify-between items-center">
+                                        <span>2. {activeEquipMake === 'General' ? '通用' : activeEquipMake} 專屬標籤</span>
+                                        <span className="text-[10px] bg-white px-2 py-0.5 rounded-full text-amber-600 border border-amber-200">{(currentEquipTags[activeEquipMake] || []).length} 個項目</span>
+                                    </div>
+                                    
+                                    <div className="p-2 border-b border-amber-100 bg-amber-50/30 flex gap-2">
+                                        <input 
+                                            value={newEquipTag} 
+                                            onChange={e => setNewEquipTag(e.target.value)} 
+                                            onKeyDown={(e) => { if (e.key === 'Enter') handleAddEquipTag(); }} 
+                                            className="border border-amber-200 rounded-md px-2 py-1.5 text-xs flex-1 outline-none focus:border-amber-400 focus:ring-1 ring-amber-400 bg-white" 
+                                            placeholder={`為 ${activeEquipMake} 新增標籤...`}
+                                        />
+                                        <button onClick={handleAddEquipTag} className="bg-amber-600 hover:bg-amber-700 text-white px-3 rounded-md text-xs font-bold shadow-sm transition-colors flex items-center"><Plus size={14} className="mr-1"/> 加入</button>
+                                    </div>
+                                    
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                        {(currentEquipTags[activeEquipMake] || []).map((tag: string, i: number) => (
+                                            <div key={i} className="group flex justify-between items-center p-1.5 bg-slate-50 hover:bg-amber-50 rounded border border-slate-200 transition-colors">
+                                                <div className="flex items-center flex-1 mr-2 min-w-0">
+                                                    <span className="text-slate-400 font-mono w-5 text-[10px] shrink-0">{i+1}.</span>
+                                                    <input 
+                                                        type="text" 
+                                                        defaultValue={tag} 
+                                                        onBlur={e => handleEditEquipTag(i, e.target.value)} 
+                                                        className="bg-transparent border-b border-transparent focus:border-amber-300 outline-none w-full font-bold text-slate-700 text-xs py-0.5" 
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity shrink-0">
+                                                    <button onClick={() => handleMoveEquipTag(i, 'up')} disabled={i === 0} className="p-1 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-white"><ChevronUp size={14}/></button>
+                                                    <button onClick={() => handleMoveEquipTag(i, 'down')} disabled={i === (currentEquipTags[activeEquipMake] || []).length - 1} className="p-1 hover:text-blue-600 disabled:opacity-30 rounded hover:bg-white"><ChevronDown size={14}/></button>
+                                                    <div className="w-px h-3 bg-slate-300 mx-0.5"></div>
+                                                    <button onClick={() => handleRemoveEquipTag(i)} className="p-1 hover:text-red-500 hover:bg-white rounded transition-colors"><Trash2 size={14}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {(currentEquipTags[activeEquipMake] || []).length === 0 && (
+                                            <div className="text-[10px] text-amber-500/70 text-center py-10 font-bold border-2 border-dashed border-amber-100 rounded-lg mx-2 mt-2">
+                                                此分類尚未有任何標籤
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
 
                         {/* 摺疊式萬能列表渲染引擎 */}
                         {[
