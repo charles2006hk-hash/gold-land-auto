@@ -7,7 +7,7 @@ import {
     Bell, FileText, DownloadCloud, Plus, ChevronUp, ChevronDown, Trash2, 
     ShieldCheck, Info, X, Palette, Armchair, Wrench, Receipt, BarChart3, 
     Upload, Key, CheckCircle, AlertTriangle, Search, ArrowLeft, Building2,
-    ArrowDownToLine, ArrowUpFromLine
+    ArrowDownToLine, ArrowUpFromLine, Star
 } from 'lucide-react';
 import { doc, setDoc, collection, addDoc, serverTimestamp, query, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
 import { ref, uploadString } from 'firebase/storage';
