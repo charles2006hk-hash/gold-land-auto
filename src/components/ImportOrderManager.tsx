@@ -195,7 +195,8 @@ const QuotationPreview = ({ item, onClose }: any) => {
     const regionStr = item.region || '';
     const safeFileName = `Quotation_${yearStr}_${modelStr}_${regionStr}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
 
-    // ★ 終極列印引擎：自建視窗並寫入指定 Title，確保 100% 抓到檔名
+
+    // ★ 終極列印引擎：自建視窗並寫入指定 Title，確保 100% 抓到檔名，並智能等待圖片載入
     const handleRobustPrint = () => {
         const content = document.getElementById('print-area');
         if (!content) return;
@@ -229,18 +230,43 @@ const QuotationPreview = ({ item, onClose }: any) => {
                 </head>
                 <body>
                     ${content.outerHTML}
+                    
+                    <!-- ★★★ 核心修復：智能圖片載入監聽引擎 ★★★ -->
+                    <script>
+                        window.onload = function() {
+                            const images = Array.from(document.images);
+                            
+                            // 建立所有圖片的載入 Promise
+                            const promises = images.map(img => {
+                                if (img.complete) return Promise.resolve();
+                                return new Promise(resolve => {
+                                    img.onload = resolve;
+                                    // 容錯機制：即使單張圖片失效也放行，避免整個列印程序死鎖
+                                    img.onerror = resolve; 
+                                });
+                            });
+                            
+                            // 1. 正常情況：等所有圖片載入完畢後，給予 300ms 緩衝渲染，然後列印
+                            Promise.all(promises).then(() => {
+                                setTimeout(() => {
+                                    window.print();
+                                    window.close();
+                                }, 300);
+                            });
+                            
+                            // 2. 終極防呆：如果網路極慢，最多只等 3 秒就強制印出，避免視窗卡死白屏
+                            setTimeout(() => {
+                                window.print();
+                                window.close();
+                            }, 3000);
+                        };
+                    </script>
                 </body>
             </html>
         `);
         
         printWindow.document.close();
         printWindow.focus();
-        
-        // 延遲 500ms 確保圖片與樣式渲染完畢後再呼叫系統列印
-        setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-        }, 500);
     };
 
     return (
