@@ -2418,7 +2418,7 @@ const VehicleFormModal = ({
                                     })()}
                                 </h3>
                                 
-                               {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
+                                {/* ★ 升級：自動分流「進行中」與「歷史歸檔」 */}
                                 <div className="space-y-6 mb-6">
                                     {(() => {
                                         const allMaint = v.maintenanceRecords || [];
@@ -2483,7 +2483,7 @@ const VehicleFormModal = ({
                                                         </div>
                                                     </div>
 
-                                                    {/* ★ 核心修復：移除了 !isHistory 的限制，讓歷史紀錄也可以展開檢視與修改 */}
+                                                    {/* 展開後的完整編輯表單 */}
                                                     {isExpanded && (
                                                         <div className="p-4 bg-slate-50 border-t border-slate-100 space-y-4">
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
