@@ -62,6 +62,18 @@ const calculateLicenseFee = (fuelType: 'Petrol' | 'Diesel' | 'Electric', engineS
   return 0;
 };
 
+const calculateFRT = (prpPrice: number) => {
+    let frt = 0;
+    if (prpPrice > 0) {
+        if (prpPrice <= 150000) { frt = prpPrice * 0.46; }
+        else if (prpPrice <= 300000) { frt = 150000 * 0.46 + (prpPrice - 150000) * 0.86; }
+        else if (prpPrice <= 500000) { frt = 150000 * 0.46 + 150000 * 0.86 + (prpPrice - 300000) * 1.15; }
+        else { frt = 150000 * 0.46 + 150000 * 0.86 + 200000 * 1.15 + (prpPrice - 500000) * 1.32; }
+    }
+    return Math.round(frt);
+};
+
+
 const getColorHex = (colorName: string) => {
     if (!colorName) return '#e2e8f0'; 
     const lower = colorName.toLowerCase();
@@ -1764,11 +1776,31 @@ const VehicleFormModal = ({
                                 </div>
                                 <div className="bg-white p-3 md:p-2 rounded-lg border border-slate-200 w-full min-w-0">
                                     <label className="block text-xs md:text-[10px] text-gray-400 font-bold mb-1">A1 Tax (首次登記稅值)</label>
-                                    <input name="priceA1" value={priceA1Str} onChange={e => setPriceA1Str(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border border-slate-200 p-2 md:p-1 text-base md:text-sm font-mono outline-none rounded"/>
+                                    <input 
+                                        name="priceA1" 
+                                        value={priceA1Str} 
+                                        onChange={e => {
+                                            const val = formatNumberInput(e.target.value);
+                                            setPriceA1Str(val);
+                                            // ★ 智能聯動：輸入 A1 價格時，自動按香港標準稅率計算 FRT 並帶入「已繳稅款」
+                                            const numVal = Number(val.replace(/,/g, '')) || 0;
+                                            if (numVal > 0) {
+                                                setPriceTaxStr(formatNumberInput(String(calculateFRT(numVal))));
+                                            } else {
+                                                setPriceTaxStr('');
+                                            }
+                                        }} 
+                                        className="w-full bg-slate-50 border border-slate-200 p-2 md:p-1 text-base md:text-sm font-mono outline-none rounded"
+                                    />
                                 </div>
                                 <div className="bg-white p-3 md:p-2 rounded-lg border border-slate-200 w-full min-w-0">
                                     <label className="block text-xs md:text-[10px] text-gray-400 font-bold mb-1">Paid Tax (已繳稅款)</label>
-                                    <input name="priceTax" value={priceTaxStr} onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} className="w-full bg-slate-50 border border-slate-200 p-2 md:p-1 text-base md:text-sm font-mono outline-none rounded"/>
+                                    <input 
+                                        name="priceTax" 
+                                        value={priceTaxStr} 
+                                        onChange={e => setPriceTaxStr(formatNumberInput(e.target.value))} 
+                                        className="w-full bg-slate-50 border border-slate-200 p-2 md:p-1 text-base md:text-sm font-mono outline-none rounded"
+                                    />
                                 </div>
                             </div>
                             
