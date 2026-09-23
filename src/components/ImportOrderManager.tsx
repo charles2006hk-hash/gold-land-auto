@@ -1055,6 +1055,8 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                         </div>
                                                         <div><span className="text-slate-400">波箱:</span> <span className="font-bold text-slate-700">{item.details?.transmission || item.carInfo?.transmission || '-'}</span></div>
                                                         <div><span className="text-slate-400">容積:</span> <span className="font-bold text-slate-700">{item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></div>
+                                                        {/* 👇 新增座位數 👇 */}
+                                                        <div><span className="text-slate-400">座位:</span> <span className="font-bold text-slate-700">{item.details?.seats || item.carInfo?.seats || '-'} 座</span></div>
                                                     </div>
 
                                                     <div className="flex justify-between items-end mt-1">
