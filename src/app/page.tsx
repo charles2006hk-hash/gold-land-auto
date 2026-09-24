@@ -3534,6 +3534,7 @@ const DatabaseSelector = ({
                   appId={appId} 
                   settings={settings}
                   inventory={visibleInventory} 
+                  currentUser={currentUser} /* 👈 核心修正：將使用者的權限屬性傳遞進去 */
               />
           )}
 
