@@ -832,7 +832,18 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
     const handlePrint = () => {
         const content = document.getElementById('share-content');
         if (content) {
-            triggerCardPrint(content.outerHTML, `Vehicle_${vehicle.regMark || 'Details'}`);
+            // ★ 動態組合檔名：年份_廠牌_型號_座位數
+            const parts = [
+                vehicle.year,
+                vehicle.make,
+                vehicle.model,
+                vehicle.seating ? `${vehicle.seating}座` : ''
+            ].filter(Boolean); // 過濾掉空值
+            
+            // 將陣列組合成字串，並把所有空格自動替換成底線，讓存檔名稱更乾淨
+            const fileName = parts.join('_').replace(/\s+/g, '_');
+            
+            triggerCardPrint(content.outerHTML, fileName);
         }
     };
 
