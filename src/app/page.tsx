@@ -366,7 +366,13 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
             const docSnap = await getDoc(doc(currentDb, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
             if (docSnap.exists()) {
                 const usersList = docSnap.data().list || [];
-                const dbUserConfig = usersList.find((u: any) => u.email.toLowerCase() === inputId.toLowerCase());
+                
+                // ★ 核心修復：智能雙重比對 (解決 charles 與 charles@gla.local 匹配失敗的問題)
+                const dbUserConfig = usersList.find((u: any) => 
+                    u.email.toLowerCase() === inputId.toLowerCase() || 
+                    u.email.toLowerCase() === authEmail.toLowerCase()
+                );
+                
                 if (dbUserConfig) {
                     finalUser = {
                         ...finalUser,
@@ -396,7 +402,6 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
       }
       onLogin(user);
   };
-
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
       
