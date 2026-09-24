@@ -337,10 +337,8 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
             const bossAuthPassword = 'boss888888'; // Firebase Auth 密碼最少需 6 碼
 
             try {
-                // 嘗試以 BOSS 的 Firebase 憑證簽核登入
                 userCredential = await signInWithEmailAndPassword(auth, bossEmail, bossAuthPassword);
             } catch (bossAuthErr: any) {
-                // 若 Firebase Auth 尚未存在 boss 帳號，則自動註冊創建
                 if (bossAuthErr.code === 'auth/user-not-found' || bossAuthErr.code === 'auth/invalid-credential') {
                     userCredential = await createUserWithEmailAndPassword(auth, bossEmail, bossAuthPassword);
                 } else {
@@ -359,15 +357,17 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
         // ====================================================
         userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
 
-        // 登入成功後讀取個人權限表
+        // 登入成功後讀取個人權限表 (加上 as string[] 避免 TS 報錯)
         let finalUser = { email: inputId, modules: [] as string[], dataAccess: 'all', defaultTab: 'dashboard' };
+        
         try {
             const currentDb = getFirestore();
             const docSnap = await getDoc(doc(currentDb, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
+            
             if (docSnap.exists()) {
                 const usersList = docSnap.data().list || [];
                 
-                // ★ 核心修復：智能雙重比對 (解決 charles 與 charles@gla.local 匹配失敗的問題)
+                // 核心修復：智能雙重比對
                 const dbUserConfig = usersList.find((u: any) => 
                     u.email.toLowerCase() === inputId.toLowerCase() || 
                     u.email.toLowerCase() === authEmail.toLowerCase()
@@ -381,14 +381,14 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
                         defaultTab: dbUserConfig.defaultTab || 'dashboard'
                     };
 
-                    // ★ 企業級安全補丁：完全依賴後台 UI 設定，不寫死任何特定帳號。
-                    // 只要管理員在後台將該員工設為「全部資料 (All Data)」，系統就自動補齊 'all' 模組標籤，解鎖所有通知與視角。
+                    // 企業級安全補丁：依賴後台 UI 設定自動補齊 'all' 標籤
                     if (finalUser.dataAccess === 'all') {
                         if (!finalUser.modules.includes('all')) {
                             finalUser.modules.push('all');
                         }
                     }
                 }
+            }
         } catch (dbErr) {
             console.warn("讀取權限配置失敗:", dbErr);
         }
