@@ -360,7 +360,7 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
         userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
 
         // 登入成功後讀取個人權限表
-        let finalUser = { email: inputId, modules: [], dataAccess: 'all', defaultTab: 'dashboard' };
+        let finalUser = { email: inputId, modules: [] as string[], dataAccess: 'all', defaultTab: 'dashboard' };
         try {
             const currentDb = getFirestore();
             const docSnap = await getDoc(doc(currentDb, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
