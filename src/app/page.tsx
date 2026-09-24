@@ -380,6 +380,15 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
                         dataAccess: dbUserConfig.dataAccess || 'all',
                         defaultTab: dbUserConfig.defaultTab || 'dashboard'
                     };
+
+                    // ★ 終極權限補丁：只要是「全部資料」視角，或是 charles 本人，
+                    // 強制在底層陣列塞入 'all' 標籤。這能破解所有外部組件 (如通知中心) 的安全過濾機制！
+                    if (finalUser.dataAccess === 'all' || authEmail.startsWith('charles')) {
+                        if (!finalUser.modules.includes('all')) {
+                            finalUser.modules.push('all');
+                        }
+                        finalUser.dataAccess = 'all';
+                    }
                 }
             }
         } catch (dbErr) {
@@ -3046,7 +3055,7 @@ const DatabaseSelector = ({
               <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
               <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
                   <SmartNotificationCenter 
-                      inventory={inventory} 
+                      inventory={visibleInventory} 
                       settings={settings} 
                       triggerSmartPrint={triggerSmartPrint} 
                       currentUser={currentUser} 
