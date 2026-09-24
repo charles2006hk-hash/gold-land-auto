@@ -496,10 +496,11 @@ const SettingsManager = ({
             setNewUserPassword('');
             alert(`✅ 帳號建立成功！\n員工 ${formattedEmail} 已在 Firebase 及 DMS 系統中雙重建檔。\n員工現在可以直接登入了！`);
 
-       } catch (error: any) {
+        } catch (error: any) {
             console.error("建立 Auth 帳號失敗:", error);
+            
+            // ★ 問題 1 修復：智能處理帳號已存在的情況
             if (error.code === 'auth/email-already-in-use') {
-                // ★ 智能處理：帳號已在 Firebase 存在，詢問是否直接加入權限表
                 const confirmLink = confirm(`⚠️ 系統底層已存在 ${formattedEmail} 這個帳號。\n\n是否直接將此現有帳號加入系統的權限清單中？\n(注意：這不會更改該帳號原本的密碼)`);
                 
                 if (confirmLink) {
