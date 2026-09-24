@@ -358,7 +358,7 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 // ==================================================================
 // 3. 智能圖庫主體 (MediaLibraryModule)
 // ==================================================================
-export default function MediaLibraryModule({ db, storage, staffId, appId, settings, inventory }: any) {
+export default function MediaLibraryModule({ db, storage, staffId, appId, settings, inventory, currentUser }: any) {
     const [mediaItems, setMediaItems] = useState<MediaLibraryItem[]>([]);
     const [uploading, setUploading] = useState(false);
     const [selectedInboxIds, setSelectedInboxIds] = useState<string[]>([]);
