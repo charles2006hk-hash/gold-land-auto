@@ -443,13 +443,67 @@ const SettingsManager = ({
         updateSystemUsers(newUsers);
     };
 
-    const handleAddUser = () => {
-        if (!newUserEmail || !newUserPassword) { alert("請輸入 Email 和密碼"); return; }
-        if (systemUsers.some((u:any) => u.email.toLowerCase() === newUserEmail.toLowerCase())) { alert("該用戶已存在"); return; }
-        const newUser = { email: newUserEmail, password: newUserPassword, modules: ['inventory', 'dashboard'], defaultTab: 'dashboard' };
-        updateSystemUsers([...systemUsers, newUser]);
-        setNewUserEmail(''); setNewUserPassword('');
-        alert(`用戶 ${newUserEmail} 已新增`);
+    const handleAddUser = async () => {
+        if (!newUserEmail || !newUserPassword) { 
+            alert("請輸入 Email (或員工代號) 和密碼"); 
+            return; 
+        }
+        if (newUserPassword.length < 6) { 
+            alert("⚠️ Firebase 安全要求：密碼至少需要 6 個字元"); 
+            return; 
+        }
+        
+        // 智能補齊邏輯：統一轉換為小寫，若無 @ 則自動補上後綴
+        let formattedEmail = newUserEmail.trim().toLowerCase();
+        if (!formattedEmail.includes('@')) {
+            formattedEmail = `${formattedEmail}@gla.local`;
+        }
+
+        if (systemUsers.some((u:any) => u.email.toLowerCase() === formattedEmail)) { 
+            alert("該用戶在系統權限表中已存在！"); 
+            return; 
+        }
+
+        try {
+            // ★ 核心黑科技：利用「臨時次要 Firebase 實例」無聲建立帳號，避免踢出當前 Admin 登入狀態
+            const { initializeApp, getApp, deleteApp } = await import('firebase/app');
+            const { getAuth, createUserWithEmailAndPassword } = await import('firebase/auth');
+
+            const mainApp = getApp(); // 取得現有的預設 Firebase 設定
+            const tempAppName = 'TempCreationApp_' + Date.now();
+            const secondaryApp = initializeApp(mainApp.options, tempAppName);
+            const secondaryAuth = getAuth(secondaryApp);
+
+            try {
+                // 1. 在 Firebase Auth 底層真正建立實體帳號
+                await createUserWithEmailAndPassword(secondaryAuth, formattedEmail, newUserPassword);
+            } finally {
+                // 2. 無論註冊成功或失敗，立刻刪除臨時實例，不留記憶體痕跡，且不干擾主實例
+                await deleteApp(secondaryApp);
+            }
+
+            // 3. 將權限寫入 Firestore 系統設置中
+            const newUser = { 
+                email: formattedEmail, 
+                password: newUserPassword, 
+                modules: ['inventory', 'dashboard'], 
+                defaultTab: 'dashboard',
+                dataAccess: 'all' // 預設給予看全部資料的權限
+            };
+            
+            updateSystemUsers([...systemUsers, newUser]);
+            setNewUserEmail(''); 
+            setNewUserPassword('');
+            alert(`✅ 帳號建立成功！\n員工 ${formattedEmail} 已在 Firebase 及 DMS 系統中雙重建檔。\n員工現在可以直接登入了！`);
+
+        } catch (error: any) {
+            console.error("建立 Auth 帳號失敗:", error);
+            if (error.code === 'auth/email-already-in-use') {
+                alert(`⚠️ Firebase 中已存在此信箱 (${formattedEmail})，請更換帳號名稱。`);
+            } else {
+                alert(`❌ 建立帳號失敗: ${error.message}`);
+            }
+        }
     };
 
     const handleRemoveUser = (email: string) => {
