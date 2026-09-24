@@ -381,16 +381,14 @@ const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => vo
                         defaultTab: dbUserConfig.defaultTab || 'dashboard'
                     };
 
-                    // ★ 終極權限補丁：只要是「全部資料」視角，或是 charles 本人，
-                    // 強制在底層陣列塞入 'all' 標籤。這能破解所有外部組件 (如通知中心) 的安全過濾機制！
-                    if (finalUser.dataAccess === 'all' || authEmail.startsWith('charles')) {
+                    // ★ 企業級安全補丁：完全依賴後台 UI 設定，不寫死任何特定帳號。
+                    // 只要管理員在後台將該員工設為「全部資料 (All Data)」，系統就自動補齊 'all' 模組標籤，解鎖所有通知與視角。
+                    if (finalUser.dataAccess === 'all') {
                         if (!finalUser.modules.includes('all')) {
                             finalUser.modules.push('all');
                         }
-                        finalUser.dataAccess = 'all';
                     }
                 }
-            }
         } catch (dbErr) {
             console.warn("讀取權限配置失敗:", dbErr);
         }
