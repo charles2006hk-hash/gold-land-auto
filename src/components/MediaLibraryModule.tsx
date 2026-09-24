@@ -395,26 +395,36 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
 
     useEffect(() => {
         if (!db || !staffId) return;
+
+        // ★ 智能權限判斷：是否擁有全部資料視角
+        const hasAllAccess = currentUser?.dataAccess === 'all' || currentUser?.modules?.includes('all') || String(staffId).toUpperCase() === 'BOSS';
+
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), orderBy('createdAt', 'desc'));
+        
         return onSnapshot(q, (snap) => {
             const list: MediaLibraryItem[] = [];
             snap.forEach(d => list.push({ id: d.id, ...d.data() } as MediaLibraryItem));
+            
             const myImages = list.filter(img => {
-                const currentStaff = String(staffId).toUpperCase();
-                const uploader = String(img.uploadedBy || '').toUpperCase();
-                if (currentStaff === 'BOSS') return true;
+                // 如果有上帝視角，直接看全公司所有圖片
+                if (hasAllAccess) return true;
                 
+                const uploader = String(img.uploadedBy || '').toUpperCase();
                 const currentStatus = img.status as string;
                 const isAssigned = currentStatus === 'linked' || currentStatus === 'assigned';
                 const targetId = img.relatedVehicleId || (img as any).vehicleId;
                 
+                // 如果已綁定車輛，檢查使用者是否對該車輛有權限 (inventory 已經根據使用者權限過濾過)
                 if (isAssigned && targetId) return inventory.some((v: Vehicle) => v.id === targetId);
-                if (currentStatus === 'unassigned' || !currentStatus) return uploader === currentStaff;
+                
+                // 如果未綁定 (待處理區)，且沒有上帝視角，則只能看自己上傳的
+                if (currentStatus === 'unassigned' || !currentStatus) return uploader === String(staffId).toUpperCase();
+                
                 return false; 
             });
             setMediaItems(myImages);
         });
-    }, [db, staffId, appId, inventory]);
+    }, [db, staffId, appId, inventory, currentUser]); // 👈 確保依賴陣列有 currentUser
 
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
