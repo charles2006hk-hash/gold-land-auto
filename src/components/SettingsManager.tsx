@@ -496,10 +496,25 @@ const SettingsManager = ({
             setNewUserPassword('');
             alert(`✅ 帳號建立成功！\n員工 ${formattedEmail} 已在 Firebase 及 DMS 系統中雙重建檔。\n員工現在可以直接登入了！`);
 
-        } catch (error: any) {
+       } catch (error: any) {
             console.error("建立 Auth 帳號失敗:", error);
             if (error.code === 'auth/email-already-in-use') {
-                alert(`⚠️ Firebase 中已存在此信箱 (${formattedEmail})，請更換帳號名稱。`);
+                // ★ 智能處理：帳號已在 Firebase 存在，詢問是否直接加入權限表
+                const confirmLink = confirm(`⚠️ 系統底層已存在 ${formattedEmail} 這個帳號。\n\n是否直接將此現有帳號加入系統的權限清單中？\n(注意：這不會更改該帳號原本的密碼)`);
+                
+                if (confirmLink) {
+                    const newUser = { 
+                        email: formattedEmail, 
+                        password: newUserPassword, // 這裡僅作 UI 紀錄，不會改寫底層密碼
+                        modules: ['inventory', 'dashboard'], 
+                        defaultTab: 'dashboard',
+                        dataAccess: 'all' 
+                    };
+                    updateSystemUsers([...systemUsers, newUser]);
+                    setNewUserEmail(''); 
+                    setNewUserPassword('');
+                    alert(`✅ 已成功將現有帳號 ${formattedEmail} 綁定至權限清單！`);
+                }
             } else {
                 alert(`❌ 建立帳號失敗: ${error.message}`);
             }
