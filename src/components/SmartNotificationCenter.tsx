@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'; 
+// src/components/SmartNotificationCenter.tsx
+import React, { useState, useEffect, useMemo } from 'react'; 
 import { createPortal } from 'react-dom'; 
-import { Bell, CheckCircle, X, FileText, Globe, Printer, Sparkles, Search, Database } from 'lucide-react';
+import { Bell, CheckCircle, X, FileText, Globe, Printer, Sparkles, Search, Database, AlertTriangle, CalendarDays, Clock } from 'lucide-react';
 import { Vehicle, SystemSettings, DatabaseEntry } from '@/types';
 
 interface SmartNotificationCenterProps {
@@ -9,7 +10,6 @@ interface SmartNotificationCenterProps {
     triggerSmartPrint: (htmlContent: string, title: string) => void;
     currentUser: { email: string, modules: string[] } | null; 
     databaseReminders?: { expired: any[], soon: any[] }; 
-    // ★ 接收跳轉所需的屬性
     dbEntries?: DatabaseEntry[];
     setActiveTab?: (tab: any) => void;
     setEditingVehicle?: (v: any) => void;
@@ -18,6 +18,130 @@ interface SmartNotificationCenterProps {
     setActiveCbVehicleId?: (id: string | null) => void;
 }
 
+// ==================================================================
+// ★ 系統智能助理彈窗 (重構：解決 UI 圓角溢出，並加入智能分類)
+// ==================================================================
+const SystemGreetingPopup = ({ 
+    onClose, 
+    allAlerts 
+}: { 
+    onClose: () => void, 
+    allAlerts: any[] 
+}) => {
+    
+    // 智能分類運算
+    const categorizedTasks = useMemo(() => {
+        return {
+            expired: allAlerts.filter(a => a.days < 0).sort((a, b) => a.days - b.days), // 已過期 (越負越前面)
+            today: allAlerts.filter(a => a.days === 0),                                 // 今天到期
+            urgent: allAlerts.filter(a => a.days > 0 && a.days <= 7),                   // 未來 7 天內
+            total: allAlerts.length
+        };
+    }, [allAlerts]);
+
+    const { expired, today, urgent, total } = categorizedTasks;
+
+    return (
+        <div className="absolute top-full right-0 mt-3 w-80 md:w-96 animate-in fade-in slide-in-from-top-4 duration-500 origin-top-right z-50">
+            {/* 對話氣泡的小尖角 */}
+            <div className="absolute -top-1.5 right-4 w-4 h-4 bg-white border-t border-l border-blue-200 transform rotate-45 z-10 rounded-tl-sm"></div>
+            
+            {/* 核心修復：加入 overflow-hidden 確保內部漸層條完美貼合圓角 */}
+            <div className="relative z-20 bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
+                
+                {/* 完美貼合的頂部漸層邊條 */}
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 z-10"></div>
+                
+                {/* 關閉按鈕 */}
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors z-20"
+                >
+                    <X size={16} />
+                </button>
+
+                <div className="p-5 pt-6">
+                    {/* 標題區 */}
+                    <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="text-blue-500 animate-pulse" size={18} />
+                        <h3 className="font-bold text-slate-800 text-sm">系統智能助理</h3>
+                    </div>
+                    
+                    <p className="text-slate-600 text-sm mb-4 font-medium">
+                        您好！目前系統有 <span className="font-black text-red-600 text-lg mx-1">{total}</span> 件待辦事項。
+                    </p>
+
+                    {/* 任務清單區 (最大高度限制 + 自定義滾動條) */}
+                    <div className="max-h-[50vh] overflow-y-auto pr-1 space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
+                        
+                        {/* 1. 今日待辦 (最優先執行) */}
+                        {today.length > 0 && (
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                                <div className="flex items-center gap-1.5 text-blue-700 font-bold text-xs mb-2">
+                                    <CalendarDays size={14} /> 今日待辦 ({today.length})
+                                </div>
+                                <ul className="space-y-1.5">
+                                    {today.slice(0, 3).map((task, i) => (
+                                        <li key={i} className="text-xs text-slate-700 leading-tight">
+                                            • <span className="font-bold font-mono text-slate-900 bg-white px-1 border border-slate-200 rounded shadow-sm">{task.regMark || task.plate || task.id}</span> 的 {task.item}
+                                        </li>
+                                    ))}
+                                    {today.length > 3 && <li className="text-[10px] text-blue-500 font-bold text-right mt-1">...等 {today.length} 項</li>}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* 2. 已過期 (最緊急) */}
+                        {expired.length > 0 && (
+                            <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+                                <div className="flex items-center gap-1.5 text-red-600 font-bold text-xs mb-2">
+                                    <AlertTriangle size={14} /> 已過期 / 極緊急 ({expired.length})
+                                </div>
+                                <ul className="space-y-1.5">
+                                    {expired.slice(0, 3).map((task, i) => (
+                                        <li key={i} className="text-xs text-slate-700 leading-tight">
+                                            • <span className="font-bold font-mono text-slate-900 bg-white px-1 border border-slate-200 rounded shadow-sm">{task.regMark || task.plate || task.id}</span> 的 {task.item} 
+                                            <span className="text-red-600 font-bold ml-1">(超時 {Math.abs(task.days)} 天)</span>
+                                        </li>
+                                    ))}
+                                    {expired.length > 3 && <li className="text-[10px] text-red-400 font-bold text-right mt-1">...等 {expired.length} 項</li>}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* 3. 未來 7 天內 (即將到期) */}
+                        {(urgent.length > 0 && today.length === 0 && expired.length === 0) && (
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                                <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs mb-2">
+                                    <Clock size={14} /> 近期提醒 ({urgent.length})
+                                </div>
+                                <ul className="space-y-1.5">
+                                    {urgent.slice(0, 3).map((task, i) => (
+                                        <li key={i} className="text-xs text-slate-700 leading-tight">
+                                            • <span className="font-bold font-mono text-slate-900 bg-white px-1 border border-slate-200 rounded shadow-sm">{task.regMark || task.plate || task.id}</span> 的 {task.item} 
+                                            <span className="text-amber-600 font-bold ml-1">(剩 {task.days} 天)</span>
+                                        </li>
+                                    ))}
+                                    {urgent.length > 3 && <li className="text-[10px] text-amber-500 font-bold text-right mt-1">...等 {urgent.length} 項</li>}
+                                </ul>
+                            </div>
+                        )}
+                        
+                        {total === 0 && (
+                            <div className="text-center py-6 text-slate-400 text-sm bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                🎉 太棒了！目前沒有任何待辦事項。
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ==================================================================
+// 主元件
+// ==================================================================
 const SmartNotificationCenter = ({ 
     inventory, settings, triggerSmartPrint, currentUser, databaseReminders,
     dbEntries, setActiveTab, setEditingVehicle, setEditingEntry, setIsDbEditing, setActiveCbVehicleId
@@ -43,11 +167,10 @@ const SmartNotificationCenter = ({
                 (car as any).createdBy === currentUser?.email || 
                 (car as any).assignedTo === currentUser?.email ||
                 (car as any).sales === currentUser?.email ||
-                car.managedBy === currentUser?.email // 加入負責人判斷
+                car.managedBy === currentUser?.email
               );
 
         visibleInventory.forEach(car => {
-            // A. 一般車務證件
             const genDocs = [
                 { key: 'licenseExpiry', reminderKey: 'licenseReminderEnabled', label: '車輛牌費 (License)' }, 
                 { key: 'insuranceExpiry', reminderKey: 'insuranceReminderEnabled', label: '車輛保險 (Insurance)' }
@@ -64,7 +187,6 @@ const SmartNotificationCenter = ({
                 }
             });
 
-            // B. 中港證件
             const cb = car.crossBorder;
             if (cb && (cb.isEnabled || cb.mainlandPlate || cb.quotaNumber)) {
                 const cbDocs = { 
@@ -96,10 +218,8 @@ const SmartNotificationCenter = ({
         const plate = raw.plateNoHK || raw.plateNoCN || '';
         const name = raw.name || raw.hkCompany || raw.mainlandCompany || '未命名紀錄';
         
-        // 處理原本傳進來的 item 字串 (例如 "陳大文 - 留牌紙" -> 提取出 "留牌紙")
         const docType = i.item && i.item.includes('-') ? i.item.split('-').pop().trim() : (raw.docType || raw.category || '文件');
         
-        // 智能顯示：有車牌就主標題顯示車牌，副標題顯示「名字 - 文件類別」
         const regMark = plate ? plate : name;
         const itemDesc = plate ? `${name} - ${docType}` : docType;
 
@@ -205,34 +325,12 @@ const SmartNotificationCenter = ({
                 )}
             </button>
 
-            {/* 2. AI 智能對話氣泡 */}
+            {/* 2. 重構後的 AI 智能對話氣泡 (包含分類提醒) */}
             {showAIBubble && alerts.length > 0 && (
-                <div className="absolute top-full right-0 mt-3 w-64 md:w-72 animate-in fade-in slide-in-from-top-4 duration-500 origin-top-right z-50">
-                    <div className="absolute -top-1.5 right-4 w-4 h-4 bg-white border-t border-l border-blue-200 transform rotate-45 z-10 rounded-tl-sm"></div>
-                    <div className="relative z-20 bg-white rounded-2xl shadow-xl border border-blue-100 p-4">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-t-2xl"></div>
-                        <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center gap-1.5 text-blue-600 font-black text-xs">
-                                <Sparkles size={14} className="animate-pulse" />
-                                系統智能助理
-                            </div>
-                            <button onClick={() => setShowAIBubble(false)} className="text-slate-400 hover:text-slate-600">
-                                <X size={14} />
-                            </button>
-                        </div>
-                        <div className="text-sm text-slate-700 font-medium leading-relaxed">
-                            您好！目前系統有 <span className="text-red-600 font-black text-base mx-1">{alerts.length}</span> 件待辦事項。
-                            <br/>
-                            <span className="text-xs text-slate-500 mt-2 block bg-slate-50 p-2 rounded-lg border border-slate-100">
-                                最緊急：車牌/對象 <span className="font-mono font-bold text-slate-800 bg-white px-1 border border-slate-200 rounded shadow-sm">{alerts[0]?.regMark}</span> 的 {alerts[0]?.item} 
-                                {alerts[0]?.days < 0 
-                                    ? <span className="text-red-500 font-bold ml-1">(已過期 {Math.abs(alerts[0]?.days)} 天)</span> 
-                                    : <span className="text-amber-500 font-bold ml-1">(剩 {alerts[0]?.days} 天)</span>
-                                }。
-                            </span>
-                        </div>
-                    </div>
-                </div>
+                <SystemGreetingPopup 
+                    onClose={() => setShowAIBubble(false)} 
+                    allAlerts={alerts} 
+                />
             )}
 
             {/* 3. Detail Modal (透過 Portal 傳送到最頂層) */}
