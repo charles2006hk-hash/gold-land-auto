@@ -423,7 +423,14 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
     const [jpEra, setJpEra] = useState('Reiwa');
     const [jpEraYear, setJpEraYear] = useState('');
 
-    const currentUser = systemUsers?.find((u: any) => u.email === staffId);
+    // ★ 智能比對：忽略大小寫，並兼容帶有 @gla.local 與不帶後綴的情況
+    const currentUser = systemUsers?.find((u: any) => {
+        const dbEmail = u.email ? u.email.toLowerCase() : '';
+        const currentStaffId = staffId ? staffId.toLowerCase() : '';
+        const currentStaffEmail = currentStaffId.includes('@') ? currentStaffId : `${currentStaffId}@gla.local`;
+        
+        return dbEmail === currentStaffId || dbEmail === currentStaffEmail;
+    });
     const isBoss = staffId === 'BOSS';
     const dataAccess = currentUser?.dataAccess || 'all'; 
     const canViewAll = isBoss || dataAccess === 'all';
