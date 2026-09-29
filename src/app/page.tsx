@@ -736,7 +736,6 @@ type SettingsManagerProps = {
 // ★★★ 終極完美版跨平台卡片列印引擎 (100%流體適應，防白屏裁切) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = async (htmlContent: string, title: string = 'Document') => {
-    // 檢測是否為 iOS 裝置
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
     if (isIOS) {
@@ -784,7 +783,10 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
 
             const pdfBlob = await (window as any).html2pdf().set(opt).from(printClone).output('blob');
             document.body.removeChild(printClone);
-            const file = new File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
+            
+            // ★ 核心修復：使用 window.File 繞過 lucide-react 的 File 圖標衝突
+            const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
+            
             document.body.removeChild(toast);
             
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -817,22 +819,8 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
             ${styles}
             <style>
                 @page { margin: 5mm; size: auto; }
-                html, body { 
-                    margin: 0 !important; padding: 0 !important; 
-                    background: white !important; 
-                    height: auto !important; 
-                    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
-                }
-                .print-wrapper { 
-                    width: 100% !important; 
-                    max-width: 100% !important; 
-                    margin: 0 !important; padding: 0 !important; 
-                    background: white !important; 
-                    height: auto !important; 
-                    overflow: visible !important;
-                    transform: none !important;
-                    box-shadow: none !important;
-                }
+                html, body { margin: 0 !important; padding: 0 !important; background: white !important; height: auto !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                .print-wrapper { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; background: white !important; height: auto !important; overflow: visible !important; transform: none !important; box-shadow: none !important; }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
@@ -1017,7 +1005,6 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 // ★★★ 終極完美版列印引擎 (5mm 邊距 + 97% 縮放防切頁) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = async (htmlContent: string, title: string = 'Document') => {
-    // 檢測是否為 iOS 裝置
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
     if (isIOS) {
@@ -1065,7 +1052,10 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
 
             const pdfBlob = await (window as any).html2pdf().set(opt).from(printClone).output('blob');
             document.body.removeChild(printClone);
-            const file = new File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
+            
+            // ★ 核心修復：使用 window.File 繞過 lucide-react 的 File 圖標衝突
+            const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
+            
             document.body.removeChild(toast);
             
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1099,27 +1089,9 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
             <style>
                 @page { size: A4 portrait; margin: 5mm !important; }
                 @media print {
-                    html, body { 
-                        width: 100% !important;
-                        height: auto !important; 
-                        margin: 0 !important; 
-                        padding: 0 !important; 
-                        background: white !important; 
-                        -webkit-print-color-adjust: exact !important; 
-                        print-color-adjust: exact !important; 
-                    }
-                    .print-container { 
-                        width: 100% !important; 
-                        margin: 0 auto !important; 
-                        padding: 0 5mm !important; 
-                        box-sizing: border-box !important; 
-                        zoom: 0.97 !important; 
-                    }
-                    #print-root {
-                        box-shadow: none !important; 
-                        border: none !important; 
-                        border-radius: 0 !important;
-                    }
+                    html, body { width: 100% !important; height: auto !important; margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    .print-container { width: 100% !important; margin: 0 auto !important; padding: 0 5mm !important; box-sizing: border-box !important; zoom: 0.97 !important; }
+                    #print-root { box-shadow: none !important; border: none !important; border-radius: 0 !important; }
                     .w-screen, .w-\\[100vw\\] { width: 100% !important; max-width: 100% !important; }
                     .min-h-screen, .h-screen, .h-\\[100dvh\\] { min-height: 0 !important; height: auto !important; }
                     body * { visibility: visible !important; }
