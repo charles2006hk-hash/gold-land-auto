@@ -760,33 +760,55 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
                 });
             }
 
-            const printClone = document.createElement('div');
-            printClone.innerHTML = htmlContent;
-            printClone.style.width = '800px'; 
-            printClone.style.padding = '20px';
-            printClone.style.background = '#ffffff';
-            printClone.style.position = 'absolute';
-            printClone.style.left = '-9999px';
-            printClone.style.top = '0';
-            document.body.appendChild(printClone); 
+            // 獲取全局樣式
+            const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+                .map(el => el.outerHTML).join('\n');
 
-            const hiddenElements = printClone.querySelectorAll('.print\\:hidden, button');
+            const printWrapper = document.createElement('div');
+            
+            // ★ 核心修復 1：絕不能用 left: -9999px！將其置於 0,0 並藏於底層 (z-index: -1000)
+            Object.assign(printWrapper.style, {
+                position: 'absolute',
+                top: '0',
+                left: '0',
+                width: '100%',
+                zIndex: '-1000',
+                pointerEvents: 'none',
+                background: 'white'
+            });
+
+            printWrapper.innerHTML = `
+                ${styles}
+                <div id="pdf-render-target" style="width: 800px; margin: 0 auto; background: white; padding: 20px;">
+                    ${htmlContent}
+                </div>
+            `;
+            document.body.appendChild(printWrapper);
+
+            const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
+            const hiddenElements = targetElement.querySelectorAll('.print\\:hidden, button');
             hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
 
+            // ★ 核心修復 2：降 scale 至 1.5 防崩潰，重置滾動防白邊
             const opt = {
                 margin: [5, 5, 5, 5],
                 filename: `${title}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
+                image: { type: 'jpeg', quality: 0.95 },
+                html2canvas: { 
+                    scale: 1.5, 
+                    useCORS: true, 
+                    logging: false, 
+                    windowWidth: 800,
+                    scrollX: 0,
+                    scrollY: 0
+                },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
-            const pdfBlob = await (window as any).html2pdf().set(opt).from(printClone).output('blob');
-            document.body.removeChild(printClone);
+            const pdfBlob = await (window as any).html2pdf().set(opt).from(targetElement).output('blob');
+            document.body.removeChild(printWrapper);
             
-            // ★ 核心修復：使用 window.File 繞過 lucide-react 的 File 圖標衝突
             const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
-            
             document.body.removeChild(toast);
             
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -819,8 +841,22 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
             ${styles}
             <style>
                 @page { margin: 5mm; size: auto; }
-                html, body { margin: 0 !important; padding: 0 !important; background: white !important; height: auto !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                .print-wrapper { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; background: white !important; height: auto !important; overflow: visible !important; transform: none !important; box-shadow: none !important; }
+                html, body { 
+                    margin: 0 !important; padding: 0 !important; 
+                    background: white !important; 
+                    height: auto !important; 
+                    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
+                }
+                .print-wrapper { 
+                    width: 100% !important; 
+                    max-width: 100% !important; 
+                    margin: 0 !important; padding: 0 !important; 
+                    background: white !important; 
+                    height: auto !important; 
+                    overflow: visible !important;
+                    transform: none !important;
+                    box-shadow: none !important;
+                }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
@@ -1029,33 +1065,51 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
                 });
             }
 
-            const printClone = document.createElement('div');
-            printClone.innerHTML = htmlContent;
-            printClone.style.width = '800px'; 
-            printClone.style.padding = '20px';
-            printClone.style.background = '#ffffff';
-            printClone.style.position = 'absolute';
-            printClone.style.left = '-9999px';
-            printClone.style.top = '0';
-            document.body.appendChild(printClone); 
+            const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+                .map(el => el.outerHTML).join('\n');
 
-            const hiddenElements = printClone.querySelectorAll('.print\\:hidden, button');
+            const printWrapper = document.createElement('div');
+            Object.assign(printWrapper.style, {
+                position: 'absolute',
+                top: '0',
+                left: '0',
+                width: '100%',
+                zIndex: '-1000',
+                pointerEvents: 'none',
+                background: 'white'
+            });
+
+            printWrapper.innerHTML = `
+                ${styles}
+                <div id="pdf-render-target" style="width: 800px; margin: 0 auto; background: white; padding: 20px;">
+                    ${htmlContent}
+                </div>
+            `;
+            document.body.appendChild(printWrapper);
+
+            const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
+            const hiddenElements = targetElement.querySelectorAll('.print\\:hidden, button');
             hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
 
             const opt = {
                 margin: [5, 5, 5, 5],
                 filename: `${title}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
+                image: { type: 'jpeg', quality: 0.95 },
+                html2canvas: { 
+                    scale: 1.5, 
+                    useCORS: true, 
+                    logging: false, 
+                    windowWidth: 800,
+                    scrollX: 0,
+                    scrollY: 0
+                },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
-            const pdfBlob = await (window as any).html2pdf().set(opt).from(printClone).output('blob');
-            document.body.removeChild(printClone);
+            const pdfBlob = await (window as any).html2pdf().set(opt).from(targetElement).output('blob');
+            document.body.removeChild(printWrapper);
             
-            // ★ 核心修復：使用 window.File 繞過 lucide-react 的 File 圖標衝突
             const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
-            
             document.body.removeChild(toast);
             
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
