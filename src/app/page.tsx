@@ -735,7 +735,73 @@ type SettingsManagerProps = {
 // ------------------------------------------------------------------
 // ★★★ 終極完美版跨平台卡片列印引擎 (100%流體適應，防白屏裁切) ★★★
 // ------------------------------------------------------------------
-const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
+const triggerCardPrint = async (htmlContent: string, title: string = 'Document') => {
+    // 檢測是否為 iOS 裝置
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+        const toast = document.createElement('div');
+        toast.innerHTML = '正在產生高畫質 PDF，請稍候...<br><span style="font-size:12px; color:#aaa;">(完成後請選擇「列印」或「儲存」)</span>';
+        Object.assign(toast.style, {
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            background: 'rgba(15, 23, 42, 0.95)', color: 'white', padding: '20px 24px',
+            borderRadius: '16px', zIndex: '999999', fontSize: '15px', fontWeight: 'bold',
+            textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+        });
+        document.body.appendChild(toast);
+
+        try {
+            if (!(window as any).html2pdf) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+
+            const printClone = document.createElement('div');
+            printClone.innerHTML = htmlContent;
+            printClone.style.width = '800px'; 
+            printClone.style.padding = '20px';
+            printClone.style.background = '#ffffff';
+            printClone.style.position = 'absolute';
+            printClone.style.left = '-9999px';
+            printClone.style.top = '0';
+            document.body.appendChild(printClone); 
+
+            const hiddenElements = printClone.querySelectorAll('.print\\:hidden, button');
+            hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
+
+            const opt = {
+                margin: [5, 5, 5, 5],
+                filename: `${title}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            const pdfBlob = await (window as any).html2pdf().set(opt).from(printClone).output('blob');
+            document.body.removeChild(printClone);
+            const file = new File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
+            document.body.removeChild(toast);
+            
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: title });
+            } else {
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                window.location.href = blobUrl;
+            }
+        } catch (error) {
+            console.error("PDF Error:", error);
+            if (document.body.contains(toast)) document.body.removeChild(toast);
+            alert('PDF 產生失敗，請稍後再試。');
+        }
+        return;
+    }
+
+    // --- 桌面版 / Android 版 原有邏輯 ---
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
@@ -750,7 +816,6 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 設定 5mm 安全邊距 */
                 @page { margin: 5mm; size: auto; }
                 html, body { 
                     margin: 0 !important; padding: 0 !important; 
@@ -758,7 +823,6 @@ const triggerCardPrint = (htmlContent: string, title: string = 'Document') => {
                     height: auto !important; 
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
-                /* ★ 核心修復：拔除危險的 zoom，改用 100% 寬度讓瀏覽器自動適應紙張大小 */
                 .print-wrapper { 
                     width: 100% !important; 
                     max-width: 100% !important; 
@@ -952,7 +1016,73 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 // ------------------------------------------------------------------
 // ★★★ 終極完美版列印引擎 (5mm 邊距 + 97% 縮放防切頁) ★★★
 // ------------------------------------------------------------------
-const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
+const triggerSmartPrint = async (htmlContent: string, title: string = 'Document') => {
+    // 檢測是否為 iOS 裝置
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+        const toast = document.createElement('div');
+        toast.innerHTML = '正在產生高畫質 PDF，請稍候...<br><span style="font-size:12px; color:#aaa;">(完成後請選擇「列印」或「儲存」)</span>';
+        Object.assign(toast.style, {
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            background: 'rgba(15, 23, 42, 0.95)', color: 'white', padding: '20px 24px',
+            borderRadius: '16px', zIndex: '999999', fontSize: '15px', fontWeight: 'bold',
+            textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+        });
+        document.body.appendChild(toast);
+
+        try {
+            if (!(window as any).html2pdf) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+
+            const printClone = document.createElement('div');
+            printClone.innerHTML = htmlContent;
+            printClone.style.width = '800px'; 
+            printClone.style.padding = '20px';
+            printClone.style.background = '#ffffff';
+            printClone.style.position = 'absolute';
+            printClone.style.left = '-9999px';
+            printClone.style.top = '0';
+            document.body.appendChild(printClone); 
+
+            const hiddenElements = printClone.querySelectorAll('.print\\:hidden, button');
+            hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
+
+            const opt = {
+                margin: [5, 5, 5, 5],
+                filename: `${title}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, logging: false, windowWidth: 800 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            const pdfBlob = await (window as any).html2pdf().set(opt).from(printClone).output('blob');
+            document.body.removeChild(printClone);
+            const file = new File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
+            document.body.removeChild(toast);
+            
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: title });
+            } else {
+                const blobUrl = URL.createObjectURL(pdfBlob);
+                window.location.href = blobUrl;
+            }
+        } catch (error) {
+            console.error("PDF Error:", error);
+            if (document.body.contains(toast)) document.body.removeChild(toast);
+            alert('PDF 產生失敗，請稍後再試。');
+        }
+        return;
+    }
+
+    // --- 桌面版 / Android 版 原有邏輯 ---
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
@@ -967,11 +1097,8 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
             ${baseTag}
             ${styles}
             <style>
-                /* ★ 1. 設定小邊距 (5mm)，爭取更多垂直空間給印章 */
                 @page { size: A4 portrait; margin: 5mm !important; }
-                
                 @media print {
-                    /* ★ 2. 解除高度鎖定，讓內容自然延展不被硬性剪裁 */
                     html, body { 
                         width: 100% !important;
                         height: auto !important; 
@@ -981,26 +1108,20 @@ const triggerSmartPrint = (htmlContent: string, title: string = 'Document') => {
                         -webkit-print-color-adjust: exact !important; 
                         print-color-adjust: exact !important; 
                     }
-                    
-                    /* ★ 3. 核心魔法：左右給 5mm 空間，並將整體等比例微縮小 3% (zoom: 0.97)，保證印章完美塞進第一頁 */
                     .print-container { 
                         width: 100% !important; 
                         margin: 0 auto !important; 
                         padding: 0 5mm !important; 
                         box-sizing: border-box !important; 
-                        zoom: 0.97 !important; /* 👈 縮小 3%，無痛解決印章溢出到第二頁的問題 */
+                        zoom: 0.97 !important; 
                     }
-
                     #print-root {
                         box-shadow: none !important; 
                         border: none !important; 
                         border-radius: 0 !important;
                     }
-
-                    /* ★ 4. 防止 Tailwind 寬高把畫面撐破 */
                     .w-screen, .w-\\[100vw\\] { width: 100% !important; max-width: 100% !important; }
                     .min-h-screen, .h-screen, .h-\\[100dvh\\] { min-height: 0 !important; height: auto !important; }
-                    
                     body * { visibility: visible !important; }
                     script { display: none !important; }
                 }
