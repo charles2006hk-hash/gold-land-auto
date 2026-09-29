@@ -1,12 +1,14 @@
 // src/utils/printHelper.ts
 
 /**
- * 核心：iOS 專屬 PDF 產生引擎 (防 OOM 崩潰與防變形)
+ * 核心：iOS 專屬 PDF 產生引擎 (帶有 Watchdog 防卡死與防變形機制)
  */
 const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolean) => {
-    // 1. 建立最高層級 Loading 提示 (不使用 alert 避免中斷線程)
+    let isResolved = false; // 追蹤進程是否結束
+
+    // 1. 建立最高層級 Loading 提示
     const toast = document.createElement('div');
-    toast.innerHTML = `正在產生高畫質 PDF...<br><span style="font-size:12px; color:#ccc;">(${isCard ? '圖片較多' : '報表生成中'}，約需 3-5 秒)</span>`;
+    toast.innerHTML = `正在產生高畫質 PDF...<br><span style="font-size:12px; color:#ccc;">(${isCard ? '圖片較多' : '報表生成中'}，請稍候)</span>`;
     Object.assign(toast.style, {
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         background: 'rgba(15, 23, 42, 0.95)', color: 'white', padding: '20px 24px',
@@ -15,21 +17,20 @@ const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolea
     });
     document.body.appendChild(toast);
 
-    // 2. 建立實體渲染容器 (防變形)
-    // 必須使用 opacity: 0.01 騙過 iOS，若用 0 或 display: none 會被優化掉導致白紙
+    // 2. 建立實體渲染容器
     const printWrapper = document.createElement('div');
+    
+    // ★ 核心修復 1：移除 Transform 縮放，直接將 800px 原比例藏於底層 (防壓扁)
     Object.assign(printWrapper.style, {
         position: 'absolute', top: '0', left: '0', 
-        width: '800px', minWidth: '800px', 
-        zIndex: '-1000', opacity: '0.01', pointerEvents: 'none', 
-        background: 'white', transformOrigin: 'top left',
-        transform: `scale(${window.innerWidth / 800})` // 在手機上視覺縮小以防撐破版面
+        width: '800px', minWidth: '800px', maxWidth: '800px',
+        zIndex: '-1000', pointerEvents: 'none', 
+        background: 'white', overflow: 'hidden'
     });
 
     const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
         .map(el => el.outerHTML).join('\n');
 
-    // 針對推介單 (Card) 與 常規單據 (Smart) 注入不同的防變形 CSS
     const customCSS = isCard 
         ? `img { max-width: 100% !important; height: 100% !important; object-fit: cover !important; }
            .aspect-\\[4\\/3\\] { aspect-ratio: 4/3 !important; height: auto !important; }
@@ -51,56 +52,90 @@ const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolea
     `;
     document.body.appendChild(printWrapper);
 
+    // ★ 核心修復 2：看門狗計時器 (Watchdog Timer) 
+    // 如果 15 秒內發生任何 iOS 底層死鎖，強制移除 Toast，拯救系統！
+    const watchdog = setTimeout(() => {
+        if (!isResolved) {
+            isResolved = true;
+            if (document.body.contains(printWrapper)) document.body.removeChild(printWrapper);
+            if (document.body.contains(toast)) document.body.removeChild(toast);
+            alert('⚠️ 系統轉換 PDF 超時 (網路延遲或圖片過大)，已自動解鎖，請重新嘗試。');
+        }
+    }, 15000);
+
     try {
-        // 3. 動態載入 html2pdf 套件
+        // 3. 動態載入 html2pdf 套件 (帶超時機制)
         if (!(window as any).html2pdf) {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
+            await Promise.race([
+                new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                    script.onload = resolve;
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Script timeout')), 4000))
+            ]);
         }
 
         const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
 
-        // ★ 核心防禦：強制等待所有圖片載入完畢，否則 Firebase 高清圖會讓 iOS 瞬間卡死崩潰
+        // ★ 核心修復 3：強制設定跨域屬性並限制圖片載入時間 (最多等 3 秒)
         const images = Array.from(targetElement.querySelectorAll('img'));
-        await Promise.all(images.map(img => {
+        const imagePromises = images.map(img => {
+            img.crossOrigin = "anonymous"; // 強制允許跨域
             if (img.complete) return Promise.resolve();
             return new Promise(res => { img.onload = res; img.onerror = res; });
-        }));
+        });
+        
+        await Promise.race([
+            Promise.all(imagePromises),
+            new Promise(res => setTimeout(res, 3000)) // 3秒後不管圖片載完沒，強制放行
+        ]);
         
         // 給予瀏覽器 0.5 秒重新繪製 DOM
         await new Promise(r => setTimeout(r, 500));
 
-        // ★ 降載防崩潰：scale 設為 1 (iOS 安全極限)，圖片壓縮至 0.8
+        // 檢查是否已被 Watchdog 砍掉
+        if (isResolved) return;
+
+        // 4. 執行 PDF 渲染
         const opt = {
             margin: [10, 10, 10, 10],
             filename: `${title}.pdf`,
-            image: { type: 'jpeg', quality: 0.8 },
-            html2canvas: { scale: 1, useCORS: true, logging: false, windowWidth: 800, width: 800, scrollX: 0, scrollY: 0 },
+            image: { type: 'jpeg', quality: 0.85 },
+            html2canvas: { 
+                scale: 1.2, 
+                useCORS: true, 
+                allowTaint: false,
+                logging: false, 
+                windowWidth: 800, width: 800, 
+                scrollX: 0, scrollY: 0 
+            },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
         const pdfBlob = await (window as any).html2pdf().set(opt).from(targetElement).output('blob');
         
-        // 使用 window.File 避免與 lucide-react 的 File 圖標衝突
+        if (isResolved) return;
+
         const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
         
-        // 觸發原生分享選單
+        // 5. 觸發原生分享選單
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: title });
         } else {
             const blobUrl = URL.createObjectURL(pdfBlob);
             window.location.href = blobUrl;
         }
+
     } catch (error) {
         console.error("PDF 產生失敗:", error);
-        alert('PDF 產生失敗，請確認網路連線或稍後再試。');
+        if (!isResolved) alert('PDF 產生失敗，請確認網路連線或稍後再試。');
     } finally {
-        // ★ 強制清理：無論成功失敗，必須拔除節點，保證系統不卡死
+        // ★ 強制清理：解鎖所有狀態
+        isResolved = true;
+        clearTimeout(watchdog);
         if (document.body.contains(printWrapper)) document.body.removeChild(printWrapper);
         if (document.body.contains(toast)) document.body.removeChild(toast);
     }
