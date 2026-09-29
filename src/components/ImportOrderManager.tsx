@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, getDocs } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
-import { triggerDocumentPrint } from '@/utils/printHelper';
+import { triggerSmartPrint } from '@/utils/printHelper';
 
 // --- 專業級預設費用數據 ---
 const REGION_CONFIGS: any = {
@@ -196,77 +196,13 @@ const QuotationPreview = ({ item, onClose }: any) => {
     const safeFileName = `Quotation_${yearStr}_${modelStr}_${regionStr}`.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || `Quotation_QT-${item.id.slice(0,8).toUpperCase()}`;
 
 
-    // ★ 終極列印引擎：自建視窗並寫入指定 Title，確保 100% 抓到檔名，並智能等待圖片載入
+    // ★ 呼叫獨立的列印引擎，支援 iOS PWA 防崩潰機制
     const handleRobustPrint = () => {
         const content = document.getElementById('print-area');
         if (!content) return;
         
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) {
-            alert('請允許瀏覽器彈出視窗以進行列印');
-            return;
-        }
-
-        // 擷取當前頁面的 Tailwind 樣式
-        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-            .map(s => s.outerHTML)
-            .join('\n');
-
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-                <head>
-                    <!-- 這裡就是瀏覽器存 PDF 時唯一認定的檔名來源 -->
-                    <title>${safeFileName}</title>
-                    ${styles}
-                    <style>
-                        @page { size: A4 portrait; margin: 10mm; }
-                        body { background: white !important; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-                        .print\\:hidden { display: none !important; }
-                        .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
-                        /* 列印時移除外框與捲動軸 */
-                        #print-area { height: auto !important; overflow: visible !important; padding: 0 !important; }
-                    </style>
-                </head>
-                <body>
-                    ${content.outerHTML}
-                    
-                    <!-- ★★★ 核心修復：智能圖片載入監聽引擎 ★★★ -->
-                    <script>
-                        window.onload = function() {
-                            const images = Array.from(document.images);
-                            
-                            // 建立所有圖片的載入 Promise
-                            const promises = images.map(img => {
-                                if (img.complete) return Promise.resolve();
-                                return new Promise(resolve => {
-                                    img.onload = resolve;
-                                    // 容錯機制：即使單張圖片失效也放行，避免整個列印程序死鎖
-                                    img.onerror = resolve; 
-                                });
-                            });
-                            
-                            // 1. 正常情況：等所有圖片載入完畢後，給予 300ms 緩衝渲染，然後列印
-                            Promise.all(promises).then(() => {
-                                setTimeout(() => {
-                                    window.print();
-                                    window.close();
-                                }, 300);
-                            });
-                            
-                            // 2. 終極防呆：如果網路極慢，最多只等 3 秒就強制印出，避免視窗卡死白屏
-                            setTimeout(() => {
-                                window.print();
-                                window.close();
-                            }, 3000);
-                        };
-                    </script>
-                </body>
-            </html>
-        `);
-        
-        printWindow.document.close();
-        printWindow.focus();
+        // 呼叫我們在 printHelper.ts 中寫好的強大防崩潰函數
+        triggerSmartPrint(content.outerHTML, safeFileName);
     };
 
     return (
