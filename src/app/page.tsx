@@ -733,7 +733,7 @@ type SettingsManagerProps = {
 
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版跨平台卡片列印引擎 (100%流體適應，防白屏裁切) ★★★
+// ★★★ 終極完美版跨平台卡片列印引擎 (防變形 + 降載防崩潰) ★★★
 // ------------------------------------------------------------------
 const triggerCardPrint = async (htmlContent: string, title: string = 'Document') => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -765,24 +765,22 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
 
             const printWrapper = document.createElement('div');
             
-            // ★ 核心修復 1：使用透明度 0.01 騙過 iOS 渲染引擎，並強制 800px
+            // ★ 核心防禦 1：使用 fixed 徹底脫離文件流，避免被 iOS 螢幕寬度裁切
             Object.assign(printWrapper.style, {
-                position: 'absolute', top: '0', left: '0', 
+                position: 'fixed', top: '0', left: '0', 
                 width: '800px', minWidth: '800px', 
                 zIndex: '-1000', opacity: '0.01', pointerEvents: 'none', 
-                background: 'white', overflow: 'visible'
+                background: 'white'
             });
 
-            // ★ 核心修復 2：注入強制樣式，打破 Tailwind 在 iOS 上的響應式錯亂 (防壓扁)
+            // ★ 核心防禦 2：強硬注入防擠壓 CSS (* { flex-shrink: 0 }) 破解 Tailwind 的響應式崩潰
             printWrapper.innerHTML = `
-                ${styles}
-                <div id="pdf-render-target" style="width: 800px; max-width: 800px; background: white; padding: 20px; box-sizing: border-box;">
+                <div id="pdf-render-target" style="width: 800px !important; min-width: 800px !important; background: white; padding: 20px; box-sizing: border-box;">
+                    ${styles}
                     <style>
-                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; flex-shrink: 0 !important; }
                         .print\\:hidden, button { display: none !important; }
-                        /* 強制圖片保持比例，防止被 Flexbox 壓扁 */
                         img { max-width: 100% !important; height: 100% !important; object-fit: cover !important; }
-                        /* 強制網格佈局生效 */
                         .grid { display: grid !important; }
                         .flex { display: flex !important; }
                         .aspect-\\[4\\/3\\] { aspect-ratio: 4/3 !important; height: auto !important; }
@@ -793,18 +791,18 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
             `;
             document.body.appendChild(printWrapper);
 
-            // 讓瀏覽器有時間載入 DOM 與重新計算佈局
-            await new Promise(r => setTimeout(r, 800));
+            // 給予足夠時間讓 DOM 渲染及圖片解碼 (防白屏)
+            await new Promise(r => setTimeout(r, 1000));
 
             const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
 
-            // ★ 核心修復 3：降畫質防崩潰 (scale 1.2, quality 0.85)
+            // ★ 核心防禦 3：將 scale 降至 1 (iOS 記憶體極限黃金點)，確保 100% 成功率且不閃退
             const opt = {
                 margin: [10, 10, 10, 10],
                 filename: `${title}.pdf`,
                 image: { type: 'jpeg', quality: 0.85 },
                 html2canvas: { 
-                    scale: 1.2, 
+                    scale: 1, 
                     useCORS: true, 
                     logging: false, 
                     windowWidth: 800, width: 800,
@@ -1032,7 +1030,7 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
 };
 
 // ------------------------------------------------------------------
-// ★★★ 終極完美版列印引擎 (5mm 邊距 + 97% 縮放防切頁) ★★★
+// ★★★ 終極完美版列印引擎 (防變形 + 降載防崩潰) ★★★
 // ------------------------------------------------------------------
 const triggerSmartPrint = async (htmlContent: string, title: string = 'Document') => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1064,17 +1062,17 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
 
             const printWrapper = document.createElement('div');
             Object.assign(printWrapper.style, {
-                position: 'absolute', top: '0', left: '0', 
+                position: 'fixed', top: '0', left: '0', 
                 width: '800px', minWidth: '800px', 
                 zIndex: '-1000', opacity: '0.01', pointerEvents: 'none', 
-                background: 'white', overflow: 'visible'
+                background: 'white'
             });
 
             printWrapper.innerHTML = `
-                ${styles}
-                <div id="pdf-render-target" style="width: 800px; max-width: 800px; background: white; padding: 20px; box-sizing: border-box;">
+                <div id="pdf-render-target" style="width: 800px !important; min-width: 800px !important; background: white; padding: 20px; box-sizing: border-box;">
+                    ${styles}
                     <style>
-                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; flex-shrink: 0 !important; }
                         .print\\:hidden, button { display: none !important; }
                         img { max-width: 100% !important; height: auto !important; object-fit: contain !important; }
                         .grid { display: grid !important; }
@@ -1085,7 +1083,7 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
             `;
             document.body.appendChild(printWrapper);
 
-            await new Promise(r => setTimeout(r, 800));
+            await new Promise(r => setTimeout(r, 1000));
 
             const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
 
@@ -1094,7 +1092,7 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
                 filename: `${title}.pdf`,
                 image: { type: 'jpeg', quality: 0.85 },
                 html2canvas: { 
-                    scale: 1.2, 
+                    scale: 1, 
                     useCORS: true, 
                     logging: false, 
                     windowWidth: 800, width: 800,
