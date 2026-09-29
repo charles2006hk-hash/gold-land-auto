@@ -15,7 +15,7 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
 
   if (isIOS) {
     // =====================================================================
-    // [iOS 專用模式]：在當前頁面覆蓋列印層 (避免非同步延遲與 Iframe 阻擋)
+    // [iOS 專用模式]：在當前頁面覆蓋列印層 (破解 Safari User Gesture 限制)
     // =====================================================================
     const originalTitle = document.title;
     document.title = title;
@@ -24,7 +24,6 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     const containerId = `ios-print-container-${Date.now()}`;
     printContainer.id = containerId;
     
-    // 抓取當前頁面已經載入好的樣式 (不需要等 CDN)
     const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
       .map(s => s.outerHTML)
       .join('\n');
@@ -32,19 +31,15 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     printContainer.innerHTML = `
       ${styles}
       <style>
-        /* 列印時的專屬樣式 */
         @media print {
-          /* 隱藏原本的應用程式，只顯示列印容器 */
           body > *:not(#${containerId}) { display: none !important; }
           #${containerId} { display: block !important; position: static; width: 100%; height: auto; z-index: 999999; background: white; }
-          
           @page { size: A4 portrait; margin: 10mm !important; }
           * { visibility: visible !important; overflow: visible !important; }
           .flex-col { display: block !important; }
           .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; margin-bottom: 24px; }
           .print\\:hidden, .no-print, button { display: none !important; }
         }
-        /* 螢幕預覽時的蓋版樣式 (純白背景蓋住主程式) */
         @media screen {
           #${containerId} { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: white; z-index: 999999; overflow-y: auto; }
         }
@@ -54,24 +49,25 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
 
     document.body.appendChild(printContainer);
 
-    // iOS 必須在極短時間內觸發列印以符合手勢安全限制 (不等待圖片或 CDN)
-    setTimeout(() => {
-      window.print();
-      
-      // 列印結束或取消後，清理現場並還原
-      setTimeout(() => {
-        if (document.body.contains(printContainer)) {
-          document.body.removeChild(printContainer);
-        }
-        document.title = originalTitle;
-      }, 1000);
-    }, 300);
+    // ★ 核心修復 1：強制瀏覽器立即重繪 (Reflow)，確保 DOM 已經渲染，避免印出空白頁
+    void printContainer.offsetHeight;
 
-    return; // 結束執行，不進入下方 Iframe 邏輯
+    // ★ 核心修復 2：移除 setTimeout，立刻「同步」呼叫 print()，保留使用者的點擊手勢權限
+    window.print();
+    
+    // 清理現場 (延遲 2 秒確保系統列印對話框已經彈出並接管畫面)
+    setTimeout(() => {
+      if (document.body.contains(printContainer)) {
+        document.body.removeChild(printContainer);
+      }
+      document.title = originalTitle;
+    }, 2000);
+
+    return; 
   }
 
   // =====================================================================
-  // [Desktop / Android 模式]：原汁原味的隱藏 Iframe 極淨化隔離模式
+  // [Desktop / Android 模式]：隱藏 Iframe 極淨化隔離模式
   // =====================================================================
   const iframe = document.createElement('iframe');
   iframe.id = `print-iframe-${Date.now()}`;
@@ -145,6 +141,5 @@ export const triggerDocumentPrint = (elementId: string, title: string = 'Documen
     iframe.contentWindow.onafterprint = cleanup;
   }
   
-  // 終極防呆：3 分鐘後強制拔除
   setTimeout(cleanup, 180000); 
 };
