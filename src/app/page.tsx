@@ -760,47 +760,55 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
                 });
             }
 
-            // 獲取全局樣式
             const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
                 .map(el => el.outerHTML).join('\n');
 
             const printWrapper = document.createElement('div');
             
-            // ★ 核心修復 1：絕不能用 left: -9999px！將其置於 0,0 並藏於底層 (z-index: -1000)
+            // ★ 核心修復 1：使用透明度 0.01 騙過 iOS 渲染引擎，並強制 800px
             Object.assign(printWrapper.style, {
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                width: '100%',
-                zIndex: '-1000',
-                pointerEvents: 'none',
-                background: 'white'
+                position: 'absolute', top: '0', left: '0', 
+                width: '800px', minWidth: '800px', 
+                zIndex: '-1000', opacity: '0.01', pointerEvents: 'none', 
+                background: 'white', overflow: 'visible'
             });
 
+            // ★ 核心修復 2：注入強制樣式，打破 Tailwind 在 iOS 上的響應式錯亂 (防壓扁)
             printWrapper.innerHTML = `
                 ${styles}
-                <div id="pdf-render-target" style="width: 800px; margin: 0 auto; background: white; padding: 20px;">
+                <div id="pdf-render-target" style="width: 800px; max-width: 800px; background: white; padding: 20px; box-sizing: border-box;">
+                    <style>
+                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .print\\:hidden, button { display: none !important; }
+                        /* 強制圖片保持比例，防止被 Flexbox 壓扁 */
+                        img { max-width: 100% !important; height: 100% !important; object-fit: cover !important; }
+                        /* 強制網格佈局生效 */
+                        .grid { display: grid !important; }
+                        .flex { display: flex !important; }
+                        .aspect-\\[4\\/3\\] { aspect-ratio: 4/3 !important; height: auto !important; }
+                        .aspect-\\[16\\/7\\] { aspect-ratio: 16/7 !important; height: auto !important; }
+                    </style>
                     ${htmlContent}
                 </div>
             `;
             document.body.appendChild(printWrapper);
 
-            const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
-            const hiddenElements = targetElement.querySelectorAll('.print\\:hidden, button');
-            hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
+            // 讓瀏覽器有時間載入 DOM 與重新計算佈局
+            await new Promise(r => setTimeout(r, 800));
 
-            // ★ 核心修復 2：降 scale 至 1.5 防崩潰，重置滾動防白邊
+            const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
+
+            // ★ 核心修復 3：降畫質防崩潰 (scale 1.2, quality 0.85)
             const opt = {
-                margin: [5, 5, 5, 5],
+                margin: [10, 10, 10, 10],
                 filename: `${title}.pdf`,
-                image: { type: 'jpeg', quality: 0.95 },
+                image: { type: 'jpeg', quality: 0.85 },
                 html2canvas: { 
-                    scale: 1.5, 
+                    scale: 1.2, 
                     useCORS: true, 
                     logging: false, 
-                    windowWidth: 800,
-                    scrollX: 0,
-                    scrollY: 0
+                    windowWidth: 800, width: 800,
+                    scrollX: 0, scrollY: 0
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
@@ -841,22 +849,8 @@ const triggerCardPrint = async (htmlContent: string, title: string = 'Document')
             ${styles}
             <style>
                 @page { margin: 5mm; size: auto; }
-                html, body { 
-                    margin: 0 !important; padding: 0 !important; 
-                    background: white !important; 
-                    height: auto !important; 
-                    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
-                }
-                .print-wrapper { 
-                    width: 100% !important; 
-                    max-width: 100% !important; 
-                    margin: 0 !important; padding: 0 !important; 
-                    background: white !important; 
-                    height: auto !important; 
-                    overflow: visible !important;
-                    transform: none !important;
-                    box-shadow: none !important;
-                }
+                html, body { margin: 0 !important; padding: 0 !important; background: white !important; height: auto !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                .print-wrapper { width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important; background: white !important; height: auto !important; overflow: visible !important; transform: none !important; box-shadow: none !important; }
                 body * { visibility: visible !important; }
                 script { display: none !important; }
                 .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
@@ -1070,38 +1064,41 @@ const triggerSmartPrint = async (htmlContent: string, title: string = 'Document'
 
             const printWrapper = document.createElement('div');
             Object.assign(printWrapper.style, {
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                width: '100%',
-                zIndex: '-1000',
-                pointerEvents: 'none',
-                background: 'white'
+                position: 'absolute', top: '0', left: '0', 
+                width: '800px', minWidth: '800px', 
+                zIndex: '-1000', opacity: '0.01', pointerEvents: 'none', 
+                background: 'white', overflow: 'visible'
             });
 
             printWrapper.innerHTML = `
                 ${styles}
-                <div id="pdf-render-target" style="width: 800px; margin: 0 auto; background: white; padding: 20px;">
+                <div id="pdf-render-target" style="width: 800px; max-width: 800px; background: white; padding: 20px; box-sizing: border-box;">
+                    <style>
+                        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                        .print\\:hidden, button { display: none !important; }
+                        img { max-width: 100% !important; height: auto !important; object-fit: contain !important; }
+                        .grid { display: grid !important; }
+                        .flex { display: flex !important; }
+                    </style>
                     ${htmlContent}
                 </div>
             `;
             document.body.appendChild(printWrapper);
 
+            await new Promise(r => setTimeout(r, 800));
+
             const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
-            const hiddenElements = targetElement.querySelectorAll('.print\\:hidden, button');
-            hiddenElements.forEach(el => (el as HTMLElement).style.display = 'none');
 
             const opt = {
-                margin: [5, 5, 5, 5],
+                margin: [10, 10, 10, 10],
                 filename: `${title}.pdf`,
-                image: { type: 'jpeg', quality: 0.95 },
+                image: { type: 'jpeg', quality: 0.85 },
                 html2canvas: { 
-                    scale: 1.5, 
+                    scale: 1.2, 
                     useCORS: true, 
                     logging: false, 
-                    windowWidth: 800,
-                    scrollX: 0,
-                    scrollY: 0
+                    windowWidth: 800, width: 800,
+                    scrollX: 0, scrollY: 0
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
