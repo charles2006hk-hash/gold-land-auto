@@ -426,32 +426,22 @@ const VehicleFormModal = ({
         safeUpdateFinancing((v.financingRecords || []).filter((f: any) => f.id !== id));
     };
 
-    const handleSettleFinancing = (f: any) => {
+    const handleSettleFinancing = async (f: any) => {
         // ★ 核心結息邏輯升級：3 個月為一期，不足 3 個月按 3 個月計
-        const endDate = new Date().toISOString().split('T')[0]; // 今天結算
-        
+        const endDate = new Date().toISOString().split('T')[0]; 
         const start = new Date(f.startDate);
         const end = new Date(endDate);
         
-        // 1. 記錄實際經過天數
         const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
         const actualDays = diffDays > 0 ? diffDays : 1; 
 
-        // 2. 計算跨越的實際月份數
         let diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-        
-        // 如果結算日的「日」大於起息日的「日」，代表剛好跨入了下一個月
-        if (end.getDate() > start.getDate()) {
-            diffMonths++;
-        }
-        // 防呆：如果是同一天或不足一個月，算作 1 個月起步
+        if (end.getDate() > start.getDate()) diffMonths++;
         if (diffMonths === 0 && actualDays > 0) diffMonths = 1;
 
-        // 3. 階梯式收費邏輯：除以 3 並向上取整，得出「期數」
-        const billedPeriods = Math.ceil(diffMonths / 3) || 1; // 至少 1 期 (3個月)
+        const billedPeriods = Math.ceil(diffMonths / 3) || 1; 
         const billedMonths = billedPeriods * 3;
 
-        // 4. 計算最終利息：本金 * (年息/100) * (收費月數/12)
         const calculatedInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
 
         const updated = { 
@@ -460,11 +450,48 @@ const VehicleFormModal = ({
             endDate: endDate, 
             actualInterest: calculatedInterest, 
             actualDays: actualDays,
-            billedMonths: billedMonths // 寫入資料庫留底，方便日後對數
+            billedMonths: billedMonths 
         };
         safeUpdateFinancing((v.financingRecords || []).map((x: any) => x.id === f.id ? updated : x));
         
-        alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費週期: ${billedPeriods} 期 (按 ${billedMonths} 個月收費)\n產生利息: $${calculatedInterest.toLocaleString()}`);
+        // ★ 核心連動：自動在「行家來往」總帳中產生一筆應付帳款 (利息+本金)
+        if (db && appId && staffId) {
+            try {
+                const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                // 產生利息應付
+                if (calculatedInterest > 0) {
+                    await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                        partner: f.lenderName, 
+                        date: endDate, 
+                        type: 'payable', 
+                        amount: calculatedInterest, 
+                        note: `[系統結算] ${v.regMark || '未出牌'} 融資利息 (${billedMonths}個月)`,
+                        sourceModule: 'vehicle_finance',
+                        vehicleId: v.id,
+                        createdAt: serverTimestamp(), 
+                        createdBy: staffId 
+                    });
+                }
+                // 產生本金應還
+                await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                    partner: f.lenderName, 
+                    date: endDate, 
+                    type: 'payable', 
+                    amount: f.principal, 
+                    note: `[系統結算] ${v.regMark || '未出牌'} 融資本金歸還`,
+                    sourceModule: 'vehicle_finance',
+                    vehicleId: v.id,
+                    createdAt: serverTimestamp(), 
+                    createdBy: staffId 
+                });
+                alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費週期: ${billedPeriods} 期\n產生利息: $${calculatedInterest.toLocaleString()}\n\n系統已自動將本金與利息轉入【財務總覽 -> 行家來往】的應付帳款中！`);
+            } catch (err) {
+                console.error("連動寫入總帳失敗", err);
+                alert(`結息成功，但連動寫入財務總帳失敗，請手動補登。`);
+            }
+        } else {
+            alert(`✅ 結息完成！\n產生利息: $${calculatedInterest.toLocaleString()}`);
+        }
     };
  
     // ★ 新增：維修保養的修改(Edit)狀態與函數
@@ -686,10 +713,40 @@ const VehicleFormModal = ({
         else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).filter((e: any) => e.id !== eid) }));
     };
 
-    const handleToggleExpenseStatus = (exp: any) => {
+   const handleToggleExpenseStatus = async (exp: any) => {
         const newStatus = exp.status === 'Paid' ? 'Unpaid' : 'Paid';
         if (v.id) updateExpenseStatus(v.id, exp.id, newStatus);
         else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: newStatus } : e) }));
+
+        // ★ 核心連動：如果標記為 Unpaid (未找數)，詢問是否要轉入行家總帳統一結算
+        if (newStatus === 'Unpaid' && db && appId && staffId && exp.company) {
+            const transferToLedger = confirm(`是否將此筆未付費用 [${exp.type} $${exp.amount}] 轉入【行家來往】總帳，與「${exp.company}」的其他帳目統一對數結算？`);
+            if (transferToLedger) {
+                 try {
+                    const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                    await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                        partner: exp.company, 
+                        date: new Date().toISOString().split('T')[0], 
+                        type: 'payable', // 支出是應付
+                        amount: exp.amount, 
+                        note: `[車輛費用] ${v.regMark || '未出牌'} - ${exp.type}`,
+                        sourceModule: 'vehicle_expense',
+                        vehicleId: v.id,
+                        createdAt: serverTimestamp(), 
+                        createdBy: staffId 
+                    });
+                    
+                    // 為了避免重複支付，將車輛這邊標記為「已轉總帳 (Transferred)」
+                    if (v.id) updateExpenseStatus(v.id, exp.id, 'Transferred_To_Ledger');
+                    else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: 'Transferred_To_Ledger' } : e) }));
+
+                    alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！日後請在總帳中與 ${exp.company} 統一結算。`);
+                } catch (err) {
+                    console.error("轉入總帳失敗", err);
+                    alert("轉入失敗。");
+                }
+            }
+        }
     };
     // ★★★ 結束：智能雙軌管理器 ★★★
 
