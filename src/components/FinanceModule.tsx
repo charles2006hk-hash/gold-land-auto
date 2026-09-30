@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
-    DownloadCloud, Trash2, X, Check, Printer, Lock // ★ 保留 Lock 圖標
+    DownloadCloud, Trash2, X, Check, Printer, Lock 
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -28,14 +28,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     
     // --- 模塊狀態鎖定 ---
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_fin_tab') as any : null) || 'dashboard');
-    const [selectedLender, setSelectedLender] = useState<string>(''); // ★ 資金池專用狀態
+    const [selectedLender, setSelectedLender] = useState<string>('');
     
     // ★ 核心安全邏輯：判斷是否擁有「管理員級別」的資料視角
     const isFullAccess = staffId === 'BOSS' || 
                         currentUser?.modules?.includes('all') || 
                         currentUser?.dataAccess === 'all';
 
-    // ★ 安全強制重導：如果普通員工誤入了管理員專屬 Tab，自動彈回首頁
     useEffect(() => {
         if (!isFullAccess && (financeTab === 'partner' || financeTab === 'lender' || financeTab === 'accounting' || financeTab === 'capital')) {
             setFinanceTab('dashboard');
@@ -85,6 +84,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [ledgers, setLedgers] = useState<any[]>([]);
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const [partnerSearch, setPartnerSearch] = useState('');
+    // ★ 修正：加入 method 與 refNo 支援進階支付記錄
     const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '', method: 'Transfer', refNo: '' });
 
     // 自動儲存狀態
@@ -125,7 +125,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
     const handlePrint = () => { window.print(); };
 
-   // ============================================================================
+    // ============================================================================
     // ★ 核心引擎 1：統計報表生成 (Report Data)
     // ============================================================================
     const generateReportData = () => {
@@ -134,27 +134,19 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         if (reportType === 'receivable') {
             const targetInventory = inventory.filter((v:any) => v.status === 'Sold' || v.status === 'Reserved');
             targetInventory.forEach((v:any) => {
-                
-                // ★ 修正 1：車價與附加費 (客戶應付) - 徹底排除內部 expenses
                 const salesAddonsTotal = ((v as any).salesAddons || []).reduce((sum: number, a: any) => sum + (a.isFree ? 0 : (a.amount || 0)), 0);
                 const totalCarReceivable = (v.price || 0) + salesAddonsTotal;
-                
-                // ★ 修正 2：一般車價收款 (排除中港代辦的獨立收款)
                 const generalPayments = (v.payments || []).filter((p:any) => !p.relatedTaskId).reduce((s:any, p:any) => s + (p.amount || 0), 0);
-                
-                // ★ 修正 3：車價尾數 (純客戶應付 - 已付)
                 const carBalance = totalCarReceivable - generalPayments;
                 if (totalCarReceivable > 0 && carBalance > 0) {
                     const date = v.stockOutDate || (v as any).reservedDate || v.stockInDate || new Date().toISOString().split('T')[0];
                     data.push({ vehicleId: v.id, date: date, title: `${v.year} ${v.make} ${v.model}`, regMark: v.regMark, amount: carBalance, type: 'Vehicle', status: v.status, rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} 車價` });
                 }
                 
-                // 4. 售後維修收費 (對客收 charge)
                 (v.maintenanceRecords || []).forEach((m: any) => {
                     if (m.charge > 0 && m.chargeStatus !== 'Paid') data.push({ vehicleId: v.id, date: m.date, title: `[售後收費] ${m.item}`, regMark: v.regMark, amount: m.charge, type: 'Service', status: 'Pending', rawTitle: `${v.year} ${v.make} ${v.model} ${v.regMark} ${m.item}` });
                 });
 
-                // 5. 中港代辦費
                 (v.crossBorder?.tasks || []).forEach((task:any) => {
                     const fee = Number(task.fee) || 0; if (fee <= 0) return;
                     const taskPaid = (v.payments || []).filter((p:any) => p.relatedTaskId === task.id).reduce((s:any, p:any) => s + (p.amount || 0), 0);
@@ -170,6 +162,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
             inventory.forEach((v:any) => {
                 (v.expenses || []).forEach((exp:any) => {
+                    // ★ 車輛端費用如果狀態為 'Transferred'，則不會出現在應付報表中，因為已轉移至行家總帳
                     if (exp.status === targetStatus) data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `[維修/雜費] ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
                 });
                 (v.maintenanceRecords || []).forEach((m: any) => {
@@ -195,7 +188,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             data = inventory.filter((v:any) => v.status === 'Sold').map((v:any) => {
                 const baseExpenses = (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
                 const interestExpenses = (v.financingRecords || []).reduce((sum:number, f:any) => sum + (f.status === 'Settled' ? (f.actualInterest || 0) : 0), 0);
-                const totalCost = (v.costPrice || 0) + baseExpenses + interestExpenses;
+                const totalCost = (v.costPrice || 0) + baseExpenses + interestExpenses; 
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
                 let safeSaleDate = v.stockOutDate || (v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -235,7 +228,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
         ledgers.forEach((l: any) => {
             const isCashIn = l.type === 'receivable' ? (l.note.includes('收') || l.note.includes('還')) : (l.note.includes('借入') || l.note.includes('收'));
-            ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: '', remark: '', rawDate: new Date(l.date).getTime() });
+            ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: l.method || '', remark: l.refNo || '', rawDate: new Date(l.date).getTime() });
         });
 
         return ledger.sort((a, b) => b.rawDate - a.rawDate);
@@ -297,10 +290,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const dashStats = calculateDashboardStats();
 
     // ============================================================================
-    // ★ 輔助函數：行家來往 & 會計帳目
+    // ★ 輔助函數：行家來往
     // ============================================================================
     
-    // 行家來往資料處理
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
     const filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
     const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -317,17 +309,17 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 type: newLedger.type, 
                 amount: amt, 
                 note: newLedger.note || (newLedger.type === 'receivable' ? '借出/應收' : '找數/墊支'), 
-                method: newLedger.method, // ★ 新增寫入支付方式
-                refNo: newLedger.refNo || '', // ★ 新增寫入參考號
+                method: newLedger.method || 'Transfer', 
+                refNo: newLedger.refNo || '', 
                 createdAt: serverTimestamp(), 
                 createdBy: staffId 
             });
-            setNewLedger({ ...newLedger, amount: '', note: '', refNo: '' }); // 保留日期與方式，清空金額備註
+            setNewLedger({ ...newLedger, amount: '', note: '', refNo: '' }); 
             alert('✅ 紀錄已成功入帳！');
         } catch (err) { alert('❌ 加入失敗'); }
     };
 
-   const handleDeleteLedgerRecord = async (id: string) => {
+    const handleDeleteLedgerRecord = async (id: string) => {
         if (!db || !confirm("確定刪除此筆對帳紀錄？")) return;
         await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', id));
     };
@@ -343,12 +335,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         });
     };
 
-    const handleSettleBalance = () => {
-        if (partnerBalance === 0) return;
-        setNewLedger({ date: new Date().toISOString().split('T')[0], type: partnerBalance > 0 ? 'payable' : 'receivable', amount: Math.abs(partnerBalance).toString(), note: '結清帳目對數 (Settlement)' });
-    };
-
-    // ★ 恢復缺失的過濾邏輯[cite: 19]
+    // ============================================================================
+    // ★ 輔助函數：會計流水帳
+    // ============================================================================
     const filteredAccLedger = rawLedger.filter(l => {
         if (isDateFilterEnabled) {
             if (reportStartDate && l.date < reportStartDate) return false;
@@ -393,7 +382,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
                     <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
                     
-                    {/* ★ 只對 All Data 權限顯示以下按鈕 */}
                     {isFullAccess && (
                         <>
                             <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
@@ -411,7 +399,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {financeTab === 'dashboard' && (
                 <div className="flex-1 overflow-y-auto animate-fade-in pb-10">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        {/* 本月現金流卡片 */}
                         <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                             <div className="col-span-full mb-2 border-b border-slate-100 pb-2">
                                 <h3 className="font-bold text-slate-700 text-lg flex items-center"><CalendarDays size={20} className="mr-2 text-blue-500"/> 本月現金流狀況 (Cash Flow - {new Date().toLocaleString('zh-HK', {month: 'long'})})</h3>
@@ -436,7 +423,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </div>
                         </div>
 
-                        {/* 應收應付總額 */}
                         <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-2xl shadow-lg text-white relative overflow-hidden">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
                             <h3 className="font-bold text-slate-300 text-sm mb-4 uppercase tracking-widest">總應收帳款 (Total A/R)</h3>
@@ -460,7 +446,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             )}
 
             {/* ========================================== */}
-            {/* Tab 2: 統計報表 (原 Reports) */}
+            {/* Tab 2: 統計報表 */}
             {/* ========================================== */}
             {financeTab === 'reports' && (
                 <div className="flex-1 flex flex-col animate-fade-in min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -611,6 +597,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </div>
                                     </div>
                                 </div>
+                                
                                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
                                     <div className="space-y-3">
                                         {partnerHistory.map(l => {
@@ -689,8 +676,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 3.5: 資金池/墊資結算 (Lender Statements) */}
             {/* ========================================== */}
             {financeTab === 'lender' && (() => {
-                
-                // 🛡️ 終極修復：無死角動態掃描全庫金主
                 const lendersSet = new Set<string>();
                 inventory.forEach((v: any) => {
                     if (v.financingRecords && Array.isArray(v.financingRecords)) {
@@ -705,7 +690,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 let activePrincipalTotal = 0;
                 let currentMonthInterest = 0;
                 let lenderHistory: any[] = [];
-                const currentMonthPrefix = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
+                const currentMonthPrefix = new Date().toISOString().split('T')[0].substring(0, 7); 
 
                 if (selectedLender) {
                     inventory.forEach((v: any) => {
@@ -821,7 +806,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             })()}
 
             {/* ========================================== */}
-            {/* ★ Tab 4: 會計帳目 (Accounting) ★ 成功補回 */}
+            {/* Tab 4: 會計帳目 (Accounting) */}
             {/* ========================================== */}
             {financeTab === 'accounting' && (
                 <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
@@ -927,7 +912,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 5: 資金預算沙盤 (Capital Sandbox) */}
             {/* ========================================== */}
             {financeTab === 'capital' && (() => {
-                // 數學計算引擎
                 const principal = Number(capPrincipal.replace(/,/g, '')) || 0;
                 const upfrontFee = principal * (capFee / 100);
                 const upfrontInterest = principal * (capInterest / 100);
@@ -936,10 +920,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 const totalInterest = principal * (capInterest / 100) * capYears;
                 const totalCost = upfrontFee + totalInterest;
                 
-                // 損益兩平點 (Break-even Yield)：每年至少要賺幾多%，先夠還利息同手續費？
                 const breakEvenYield = usableCash > 0 ? (totalCost / usableCash / capYears) * 100 : 0;
 
-                // 分配計算
                 const valUsedCar = usableCash * (allocUsedCar / 100);
                 const valLimited = usableCash * (allocLimited / 100);
                 const valRental = usableCash * (allocRental / 100);
@@ -962,7 +944,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* 左側：資金結構 */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                                 <h4 className="font-bold text-slate-800 text-lg border-b pb-2">1. 外部資金結構 (Capital Structure)</h4>
                                 
@@ -1005,14 +986,12 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                             </div>
 
-                            {/* 右側：投資分配與回報 */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                                 <div className="flex justify-between items-center border-b pb-2">
                                     <h4 className="font-bold text-slate-800 text-lg">2. 資金池分配矩陣 (Allocation)</h4>
                                     <span className={`text-xs font-bold px-2 py-1 rounded ${allocUsedCar + allocLimited + allocRental === 100 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700 animate-pulse'}`}>總分配: {allocUsedCar + allocLimited + allocRental}%</span>
                                 </div>
 
-                                {/* 跑道 1 */}
                                 <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
                                     <div className="flex justify-between font-bold text-blue-800 text-sm mb-2"><span>A. 常規二手車及中港買賣 (高周轉)</span><span>{formatCurrency(valUsedCar)}</span></div>
                                     <div className="flex gap-4 items-center">
@@ -1021,7 +1000,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
 
-                                {/* 跑道 2 */}
                                 <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
                                     <div className="flex justify-between font-bold text-amber-800 text-sm mb-2"><span>B. 限量版 Quota 買賣 (高利潤)</span><span>{formatCurrency(valLimited)}</span></div>
                                     <div className="flex gap-4 items-center">
@@ -1030,7 +1008,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
 
-                                {/* 跑道 3 */}
                                 <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
                                     <div className="flex justify-between font-bold text-emerald-800 text-sm mb-2"><span>C. 未來拓展：車輛出租 (穩定防守)</span><span>{formatCurrency(valRental)}</span></div>
                                     <div className="flex gap-4 items-center">
@@ -1040,7 +1017,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                             </div>
                             
-                            {/* 底部總結 */}
                             <div className="lg:col-span-2 bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center text-white">
                                 <div className="mb-4 md:mb-0 w-full md:w-auto">
                                     <div className="text-slate-400 font-bold text-sm uppercase tracking-widest mb-1">Portfolio Projection (投資組合預期)</div>
