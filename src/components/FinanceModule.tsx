@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
-    DownloadCloud, Trash2, X, Check, Printer
+    DownloadCloud, Trash2, X, Check, Printer, Lock // ★ 保留 Lock 圖標
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -195,7 +195,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             data = inventory.filter((v:any) => v.status === 'Sold').map((v:any) => {
                 const baseExpenses = (v.expenses || []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
                 const interestExpenses = (v.financingRecords || []).reduce((sum:number, f:any) => sum + (f.status === 'Settled' ? (f.actualInterest || 0) : 0), 0);
-                const totalCost = (v.costPrice || 0) + baseExpenses + interestExpenses; // ★ 將結算後的利息納入成本！ []).reduce((sum:number, e:any) => sum + (e.amount || 0), 0);
+                const totalCost = (v.costPrice || 0) + baseExpenses + interestExpenses;
                 const cbFees = (v.crossBorder?.tasks || []).reduce((sum:number, t:any) => sum + (t.fee || 0), 0);
                 const totalRevenue = (v.price || 0) + cbFees;
                 let safeSaleDate = v.stockOutDate || (v.updatedAt?.seconds ? new Date(v.updatedAt.seconds * 1000).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -327,7 +327,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         setNewLedger({ date: new Date().toISOString().split('T')[0], type: partnerBalance > 0 ? 'payable' : 'receivable', amount: Math.abs(partnerBalance).toString(), note: '結清帳目對數 (Settlement)' });
     };
 
-    // 會計帳目過濾與匯出
+    // ★ 恢復缺失的過濾邏輯[cite: 19]
     const filteredAccLedger = rawLedger.filter(l => {
         if (isDateFilterEnabled) {
             if (reportStartDate && l.date < reportStartDate) return false;
@@ -591,19 +591,39 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                                    {/* ★ 核心修改：區分系統連動與手工記帳 */}
                                     <div className="space-y-3">
-                                        {partnerHistory.map(l => (
-                                            <div key={l.id} className="flex justify-between items-center p-4 bg-white rounded-xl border border-slate-200 shadow-sm hover:border-amber-300 transition-colors group">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{l.type === 'receivable' ? '入' : '出'}</div>
-                                                    <div><div className="font-bold text-slate-800">{l.note || '-'}</div><div className="text-xs text-slate-400 font-mono mt-0.5">{l.date} • {l.createdBy} 記錄</div></div>
+                                        {partnerHistory.map(l => {
+                                            // 智能視覺區分：系統自動匯入 vs 手工記帳
+                                            const isSystemAuto = !!l.sourceModule;
+                                            
+                                            return (
+                                                <div key={l.id} className={`flex justify-between items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{l.type === 'receivable' ? '入' : '出'}</div>
+                                                        <div>
+                                                            <div className="font-bold text-slate-800 flex items-center gap-2">
+                                                                {l.note || '-'}
+                                                                {isSystemAuto && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200" title="此紀錄由車輛系統自動連動產生">🤖 系統連動</span>}
+                                                            </div>
+                                                            <div className="text-xs text-slate-400 font-mono mt-0.5">{l.date} • {l.createdBy} 記錄</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right flex items-center gap-4">
+                                                        <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>{l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
+                                                        
+                                                        {isSystemAuto ? (
+                                                            // 系統產生的紀錄不允許在總帳直接刪除，引導回車輛修改
+                                                            <div className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 cursor-help transition-all" title="系統連動紀錄，如需刪除請至車輛庫存修改源頭數據">
+                                                                <Lock size={16}/>
+                                                            </div>
+                                                        ) : (
+                                                            <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title="刪除此手工紀錄"><Trash2 size={16}/></button>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <div className="text-right flex items-center gap-4">
-                                                    <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>{l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
-                                                    <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"><Trash2 size={16}/></button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                                 <form onSubmit={handleAddLedgerRecord} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
@@ -626,7 +646,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {financeTab === 'lender' && (() => {
                 
-                // 🛡️ 終極修復：無死角動態掃描全庫金主 (取代寫死的 settings.lenders)
+                // 🛡️ 終極修復：無死角動態掃描全庫金主
                 const lendersSet = new Set<string>();
                 inventory.forEach((v: any) => {
                     if (v.financingRecords && Array.isArray(v.financingRecords)) {
@@ -636,15 +656,11 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         });
                     }
                 });
-                // 轉為陣列並排序
                 const lendersList = Array.from(lendersSet).sort();
                 
-                // 找出選定金主的所有紀錄
                 let activePrincipalTotal = 0;
                 let currentMonthInterest = 0;
                 let lenderHistory: any[] = [];
-              
-
                 const currentMonthPrefix = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
 
                 if (selectedLender) {
@@ -654,11 +670,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 if (f.status === 'Active') {
                                     activePrincipalTotal += Number(f.principal || 0);
                                 }
-                                
                                 if (f.status === 'Settled' && f.endDate?.startsWith(currentMonthPrefix)) {
                                     currentMonthInterest += Number(f.actualInterest || 0);
                                 }
-
                                 lenderHistory.push({
                                     vehicleId: v.id,
                                     regMark: v.regMark || '未出牌',
@@ -669,7 +683,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             }
                         });
                     });
-                    // 排序：未結算在前，已結算按日期降序
                     lenderHistory.sort((a, b) => {
                         if (a.status === 'Active' && b.status === 'Settled') return -1;
                         if (a.status === 'Settled' && b.status === 'Active') return 1;
@@ -762,9 +775,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     </div>
                 );
             })()}
-            
+
             {/* ========================================== */}
-            {/* Tab 4: 會計帳目 (Accounting) */}
+            {/* ★ Tab 4: 會計帳目 (Accounting) ★ 成功補回 */}
             {/* ========================================== */}
             {financeTab === 'accounting' && (
                 <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
@@ -852,11 +865,11 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </td>
                                     </tr>
                                 ))}
-                                {filteredAccLedger.length === 0 && <tr><td colSpan={7} className="p-12 text-center text-slate-400">目前沒有符合條件的紀錄</td></tr>}
+                                {filteredAccLedger.length === 0 && <tr><td colSpan={9} className="p-12 text-center text-slate-400">目前沒有符合條件的紀錄</td></tr>}
                             </tbody>
                             <tfoot className="sticky bottom-0 bg-slate-50 font-bold border-t-2 border-slate-300 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
                                 <tr>
-                                    <td colSpan={5} className="p-3 text-right text-slate-500 uppercase tracking-widest">目前顯示區間總計:</td>
+                                    <td colSpan={7} className="p-3 text-right text-slate-500 uppercase tracking-widest">目前顯示區間總計:</td>
                                     <td className="p-3 text-right text-base font-black font-mono text-emerald-600">{formatCurrency(filteredTotalIn)}</td>
                                     <td className="p-3 pr-6 text-right text-base font-black font-mono text-red-600">{formatCurrency(filteredTotalOut)}</td>
                                 </tr>
@@ -865,7 +878,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     </div>
                 </div>
             )}
-        {/* ========================================== */}
+
+            {/* ========================================== */}
             {/* Tab 5: 資金預算沙盤 (Capital Sandbox) */}
             {/* ========================================== */}
             {financeTab === 'capital' && (() => {
