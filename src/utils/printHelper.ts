@@ -1,14 +1,14 @@
 // src/utils/printHelper.ts
 
 /**
- * 核心：iOS 專屬 PDF 產生引擎 (防死鎖 + Base64 預處理 + 前置解鎖)
+ * 核心：iOS 專屬 PDF 產生引擎 (預先降解圖片防 OOM + 拔除 GPU 殺手特效)
  */
 const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolean) => {
     let isResolved = false;
 
     // 1. 建立 Loading 提示
     const toast = document.createElement('div');
-    toast.innerHTML = `正在產生高畫質 PDF...<br><span style="font-size:12px; color:#ccc;">(正在處理圖片，約需 3-5 秒)</span>`;
+    toast.innerHTML = `正在優化圖片與產生 PDF...<br><span style="font-size:12px; color:#ccc;">(請保持螢幕開啟，約需 5-10 秒)</span>`;
     Object.assign(toast.style, {
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         background: 'rgba(15, 23, 42, 0.95)', color: 'white', padding: '20px 24px',
@@ -17,7 +17,7 @@ const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolea
     });
     document.body.appendChild(toast);
 
-    // 2. 建立實體渲染容器 (防變形，強制 800px 寬度)
+    // 2. 建立實體渲染容器
     const printWrapper = document.createElement('div');
     Object.assign(printWrapper.style, {
         position: 'absolute', top: '0', left: '0', 
@@ -39,7 +39,16 @@ const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolea
         <div id="pdf-render-target" style="width: 800px !important; min-width: 800px !important; background: white; padding: 20px; box-sizing: border-box;">
             ${styles}
             <style>
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; flex-shrink: 0 !important; box-shadow: none !important; }
+                /* ★ 核心防當機：徹底拔除所有會讓 iOS GPU 崩潰的特效 */
+                * { 
+                    -webkit-print-color-adjust: exact !important; 
+                    print-color-adjust: exact !important; 
+                    flex-shrink: 0 !important; 
+                    box-shadow: none !important; 
+                    text-shadow: none !important; 
+                    backdrop-filter: none !important; 
+                    -webkit-backdrop-filter: none !important; 
+                }
                 .print\\:hidden, button { display: none !important; }
                 .grid { display: grid !important; }
                 .flex { display: flex !important; }
@@ -50,18 +59,17 @@ const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolea
     `;
     document.body.appendChild(printWrapper);
 
-    // ★ 看門狗機制：15秒內未完成強制解鎖 UI
+    // ★ 看門狗機制：延長至 20 秒，確保網路極慢時仍有機會完成，否則解鎖 UI
     const watchdog = setTimeout(() => {
         if (!isResolved) {
             isResolved = true;
             if (document.body.contains(printWrapper)) document.body.removeChild(printWrapper);
             if (document.body.contains(toast)) document.body.removeChild(toast);
-            alert('⚠️ 系統處理 PDF 超時 (可能由於網路不穩)，已自動解鎖。');
+            alert('⚠️ 系統優化 PDF 超時 (可能由於網路不穩)，已自動解鎖，請重新嘗試。');
         }
-    }, 15000);
+    }, 20000);
 
     try {
-        // 3. 動態載入 html2pdf 套件
         if (!(window as any).html2pdf) {
             await new Promise((resolve, reject) => {
                 const script = document.createElement('script');
@@ -74,59 +82,84 @@ const generateIOSPDF = async (htmlContent: string, title: string, isCard: boolea
 
         const targetElement = printWrapper.querySelector('#pdf-render-target') as HTMLElement;
 
-        // ★ 核心防禦 1：預先將所有圖片轉換為 Base64
-        // 這會讓 iOS 的 html2canvas 把圖片視為「本機記憶體」直接渲染，徹底解決 CORS 與死鎖問題！
+        // ★ 核心防 OOM：在交給 PDF 引擎前，手動將所有高清圖片強制降維壓縮
         const images = Array.from(targetElement.querySelectorAll('img'));
         await Promise.all(images.map(async (img) => {
+            if (!img.src || img.src.startsWith('data:')) return;
             try {
-                if (img.src.startsWith('http')) {
-                    const res = await fetch(img.src, { mode: 'cors' });
-                    const blob = await res.blob();
-                    const base64 = await new Promise<string>((resolve) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result as string);
-                        reader.readAsDataURL(blob);
-                    });
-                    img.src = base64;
-                    img.srcset = ''; // 清除 srcset 避免干擾
-                }
+                const base64 = await new Promise<string>((resolve) => {
+                    const tempImg = new Image();
+                    tempImg.crossOrigin = 'anonymous';
+                    tempImg.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 600; // iOS 安全寬度上限
+                        let width = tempImg.width;
+                        let height = tempImg.height;
+                        
+                        // 等比例縮小圖片
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height * MAX_WIDTH) / width);
+                            width = MAX_WIDTH;
+                        }
+                        canvas.width = width || MAX_WIDTH;
+                        canvas.height = height || Math.round(MAX_WIDTH * 0.75);
+                        
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.drawImage(tempImg, 0, 0, width, height);
+                            // 將圖片壓縮成 60% 的輕量級 JPEG
+                            resolve(canvas.toDataURL('image/jpeg', 0.6)); 
+                        } else {
+                            resolve(img.src);
+                        }
+                    };
+                    tempImg.onerror = () => resolve(img.src); // 失敗則退回原網址
+                    tempImg.src = img.src;
+                });
+                img.src = base64;
+                img.srcset = ''; // 必須清除，防止瀏覽器繼續抓取高清原圖
             } catch (err) {
-                console.warn('圖片轉 Base64 失敗，降級使用原屬性', err);
-                img.crossOrigin = "anonymous";
+                console.warn('圖片降維失敗', err);
             }
         }));
 
-        // 給予瀏覽器 0.5 秒重繪 DOM
-        await new Promise(r => setTimeout(r, 500));
+        // 給予瀏覽器 0.8 秒重繪 DOM，確保圖片替換完成
+        await new Promise(r => setTimeout(r, 800));
         if (isResolved) return;
 
-        // 4. 產生 PDF
+        // 4. 產生 PDF (既然圖片已經全部微型化，scale 1.2 提供清晰文字也絕對安全)
         const opt = {
             margin: [10, 10, 10, 10],
             filename: `${title}.pdf`,
             image: { type: 'jpeg', quality: 0.85 },
-            html2canvas: { scale: 1, useCORS: true, logging: false, windowWidth: 800, width: 800, scrollX: 0, scrollY: 0 },
+            html2canvas: { 
+                scale: 1.2, 
+                useCORS: true, 
+                logging: false, 
+                windowWidth: 800, width: 800, 
+                scrollX: 0, scrollY: 0 
+            },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
         const pdfBlob = await (window as any).html2pdf().set(opt).from(targetElement).output('blob');
-        const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
 
-        // ★ 核心防禦 2：在觸發分享之前，強制先清理 UI 解鎖畫面！
+        // ★ 核心防禦：強制在呼叫分享前先清理畫布與解鎖 UI
         isResolved = true;
         clearTimeout(watchdog);
         if (document.body.contains(printWrapper)) document.body.removeChild(printWrapper);
         if (document.body.contains(toast)) document.body.removeChild(toast);
+
+        const file = new window.File([pdfBlob], `${title}.pdf`, { type: 'application/pdf' });
 
         // 5. 觸發分享或下載
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
             try {
                 await navigator.share({ files: [file], title: title });
             } catch (shareErr) {
-                console.log("使用者取消分享或分享失敗", shareErr);
+                console.log("使用者取消分享", shareErr);
             }
         } else {
-            // ★ 核心防禦 3：如果是在 PWA 模式且不支援 share，使用隱藏 a 標籤強制觸發下載
             const blobUrl = URL.createObjectURL(pdfBlob);
             const a = document.createElement('a');
             a.href = blobUrl;
