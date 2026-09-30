@@ -684,19 +684,43 @@ const VehicleFormModal = ({
         else setEditingVehicle((prev: any) => ({ ...prev, salesAddons: (prev.salesAddons || []).filter((a: any) => a.id !== aid) }));
     };
 
-    const handleAddExpenseClick = () => {
+    const handleAddExpenseClick = async () => {
         const amt = Number(newExpense.amount.replace(/,/g, ''));
         if (amt > 0) {
-            // ★ 智能判斷：如果有選付款方式（非未付），就自動把狀態標為 Paid
             const isPaid = newExpense.paymentMethod && newExpense.paymentMethod !== 'Unpaid';
-            const finalStatus = isPaid ? 'Paid' : 'Unpaid';
+            let finalStatus = isPaid ? 'Paid' : 'Unpaid';
             const finalMethod = isPaid ? newExpense.paymentMethod : '';
+
+            // ★ 核心連動：如果是未付，且有填寫對象，自動詢問是否轉總帳
+            if (finalStatus === 'Unpaid' && newExpense.company && db && appId && staffId) {
+                const transfer = confirm(`是否將此筆費用 [${newExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newExpense.company}」統一對數結算？`);
+                if (transfer) {
+                    try {
+                        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                            partner: newExpense.company, 
+                            date: newExpense.date || new Date().toISOString().split('T')[0], 
+                            type: 'payable', 
+                            amount: amt, 
+                            note: `[車輛費用] ${v.regMark || '未出牌'} - ${newExpense.type}`,
+                            sourceModule: 'vehicle_expense',
+                            vehicleId: v.id || 'new_vehicle', // 防呆：如果車輛尚未建立
+                            createdAt: serverTimestamp(), 
+                            createdBy: staffId 
+                        });
+                        finalStatus = 'Transferred'; // 鎖定狀態
+                        alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！日後請在總帳中與 ${newExpense.company} 統一結算。`);
+                    } catch (err) {
+                        console.error("轉帳失敗", err);
+                    }
+                }
+            }
 
             const obj = { id: Date.now().toString(), ...newExpense, amount: amt, status: finalStatus, paymentMethod: finalMethod };
             if (v.id) addExpense(v.id, obj as any);
             else setEditingVehicle((prev: any) => ({ ...prev, expenses: [...(prev.expenses || []), obj] }));
             
-            // ★ 智能記憶：自動將新輸入的費用項目與車房/公司，寫入系統的後台設定庫！
+            // 智能記憶設定
             if (newExpense.type && !settings.expenseTypes.some((t:any) => typeof t === 'string' ? t === newExpense.type : t.name === newExpense.type)) {
                 updateSettings('expenseTypes', [...settings.expenseTypes, { name: newExpense.type, defaultCompany: newExpense.company, defaultAmount: amt, defaultDays: '0' }]);
             }
@@ -704,7 +728,7 @@ const VehicleFormModal = ({
                 updateSettings('expenseCompanies', [...(settings.expenseCompanies || []), newExpense.company]);
             }
 
-            setNewExpense({ ...newExpense, amount: '', paymentMethod: 'Unpaid' }); // 重置回未付狀態
+            setNewExpense({ ...newExpense, amount: '', paymentMethod: 'Unpaid' }); 
         }
     };
 
@@ -714,40 +738,47 @@ const VehicleFormModal = ({
     };
 
    const handleToggleExpenseStatus = async (exp: any) => {
+        // ★ 防呆鎖定：已轉出至總帳的款項，必須在總帳處理
+        if (exp.status === 'Transferred') {
+            alert('⚠️ 此筆帳目已轉入【行家來往】總帳。如需對數或結清，請至財務總覽處理，避免雙重入帳。');
+            return;
+        }
+
         const newStatus = exp.status === 'Paid' ? 'Unpaid' : 'Paid';
+        
+        // 如果原本是已付，退回未付時也觸發詢問
+        if (newStatus === 'Unpaid' && db && appId && staffId && exp.company) {
+             const transfer = confirm(`是否將此筆退回未付的費用 [${exp.type} $${exp.amount}] 轉入【行家來往】總帳，與「${exp.company}」統一對數結算？`);
+             if (transfer) {
+                 try {
+                     const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                     await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                         partner: exp.company, 
+                         date: new Date().toISOString().split('T')[0], 
+                         type: 'payable', 
+                         amount: exp.amount, 
+                         note: `[車輛費用] ${v.regMark || '未出牌'} - ${exp.type}`,
+                         sourceModule: 'vehicle_expense',
+                         vehicleId: v.id,
+                         createdAt: serverTimestamp(), 
+                         createdBy: staffId 
+                     });
+                     
+                     if (v.id) updateExpenseStatus(v.id, exp.id, 'Transferred');
+                     else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: 'Transferred' } : e) }));
+                     alert(`✅ 已成功轉入！`);
+                     return; 
+                 } catch (err) {
+                     console.error(err);
+                 }
+             }
+        }
+
         if (v.id) updateExpenseStatus(v.id, exp.id, newStatus);
         else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: newStatus } : e) }));
-
-        // ★ 核心連動：如果標記為 Unpaid (未找數)，詢問是否要轉入行家總帳統一結算
-        if (newStatus === 'Unpaid' && db && appId && staffId && exp.company) {
-            const transferToLedger = confirm(`是否將此筆未付費用 [${exp.type} $${exp.amount}] 轉入【行家來往】總帳，與「${exp.company}」的其他帳目統一對數結算？`);
-            if (transferToLedger) {
-                 try {
-                    const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-                    await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
-                        partner: exp.company, 
-                        date: new Date().toISOString().split('T')[0], 
-                        type: 'payable', // 支出是應付
-                        amount: exp.amount, 
-                        note: `[車輛費用] ${v.regMark || '未出牌'} - ${exp.type}`,
-                        sourceModule: 'vehicle_expense',
-                        vehicleId: v.id,
-                        createdAt: serverTimestamp(), 
-                        createdBy: staffId 
-                    });
-                    
-                    // 為了避免重複支付，將車輛這邊標記為「已轉總帳 (Transferred)」
-                    if (v.id) updateExpenseStatus(v.id, exp.id, 'Transferred_To_Ledger');
-                    else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: 'Transferred_To_Ledger' } : e) }));
-
-                    alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！日後請在總帳中與 ${exp.company} 統一結算。`);
-                } catch (err) {
-                    console.error("轉入總帳失敗", err);
-                    alert("轉入失敗。");
-                }
-            }
-        }
     };
+
+
     // ★★★ 結束：智能雙軌管理器 ★★★
 
     useEffect(() => {
@@ -2450,12 +2481,12 @@ const VehicleFormModal = ({
                             
                             <div className="space-y-3 md:space-y-2 mb-4 w-full">
                                 {(v.expenses || []).map((exp: any) => (
-                                    <div key={exp.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-white border rounded-lg shadow-sm relative">
+                                    <div key={exp.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-white border rounded-lg shadow-sm relative transition-colors ${exp.status === 'Transferred' ? 'border-indigo-300 bg-indigo-50/10' : 'border-slate-200'}`}>
                                         <div className="flex flex-wrap items-center gap-3 md:flex-1 min-w-0">
                                             <span className="text-gray-400 font-mono w-full sm:w-auto font-bold">{exp.date}</span>
                                             <span className="font-black text-slate-800 bg-slate-100 px-2 py-1 rounded-md">{exp.type}</span>
                                             <span className="text-gray-600 flex-1 truncate w-full sm:w-auto font-medium">{exp.company}</span>
-                                            {/* ★ 顯示並允許直接修改付款方式 */}
+                                            {/* ★ 顯示並允許直接修改付款方式 (已轉總帳則鎖定) */}
                                             {exp.status === 'Paid' && (
                                                 <select 
                                                     value={exp.paymentMethod || 'Cash'}
@@ -2480,8 +2511,21 @@ const VehicleFormModal = ({
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:w-auto flex-shrink-0 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
                                             <span className="font-mono font-black text-lg md:text-base text-slate-700">{formatCurrency(exp.amount)}</span>
                                             <div className="flex items-center gap-2">
-                                                <button type="button" onClick={() => handleToggleExpenseStatus(exp)} className={`px-3 py-1.5 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border transition-colors shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-50 text-red-600 border-red-200'}`}>{exp.status === 'Paid' ? '已付' : '未付'}</button>
-                                                <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-gray-400 hover:text-white bg-gray-100 hover:bg-red-500 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><X size={16}/></button>
+                                                {/* ★ 智能狀態按鈕 */}
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => handleToggleExpenseStatus(exp)} 
+                                                    className={`px-3 py-1.5 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border transition-colors shadow-sm 
+                                                        ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : 
+                                                         (exp.status === 'Transferred' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 cursor-help' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100')}`}
+                                                >
+                                                    {exp.status === 'Paid' ? '已付' : (exp.status === 'Transferred' ? '已轉總帳' : '未付')}
+                                                </button>
+                                                
+                                                {/* 轉總帳後禁止在這邊直接刪除 */}
+                                                {exp.status !== 'Transferred' && (
+                                                    <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-gray-400 hover:text-white bg-gray-100 hover:bg-red-500 p-2 md:p-1.5 rounded-md flex-shrink-0 transition-colors"><X size={16}/></button>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
