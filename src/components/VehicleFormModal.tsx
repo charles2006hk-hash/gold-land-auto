@@ -738,17 +738,41 @@ const VehicleFormModal = ({
     };
 
    const handleToggleExpenseStatus = async (exp: any) => {
-        // ★ 防呆鎖定：已轉出至總帳的款項，必須在總帳處理
+        // ★ 升級 1：允許「已轉總帳」解除鎖定，並自動從總帳中刪除連動紀錄
         if (exp.status === 'Transferred') {
-            alert('⚠️ 此筆帳目已轉入【行家來往】總帳。如需對數或結清，請至財務總覽處理，避免雙重入帳。');
+            const revert = confirm('確定要解除鎖定，退回「未付」狀態嗎？\n\n⚠️ 系統將會【自動刪除】總帳中對應的應付紀錄！');
+            if (revert) {
+                if (v.id && db && appId) {
+                    try {
+                        const { collection, query, where, getDocs, deleteDoc, doc } = await import('firebase/firestore');
+                        // 精準找出總帳中對應的連動紀錄
+                        const q = query(
+                            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), 
+                            where('vehicleId', '==', v.id),
+                            where('sourceModule', '==', 'vehicle_expense'),
+                            where('amount', '==', exp.amount)
+                        );
+                        const snap = await getDocs(q);
+                        snap.forEach(async (d) => {
+                            await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', d.id));
+                        });
+                        alert('✅ 已撤回總帳連動紀錄，狀態恢復為未付！');
+                    } catch (err) {
+                        console.error("刪除總帳連動紀錄失敗", err);
+                    }
+                }
+                // 更新車輛面板狀態
+                if (v.id) updateExpenseStatus(v.id, exp.id, 'Unpaid');
+                else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: 'Unpaid' } : e) }));
+            }
             return;
         }
 
         const newStatus = exp.status === 'Paid' ? 'Unpaid' : 'Paid';
         
-        // 如果原本是已付，退回未付時也觸發詢問
+        // 如果原本是已付，退回未付時觸發詢問是否轉總帳
         if (newStatus === 'Unpaid' && db && appId && staffId && exp.company) {
-             const transfer = confirm(`是否將此筆退回未付的費用 [${exp.type} $${exp.amount}] 轉入【行家來往】總帳，與「${exp.company}」統一對數結算？`);
+             const transfer = confirm(`是否將此筆費用 [${exp.type} $${exp.amount}] 轉入【行家來往】總帳，與「${exp.company}」統一對數結算？`);
              if (transfer) {
                  try {
                      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
