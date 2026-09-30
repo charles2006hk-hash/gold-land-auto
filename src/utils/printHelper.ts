@@ -2,8 +2,8 @@
 
 /**
  * 終極全域列印引擎
- * 1. 桌面版：使用 Off-Screen 1024px Iframe，完美隔離 Next.js 標題干擾，並強制鎖定 Tailwind 桌面版排版防走位。
- * 2. iPhone 版：依照需求，回歸純淨的 Blob 預覽頁面，讓使用者自行透過系統選單分享/輸出 PDF。
+ * 1. 桌面版：使用 MutationObserver 凍結標題對抗 Next.js，並根據單據類型套用不同寬度。
+ * 2. iPhone 版：純淨 Blob 預覽，依賴原生分享選單，無走位按鈕。
  */
 const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -14,7 +14,7 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
         .map(el => el.outerHTML).join('\n');
     const baseTag = `<base href="${window.location.origin}/">`;
 
-    // 針對圖片走位的強力修正
+    // 針對圖片走位的修正
     const customCSS = isCard 
         ? `img { max-width: 100% !important; height: 100% !important; object-fit: cover !important; }
            .aspect-\\[4\\/3\\] { aspect-ratio: 4/3 !important; }
@@ -23,7 +23,7 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
 
     // =========================================================================
     // 【模式 A】: iPhone / iOS PWA / WeChat (純淨 Blob 預覽)
-    // 移除會變形的按鈕，還原為最乾淨的預覽畫面，指引使用者用底層 Safari 分享功能
+    // 移除所有會走位的按鈕，還原為最乾淨的預覽畫面，指引使用者用底層 Safari 分享功能
     // =========================================================================
     if (isIOS && (isStandalone || isWeChat)) {
         const fullHtml = `
@@ -73,16 +73,36 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
     }
 
     // =========================================================================
-    // 【模式 B】: 桌面版 (Off-Screen Desktop Iframe)
-    // 徹底解決檔名覆寫與 Tailwind 佈局擠壓問題
+    // 【模式 B】: 桌面版 (Off-Screen Iframe + Title Lock + 動態寬度適應)
     // =========================================================================
-    const iframeId = 'gla-print-iframe-v3';
+    const iframeId = 'gla-print-iframe-v4';
     document.getElementById(iframeId)?.remove();
+
+    // ★ 核心 1：強力凍結標題 (MutationObserver)，絕對禁止 Next.js 竄改檔名
+    const originalDocTitle = document.title;
+    const titleNode = document.querySelector('title');
+    const originalTitleHTML = titleNode ? titleNode.innerHTML : '';
+
+    const lockTitle = () => {
+        if (document.title !== title) document.title = title;
+        if (titleNode && titleNode.innerHTML !== title) {
+            titleNode.innerHTML = title;
+            titleNode.removeAttribute('data-rh'); 
+        }
+    };
+    
+    // 先執行一次，並開啟監視器
+    lockTitle();
+    const titleObserver = new MutationObserver(lockTitle);
+    titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
+
+    // ★ 核心 2：動態配置寬度。卡片需要 1024px 防走位，單據維持 100% 自然適應 A4。
+    const printWidth = isCard ? '1024px' : '100%';
+    const printMaxWidth = isCard ? '1024px' : '800px';
+    const containerPadding = isCard ? '20px' : '0px'; 
 
     const iframe = document.createElement('iframe');
     iframe.id = iframeId;
-    
-    // ★ 關鍵 1：強制 iframe 為 1024px 寬，並隱藏到螢幕外。這能騙過 Tailwind 渲染完美的桌面版排版。
     Object.assign(iframe.style, {
         position: 'fixed', right: '-3000px', bottom: '0', 
         width: '1024px', height: '100vh', border: 'none', zIndex: '-1000'
@@ -90,9 +110,11 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
     document.body.appendChild(iframe);
 
     const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) return;
+    if (!iframeDoc) {
+        titleObserver.disconnect();
+        return;
+    }
 
-    // ★ 關鍵 2：在這個獨立的 iframe 中寫入 HTML，<title> 絕對不會被 Next.js 污染，確保 PDF 檔名正確。
     iframeDoc.open();
     iframeDoc.write(`
         <!DOCTYPE html>
@@ -104,16 +126,15 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
             ${styles}
             <style>
                 @page { size: auto; margin: 8mm; }
-                /* 強制鎖死寬度，瀏覽器列印引擎會自動等比縮小放進 A4 紙 */
                 html, body { 
-                    width: 1024px !important; min-width: 1024px !important; 
+                    width: ${printWidth} !important; min-width: ${isCard ? '1024px' : 'auto'} !important; 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 .print-container { 
-                    width: 1024px !important; max-width: 1024px !important; 
-                    margin: 0 auto !important; padding: 20px !important; 
+                    width: ${printWidth} !important; max-width: ${printMaxWidth} !important; 
+                    margin: 0 auto !important; padding: ${containerPadding} !important; 
                     background: white !important; color: black !important; 
                 }
                 * { box-shadow: none !important; text-shadow: none !important; }
@@ -131,7 +152,6 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
     `);
     iframeDoc.close();
 
-    // 確保 Iframe 內的圖片全數載入，避免破圖
     const images = Array.from(iframeDoc.images);
     const promises = images.map(img => {
         if (img.complete) return Promise.resolve();
@@ -142,7 +162,6 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
         Promise.all(promises),
         new Promise(res => setTimeout(res, 2000))
     ]).then(() => {
-        // 給予瀏覽器 0.5 秒重新計算排版
         setTimeout(() => {
             try {
                 iframe.contentWindow?.focus();
@@ -150,7 +169,14 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
             } catch (e) {
                 console.error("Print failed", e);
             } finally {
-                // 列印對話框關閉後安全清理
+                // 列印對話框關閉後：解除監視器並還原原有的標題
+                titleObserver.disconnect();
+                document.title = originalDocTitle;
+                if (titleNode) {
+                    titleNode.innerHTML = originalTitleHTML;
+                    titleNode.setAttribute('data-rh', 'true');
+                }
+
                 setTimeout(() => {
                     document.getElementById(iframeId)?.remove();
                 }, 2000);
