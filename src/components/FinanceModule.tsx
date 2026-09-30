@@ -85,7 +85,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [ledgers, setLedgers] = useState<any[]>([]);
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const [partnerSearch, setPartnerSearch] = useState('');
-    const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '' });
+    const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '', method: 'Transfer', refNo: '' });
 
     // 自動儲存狀態
     useEffect(() => {
@@ -308,18 +308,39 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
     const handleAddLedgerRecord = async (e: React.FormEvent) => {
         e.preventDefault();
-        const amt = Number(newLedger.amount);
+        const amt = Number(newLedger.amount.replace(/,/g, ''));
         if (!amt || !selectedPartner || !db) return;
         try {
-            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { partner: selectedPartner, date: newLedger.date, type: newLedger.type, amount: amt, note: newLedger.note || (newLedger.type === 'receivable' ? '借出/應收' : '收到還款/墊支'), createdAt: serverTimestamp(), createdBy: staffId });
-            setNewLedger({ ...newLedger, amount: '', note: '' });
-            alert('✅ 紀錄已成功加入！');
+            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                partner: selectedPartner, 
+                date: newLedger.date, 
+                type: newLedger.type, 
+                amount: amt, 
+                note: newLedger.note || (newLedger.type === 'receivable' ? '借出/應收' : '找數/墊支'), 
+                method: newLedger.method, // ★ 新增寫入支付方式
+                refNo: newLedger.refNo || '', // ★ 新增寫入參考號
+                createdAt: serverTimestamp(), 
+                createdBy: staffId 
+            });
+            setNewLedger({ ...newLedger, amount: '', note: '', refNo: '' }); // 保留日期與方式，清空金額備註
+            alert('✅ 紀錄已成功入帳！');
         } catch (err) { alert('❌ 加入失敗'); }
     };
 
-    const handleDeleteLedgerRecord = async (id: string) => {
+   const handleDeleteLedgerRecord = async (id: string) => {
         if (!db || !confirm("確定刪除此筆對帳紀錄？")) return;
         await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers', id));
+    };
+
+    const handleSettleBalance = () => {
+        if (partnerBalance === 0) return;
+        setNewLedger({ 
+            ...newLedger, 
+            date: new Date().toISOString().split('T')[0], 
+            type: partnerBalance > 0 ? 'payable' : 'receivable', 
+            amount: formatNumberInput(Math.abs(partnerBalance).toString()), 
+            note: '結清帳目 (Settlement)' 
+        });
     };
 
     const handleSettleBalance = () => {
@@ -591,12 +612,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-                                    {/* ★ 核心修改：區分系統連動與手工記帳 */}
                                     <div className="space-y-3">
                                         {partnerHistory.map(l => {
-                                            // 智能視覺區分：系統自動匯入 vs 手工記帳
                                             const isSystemAuto = !!l.sourceModule;
-                                            
                                             return (
                                                 <div key={l.id} className={`flex justify-between items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
                                                     <div className="flex items-center gap-4">
@@ -606,19 +624,24 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                                 {l.note || '-'}
                                                                 {isSystemAuto && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200" title="此紀錄由車輛系統自動連動產生">🤖 系統連動</span>}
                                                             </div>
-                                                            <div className="text-xs text-slate-400 font-mono mt-0.5">{l.date} • {l.createdBy} 記錄</div>
+                                                            {/* ★ 升級：顯示支付方式與參考號 */}
+                                                            <div className="text-xs text-slate-400 mt-1">
+                                                                <span className="font-mono">{l.date}</span> • {l.createdBy} 記錄
+                                                                {l.method && (
+                                                                    <span className="ml-2 pl-2 border-l border-slate-300 inline-block">
+                                                                        方式: <span className="font-bold text-slate-600">{l.method === 'Transfer' ? '轉帳' : l.method === 'Cheque' ? '支票' : l.method === 'Cash' ? '現金' : '對數抵銷'}</span>
+                                                                        {l.refNo && <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono border border-slate-200">#{l.refNo}</span>}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="text-right flex items-center gap-4">
                                                         <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>{l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
-                                                        
                                                         {isSystemAuto ? (
-                                                            // 系統產生的紀錄不允許在總帳直接刪除，引導回車輛修改
-                                                            <div className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 cursor-help transition-all" title="系統連動紀錄，如需刪除請至車輛庫存修改源頭數據">
-                                                                <Lock size={16}/>
-                                                            </div>
+                                                            <div className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 cursor-help transition-all" title="系統連動紀錄，如需修改/刪除請至車輛面板退回「未付」"><Lock size={16}/></div>
                                                         ) : (
-                                                            <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title="刪除此手工紀錄"><Trash2 size={16}/></button>
+                                                            <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title="刪除此紀錄"><Trash2 size={16}/></button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -626,13 +649,34 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         })}
                                     </div>
                                 </div>
+                                
+                                {/* ★ 升級：雙排輸入表單，支援選擇支付方式 */}
                                 <form onSubmit={handleAddLedgerRecord} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
-                                    <div className="flex flex-col sm:flex-row gap-3 items-center">
-                                        <input type="date" value={newLedger.date} onChange={e => setNewLedger({...newLedger, date: e.target.value})} className="w-full sm:w-32 p-2.5 border rounded-lg text-sm font-bold text-slate-700 outline-none" required />
-                                        <select value={newLedger.type} onChange={e => setNewLedger({...newLedger, type: e.target.value})} className="w-full sm:w-40 p-2.5 border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer"><option value="receivable" className="text-green-700">🟢 我方應收 (借出/收佣)</option><option value="payable" className="text-red-700">🔴 我方應付 (借入/墊支)</option></select>
-                                        <input type="text" placeholder="說明備註..." value={newLedger.note} onChange={e => setNewLedger({...newLedger, note: e.target.value})} className="flex-1 w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 ring-amber-200" required />
-                                        <div className="flex items-center bg-white border rounded-lg overflow-hidden w-full sm:w-40 focus-within:ring-2 ring-amber-200"><span className="pl-3 text-slate-400 font-bold">$</span><input type="number" min="1" placeholder="金額" value={newLedger.amount} onChange={e => setNewLedger({...newLedger, amount: e.target.value})} className="w-full p-2.5 outline-none text-right font-mono font-black text-slate-800" required /></div>
-                                        <button type="submit" className="w-full sm:w-auto bg-amber-500 text-white font-bold px-6 py-2.5 rounded-lg shadow-md hover:bg-amber-600">記帳</button>
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                            <input type="date" value={newLedger.date} onChange={e => setNewLedger({...newLedger, date: e.target.value})} className="w-full sm:w-36 p-2.5 border rounded-lg text-sm font-bold text-slate-700 outline-none" required />
+                                            <select value={newLedger.type} onChange={e => setNewLedger({...newLedger, type: e.target.value})} className="w-full sm:w-48 p-2.5 border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
+                                                <option value="receivable" className="text-green-700">🟢 我方應收 (借出/收佣)</option>
+                                                <option value="payable" className="text-red-700">🔴 我方應付 (找數/墊支)</option>
+                                            </select>
+                                            <div className="flex items-center bg-white border rounded-lg overflow-hidden w-full focus-within:ring-2 ring-amber-200">
+                                                <span className="pl-3 text-slate-400 font-bold">$</span>
+                                                <input type="text" placeholder="金額" value={newLedger.amount} onChange={e => setNewLedger({...newLedger, amount: formatNumberInput(e.target.value)})} className="w-full p-2.5 outline-none text-right font-mono font-black text-slate-800" required />
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                            <select value={newLedger.method} onChange={e => setNewLedger({...newLedger, method: e.target.value})} className="w-full sm:w-36 p-2.5 border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
+                                                <option value="Transfer">🏦 銀行轉帳</option>
+                                                <option value="Cheque">🧾 支票</option>
+                                                <option value="Cash">💵 現金</option>
+                                                <option value="Offset">🔄 對數抵銷</option>
+                                            </select>
+                                            {newLedger.method === 'Cheque' && (
+                                                <input type="text" placeholder="支票號碼..." value={newLedger.refNo} onChange={e => setNewLedger({...newLedger, refNo: e.target.value})} className="w-full sm:w-32 p-2.5 border border-purple-200 rounded-lg text-sm font-mono outline-none focus:ring-2 ring-purple-200 bg-purple-50" />
+                                            )}
+                                            <input type="text" placeholder="說明備註 (例如：結清某某車款)..." value={newLedger.note} onChange={e => setNewLedger({...newLedger, note: e.target.value})} className="flex-1 w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 ring-amber-200" required />
+                                            <button type="submit" className="w-full sm:w-32 bg-amber-500 text-white font-bold px-6 py-2.5 rounded-lg shadow-md hover:bg-amber-600 active:scale-95 transition-all">記帳入庫</button>
+                                        </div>
                                     </div>
                                 </form>
                             </>
