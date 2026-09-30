@@ -2,8 +2,8 @@
 
 /**
  * 終極全域列印引擎
- * 1. 桌面版：使用 MutationObserver 凍結標題對抗 Next.js，並根據單據類型套用不同寬度。
- * 2. iPhone 版：純淨 Blob 預覽，依賴原生分享選單，無走位按鈕。
+ * 1. 桌面版：使用動態寬度 Iframe (卡片1024px/單據800px)，並利用執行緒阻斷特性鎖定檔名，不當機。
+ * 2. iOS 版：純淨 Blob 預覽，無走位按鈕，依賴原生分享選單。
  */
 const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -23,7 +23,7 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
 
     // =========================================================================
     // 【模式 A】: iPhone / iOS PWA / WeChat (純淨 Blob 預覽)
-    // 移除所有會走位的按鈕，還原為最乾淨的預覽畫面，指引使用者用底層 Safari 分享功能
+    // 移除所有會走位的按鈕，還原乾淨畫面，指引使用者用底層 Safari 分享功能
     // =========================================================================
     if (isIOS && (isStandalone || isWeChat)) {
         const fullHtml = `
@@ -73,47 +73,24 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
     }
 
     // =========================================================================
-    // 【模式 B】: 桌面版 (Off-Screen Iframe + Title Lock + 動態寬度適應)
+    // 【模式 B】: 桌面版 (Off-Screen Iframe + 阻斷式標題修改)
     // =========================================================================
-    const iframeId = 'gla-print-iframe-v4';
+    const iframeId = 'gla-print-iframe-final';
     document.getElementById(iframeId)?.remove();
 
-    // ★ 核心 1：強力凍結標題 (MutationObserver)，絕對禁止 Next.js 竄改檔名
-    const originalDocTitle = document.title;
-    const titleNode = document.querySelector('title');
-    const originalTitleHTML = titleNode ? titleNode.innerHTML : '';
-
-    const lockTitle = () => {
-        if (document.title !== title) document.title = title;
-        if (titleNode && titleNode.innerHTML !== title) {
-            titleNode.innerHTML = title;
-            titleNode.removeAttribute('data-rh'); 
-        }
-    };
-    
-    // 先執行一次，並開啟監視器
-    lockTitle();
-    const titleObserver = new MutationObserver(lockTitle);
-    titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
-
-    // ★ 核心 2：動態配置寬度。卡片需要 1024px 防走位，單據維持 100% 自然適應 A4。
-    const printWidth = isCard ? '1024px' : '100%';
-    const printMaxWidth = isCard ? '1024px' : '800px';
-    const containerPadding = isCard ? '20px' : '0px'; 
+    // ★ 核心 1：動態配置寬度！卡片用 1024px 防走位，單據用 800px 恢復正常比例。
+    const iframeWidth = isCard ? '1024px' : '800px';
 
     const iframe = document.createElement('iframe');
     iframe.id = iframeId;
     Object.assign(iframe.style, {
         position: 'fixed', right: '-3000px', bottom: '0', 
-        width: '1024px', height: '100vh', border: 'none', zIndex: '-1000'
+        width: iframeWidth, height: '100vh', border: 'none', zIndex: '-1000'
     });
     document.body.appendChild(iframe);
 
     const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-        titleObserver.disconnect();
-        return;
-    }
+    if (!iframeDoc) return;
 
     iframeDoc.open();
     iframeDoc.write(`
@@ -127,14 +104,14 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
             <style>
                 @page { size: auto; margin: 8mm; }
                 html, body { 
-                    width: ${printWidth} !important; min-width: ${isCard ? '1024px' : 'auto'} !important; 
+                    width: ${iframeWidth} !important; min-width: ${iframeWidth} !important; 
                     margin: 0 !important; padding: 0 !important; 
                     background: white !important; 
                     -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; 
                 }
                 .print-container { 
-                    width: ${printWidth} !important; max-width: ${printMaxWidth} !important; 
-                    margin: 0 auto !important; padding: ${containerPadding} !important; 
+                    width: ${iframeWidth} !important; max-width: ${iframeWidth} !important; 
+                    margin: 0 auto !important; padding: ${isCard ? '20px' : '0'} !important; 
                     background: white !important; color: black !important; 
                 }
                 * { box-shadow: none !important; text-shadow: none !important; }
@@ -163,20 +140,21 @@ const executePrint = (htmlContent: string, title: string, isCard: boolean) => {
         new Promise(res => setTimeout(res, 2000))
     ]).then(() => {
         setTimeout(() => {
+            // ★ 核心 2：利用 window.print() 的「執行緒阻斷」特性，強行修改標題。
+            // 這樣 Next.js 完全沒有機會在列印視窗出現前搶回標題！
+            const originalTitle = document.title;
+            document.title = title;
+
             try {
                 iframe.contentWindow?.focus();
                 iframe.contentWindow?.print();
             } catch (e) {
                 console.error("Print failed", e);
             } finally {
-                // 列印對話框關閉後：解除監視器並還原原有的標題
-                titleObserver.disconnect();
-                document.title = originalDocTitle;
-                if (titleNode) {
-                    titleNode.innerHTML = originalTitleHTML;
-                    titleNode.setAttribute('data-rh', 'true');
-                }
-
+                // 列印對話框關閉後（阻斷結束），立刻把標題還給 Next.js
+                document.title = originalTitle;
+                
+                // 延遲清理 Iframe
                 setTimeout(() => {
                     document.getElementById(iframeId)?.remove();
                 }, 2000);
