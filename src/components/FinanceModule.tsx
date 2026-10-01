@@ -154,11 +154,11 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             const isTargetPaid = reportType === 'paid_expenses';
             const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
             inventory.forEach((v:any) => {
-                // ★ 修復 1：撤回車輛的「未付」帳款不列入應付統計
+                // 撤回車輛的未付帳款不列入應付統計
                 if (v.status === 'Withdrawn' && !isTargetPaid) return;
 
                 (v.expenses || []).forEach((exp:any) => {
-                    // ★ 修復 2：找未付時，把已轉總帳 (Transferred) 也算進來，並加上專屬標示 [已轉總帳]
+                    // ★ 終極修復：精準捕捉所有「已轉總帳」的變化狀態
                     const isTransferred = !isTargetPaid && (exp.status === 'Transferred' || exp.status === 'Transferred_To_Ledger');
                     if (exp.status === targetStatus || isTransferred) {
                         const titlePrefix = isTransferred ? '[已轉總帳]' : '[維修/雜費]';
@@ -264,7 +264,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 if (balance > 0) totalAR += balance;
             }
             
-            // ★ 修復 3：計算 Dashboard 總應付時，排除撤回車輛，且「不重複」計算已轉總帳 (Transferred) 的項目，避免與行家結餘雙重計算
             if (v.status !== 'Withdrawn') {
                 (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid') totalAP += Number(e.amount); });
                 (v.maintenanceRecords || []).forEach((m:any) => { if (m.costStatus === 'Unpaid' && m.cost > 0) totalAP += Number(m.cost); });
@@ -276,7 +275,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             }
         });
 
-        // 加上行家戶口結餘
         const partnerBalances: Record<string, number> = {};
         ledgers.forEach(l => {
             if (!partnerBalances[l.partner]) partnerBalances[l.partner] = 0;
@@ -339,7 +337,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         });
     };
 
-    // ★ 新增功能：一鍵掃描車輛未付帳款並匯入總帳
     const handleSyncFromVehicles = async () => {
         if (!selectedPartner || !db || !appId) return;
 
@@ -672,7 +669,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                             <span className={`text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
                                         </div>
                                         <div className="flex flex-col gap-2 ml-4">
-                                            {/* ★ 一鍵掃描車輛未付款項按鈕 */}
                                             <button onClick={handleSyncFromVehicles} className="bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 px-3 py-1.5 rounded text-[10px] font-bold transition-colors border border-indigo-400/30 flex items-center justify-center">
                                                 <RefreshCw size={12} className="mr-1"/> 掃描車輛未付
                                             </button>
