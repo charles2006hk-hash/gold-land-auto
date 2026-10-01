@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
-    DownloadCloud, Trash2, X, Check, Printer, Lock 
+    DownloadCloud, Trash2, X, Check, Printer, Lock, RefreshCw 
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -28,12 +28,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     
     // --- 模塊狀態鎖定 ---
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_fin_tab') as any : null) || 'dashboard');
-    const [selectedLender, setSelectedLender] = useState<string>('');
+    const [selectedLender, setSelectedLender] = useState<string>(''); 
     
-    // ★ 核心安全邏輯：判斷是否擁有「管理員級別」的資料視角
-    const isFullAccess = staffId === 'BOSS' || 
-                        currentUser?.modules?.includes('all') || 
-                        currentUser?.dataAccess === 'all';
+    const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
 
     useEffect(() => {
         if (!isFullAccess && (financeTab === 'partner' || financeTab === 'lender' || financeTab === 'accounting' || financeTab === 'capital')) {
@@ -41,7 +38,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     }, [financeTab, isFullAccess]);
 
-    // --- ★★★ 資金預算沙盤狀態 (Capital Sandbox) ★★★ ---
+    // --- 資金預算沙盤狀態 ---
     const [capPrincipal, setCapPrincipal] = useState<string>('10000000');
     const [capInterest, setCapInterest] = useState<number>(8);
     const [capFee, setCapFee] = useState<number>(6);
@@ -61,7 +58,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [reportSearchTerm, setReportSearchTerm] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_search') || '' : '');
     const [reportCompany, setReportCompany] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_comp') || '' : '');
     
-    // --- 共用日期鎖定 ---
     const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_date_en') !== 'false' : true);
     const [reportStartDate, setReportStartDate] = useState(() => { 
         const saved = typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_start') : null; 
@@ -84,10 +80,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [ledgers, setLedgers] = useState<any[]>([]);
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const [partnerSearch, setPartnerSearch] = useState('');
-    // ★ 修正：加入 method 與 refNo 支援進階支付記錄
     const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '', method: 'Transfer', refNo: '' });
 
-    // 自動儲存狀態
     useEffect(() => {
         if (typeof window !== 'undefined') {
             sessionStorage.setItem('gla_fin_tab', financeTab);
@@ -103,7 +97,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate, accSearchTerm, accFilterType]);
 
-    // 讀取行家來往資料庫
     useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
@@ -162,11 +155,17 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
             inventory.forEach((v:any) => {
                 (v.expenses || []).forEach((exp:any) => {
-                    // ★ 車輛端費用如果狀態為 'Transferred'，則不會出現在應付報表中，因為已轉移至行家總帳
-                    if (exp.status === targetStatus) data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `[維修/雜費] ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
+                    // ★ 核心修復：找未付時，把已轉總帳 (Transferred) 也算進來，並加上標示
+                    if (exp.status === targetStatus || (!isTargetPaid && exp.status === 'Transferred')) {
+                        const titlePrefix = exp.status === 'Transferred' ? '[已轉總帳]' : '[維修/雜費]';
+                        data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `${titlePrefix} ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: exp.status, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
+                    }
                 });
                 (v.maintenanceRecords || []).forEach((m: any) => {
-                    if (m.cost > 0 && m.costStatus === targetStatus) data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `[售後成本] ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
+                    if (m.cost > 0 && (m.costStatus === targetStatus || (!isTargetPaid && m.costStatus === 'Transferred'))) {
+                        const titlePrefix = m.costStatus === 'Transferred' ? '[已轉總帳]' : '[售後成本]';
+                        data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `${titlePrefix} ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: m.costStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
+                    }
                 });
                 if (isTargetPaid) {
                     (v.acquisition?.payments || []).forEach((p: any) => {
@@ -243,13 +242,11 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const now = new Date();
         const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
         
-        // 1. 本月現金流
         const thisMonthLedger = rawLedger.filter(l => l.date.startsWith(currentMonthPrefix));
         const monthIn = thisMonthLedger.filter(l => l.type === 'IN').reduce((sum, l) => sum + l.amount, 0);
         const monthOut = thisMonthLedger.filter(l => l.type === 'OUT').reduce((sum, l) => sum + l.amount, 0);
         const monthNet = monthIn - monthOut;
 
-        // 2. 總應收 (AR) 與總應付 (AP)
         let totalAR = 0;
         let totalAP = 0;
         
@@ -261,8 +258,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 const balance = ((v.price || 0) + cbFees + salesAddonsTotal) - received;
                 if (balance > 0) totalAR += balance;
             }
-            (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid') totalAP += Number(e.amount); });
-            (v.maintenanceRecords || []).forEach((m:any) => { if (m.costStatus === 'Unpaid' && m.cost > 0) totalAP += Number(m.cost); });
+            (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid' || e.status === 'Transferred') totalAP += Number(e.amount); });
+            (v.maintenanceRecords || []).forEach((m:any) => { if ((m.costStatus === 'Unpaid' || m.costStatus === 'Transferred') && m.cost > 0) totalAP += Number(m.cost); });
             
             const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
             const acqOffset = Number(v.acquisition?.offsetAmount || 0);
@@ -270,7 +267,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             if (acqBalance > 0) totalAP += acqBalance;
         });
 
-        // 加上行家戶口結餘
         const partnerBalances: Record<string, number> = {};
         ledgers.forEach(l => {
             if (!partnerBalances[l.partner]) partnerBalances[l.partner] = 0;
@@ -281,7 +277,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             else if (bal < 0) totalAP += Math.abs(bal);
         });
 
-        // 3. 庫存總值
         const stockValue = inventory.filter((v: any) => v.status === 'In Stock').reduce((sum: number, v: any) => sum + (v.price || 0), 0);
 
         return { monthIn, monthOut, monthNet, totalAR, totalAP, stockValue };
@@ -290,9 +285,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const dashStats = calculateDashboardStats();
 
     // ============================================================================
-    // ★ 輔助函數：行家來往
+    // ★ 輔助函數：行家來往 & 一鍵掃描功能
     // ============================================================================
-    
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
     const filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
     const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -333,6 +327,80 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             amount: formatNumberInput(Math.abs(partnerBalance).toString()), 
             note: '結清帳目 (Settlement)' 
         });
+    };
+
+    // ★ 新增功能：一鍵掃描車輛未付帳款並匯入總帳
+    const handleSyncFromVehicles = async () => {
+        if (!selectedPartner || !db || !appId) return;
+
+        let itemsToSync: any[] = [];
+        inventory.forEach((v: any) => {
+            (v.expenses || []).forEach((exp: any) => {
+                if (exp.company === selectedPartner && exp.status === 'Unpaid') {
+                    itemsToSync.push({ vehicleId: v.id, type: 'expense', item: exp, v });
+                }
+            });
+            (v.maintenanceRecords || []).forEach((m: any) => {
+                if (m.vendor === selectedPartner && m.costStatus === 'Unpaid') {
+                    itemsToSync.push({ vehicleId: v.id, type: 'maintenance', item: m, v });
+                }
+            });
+        });
+
+        if (itemsToSync.length === 0) {
+            alert(`✅ 在車輛資料庫中，沒有找到屬於「${selectedPartner}」的未付/未轉移項目。`);
+            return;
+        }
+
+        if (!confirm(`系統掃描到 ${itemsToSync.length} 筆屬於「${selectedPartner}」的車輛未結帳款（如佣金或維修費）。\n是否一鍵將它們匯入行家總帳，並在車輛面板鎖定為「已轉總帳」？`)) return;
+
+        try {
+            const { writeBatch, doc: firestoreDoc, collection: firestoreCol } = await import('firebase/firestore');
+            const batch = writeBatch(db);
+
+            itemsToSync.forEach(({ vehicleId, type, item, v }) => {
+                const ledgerRef = firestoreDoc(firestoreCol(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'));
+                let amount = type === 'expense' ? item.amount : item.cost;
+                let note = type === 'expense' ? `[車輛費用] ${v.regMark || '未出牌'} - ${item.type}` : `[車輛維修] ${v.regMark || '未出牌'} - ${item.item}`;
+                
+                batch.set(ledgerRef, {
+                    partner: selectedPartner,
+                    date: new Date().toISOString().split('T')[0],
+                    type: 'payable',
+                    amount: Number(amount),
+                    note: note,
+                    method: 'Transfer',
+                    refNo: '',
+                    sourceModule: type === 'expense' ? 'vehicle_expense' : 'vehicle_maintenance',
+                    vehicleId: vehicleId,
+                    createdAt: serverTimestamp(),
+                    createdBy: staffId
+                });
+            });
+
+            const vehicleUpdates: Record<string, any> = {};
+            itemsToSync.forEach(({ vehicleId, type, item, v }) => {
+                if (!vehicleUpdates[vehicleId]) {
+                    vehicleUpdates[vehicleId] = { expenses: v.expenses || [], maintenanceRecords: v.maintenanceRecords || [] };
+                }
+                if (type === 'expense') {
+                    vehicleUpdates[vehicleId].expenses = vehicleUpdates[vehicleId].expenses.map((e: any) => e.id === item.id ? { ...e, status: 'Transferred' } : e);
+                } else {
+                    vehicleUpdates[vehicleId].maintenanceRecords = vehicleUpdates[vehicleId].maintenanceRecords.map((m: any) => m.id === item.id ? { ...m, costStatus: 'Transferred' } : m);
+                }
+            });
+
+            Object.keys(vehicleUpdates).forEach(vId => {
+                const vRef = firestoreDoc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vId);
+                batch.update(vRef, vehicleUpdates[vId]);
+            });
+
+            await batch.commit();
+            alert(`✅ 成功！已將 ${itemsToSync.length} 筆項目批次轉入「${selectedPartner}」的總帳中。`);
+        } catch (error) {
+            console.error(error);
+            alert('同步失敗: ' + error);
+        }
     };
 
     // ============================================================================
@@ -377,7 +445,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     </h2>
                 </div>
 
-                {/* 4 大分頁按鈕 */}
                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 w-full md:w-auto overflow-x-auto scrollbar-hide">
                     <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
                     <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
@@ -526,11 +593,11 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     {reportData.map((item, idx) => (
                                         <tr key={idx} className="hover:bg-indigo-50/50 cursor-pointer transition-colors" onClick={() => handleReportItemClick(item.vehicleId)}>
                                             <td className="p-3 font-mono text-slate-500">{item.date}</td>
-                                            <td className="p-3 font-bold truncate max-w-[200px]"><span className={item.type === 'Service' ? 'text-indigo-700' : (item.title.includes('[進貨') ? 'text-red-700' : 'text-slate-800')}>{item.title}</span></td>
+                                            <td className="p-3 font-bold truncate max-w-[200px]"><span className={item.type === 'Service' ? 'text-indigo-700' : (item.title.includes('[進貨') ? 'text-red-700' : (item.status === '已轉總帳' ? 'text-indigo-600' : 'text-slate-800'))}>{item.title}</span></td>
                                             <td className="p-3 font-mono"><span className="bg-slate-100 border border-slate-200 px-2 py-1 rounded text-slate-800 font-bold">{item.regMark || '未出牌'}</span></td>
                                             {reportType === 'receivable' && <td className="p-3 text-xs"><span className={`px-2 py-1 rounded border ${item.type==='Vehicle'?'bg-blue-50 text-blue-700 border-blue-100':'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>{item.type === 'Vehicle' ? '車價' : '代辦'}</span></td>}
                                             {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-3 font-bold text-slate-700">{item.company}</td>}
-                                            {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-3"><span className={`px-2 py-1 rounded border ${item.invoiceNo === '本地收車' || item.invoiceNo === '國外訂車' || item.title.includes('[進貨付款]') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>{item.invoiceNo || '-'}</span></td>}
+                                            {(reportType === 'payable' || reportType === 'paid_expenses') && <td className="p-3"><span className={`px-2 py-1 rounded border ${item.status === '已轉總帳' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : (item.invoiceNo === '本地收車' || item.invoiceNo === '國外訂車' || item.title.includes('[進貨付款]') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-100 text-gray-600 border-gray-200')}`}>{item.status === '已轉總帳' ? '已轉總帳' : (item.invoiceNo || '-')}</span></td>}
                                             {reportType === 'sales' && <td className="p-3 text-right font-mono">{formatCurrency(item.cost)}</td>}
                                             <td className="p-3 text-right font-mono font-black text-slate-800 text-sm">{formatCurrency(item.amount)}</td>
                                             {reportType === 'sales' && <td className={`p-3 text-right font-mono font-black text-sm ${item.profit > 0 ? 'text-emerald-600' : 'text-red-600'}`}>{formatCurrency(item.profit)}</td>}
@@ -589,15 +656,20 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             <>
                                 <div className="p-6 bg-slate-900 text-white flex justify-between items-center flex-none shadow-md z-10">
                                     <div><h3 className="text-2xl font-black tracking-wide mb-1">{selectedPartner}</h3><p className="text-xs text-slate-400">行家往來對帳單</p></div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">目前結餘 (Balance)</p>
-                                        <div className="flex items-center justify-end">
+                                    <div className="text-right flex items-center justify-end">
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">目前結餘 (Balance)</p>
                                             <span className={`text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
-                                            {partnerBalance !== 0 && <button onClick={handleSettleBalance} className="ml-4 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-xs font-bold transition-colors">一鍵結清</button>}
+                                        </div>
+                                        <div className="flex flex-col gap-2 ml-4">
+                                            {/* ★ 新增：一鍵掃描車輛未付款項按鈕 */}
+                                            <button onClick={handleSyncFromVehicles} className="bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 px-3 py-1.5 rounded text-[10px] font-bold transition-colors border border-indigo-400/30 flex items-center justify-center">
+                                                <RefreshCw size={12} className="mr-1"/> 掃描車輛未付
+                                            </button>
+                                            {partnerBalance !== 0 && <button onClick={handleSettleBalance} className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-[10px] font-bold transition-colors">一鍵結清</button>}
                                         </div>
                                     </div>
                                 </div>
-                                
                                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
                                     <div className="space-y-3">
                                         {partnerHistory.map(l => {
@@ -611,7 +683,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                                 {l.note || '-'}
                                                                 {isSystemAuto && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200" title="此紀錄由車輛系統自動連動產生">🤖 系統連動</span>}
                                                             </div>
-                                                            {/* ★ 升級：顯示支付方式與參考號 */}
                                                             <div className="text-xs text-slate-400 mt-1">
                                                                 <span className="font-mono">{l.date}</span> • {l.createdBy} 記錄
                                                                 {l.method && (
@@ -637,7 +708,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
                                 
-                                {/* ★ 升級：雙排輸入表單，支援選擇支付方式 */}
+                                {/* 雙排輸入表單 */}
                                 <form onSubmit={handleAddLedgerRecord} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
                                     <div className="flex flex-col gap-3">
                                         <div className="flex flex-col sm:flex-row gap-3 items-center">
