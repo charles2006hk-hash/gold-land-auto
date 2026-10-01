@@ -154,17 +154,22 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             const isTargetPaid = reportType === 'paid_expenses';
             const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
             inventory.forEach((v:any) => {
+                // ★ 修復 1：撤回車輛的「未付」帳款不列入應付統計
+                if (v.status === 'Withdrawn' && !isTargetPaid) return;
+
                 (v.expenses || []).forEach((exp:any) => {
-                    // ★ 核心修復：找未付時，把已轉總帳 (Transferred) 也算進來，並加上標示
-                    if (exp.status === targetStatus || (!isTargetPaid && exp.status === 'Transferred')) {
-                        const titlePrefix = exp.status === 'Transferred' ? '[已轉總帳]' : '[維修/雜費]';
-                        data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `${titlePrefix} ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: exp.status, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
+                    // ★ 修復 2：找未付時，把已轉總帳 (Transferred) 也算進來，並加上專屬標示 [已轉總帳]
+                    const isTransferred = !isTargetPaid && (exp.status === 'Transferred' || exp.status === 'Transferred_To_Ledger');
+                    if (exp.status === targetStatus || isTransferred) {
+                        const titlePrefix = isTransferred ? '[已轉總帳]' : '[維修/雜費]';
+                        data.push({ vehicleId: v.id, id: exp.id, date: exp.date, title: `${titlePrefix} ${exp.type}`, company: exp.company, invoiceNo: exp.invoiceNo, amount: exp.amount, status: isTransferred ? '已轉總帳' : targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${exp.type} ${exp.company} ${exp.invoiceNo}` });
                     }
                 });
                 (v.maintenanceRecords || []).forEach((m: any) => {
-                    if (m.cost > 0 && (m.costStatus === targetStatus || (!isTargetPaid && m.costStatus === 'Transferred'))) {
-                        const titlePrefix = m.costStatus === 'Transferred' ? '[已轉總帳]' : '[售後成本]';
-                        data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `${titlePrefix} ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: m.costStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
+                    const isTransferredMaint = !isTargetPaid && (m.costStatus === 'Transferred' || m.costStatus === 'Transferred_To_Ledger');
+                    if (m.cost > 0 && (m.costStatus === targetStatus || isTransferredMaint)) {
+                        const titlePrefix = isTransferredMaint ? '[已轉總帳]' : '[售後成本]';
+                        data.push({ vehicleId: v.id, id: m.id, date: m.date, title: `${titlePrefix} ${m.item}`, company: m.vendor || '未指定車房', invoiceNo: '-', amount: m.cost, status: isTransferredMaint ? '已轉總帳' : targetStatus, regMark: v.regMark, rawTitle: `${v.regMark} ${m.item} ${m.vendor}` });
                     }
                 });
                 if (isTargetPaid) {
@@ -258,15 +263,20 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 const balance = ((v.price || 0) + cbFees + salesAddonsTotal) - received;
                 if (balance > 0) totalAR += balance;
             }
-            (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid' || e.status === 'Transferred') totalAP += Number(e.amount); });
-            (v.maintenanceRecords || []).forEach((m:any) => { if ((m.costStatus === 'Unpaid' || m.costStatus === 'Transferred') && m.cost > 0) totalAP += Number(m.cost); });
             
-            const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-            const acqOffset = Number(v.acquisition?.offsetAmount || 0);
-            const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
-            if (acqBalance > 0) totalAP += acqBalance;
+            // ★ 修復 3：計算 Dashboard 總應付時，排除撤回車輛，且「不重複」計算已轉總帳 (Transferred) 的項目，避免與行家結餘雙重計算
+            if (v.status !== 'Withdrawn') {
+                (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid') totalAP += Number(e.amount); });
+                (v.maintenanceRecords || []).forEach((m:any) => { if (m.costStatus === 'Unpaid' && m.cost > 0) totalAP += Number(m.cost); });
+                
+                const acqPaid = (v.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
+                const acqOffset = Number(v.acquisition?.offsetAmount || 0);
+                const acqBalance = (v.costPrice || 0) - acqPaid - acqOffset;
+                if (acqBalance > 0) totalAP += acqBalance;
+            }
         });
 
+        // 加上行家戶口結餘
         const partnerBalances: Record<string, number> = {};
         ledgers.forEach(l => {
             if (!partnerBalances[l.partner]) partnerBalances[l.partner] = 0;
@@ -662,7 +672,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                             <span className={`text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
                                         </div>
                                         <div className="flex flex-col gap-2 ml-4">
-                                            {/* ★ 新增：一鍵掃描車輛未付款項按鈕 */}
+                                            {/* ★ 一鍵掃描車輛未付款項按鈕 */}
                                             <button onClick={handleSyncFromVehicles} className="bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 px-3 py-1.5 rounded text-[10px] font-bold transition-colors border border-indigo-400/30 flex items-center justify-center">
                                                 <RefreshCw size={12} className="mr-1"/> 掃描車輛未付
                                             </button>
@@ -708,7 +718,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
                                 
-                                {/* 雙排輸入表單 */}
                                 <form onSubmit={handleAddLedgerRecord} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
                                     <div className="flex flex-col gap-3">
                                         <div className="flex flex-col sm:flex-row gap-3 items-center">
