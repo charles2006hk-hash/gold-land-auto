@@ -382,6 +382,80 @@ const VehicleFormModal = ({
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' , tradeInVehicleId: ''});
     const [newAddon, setNewAddon] = useState({ name: '文件費', amount: '' });
 
+    // ★★★ 新增：中港業務支出專用狀態與函數 ★★★
+    const [newCbExpense, setNewCbExpense] = useState({ 
+        date: new Date().toISOString().split('T')[0], 
+        type: '指標租金', 
+        company: '', 
+        amount: '', 
+        status: 'Unpaid', 
+        paymentMethod: 'Transfer', 
+        isCrossBorder: true // 核心標記：區分中港支出
+    });
+    
+    const [showCbPartnerSearch, setShowCbPartnerSearch] = useState(false);
+    const [cbPartnerSearchResults, setCbPartnerSearchResults] = useState<string[]>([]);
+
+    const handleSearchRelatedCbPartners = () => {
+        const possiblePartners = new Set<string>();
+        if (v.acquisition?.vendor) possiblePartners.add(v.acquisition.vendor);
+        if (v.crossBorder?.insuranceAgent) possiblePartners.add(v.crossBorder.insuranceAgent);
+        (v.crossBorder?.tasks || []).forEach((t:any) => { if (t.remark || t.note) possiblePartners.add(t.remark || t.note); });
+        (v.expenses || []).filter((e:any) => e.isCrossBorder).forEach((e:any) => { if (e.company) possiblePartners.add(e.company); });
+
+        const results = Array.from(possiblePartners).filter(Boolean);
+        if (results.length > 0) {
+            setCbPartnerSearchResults(results);
+            setShowCbPartnerSearch(true);
+        } else {
+            alert('這台車目前沒有關聯任何行家或對象紀錄。');
+        }
+    };
+
+    const handleAddCbExpenseClick = async () => {
+        const amt = Number(newCbExpense.amount.replace(/,/g, ''));
+        if (amt > 0) {
+            const isPaid = newCbExpense.paymentMethod && newCbExpense.paymentMethod !== 'Unpaid';
+            let finalStatus = isPaid ? 'Paid' : 'Unpaid';
+            const finalMethod = isPaid ? newCbExpense.paymentMethod : '';
+
+            // 核心連動：未付且有對象，自動詢問轉入行家總帳
+            if (finalStatus === 'Unpaid' && newCbExpense.company && db && appId && staffId) {
+                const transfer = confirm(`是否將此筆中港費用 [${newCbExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newCbExpense.company}」統一對數結算？`);
+                if (transfer) {
+                    try {
+                        const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                            partner: newCbExpense.company, 
+                            date: newCbExpense.date || new Date().toISOString().split('T')[0], 
+                            type: 'payable', 
+                            amount: amt, 
+                            note: `[中港費用] ${v.regMark || '未出牌'} - ${newCbExpense.type}`,
+                            sourceModule: 'vehicle_expense', 
+                            vehicleId: v.id || 'new_vehicle',
+                            createdAt: serverTimestamp(), 
+                            createdBy: staffId 
+                        });
+                        finalStatus = 'Transferred'; 
+                        alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！`);
+                    } catch (err) {
+                        console.error("轉帳失敗", err);
+                    }
+                }
+            }
+
+            const obj = { id: Date.now().toString(), ...newCbExpense, amount: amt, status: finalStatus, paymentMethod: finalMethod };
+            if (v.id) addExpense(v.id, obj as any);
+            else setEditingVehicle((prev: any) => ({ ...prev, expenses: [...(prev.expenses || []), obj] }));
+            
+            if (newCbExpense.company && !(settings.expenseCompanies || []).includes(newCbExpense.company)) {
+                updateSettings('expenseCompanies', [...(settings.expenseCompanies || []), newCbExpense.company]);
+            }
+
+            setNewCbExpense({ ...newCbExpense, amount: '', paymentMethod: 'Unpaid', company: '' }); 
+        }
+    };
+
    // ★ 新增：維修保養狀態與函數
     const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
 
@@ -3147,6 +3221,130 @@ const VehicleFormModal = ({
                                             );
                                         })()}
                                     </div>
+                                {/* ★★★ 新增：中港業務專屬支出 (成本/應付) ★★★ */}
+                                    <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-red-200 w-full min-w-0">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <label className="text-sm md:text-xs text-red-900 font-black flex items-center bg-red-100 w-fit px-3 py-1 rounded-full shadow-sm">
+                                                <DollarSign size={16} className="mr-1.5"/> 中港業務支出 (Cross-Border Payables)
+                                            </label>
+                                            {(() => {
+                                                const cbExpTotal = (v.expenses || []).filter((e:any) => e.isCrossBorder).reduce((s:number, e:any) => s + (e.amount || 0), 0);
+                                                return <span className="text-xs font-bold text-red-700 bg-white border border-red-200 px-3 py-1 rounded-full shadow-sm">中港總成本: {formatCurrency(cbExpTotal)}</span>
+                                            })()}
+                                        </div>
+
+                                        <div className="bg-white p-4 rounded-xl border border-red-200 shadow-sm w-full space-y-4">
+                                            
+                                            {/* 歷史支出列表 */}
+                                            <div className="space-y-2">
+                                                {(v.expenses || []).filter((e:any) => e.isCrossBorder).map((exp: any) => (
+                                                    <div key={exp.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-slate-50 border rounded-lg shadow-sm transition-colors ${exp.status === 'Transferred' ? 'border-indigo-300 bg-indigo-50/20' : 'border-slate-200'}`}>
+                                                        <div className="flex flex-wrap items-center gap-3 md:flex-1 min-w-0">
+                                                            <span className="text-gray-400 font-mono font-bold">{exp.date}</span>
+                                                            <span className="font-black text-red-800 bg-red-100 px-2 py-1 rounded-md">{exp.type}</span>
+                                                            <span className="text-gray-600 font-medium truncate flex-1 min-w-[100px]">{exp.company || '未指定對象'}</span>
+                                                            {exp.status === 'Paid' && (
+                                                                <select 
+                                                                    value={exp.paymentMethod || 'Transfer'}
+                                                                    onChange={(e) => {
+                                                                        if (v.id) updateSubItem(v.id, 'expenses', (v.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: e.target.value} : ex));
+                                                                    }}
+                                                                    className="px-2 py-1 rounded-md text-[10px] font-bold border outline-none cursor-pointer bg-white text-slate-600 border-slate-200"
+                                                                >
+                                                                    <option value="Transfer">轉帳 (Transfer)</option>
+                                                                    <option value="Cash">現金 (Cash)</option>
+                                                                    <option value="Cheque">支票 (Cheque)</option>
+                                                                </select>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
+                                                            <span className="font-mono font-black text-lg md:text-base text-red-600">{formatCurrency(exp.amount)}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <button type="button" onClick={() => handleToggleExpenseStatus(exp)} className={`px-3 py-1 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : (exp.status === 'Transferred' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 cursor-help' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100')}`}>
+                                                                    {exp.status === 'Paid' ? '已付' : (exp.status === 'Transferred' ? '已轉總帳' : '未付')}
+                                                                </button>
+                                                                {exp.status !== 'Transferred' && (
+                                                                    <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-gray-400 hover:text-red-500 bg-white border border-gray-200 hover:border-red-200 p-1.5 rounded-md transition-colors"><X size={16}/></button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {(v.expenses || []).filter((e:any) => e.isCrossBorder).length === 0 && (
+                                                    <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">目前無中港相關支出紀錄</div>
+                                                )}
+                                            </div>
+
+                                            {/* 新增支出表單 */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-red-100 w-full">
+                                                <input type="date" value={newCbExpense.date} onChange={e => setNewCbExpense({...newCbExpense, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-100 rounded-lg outline-none bg-slate-50 font-bold text-slate-700 min-w-0"/>
+                                                
+                                                <div className="w-full lg:w-36 relative min-w-0">
+                                                    <input list="cb_expense_type_list" placeholder="選擇支出項目..." value={newCbExpense.type} onChange={e => setNewCbExpense({...newCbExpense, type: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                                                    <datalist id="cb_expense_type_list">
+                                                        <option value="指標租金">指標租金</option>
+                                                        <option value="內地保險費">內地保險費</option>
+                                                        <option value="代辦手續費">代辦手續費</option>
+                                                        <option value="內地驗車費">內地驗車費</option>
+                                                        <option value="其他雜費">其他雜費</option>
+                                                    </datalist>
+                                                </div>
+                                                
+                                                <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0 flex items-center gap-1">
+                                                    <div className="relative flex-1">
+                                                        <input list="cb_expense_company_list" placeholder="對象 (行家/代辦/指標主)..." value={newCbExpense.company} onChange={e => setNewCbExpense({...newCbExpense, company: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold text-slate-700 pr-8"/>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={handleSearchRelatedCbPartners}
+                                                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-red-400 hover:text-red-600"
+                                                            title="尋找與本車相關的行家"
+                                                        >
+                                                            <Search size={16} />
+                                                        </button>
+                                                        <datalist id="cb_expense_company_list">
+                                                            {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
+                                                        </datalist>
+                                                    </div>
+                                                    
+                                                    {/* 相關行家選擇彈窗 */}
+                                                    {showCbPartnerSearch && (
+                                                        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-red-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                                                            <div className="p-2 bg-red-50 text-xs font-bold text-red-800 flex justify-between items-center border-b border-red-100">
+                                                                關聯行家快速選擇
+                                                                <button type="button" onClick={() => setShowCbPartnerSearch(false)}><X size={14}/></button>
+                                                            </div>
+                                                            <div className="max-h-40 overflow-y-auto">
+                                                                {cbPartnerSearchResults.map((p, idx) => (
+                                                                    <div 
+                                                                        key={idx} 
+                                                                        className="p-2 text-sm hover:bg-red-50 cursor-pointer border-b last:border-0 border-slate-100 font-medium"
+                                                                        onClick={() => {
+                                                                            setNewCbExpense({...newCbExpense, company: p});
+                                                                            setShowCbPartnerSearch(false);
+                                                                        }}
+                                                                    >
+                                                                        {p}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <select value={newCbExpense.paymentMethod || 'Unpaid'} onChange={e => setNewCbExpense({...newCbExpense, paymentMethod: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
+                                                    <option value="Unpaid">未付 (Unpaid)</option>
+                                                    <option value="Cash">現金 (Cash)</option>
+                                                    <option value="Transfer">轉帳 (Transfer)</option>
+                                                    <option value="Cheque">支票 (Cheque)</option>
+                                                </select>
+                                                
+                                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
+                                                    <input type="text" placeholder="$ 金額" value={newCbExpense.amount} onChange={e => setNewCbExpense({...newCbExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-300 rounded-lg outline-none bg-red-50 text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
+                                                    <button type="button" onClick={handleAddCbExpenseClick} className="w-full sm:w-auto bg-red-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-red-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">記一筆支出</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>    
                                 </div>
                             ) : (
                                 <div className="p-12 text-center text-blue-400/60 bg-slate-50 flex flex-col items-center w-full">
