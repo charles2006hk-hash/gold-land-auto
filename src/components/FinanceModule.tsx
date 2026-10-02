@@ -6,7 +6,7 @@ import {
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
     DownloadCloud, Trash2, X, Check, Printer, Lock, RefreshCw, Edit,
-    CreditCard, User, Building2, Car, Save, Loader2 // ★ 新增 UI 圖標
+    CreditCard, User, Building2, Car, Save, Loader2 
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -28,7 +28,6 @@ const formatNumberInput = (value: string) => {
 export default function FinanceModule({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) {
     
     // --- 模塊狀態鎖定 ---
-    // ★ 預設頁面邏輯修改：若無權限，預設進入 'staff' 分頁
     const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital' | 'staff'>(() => {
         if (typeof window !== 'undefined') {
@@ -40,7 +39,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     
     const [selectedLender, setSelectedLender] = useState<string>(''); 
     
-    // ★ 安全強制重導
     useEffect(() => {
         if (!isFullAccess && financeTab !== 'staff') {
             setFinanceTab('staff');
@@ -101,14 +99,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         return [];
     });
 
-    // --- ★ 員工記帳與報銷 (Staff Ledgers) 狀態 ---
+    // --- 員工記帳與報銷狀態 ---
     const [staffLedgers, setStaffLedgers] = useState<any[]>([]);
-    const [selectedStaff, setSelectedStaff] = useState<string>(staffId); // 預設選中自己
+    const [selectedStaff, setSelectedStaff] = useState<string>(staffId); 
     const [staffExpForm, setStaffExpForm] = useState({
         date: new Date().toISOString().split('T')[0],
-        fundSource: 'personal', // personal(代墊) | company(公數)
+        fundSource: 'personal', 
         paymentMethod: 'Transfer', 
-        targetType: 'company_general', // company_general | vehicle_cost | partner_payment
+        targetType: 'company_general', 
         amount: '',
         description: '',
         targetVehicleId: '',
@@ -137,7 +135,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate, accSearchTerm, accFilterType, isPartnerDateFilter, partnerStart, partnerEnd, recentPartners]);
 
-    // 讀取行家來往與員工來往資料庫
     useEffect(() => {
         if (!db || !appId) return;
         const qPartner = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
@@ -164,7 +161,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const handlePrint = () => { window.print(); };
 
     // ============================================================================
-    // ★ 核心引擎 1：統計報表生成 (Report Data)
+    // ★ 統計報表生成 (Report Data)
     // ============================================================================
     const generateReportData = () => {
         let data: any[] = [];
@@ -259,11 +256,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
   
     // ============================================================================
-    // ★ 核心引擎 2：會計流水帳生成 (Unified Cash Ledger)
+    // ★ 會計流水帳生成 (Unified Cash Ledger)
     // ============================================================================
     const generateLedger = () => {
         const ledger: any[] = [];
-        
         inventory.forEach((v: any) => {
             (v.payments || []).forEach((p: any) => ledger.push({ id: `pay_${p.id}`, date: p.date, type: 'IN', amount: Number(p.amount), category: '營業收入 (Sales)', desc: `[收款] ${p.type}`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
             (v.acquisition?.payments || []).forEach((p: any) => ledger.push({ id: `acq_${p.id}`, date: p.date, type: 'OUT', amount: Number(p.amount), category: '進貨成本 (COGS)', desc: `[進貨付款]`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
@@ -271,19 +267,17 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus === 'Paid' && m.charge > 0).forEach((m: any) => ledger.push({ id: `maint_in_${m.id}`, date: m.chargeDate || m.date, type: 'IN', amount: Number(m.charge), category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, ref: v.regMark || '未出牌', method: m.chargeMethod || '', remark: m.chargeRemark || '', rawDate: new Date(m.chargeDate || m.date).getTime() }));
             (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0).forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.costDate || m.date, type: 'OUT', amount: Number(m.cost), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', method: m.costMethod || '', remark: m.costRemark || '', rawDate: new Date(m.costDate || m.date).getTime() }));
         });
-
         ledgers.forEach((l: any) => {
             const isCashIn = l.type === 'receivable' ? (l.note.includes('收') || l.note.includes('還')) : (l.note.includes('借入') || l.note.includes('收'));
             ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: l.method || '', remark: l.refNo || '', rawDate: new Date(l.date).getTime() });
         });
-
         return ledger.sort((a, b) => b.rawDate - a.rawDate);
     };
 
     const rawLedger = generateLedger();
 
     // ============================================================================
-    // ★ 核心引擎 3：財務 Dashboard 數據計算
+    // ★ 財務 Dashboard 數據計算
     // ============================================================================
     const calculateDashboardStats = () => {
         const now = new Date();
@@ -328,14 +322,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         });
 
         const stockValue = inventory.filter((v: any) => v.status === 'In Stock').reduce((sum: number, v: any) => sum + (v.price || 0), 0);
-
         return { monthIn, monthOut, monthNet, totalAR, totalAP, stockValue };
     };
 
     const dashStats = calculateDashboardStats();
 
     // ============================================================================
-    // ★ 輔助函數：行家來往
+    // ★ 行家來往 & 員工報銷 邏輯
     // ============================================================================
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
     
@@ -363,7 +356,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     }
     const periodIn = displayPartnerHistory.filter(l => l.type === 'receivable').reduce((sum, l) => sum + Number(l.amount), 0);
     const periodOut = displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0);
-    const periodNet = periodIn - periodOut;
 
     const promptRenamePartner = async (oldName: string) => {
         const newName = window.prompt(`請輸入「${oldName}」的正確名稱：\n\n💡 提示：若輸入另一個已存在的行家名稱（例如把「交Benny」改為「Benny」），系統將會自動合併兩者的帳目！`, oldName);
@@ -611,9 +603,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     };
 
-    // ============================================================================
-    // ★ 輔助函數：員工記帳與報銷
-    // ============================================================================
     const handleStaffExpenseSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const amt = Number(staffExpForm.amount.replace(/,/g, ''));
@@ -693,13 +682,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     };
 
-    // 計算員工本人代墊結餘
     const myLedgers = staffLedgers.filter(l => l.staffId === (isFullAccess ? selectedStaff : staffId));
     const myBalance = myLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? -Number(l.amount) : Number(l.amount)), 0);
 
-    // ============================================================================
-    // ★ 輔助函數：會計流水帳
-    // ============================================================================
     const filteredAccLedger = rawLedger.filter(l => {
         if (isDateFilterEnabled) {
             if (reportStartDate && l.date < reportStartDate) return false;
@@ -750,7 +735,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             <button onClick={() => setFinanceTab('capital')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'capital' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="mr-1.5"/> 資金預算沙盤</button>
                         </>
                     )}
-                    {/* ★ 任何人都可見的分頁 */}
                     <button onClick={() => setFinanceTab('staff')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'staff' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><CreditCard size={16} className="mr-1.5"/> 員工報銷</button>
                 </div>
             </div>
@@ -918,21 +902,21 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 3: 行家來往 (Partner Ledger) */}
             {/* ========================================== */}
             {financeTab === 'partner' && isFullAccess && (
-                <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
-                    <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
-                        <div className="p-4 border-b border-slate-200 bg-white">
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                    <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                        <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
                             <h3 className="font-bold text-slate-700 flex items-center mb-3"><Users size={18} className="mr-2 text-amber-500"/> 行家/夥伴名單</h3>
                             <div className="relative">
                                 <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
                                 <input value={partnerSearch} onChange={e => setPartnerSearch(e.target.value)} placeholder="搜尋名稱..." className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-amber-200"/>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
                             {filteredPartners.map((partner, idx) => {
                                 const pLedgers = ledgers.filter(l => l.partner === partner);
                                 const pBalance = pLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
                                 return (
-                                    <div key={idx} onClick={() => handleSelectPartner(partner)} className={`p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'hover:bg-white border border-transparent hover:border-slate-200'}`}>
+                                    <div key={idx} onClick={() => handleSelectPartner(partner)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
                                         <div className="flex justify-between items-center w-full">
                                             <span className={`font-bold text-sm truncate ${selectedPartner === partner ? 'text-amber-900' : 'text-slate-700'}`}>{partner}</span>
                                             {selectedPartner === partner && isFullAccess && (
@@ -950,9 +934,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                     <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
                         {!selectedPartner ? (
-                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10">
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10 hidden md:flex">
                                 <Briefcase size={48} className="mb-4 opacity-30 text-amber-500"/>
-                                <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左側行家</h3>
+                                <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左/上方行家</h3>
                             </div>
                         ) : (
                             <>
@@ -963,8 +947,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                     
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
-                                        <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 p-1.5 rounded-lg">
-                                            <label className="flex items-center text-[10px] font-bold text-slate-300 cursor-pointer ml-1">
+                                        <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 p-1.5 rounded-lg w-full sm:w-auto">
+                                            <label className="flex items-center text-[10px] font-bold text-slate-300 cursor-pointer ml-1 whitespace-nowrap">
                                                 <input type="checkbox" checked={isPartnerDateFilter} onChange={(e) => setIsPartnerDateFilter(e.target.checked)} className="mr-1.5 accent-blue-500"/>區間
                                             </label>
                                             <div className={`flex items-center gap-1 transition-opacity ${!isPartnerDateFilter ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
@@ -974,7 +958,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                             </div>
                                         </div>
                                         
-                                        <button onClick={executePartnerPrint} className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-[10px] font-bold transition-colors flex items-center border border-slate-500 whitespace-nowrap">
+                                        <button onClick={executePartnerPrint} className="w-full sm:w-auto justify-center bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-[10px] font-bold transition-colors flex items-center border border-slate-500 whitespace-nowrap">
                                             <Printer size={12} className="mr-1.5"/> 輸出對數單
                                         </button>
                                     </div>
@@ -994,36 +978,37 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                                <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-slate-50">
                                     <div className="space-y-3">
                                         {displayPartnerHistory.map(l => {
                                             const isSystemAuto = !!l.sourceModule;
                                             return (
-                                                <div key={l.id} className={`flex justify-between items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{l.type === 'receivable' ? '入' : '出'}</div>
+                                                <div key={l.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black flex-shrink-0 ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{l.type === 'receivable' ? '入' : '出'}</div>
                                                         <div>
-                                                            <div className="font-bold text-slate-800 flex items-center gap-2">
+                                                            <div className="font-bold text-slate-800 flex items-center flex-wrap gap-2">
                                                                 {l.note || '-'}
-                                                                {isSystemAuto && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200" title="此紀錄由車輛系統自動連動產生">🤖 系統連動</span>}
+                                                                {isSystemAuto && <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap" title="此紀錄由車輛系統自動連動產生">🤖 系統連動</span>}
                                                             </div>
-                                                            <div className="text-xs text-slate-400 mt-1">
-                                                                <span className="font-mono">{l.date}</span> • {l.createdBy} 記錄
+                                                            <div className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                                                                <span className="font-mono">{l.date}</span>
+                                                                <span className="hidden sm:inline">• {l.createdBy} 記錄</span>
                                                                 {l.method && (
-                                                                    <span className="ml-2 pl-2 border-l border-slate-300 inline-block">
+                                                                    <span className="pl-2 border-l border-slate-300 flex items-center gap-1">
                                                                         方式: <span className="font-bold text-slate-600">{l.method === 'Transfer' ? '轉帳' : l.method === 'Cheque' ? '支票' : l.method === 'Cash' ? '現金' : l.method === 'Offset' ? '對數抵銷' : '-'}</span>
-                                                                        {l.refNo && <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono border border-slate-200">#{l.refNo}</span>}
+                                                                        {l.refNo && <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono border border-slate-200 max-w-[100px] truncate">#{l.refNo}</span>}
                                                                     </span>
                                                                 )}
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right flex items-center gap-4">
+                                                    <div className="text-right flex items-center justify-between md:justify-end gap-4 w-full md:w-auto mt-3 md:mt-0 pt-3 md:pt-0 border-t md:border-0 border-slate-100">
                                                         <span className={`text-lg font-black font-mono ${l.type === 'receivable' ? 'text-green-600' : 'text-red-600'}`}>{l.type === 'receivable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
                                                         {isSystemAuto ? (
-                                                            <div className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 cursor-help transition-all" title="系統連動紀錄，如需修改/刪除請至車輛面板退回「未付」"><Lock size={16}/></div>
+                                                            <div className="opacity-100 md:opacity-0 group-hover:opacity-100 p-2 text-slate-300 cursor-help transition-all bg-slate-50 md:bg-transparent rounded-lg" title="系統連動紀錄，如需修改/刪除請至車輛面板退回「未付」"><Lock size={16}/></div>
                                                         ) : (
-                                                            <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title="刪除此紀錄"><Trash2 size={16}/></button>
+                                                            <button onClick={() => handleDeleteLedgerRecord(l.id)} className="opacity-100 md:opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 bg-slate-50 md:bg-transparent rounded-lg transition-all" title="刪除此紀錄"><Trash2 size={16}/></button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1119,14 +1104,14 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 }
 
                 return (
-                    <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
-                        <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
-                            <div className="p-4 border-b border-slate-200 bg-white">
+                    <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                        <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                            <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
                                 <h3 className="font-bold text-slate-700 flex items-center mb-3"><DollarSign size={18} className="mr-2 text-pink-600"/> 資金池 / 金主名單</h3>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
                                 {lendersList.map((lender: string, idx: number) => (
-                                    <div key={idx} onClick={() => setSelectedLender(lender)} className={`p-3 rounded-xl cursor-pointer transition-all font-bold text-sm ${selectedLender === lender ? 'bg-pink-100 border border-pink-300 shadow-sm text-pink-900' : 'hover:bg-white border border-transparent hover:border-slate-200 text-slate-700'}`}>
+                                    <div key={idx} onClick={() => setSelectedLender(lender)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all font-bold text-sm flex-shrink-0 min-w-[140px] md:min-w-0 text-center md:text-left ${selectedLender === lender ? 'bg-pink-100 border border-pink-300 shadow-sm text-pink-900' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200 text-slate-700'}`}>
                                         {lender}
                                     </div>
                                 ))}
@@ -1136,19 +1121,19 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                         <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
                             {!selectedLender ? (
-                                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10">
+                                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10 hidden md:flex">
                                     <DollarSign size={48} className="mb-4 opacity-30 text-pink-500"/>
-                                    <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左側金主 / 墊資方</h3>
+                                    <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左/上方金主</h3>
                                     <p className="text-xs">系統將自動統整該金主名下的所有本金與利息</p>
                                 </div>
                             ) : (
                                 <>
-                                    <div className="p-6 bg-slate-900 text-white flex flex-wrap justify-between items-center flex-none shadow-md z-10 gap-4">
+                                    <div className="p-4 md:p-6 bg-slate-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center flex-none shadow-md z-10 gap-4">
                                         <div>
                                             <h3 className="text-2xl font-black tracking-wide mb-1">{selectedLender}</h3>
                                             <p className="text-xs text-slate-400">資金池佔用與利息月結單</p>
                                         </div>
-                                        <div className="flex gap-6 text-right">
+                                        <div className="flex flex-row md:flex-col lg:flex-row gap-6 text-left md:text-right w-full md:w-auto justify-between border-t md:border-t-0 border-slate-700 pt-3 md:pt-0">
                                             <div>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">現時動用本金 (Active Principal)</p>
                                                 <span className="text-2xl font-black font-mono text-blue-400">{formatCurrency(activePrincipalTotal)}</span>
@@ -1160,16 +1145,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         </div>
                                     </div>
                                     
-                                    <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                                    <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-slate-50">
                                         <div className="space-y-4">
                                             {lenderHistory.map((f, idx) => (
                                                 <div key={idx} className={`flex flex-col md:flex-row justify-between p-4 bg-white rounded-xl border shadow-sm transition-colors ${f.status === 'Active' ? 'border-blue-200 hover:border-blue-300' : 'border-slate-200 hover:border-pink-300'}`}>
                                                     <div className="flex items-start gap-4">
-                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black ${f.status === 'Active' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-black flex-shrink-0 ${f.status === 'Active' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
                                                             {f.status === 'Active' ? '計息' : '結算'}
                                                         </div>
                                                         <div>
-                                                            <div className="font-bold text-slate-800 text-base">{f.make} {f.model} <span className="text-xs bg-slate-100 px-2 py-0.5 rounded border ml-2 text-slate-600 font-mono">{f.regMark}</span></div>
+                                                            <div className="font-bold text-slate-800 text-sm md:text-base flex flex-wrap items-center gap-2">{f.make} {f.model} <span className="text-xs bg-slate-100 px-2 py-0.5 rounded border text-slate-600 font-mono">{f.regMark}</span></div>
                                                             <div className="text-xs text-slate-500 font-mono mt-1">
                                                                 起息: {f.startDate} {f.status === 'Settled' && `| 結算: ${f.endDate} (${f.actualDays}天)`}
                                                             </div>
@@ -1177,12 +1162,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                         </div>
                                                     </div>
                                                     
-                                                    <div className="text-right mt-4 md:mt-0 flex flex-col justify-center">
-                                                        <div className="text-[10px] uppercase font-bold text-slate-400">融資本金</div>
-                                                        <div className="text-lg font-black font-mono text-slate-700">{formatCurrency(f.principal)}</div>
-                                                        
+                                                    <div className="text-left md:text-right mt-4 md:mt-0 flex flex-row md:flex-col justify-between md:justify-center border-t md:border-0 border-slate-100 pt-3 md:pt-0">
+                                                        <div>
+                                                            <div className="text-[10px] uppercase font-bold text-slate-400">融資本金</div>
+                                                            <div className="text-lg font-black font-mono text-slate-700">{formatCurrency(f.principal)}</div>
+                                                        </div>
                                                         {f.status === 'Settled' && (
-                                                            <div className="mt-2">
+                                                            <div className="mt-0 md:mt-2 text-right">
                                                                 <div className="text-[10px] uppercase font-bold text-pink-500">已產生利息</div>
                                                                 <div className="text-xl font-black font-mono text-pink-600">+{formatCurrency(f.actualInterest)}</div>
                                                             </div>
@@ -1191,7 +1177,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                 </div>
                                             ))}
                                             {lenderHistory.length === 0 && (
-                                                <div className="text-center p-10 text-slate-400 font-bold">該墊資方目前沒有任何融資紀錄。</div>
+                                                <div className="text-center p-10 text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">該墊資方目前沒有任何融資紀錄。</div>
                                             )}
                                         </div>
                                     </div>
@@ -1216,37 +1202,37 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         </div>
                         
                         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                            <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden">
+                            <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden w-full sm:w-auto">
                                 <select value={accFilterType} onChange={e => setAccFilterType(e.target.value as any)} className="bg-transparent text-xs font-bold text-slate-700 py-2 px-3 outline-none cursor-pointer border-r border-slate-200">
                                     <option value="All">全部 (All)</option>
                                     <option value="IN">只看收入 (IN)</option>
                                     <option value="OUT">只看支出 (OUT)</option>
                                 </select>
-                                <div className="relative">
+                                <div className="relative flex-1">
                                     <Search size={14} className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-400"/>
-                                    <input value={accSearchTerm} onChange={e => setAccSearchTerm(e.target.value)} placeholder="搜尋摘要/車牌..." className="bg-transparent text-xs py-2 pl-7 pr-3 outline-none w-32 md:w-48"/>
+                                    <input value={accSearchTerm} onChange={e => setAccSearchTerm(e.target.value)} placeholder="搜尋摘要/車牌..." className="bg-transparent text-xs py-2 pl-7 pr-3 outline-none w-full md:w-48"/>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-lg">
-                                <label className="flex items-center text-[10px] font-bold text-gray-700 cursor-pointer ml-2">
+                            <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-lg w-full sm:w-auto">
+                                <label className="flex items-center text-[10px] font-bold text-gray-700 cursor-pointer ml-2 whitespace-nowrap">
                                     <input type="checkbox" checked={isDateFilterEnabled} onChange={(e) => setIsDateFilterEnabled(e.target.checked)} className="mr-1.5 accent-emerald-600"/>鎖定區間
                                 </label>
-                                <div className={`flex items-center gap-1 transition-opacity ${!isDateFilterEnabled ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                                <div className={`flex items-center gap-1 transition-opacity ${!isDateFilterEnabled ? 'opacity-40 pointer-events-none' : 'opacity-100'} flex-1`}>
                                     <input type="date" value={reportStartDate} onChange={e => { setReportStartDate(e.target.value); setIsDateFilterEnabled(true); }} className="w-full border-b border-gray-200 p-1 text-xs outline-none bg-transparent cursor-pointer" />
                                     <span className="text-gray-400 text-xs px-1">至</span>
                                     <input type="date" value={reportEndDate} onChange={e => { setReportEndDate(e.target.value); setIsDateFilterEnabled(true); }} className="w-full border-b border-gray-200 p-1 text-xs outline-none bg-transparent cursor-pointer" />
                                 </div>
                             </div>
 
-                            <button onClick={exportAccountingCSV} className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-md hover:bg-emerald-700 active:scale-95 transition-all flex items-center ml-auto lg:ml-0">
+                            <button onClick={exportAccountingCSV} className="w-full lg:w-auto justify-center bg-emerald-600 text-white px-4 py-2 rounded-lg font-bold text-xs shadow-md hover:bg-emerald-700 active:scale-95 transition-all flex items-center ml-auto lg:ml-0">
                                 <DownloadCloud size={14} className="mr-1.5"/> 匯出 CSV
                             </button>
                         </div>
                     </div>
 
                     {/* 流水帳表格 */}
-                    <div className="flex-1 overflow-y-auto bg-white relative">
+                    <div className="flex-1 overflow-auto bg-white relative">
                         <table className="w-full text-left text-sm border-collapse whitespace-nowrap">
                             <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10 shadow-sm">
                                 <tr>
@@ -1441,15 +1427,15 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* Tab 6: 員工記帳與報銷中心 (Staff Ledger) */}
             {/* ========================================== */}
             {financeTab === 'staff' && (
-                <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
                     
-                    {/* 左側：員工列表 (老闆可見全部，員工只見自己) */}
-                    <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
-                        <div className="p-4 border-b border-slate-200 bg-white">
+                    {/* 左側：員工列表 */}
+                    <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                        <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
                             <h3 className="font-bold text-slate-700 flex items-center mb-1"><User size={18} className="mr-2 text-blue-600"/> 員工報銷與記帳</h3>
                             <p className="text-xs text-slate-400">自動分發 (Fan-out) 至對應帳戶</p>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
                             {(() => {
                                 const staffList = isFullAccess 
                                     ? Array.from(new Set([staffId, ...staffLedgers.map(l => l.staffId)])).filter(Boolean)
@@ -1457,11 +1443,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 
                                 return staffList.map((sId: any) => {
                                     const sLedgers = staffLedgers.filter(l => l.staffId === sId);
-                                    // 員工代墊是 payable (公司應付給員工)
                                     const sBalance = sLedgers.reduce((sum, l) => sum + (l.type === 'payable' ? Number(l.amount) : -Number(l.amount)), 0);
                                     
                                     return (
-                                        <div key={sId} onClick={() => setSelectedStaff(sId)} className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center ${selectedStaff === sId ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'hover:bg-white border border-transparent hover:border-slate-200'}`}>
+                                        <div key={sId} onClick={() => setSelectedStaff(sId)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedStaff === sId ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
                                             <span className={`font-bold text-sm truncate ${selectedStaff === sId ? 'text-blue-900' : 'text-slate-700'}`}>{sId === staffId ? '我 (My Account)' : sId}</span>
                                             {sBalance !== 0 && <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${sBalance > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>{sBalance > 0 ? '公司欠 ' : ''}${Math.abs(sBalance).toLocaleString()}</span>}
                                         </div>
@@ -1471,20 +1456,18 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         </div>
                     </div>
 
-                    {/* 右側：主工作區 (表單 + 歷史) */}
+                    {/* 右側：主工作區 */}
                     <div className="flex-1 flex flex-col relative bg-slate-50 overflow-y-auto p-4 md:p-6 space-y-6">
                         
-                        {/* A. 記帳表單 (StaffExpenseEntry) */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200">
                             <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center border-b pb-3">
                                 <CreditCard className="mr-2 text-indigo-600" /> 員工記帳與報銷中心 (Expense Entry)
                             </h2>
 
                             <form onSubmit={handleStaffExpenseSubmit} className="space-y-5">
-                                {/* 1. 資金來源 */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">1. 錢是誰出的？ (資金來源)</label>
-                                    <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                                    <div className="flex flex-col sm:flex-row gap-2 bg-slate-100 p-1 rounded-lg">
                                         <button type="button" onClick={() => setStaffExpForm({...staffExpForm, fundSource: 'company'})} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition-all ${staffExpForm.fundSource === 'company' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'}`}>
                                             <Building2 size={16} className="mr-2"/> 公司帳戶/支票
                                         </button>
@@ -1494,7 +1477,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </div>
                                 </div>
 
-                                {/* 2. 支出歸屬 */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">2. 這筆錢付給誰/做什麼？ (費用歸屬)</label>
                                     <select 
@@ -1508,7 +1490,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     </select>
                                 </div>
 
-                                {/* 動態顯示細節表單 */}
                                 <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-4">
                                     {staffExpForm.targetType === 'company_general' && (
                                         <div>
@@ -1540,7 +1521,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     )}
                                 </div>
 
-                                {/* 3. 金額與備註 */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 mb-1">日期</label>
@@ -1560,14 +1540,13 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                     <input type="text" value={staffExpForm.description} onChange={e => setStaffExpForm({...staffExpForm, description: e.target.value})} placeholder="例如：幫忙付威仔的中檢費..." className="w-full p-3 border rounded-lg outline-none focus:ring-2 ring-indigo-200 bg-slate-50" required />
                                 </div>
 
-                                {/* 總結提示與送出 */}
                                 <div className="pt-2">
-                                    <button type="submit" disabled={isSubmittingStaffExp} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-all flex justify-center items-center shadow-lg active:scale-95">
+                                    <button type="submit" disabled={isSubmittingStaffExp} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-all flex justify-center items-center shadow-lg active:scale-95 text-sm md:text-base">
                                         {isSubmittingStaffExp ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
                                         {staffExpForm.fundSource === 'personal' ? '紀錄代墊款 並 拋轉至各帳戶' : '紀錄公司支出'}
                                     </button>
                                     {staffExpForm.fundSource === 'personal' && (
-                                        <p className="text-center text-xs text-amber-600 mt-3 font-bold bg-amber-50 py-2 rounded-lg border border-amber-200">
+                                        <p className="text-center text-[10px] md:text-xs text-amber-600 mt-3 font-bold bg-amber-50 py-2 rounded-lg border border-amber-200">
                                             💡 提示：提交後，此筆款項將自動寫入下方的「員工往來帳」，您可以隨時查看公司欠您的總額。
                                         </p>
                                     )}
@@ -1575,13 +1554,12 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </form>
                         </div>
 
-                        {/* B. 員工代墊款歷史 (Staff Ledger History) */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                            <div className="flex justify-between items-end mb-4 border-b pb-3">
+                        <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-4 border-b pb-3 gap-2">
                                 <div>
                                     <h3 className="text-lg font-black text-slate-800 tracking-wide">{selectedStaff} <span className="text-sm font-bold text-slate-400 ml-2">代墊款往來帳</span></h3>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-left sm:text-right">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">公司目前欠款 (Company Payable)</p>
                                     <span className={`text-3xl font-black font-mono ${myBalance > 0 ? 'text-green-500' : 'text-slate-300'}`}>
                                         ${formatCurrency(myBalance)}
@@ -1591,16 +1569,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                             <div className="space-y-3">
                                 {myLedgers.map(l => (
-                                    <div key={l.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${l.type === 'payable' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>{l.type === 'payable' ? '墊' : '還'}</div>
+                                    <div key={l.id} className="flex justify-between items-center p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                        <div className="flex items-center gap-3 md:gap-4">
+                                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-black text-xs md:text-base ${l.type === 'payable' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>{l.type === 'payable' ? '墊' : '還'}</div>
                                             <div>
-                                                <div className="font-bold text-slate-800">{l.note || '-'}</div>
-                                                <div className="text-xs text-slate-400 font-mono mt-0.5">{l.date}</div>
+                                                <div className="font-bold text-slate-800 text-sm md:text-base line-clamp-1" title={l.note}>{l.note || '-'}</div>
+                                                <div className="text-[10px] md:text-xs text-slate-400 font-mono mt-0.5">{l.date}</div>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <span className={`text-lg font-black font-mono ${l.type === 'payable' ? 'text-amber-600' : 'text-green-600'}`}>{l.type === 'payable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
+                                            <span className={`text-base md:text-lg font-black font-mono ${l.type === 'payable' ? 'text-amber-600' : 'text-green-600'}`}>{l.type === 'payable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
                                         </div>
                                     </div>
                                 ))}
