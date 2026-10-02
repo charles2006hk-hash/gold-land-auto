@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
-    DownloadCloud, Trash2, X, Check, Printer, Lock, RefreshCw 
+    DownloadCloud, Trash2, X, Check, Printer, Lock, RefreshCw, Edit 
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -81,7 +81,27 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const [partnerSearch, setPartnerSearch] = useState('');
     const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '', method: 'Transfer', refNo: '' });
+    
+    // ★ 行家來往：對數日期區間鎖定與歷史置頂記憶
+    const [isPartnerDateFilter, setIsPartnerDateFilter] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_ptn_date_en') === 'true' : false);
+    const [partnerStart, setPartnerStart] = useState(() => {
+        const saved = typeof window !== 'undefined' ? sessionStorage.getItem('gla_ptn_start') : null;
+        if (saved) return saved;
+        const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+    });
+    const [partnerEnd, setPartnerEnd] = useState(() => {
+        const saved = typeof window !== 'undefined' ? sessionStorage.getItem('gla_ptn_end') : null;
+        if (saved) return saved;
+        const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+    });
+    const [recentPartners, setRecentPartners] = useState<string[]>(() => {
+        if (typeof window !== 'undefined') {
+            try { return JSON.parse(sessionStorage.getItem('gla_recent_partners') || '[]'); } catch { return []; }
+        }
+        return [];
+    });
 
+    // 自動儲存狀態
     useEffect(() => {
         if (typeof window !== 'undefined') {
             sessionStorage.setItem('gla_fin_tab', financeTab);
@@ -94,9 +114,15 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             sessionStorage.setItem('gla_rep_end', reportEndDate);
             sessionStorage.setItem('gla_acc_search', accSearchTerm);
             sessionStorage.setItem('gla_acc_filter', accFilterType);
+            
+            sessionStorage.setItem('gla_ptn_date_en', isPartnerDateFilter.toString());
+            sessionStorage.setItem('gla_ptn_start', partnerStart);
+            sessionStorage.setItem('gla_ptn_end', partnerEnd);
+            sessionStorage.setItem('gla_recent_partners', JSON.stringify(recentPartners));
         }
-    }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate, accSearchTerm, accFilterType]);
+    }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate, accSearchTerm, accFilterType, isPartnerDateFilter, partnerStart, partnerEnd, recentPartners]);
 
+    // 讀取行家來往資料庫
     useEffect(() => {
         if (!db || !appId) return;
         const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
@@ -295,17 +321,104 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // ============================================================================
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
     
-    // ★ 新增：過濾並將選中的行家置頂
+    // ★ 行家列表智能置頂機制 (永久記憶)
     let filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
-    if (selectedPartner && filteredPartners.includes(selectedPartner)) {
-        filteredPartners = [
-            selectedPartner,
-            ...filteredPartners.filter(p => p !== selectedPartner)
-        ];
-    }
+    filteredPartners.sort((a, b) => {
+        const indexA = recentPartners.indexOf(a);
+        const indexB = recentPartners.indexOf(b);
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.localeCompare(b);
+    });
+
+    const handleSelectPartner = (p: string) => {
+        setSelectedPartner(p);
+        setRecentPartners(prev => [p, ...prev.filter(x => x !== p)]); // 加入首位並去重
+    };
 
     const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const partnerBalance = partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
+
+    // ★ 對數區間過濾與計算
+    let displayPartnerHistory = partnerHistory;
+    if (isPartnerDateFilter) {
+        displayPartnerHistory = partnerHistory.filter(l => l.date >= partnerStart && l.date <= partnerEnd);
+    }
+    const periodIn = displayPartnerHistory.filter(l => l.type === 'receivable').reduce((sum, l) => sum + Number(l.amount), 0);
+    const periodOut = displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0);
+    const periodNet = periodIn - periodOut;
+
+    // ★ 重新命名行家 (全局深度替換)
+    const promptRenamePartner = async (oldName: string) => {
+        const newName = window.prompt(`請輸入「${oldName}」的正確名稱：\n\n💡 提示：若輸入另一個已存在的行家名稱（例如把「交Benny」改為「Benny」），系統將會自動合併兩者的帳目！`, oldName);
+        if (!newName || newName.trim() === '' || newName === oldName) return;
+        
+        const cleanNewName = newName.trim();
+        if (!confirm(`⚠️ 警告：確定要將全系統中「${oldName}」的所有歷史紀錄全面改為「${cleanNewName}」嗎？\n\n(系統將同步修改：財務總帳、所有車輛成本明細、維修紀錄及收車前手名稱。此操作無法復原！)`)) return;
+
+        try {
+            const { collection, query, where, getDocs, writeBatch, doc: firestoreDoc, getDoc } = await import('firebase/firestore');
+            const batch = writeBatch(db);
+
+            const ledgerQ = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), where('partner', '==', oldName));
+            const ledgerSnap = await getDocs(ledgerQ);
+            ledgerSnap.forEach(d => { batch.update(d.ref, { partner: cleanNewName }); });
+
+            const invSnap = await getDocs(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
+            invSnap.forEach(d => {
+                const v = d.data();
+                let needsUpdate = false;
+                let updateData: any = {};
+
+                if (v.expenses && Array.isArray(v.expenses)) {
+                    let eChanged = false;
+                    const newExp = v.expenses.map((e: any) => {
+                        if (e.company === oldName) { eChanged = true; return { ...e, company: cleanNewName }; }
+                        return e;
+                    });
+                    if (eChanged) { needsUpdate = true; updateData.expenses = newExp; }
+                }
+
+                if (v.maintenanceRecords && Array.isArray(v.maintenanceRecords)) {
+                    let mChanged = false;
+                    const newMaint = v.maintenanceRecords.map((m: any) => {
+                        if (m.vendor === oldName) { mChanged = true; return { ...m, vendor: cleanNewName }; }
+                        return m;
+                    });
+                    if (mChanged) { needsUpdate = true; updateData.maintenanceRecords = newMaint; }
+                }
+
+                if (v.acquisition?.vendor === oldName) {
+                    needsUpdate = true;
+                    updateData['acquisition.vendor'] = cleanNewName;
+                }
+
+                if (needsUpdate) batch.update(d.ref, updateData);
+            });
+
+            const settingsRef = firestoreDoc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
+            const settingsSnap = await getDoc(settingsRef);
+            if (settingsSnap.exists()) {
+                const currentData = settingsSnap.data();
+                let comps = currentData.expenseCompanies || [];
+                if (comps.includes(oldName)) {
+                    comps = comps.filter((c: string) => c !== oldName);
+                    if (!comps.includes(cleanNewName)) comps.push(cleanNewName);
+                    batch.update(settingsRef, { expenseCompanies: comps });
+                }
+            }
+
+            await batch.commit(); 
+            
+            if (selectedPartner === oldName) setSelectedPartner(cleanNewName);
+            setRecentPartners(prev => prev.map(p => p === oldName ? cleanNewName : p));
+            alert(`✅ 數據清洗與全局替換成功！\n\n已將全系統的「${oldName}」完美更新為「${cleanNewName}」。`);
+        } catch (err) {
+            console.error(err);
+            alert('更新失敗，請檢查權限或網路狀態。');
+        }
+    };
 
     const handleAddLedgerRecord = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -416,6 +529,71 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         } catch (error) {
             console.error(error);
             alert('同步失敗: ' + error);
+        }
+    };
+
+    // ★ 輸出對數單 PDF
+    const executePartnerPrint = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const reportTitle = `Statement_${selectedPartner}_${new Date().toISOString().split('T')[0]}`;
+        const htmlContent = `
+            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b;">
+                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px;">
+                    <h1 style="margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: 2px;">GOLD LAND AUTO</h1>
+                    <h2 style="margin: 0 0 10px 0; font-size: 16px; color: #475569; letter-spacing: 5px;">金田汽車</h2>
+                    <p style="margin: 0; font-size: 16px; font-weight: bold; background: #f1f5f9; display: inline-block; padding: 4px 12px; border-radius: 4px; border: 1px solid #cbd5e1;">行家來往對帳單 (STATEMENT OF ACCOUNT)</p>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 14px;">
+                    <table style="width: 48%; border-collapse: collapse;">
+                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 100px;">致 (To):</td><td style="font-weight: bold; font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">${selectedPartner}</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">列印日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
+                    </table>
+                    <table style="width: 48%; border-collapse: collapse;">
+                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; width: 100px;">帳單區間:</td><td style="font-weight: bold; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">${isPartnerDateFilter ? `${partnerStart} 至 ${partnerEnd}` : '全部歷史紀錄'}</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px;">歷史總結餘:</td><td style="padding-top: 5px; font-family: monospace; font-weight: bold; font-size: 16px; color: ${partnerBalance > 0 ? '#16a34a' : '#dc2626'};">${partnerBalance > 0 ? '應收 (Receivable) ' : '應付 (Payable) '} ${formatCurrency(Math.abs(partnerBalance))}</td></tr>
+                    </table>
+                </div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px;">
+                    <tr style="background-color: #f8fafc; text-align: left;">
+                        <th style="padding: 10px; border: 1px solid #cbd5e1;">日期</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1;">項目與備註</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1;">方式</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: right;">應收/借出 (+)</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1; text-align: right;">應付/借入 (-)</th>
+                    </tr>
+                    ${displayPartnerHistory.map(l => `
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; font-family: monospace;">${l.date}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0;">${l.note || '-'}${l.sourceModule ? ' (系統連動)' : ''}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0;">${l.method === 'Transfer' ? '轉帳' : l.method === 'Cheque' ? '支票' : l.method === 'Cash' ? '現金' : l.method === 'Offset' ? '對數抵銷' : '-'}${l.refNo ? ` #${l.refNo}` : ''}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #16a34a;">${l.type === 'receivable' ? formatCurrency(l.amount) : ''}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #dc2626;">${l.type === 'payable' ? formatCurrency(l.amount) : ''}</td>
+                    </tr>
+                    `).join('')}
+                    ${displayPartnerHistory.length === 0 ? `<tr><td colspan="5" style="padding: 15px; border: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">此區間尚無紀錄</td></tr>` : ''}
+                    <tr style="background-color: #f1f5f9; font-weight: bold;">
+                        <td colspan="3" style="padding: 10px; border: 1px solid #cbd5e1; text-align: right;">${isPartnerDateFilter ? '區間收付總計 (Period Total):' : '歷史收付總計 (Total):'}</td>
+                        <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #16a34a;">${formatCurrency(periodIn)}</td>
+                        <td style="padding: 10px; border: 1px solid #cbd5e1; text-align: right; font-family: monospace; color: #dc2626;">${formatCurrency(periodOut)}</td>
+                    </tr>
+                </table>
+                <div style="margin-top: 60px; display: flex; justify-content: space-between;">
+                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                        Prepared By (經手人)<br/><b>${staffId}</b>
+                    </div>
+                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                        Confirmed By (簽署確認)
+                    </div>
+                </div>
+            </div>
+        `;
+        const printWin = window.open('', '_blank');
+        if (printWin) {
+            printWin.document.write(`<html><head><title>${reportTitle}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${htmlContent}</body></html>`);
+            printWin.document.close();
+            printWin.focus();
+            printWin.onafterprint = () => printWin.close();
+            setTimeout(() => { printWin.print(); printWin.close(); }, 250);
         }
     };
 
@@ -653,9 +831,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 const pLedgers = ledgers.filter(l => l.partner === partner);
                                 const pBalance = pLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
                                 return (
-                                    <div key={idx} onClick={() => setSelectedPartner(partner)} className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'hover:bg-white border border-transparent hover:border-slate-200'}`}>
-                                        <span className={`font-bold text-sm truncate ${selectedPartner === partner ? 'text-amber-900' : 'text-slate-700'}`}>{partner}</span>
-                                        {pBalance !== 0 && <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${pBalance > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pBalance > 0 ? '欠我們 ' : '我們欠 '}${Math.abs(pBalance).toLocaleString()}</span>}
+                                    <div key={idx} onClick={() => handleSelectPartner(partner)} className={`p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 ${selectedPartner === partner ? 'bg-amber-100 border border-amber-300 shadow-sm' : 'hover:bg-white border border-transparent hover:border-slate-200'}`}>
+                                        <div className="flex justify-between items-center w-full">
+                                            <span className={`font-bold text-sm truncate ${selectedPartner === partner ? 'text-amber-900' : 'text-slate-700'}`}>{partner}</span>
+                                            {selectedPartner === partner && isFullAccess && (
+                                                <button onClick={(e) => { e.stopPropagation(); promptRenamePartner(partner); }} className="text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-200 p-1.5 rounded transition-colors" title="重新命名或合併">
+                                                    <Edit size={14} />
+                                                </button>
+                                            )}
+                                        </div>
+                                        {pBalance !== 0 && <span className={`text-[10px] w-fit font-mono font-bold px-1.5 py-0.5 rounded ${pBalance > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pBalance > 0 ? '欠我們 ' : '我們欠 '}${Math.abs(pBalance).toLocaleString()}</span>}
                                     </div>
                                 );
                             })}
@@ -670,24 +855,48 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </div>
                         ) : (
                             <>
-                                <div className="p-6 bg-slate-900 text-white flex justify-between items-center flex-none shadow-md z-10">
-                                    <div><h3 className="text-2xl font-black tracking-wide mb-1">{selectedPartner}</h3><p className="text-xs text-slate-400">行家往來對帳單</p></div>
-                                    <div className="text-right flex items-center justify-end">
-                                        <div>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">目前結餘 (Balance)</p>
-                                            <span className={`text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
+                                <div className="p-4 md:p-6 bg-slate-900 text-white flex flex-col lg:flex-row justify-between items-start lg:items-center flex-none shadow-md z-10 gap-4">
+                                    <div>
+                                        <h3 className="text-2xl font-black tracking-wide mb-1">{selectedPartner}</h3>
+                                        <p className="text-xs text-slate-400">行家往來對帳單</p>
+                                    </div>
+                                    
+                                    {/* ★ Date Filter for Partner */}
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+                                        <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 p-1.5 rounded-lg">
+                                            <label className="flex items-center text-[10px] font-bold text-slate-300 cursor-pointer ml-1">
+                                                <input type="checkbox" checked={isPartnerDateFilter} onChange={(e) => setIsPartnerDateFilter(e.target.checked)} className="mr-1.5 accent-blue-500"/>區間
+                                            </label>
+                                            <div className={`flex items-center gap-1 transition-opacity ${!isPartnerDateFilter ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                                                <input type="date" value={partnerStart} onChange={e => { setPartnerStart(e.target.value); setIsPartnerDateFilter(true); }} className="w-full border-b border-slate-600 p-1 text-xs outline-none bg-transparent cursor-pointer text-white" />
+                                                <span className="text-slate-500 text-xs px-1">至</span>
+                                                <input type="date" value={partnerEnd} onChange={e => { setPartnerEnd(e.target.value); setIsPartnerDateFilter(true); }} className="w-full border-b border-slate-600 p-1 text-xs outline-none bg-transparent cursor-pointer text-white" />
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col gap-2 ml-4">
-                                            <button onClick={handleSyncFromVehicles} className="bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 px-3 py-1.5 rounded text-[10px] font-bold transition-colors border border-indigo-400/30 flex items-center justify-center">
-                                                <RefreshCw size={12} className="mr-1"/> 掃描車輛未付
-                                            </button>
-                                            {partnerBalance !== 0 && <button onClick={handleSettleBalance} className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-[10px] font-bold transition-colors">一鍵結清</button>}
+                                        
+                                        <button onClick={executePartnerPrint} className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-[10px] font-bold transition-colors flex items-center border border-slate-500 whitespace-nowrap">
+                                            <Printer size={12} className="mr-1.5"/> 輸出對數單
+                                        </button>
+                                    </div>
+
+                                    <div className="text-right flex flex-col md:items-end w-full lg:w-auto border-t lg:border-t-0 border-slate-700 pt-3 lg:pt-0">
+                                        <div className="flex justify-between lg:justify-end items-center w-full gap-4">
+                                            <div className="text-left lg:text-right">
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">目前總結餘 (Balance)</p>
+                                                <span className={`text-2xl lg:text-3xl font-black font-mono ${partnerBalance > 0 ? 'text-green-400' : (partnerBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>{partnerBalance === 0 ? '$0' : `${partnerBalance > 0 ? '+' : '-'}$${Math.abs(partnerBalance).toLocaleString()}`}</span>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <button onClick={handleSyncFromVehicles} className="bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 px-3 py-1.5 rounded text-[10px] font-bold transition-colors border border-indigo-400/30 flex items-center justify-center whitespace-nowrap">
+                                                    <RefreshCw size={12} className="mr-1"/> 掃描車輛未付
+                                                </button>
+                                                {partnerBalance !== 0 && <button onClick={handleSettleBalance} className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded text-[10px] font-bold transition-colors whitespace-nowrap">一鍵結清</button>}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
                                     <div className="space-y-3">
-                                        {partnerHistory.map(l => {
+                                        {displayPartnerHistory.map(l => {
                                             const isSystemAuto = !!l.sourceModule;
                                             return (
                                                 <div key={l.id} className={`flex justify-between items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
@@ -702,7 +911,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                                 <span className="font-mono">{l.date}</span> • {l.createdBy} 記錄
                                                                 {l.method && (
                                                                     <span className="ml-2 pl-2 border-l border-slate-300 inline-block">
-                                                                        方式: <span className="font-bold text-slate-600">{l.method === 'Transfer' ? '轉帳' : l.method === 'Cheque' ? '支票' : l.method === 'Cash' ? '現金' : '對數抵銷'}</span>
+                                                                        方式: <span className="font-bold text-slate-600">{l.method === 'Transfer' ? '轉帳' : l.method === 'Cheque' ? '支票' : l.method === 'Cash' ? '現金' : l.method === 'Offset' ? '對數抵銷' : '-'}</span>
                                                                         {l.refNo && <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.5 rounded font-mono border border-slate-200">#{l.refNo}</span>}
                                                                     </span>
                                                                 )}
@@ -720,6 +929,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                 </div>
                                             );
                                         })}
+                                        {displayPartnerHistory.length === 0 && (
+                                            <div className="text-center p-10 text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">此區間尚無紀錄</div>
+                                        )}
                                     </div>
                                 </div>
                                 
