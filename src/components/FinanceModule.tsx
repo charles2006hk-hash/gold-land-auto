@@ -154,11 +154,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             const isTargetPaid = reportType === 'paid_expenses';
             const targetStatus = isTargetPaid ? 'Paid' : 'Unpaid';
             inventory.forEach((v:any) => {
-                // ★ 修復 2：撤回車輛的「未付」帳款不列入應付統計
                 if (v.status === 'Withdrawn' && !isTargetPaid) return;
 
                 (v.expenses || []).forEach((exp:any) => {
-                    // ★ 修復 1：精準捕捉所有「已轉總帳」的變化狀態
                     const isTransferred = !isTargetPaid && (exp.status === 'Transferred' || exp.status === 'Transferred_To_Ledger');
                     if (exp.status === targetStatus || isTransferred) {
                         const titlePrefix = isTransferred ? '[已轉總帳]' : '[維修/雜費]';
@@ -264,7 +262,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 if (balance > 0) totalAR += balance;
             }
             
-            // ★ 修復 2：計算 Dashboard 總應付時，排除撤回車輛，且「不重複」計算已轉總帳 (Transferred) 的項目，避免與行家結餘雙重計算
             if (v.status !== 'Withdrawn') {
                 (v.expenses || []).forEach((e:any) => { if (e.status === 'Unpaid') totalAP += Number(e.amount); });
                 (v.maintenanceRecords || []).forEach((m:any) => { if (m.costStatus === 'Unpaid' && m.cost > 0) totalAP += Number(m.cost); });
@@ -343,7 +340,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
         let itemsToSync: any[] = [];
         inventory.forEach((v: any) => {
-            // ★ 修復：同步掃描時，排除已撤回的車輛
             if (v.status === 'Withdrawn') return;
 
             (v.expenses || []).forEach((exp: any) => {
@@ -376,7 +372,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 
                 batch.set(ledgerRef, {
                     partner: selectedPartner,
-                    date: new Date().toISOString().split('T')[0],
+                    // ★ 核心修復：使用車輛端原始紀錄的日期，若沒有則使用當前日期
+                    date: item.date || new Date().toISOString().split('T')[0],
                     type: 'payable',
                     amount: Number(amount),
                     note: note,
@@ -407,7 +404,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             });
 
             await batch.commit();
-            alert(`✅ 成功！已將 ${itemsToSync.length} 筆項目批次轉入「${selectedPartner}」的總帳中。`);
+            alert(`✅ 成功！已將 ${itemsToSync.length} 筆項目批次轉入「${selectedPartner}」的總帳中，並成功保留了它們原有的歷史日期。`);
         } catch (error) {
             console.error(error);
             alert('同步失敗: ' + error);
