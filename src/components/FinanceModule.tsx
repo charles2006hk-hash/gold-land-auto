@@ -5,7 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { 
     LayoutDashboard, FileBarChart, Users, Receipt, BarChart3, 
     CalendarDays, DollarSign, Search, CheckSquare, Briefcase, 
-    DownloadCloud, Trash2, X, Check, Printer, Lock, RefreshCw, Edit 
+    DownloadCloud, Trash2, X, Check, Printer, Lock, RefreshCw, Edit,
+    CreditCard, User, Building2, Car, Save, Loader2 // ★ 新增 UI 圖標
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
@@ -27,14 +28,22 @@ const formatNumberInput = (value: string) => {
 export default function FinanceModule({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) {
     
     // --- 模塊狀態鎖定 ---
-    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_fin_tab') as any : null) || 'dashboard');
+    // ★ 預設頁面邏輯修改：若無權限，預設進入 'staff' 分頁
+    const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
+    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital' | 'staff'>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = sessionStorage.getItem('gla_fin_tab') as any;
+            if (saved && (isFullAccess || saved === 'staff')) return saved;
+        }
+        return isFullAccess ? 'dashboard' : 'staff';
+    });
+    
     const [selectedLender, setSelectedLender] = useState<string>(''); 
     
-    const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
-
+    // ★ 安全強制重導
     useEffect(() => {
-        if (!isFullAccess && (financeTab === 'partner' || financeTab === 'lender' || financeTab === 'accounting' || financeTab === 'capital')) {
-            setFinanceTab('dashboard');
+        if (!isFullAccess && financeTab !== 'staff') {
+            setFinanceTab('staff');
         }
     }, [financeTab, isFullAccess]);
 
@@ -43,11 +52,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [capInterest, setCapInterest] = useState<number>(8);
     const [capFee, setCapFee] = useState<number>(6);
     const [capYears, setCapYears] = useState<number>(5);
-
     const [allocUsedCar, setAllocUsedCar] = useState<number>(60);
     const [allocLimited, setAllocLimited] = useState<number>(20);
     const [allocRental, setAllocRental] = useState<number>(20);
-    
     const [yieldUsedCar, setYieldUsedCar] = useState<number>(15);
     const [yieldLimited, setYieldLimited] = useState<number>(25);
     const [yieldRental, setYieldRental] = useState<number>(10);
@@ -57,19 +64,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_cat') as any : null) || 'All');
     const [reportSearchTerm, setReportSearchTerm] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_search') || '' : '');
     const [reportCompany, setReportCompany] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_comp') || '' : '');
-    
     const [isDateFilterEnabled, setIsDateFilterEnabled] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_date_en') !== 'false' : true);
     const [reportStartDate, setReportStartDate] = useState(() => { 
         const saved = typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_start') : null; 
         if (saved) return saved; 
-        const d = new Date(); 
-        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]; 
+        const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]; 
     });
     const [reportEndDate, setReportEndDate] = useState(() => { 
         const saved = typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_end') : null; 
         if (saved) return saved; 
-        const d = new Date(); 
-        return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; 
+        const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; 
     });
 
     // --- 會計帳目專屬狀態 ---
@@ -81,8 +85,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const [partnerSearch, setPartnerSearch] = useState('');
     const [newLedger, setNewLedger] = useState({ date: new Date().toISOString().split('T')[0], type: 'receivable', amount: '', note: '', method: 'Transfer', refNo: '' });
-    
-    // ★ 行家來往：對數日期區間鎖定與歷史置頂記憶
     const [isPartnerDateFilter, setIsPartnerDateFilter] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_ptn_date_en') === 'true' : false);
     const [partnerStart, setPartnerStart] = useState(() => {
         const saved = typeof window !== 'undefined' ? sessionStorage.getItem('gla_ptn_start') : null;
@@ -95,11 +97,25 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
     });
     const [recentPartners, setRecentPartners] = useState<string[]>(() => {
-        if (typeof window !== 'undefined') {
-            try { return JSON.parse(sessionStorage.getItem('gla_recent_partners') || '[]'); } catch { return []; }
-        }
+        if (typeof window !== 'undefined') { try { return JSON.parse(sessionStorage.getItem('gla_recent_partners') || '[]'); } catch { return []; } }
         return [];
     });
+
+    // --- ★ 員工記帳與報銷 (Staff Ledgers) 狀態 ---
+    const [staffLedgers, setStaffLedgers] = useState<any[]>([]);
+    const [selectedStaff, setSelectedStaff] = useState<string>(staffId); // 預設選中自己
+    const [staffExpForm, setStaffExpForm] = useState({
+        date: new Date().toISOString().split('T')[0],
+        fundSource: 'personal', // personal(代墊) | company(公數)
+        paymentMethod: 'Transfer', 
+        targetType: 'company_general', // company_general | vehicle_cost | partner_payment
+        amount: '',
+        description: '',
+        targetVehicleId: '',
+        targetPartnerId: '',
+        generalCategory: '其他雜支'
+    });
+    const [isSubmittingStaffExp, setIsSubmittingStaffExp] = useState(false);
 
     // 自動儲存狀態
     useEffect(() => {
@@ -114,7 +130,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             sessionStorage.setItem('gla_rep_end', reportEndDate);
             sessionStorage.setItem('gla_acc_search', accSearchTerm);
             sessionStorage.setItem('gla_acc_filter', accFilterType);
-            
             sessionStorage.setItem('gla_ptn_date_en', isPartnerDateFilter.toString());
             sessionStorage.setItem('gla_ptn_start', partnerStart);
             sessionStorage.setItem('gla_ptn_end', partnerEnd);
@@ -122,12 +137,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate, accSearchTerm, accFilterType, isPartnerDateFilter, partnerStart, partnerEnd, recentPartners]);
 
-    // 讀取行家來往資料庫
+    // 讀取行家來往與員工來往資料庫
     useEffect(() => {
         if (!db || !appId) return;
-        const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
-        const unsub = onSnapshot(q, (snap: any) => { setLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
-        return () => unsub();
+        const qPartner = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
+        const unsubP = onSnapshot(qPartner, (snap: any) => { setLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        const qStaff = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), orderBy('createdAt', 'desc'));
+        const unsubS = onSnapshot(qStaff, (snap: any) => { setStaffLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        return () => { unsubP(); unsubS(); };
     }, [db, appId]);
 
     const handleReportItemClick = (vehicleId: string) => {
@@ -149,7 +168,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // ============================================================================
     const generateReportData = () => {
         let data: any[] = [];
-        
         if (reportType === 'receivable') {
             const targetInventory = inventory.filter((v:any) => v.status === 'Sold' || v.status === 'Reserved');
             targetInventory.forEach((v:any) => {
@@ -317,11 +335,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const dashStats = calculateDashboardStats();
 
     // ============================================================================
-    // ★ 輔助函數：行家來往 & 一鍵掃描功能
+    // ★ 輔助函數：行家來往
     // ============================================================================
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
     
-    // ★ 行家列表智能置頂機制 (永久記憶)
     let filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
     filteredPartners.sort((a, b) => {
         const indexA = recentPartners.indexOf(a);
@@ -334,13 +351,12 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
     const handleSelectPartner = (p: string) => {
         setSelectedPartner(p);
-        setRecentPartners(prev => [p, ...prev.filter(x => x !== p)]); // 加入首位並去重
+        setRecentPartners(prev => [p, ...prev.filter(x => x !== p)]);
     };
 
     const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const partnerBalance = partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
 
-    // ★ 對數區間過濾與計算
     let displayPartnerHistory = partnerHistory;
     if (isPartnerDateFilter) {
         displayPartnerHistory = partnerHistory.filter(l => l.date >= partnerStart && l.date <= partnerEnd);
@@ -349,7 +365,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const periodOut = displayPartnerHistory.filter(l => l.type === 'payable').reduce((sum, l) => sum + Number(l.amount), 0);
     const periodNet = periodIn - periodOut;
 
-    // ★ 重新命名行家 (全局深度替換)
     const promptRenamePartner = async (oldName: string) => {
         const newName = window.prompt(`請輸入「${oldName}」的正確名稱：\n\n💡 提示：若輸入另一個已存在的行家名稱（例如把「交Benny」改為「Benny」），系統將會自動合併兩者的帳目！`, oldName);
         if (!newName || newName.trim() === '' || newName === oldName) return;
@@ -532,7 +547,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     };
 
-    // ★ 輸出對數單 PDF
     const executePartnerPrint = (e: React.MouseEvent) => {
         e.preventDefault();
         const reportTitle = `Statement_${selectedPartner}_${new Date().toISOString().split('T')[0]}`;
@@ -598,6 +612,92 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     };
 
     // ============================================================================
+    // ★ 輔助函數：員工記帳與報銷
+    // ============================================================================
+    const handleStaffExpenseSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const amt = Number(staffExpForm.amount.replace(/,/g, ''));
+        if (amt <= 0 || !db || !appId || !staffId) return alert('請輸入有效金額');
+
+        setIsSubmittingStaffExp(true);
+        try {
+            const { writeBatch, doc: firestoreDoc, collection: firestoreCol } = await import('firebase/firestore');
+            const batch = writeBatch(db);
+            const entryId = `entry_${Date.now()}`;
+            
+            if (staffExpForm.fundSource === 'personal') {
+                const staffLedgerRef = firestoreDoc(firestoreCol(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'));
+                batch.set(staffLedgerRef, {
+                    staffId: staffId,
+                    date: staffExpForm.date,
+                    type: 'payable', 
+                    amount: amt,
+                    note: `[代墊] ${staffExpForm.description}`,
+                    relatedEntryId: entryId,
+                    createdAt: serverTimestamp()
+                });
+            }
+
+            if (staffExpForm.targetType === 'company_general') {
+                const expRef = firestoreDoc(firestoreCol(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'));
+                batch.set(expRef, {
+                    category: staffExpForm.generalCategory,
+                    title: staffExpForm.description,
+                    amount: amt,
+                    flow: 'OUT',
+                    status: 'Paid', 
+                    paymentDate: staffExpForm.date,
+                    paymentMethod: staffExpForm.fundSource === 'personal' ? 'Staff_Advance' : staffExpForm.paymentMethod,
+                    createdAt: serverTimestamp(),
+                    updatedBy: staffId
+                });
+
+            } else if (staffExpForm.targetType === 'vehicle_cost' && staffExpForm.targetVehicleId) {
+                const vRef = firestoreDoc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', staffExpForm.targetVehicleId);
+                const vehicle = inventory.find((v:any) => v.id === staffExpForm.targetVehicleId);
+                const currentExpenses = vehicle?.expenses || [];
+                const newExpense = {
+                    id: Date.now().toString(),
+                    date: staffExpForm.date,
+                    type: '員工代支成本', 
+                    company: staffExpForm.description,
+                    amount: amt,
+                    status: 'Paid', 
+                    paymentMethod: staffExpForm.fundSource === 'personal' ? 'Staff_Advance' : staffExpForm.paymentMethod
+                };
+                batch.update(vRef, { expenses: [...currentExpenses, newExpense] });
+
+            } else if (staffExpForm.targetType === 'partner_payment' && staffExpForm.targetPartnerId) {
+                const partnerLedgerRef = firestoreDoc(firestoreCol(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'));
+                batch.set(partnerLedgerRef, {
+                    partner: staffExpForm.targetPartnerId,
+                    date: staffExpForm.date,
+                    type: 'payable',
+                    amount: -Math.abs(amt), 
+                    note: `[付款/代付] ${staffExpForm.description}`,
+                    method: staffExpForm.fundSource === 'personal' ? 'Staff_Advance' : staffExpForm.paymentMethod,
+                    sourceModule: 'daily_entry',
+                    createdAt: serverTimestamp(),
+                    createdBy: staffId
+                });
+            }
+
+            await batch.commit();
+            alert('✅ 記帳成功！數據已自動分派。');
+            setStaffExpForm(prev => ({ ...prev, amount: '', description: '' }));
+        } catch (error) {
+            console.error(error);
+            alert('寫入失敗，請重試。');
+        } finally {
+            setIsSubmittingStaffExp(false);
+        }
+    };
+
+    // 計算員工本人代墊結餘
+    const myLedgers = staffLedgers.filter(l => l.staffId === (isFullAccess ? selectedStaff : staffId));
+    const myBalance = myLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? -Number(l.amount) : Number(l.amount)), 0);
+
+    // ============================================================================
     // ★ 輔助函數：會計流水帳
     // ============================================================================
     const filteredAccLedger = rawLedger.filter(l => {
@@ -640,24 +740,25 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 </div>
 
                 <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200 w-full md:w-auto overflow-x-auto scrollbar-hide">
-                    <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
-                    <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
-                    
                     {isFullAccess && (
                         <>
+                            <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
+                            <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
                             <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
                             <button onClick={() => setFinanceTab('lender')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'lender' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><DollarSign size={16} className="mr-1.5"/> 資金池結算</button>
                             <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
                             <button onClick={() => setFinanceTab('capital')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'capital' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><BarChart3 size={16} className="mr-1.5"/> 資金預算沙盤</button>
                         </>
                     )}
+                    {/* ★ 任何人都可見的分頁 */}
+                    <button onClick={() => setFinanceTab('staff')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'staff' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><CreditCard size={16} className="mr-1.5"/> 員工報銷</button>
                 </div>
             </div>
 
             {/* ========================================== */}
             {/* Tab 1: 財務數據 (Dashboard) */}
             {/* ========================================== */}
-            {financeTab === 'dashboard' && (
+            {financeTab === 'dashboard' && isFullAccess && (
                 <div className="flex-1 overflow-y-auto animate-fade-in pb-10">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -709,7 +810,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {/* Tab 2: 統計報表 */}
             {/* ========================================== */}
-            {financeTab === 'reports' && (
+            {financeTab === 'reports' && isFullAccess && (
                 <div className="flex-1 flex flex-col animate-fade-in min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-none print:hidden">
                         <h3 className="font-bold text-slate-700 flex items-center"><FileBarChart size={18} className="mr-2 text-indigo-500"/> 車輛微觀統計</h3>
@@ -816,7 +917,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {/* Tab 3: 行家來往 (Partner Ledger) */}
             {/* ========================================== */}
-            {financeTab === 'partner' && (
+            {financeTab === 'partner' && isFullAccess && (
                 <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
                     <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
                         <div className="p-4 border-b border-slate-200 bg-white">
@@ -861,7 +962,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                         <p className="text-xs text-slate-400">行家往來對帳單</p>
                                     </div>
                                     
-                                    {/* ★ Date Filter for Partner */}
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
                                         <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 p-1.5 rounded-lg">
                                             <label className="flex items-center text-[10px] font-bold text-slate-300 cursor-pointer ml-1">
@@ -972,7 +1072,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {/* Tab 3.5: 資金池/墊資結算 (Lender Statements) */}
             {/* ========================================== */}
-            {financeTab === 'lender' && (() => {
+            {financeTab === 'lender' && isFullAccess && (() => {
                 const lendersSet = new Set<string>();
                 inventory.forEach((v: any) => {
                     if (v.financingRecords && Array.isArray(v.financingRecords)) {
@@ -1105,7 +1205,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {/* Tab 4: 會計帳目 (Accounting) */}
             {/* ========================================== */}
-            {financeTab === 'accounting' && (
+            {financeTab === 'accounting' && isFullAccess && (
                 <div className="flex-1 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
                     
                     {/* 控制列 (Filters) */}
@@ -1208,7 +1308,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {/* Tab 5: 資金預算沙盤 (Capital Sandbox) */}
             {/* ========================================== */}
-            {financeTab === 'capital' && (() => {
+            {financeTab === 'capital' && isFullAccess && (() => {
                 const principal = Number(capPrincipal.replace(/,/g, '')) || 0;
                 const upfrontFee = principal * (capFee / 100);
                 const upfrontInterest = principal * (capInterest / 100);
@@ -1336,6 +1436,183 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                     </div>
                 );
             })()}
+
+            {/* ========================================== */}
+            {/* Tab 6: 員工記帳與報銷中心 (Staff Ledger) */}
+            {/* ========================================== */}
+            {financeTab === 'staff' && (
+                <div className="flex-1 flex overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                    
+                    {/* 左側：員工列表 (老闆可見全部，員工只見自己) */}
+                    <div className="w-1/3 md:w-80 bg-slate-50 border-r border-slate-200 flex flex-col">
+                        <div className="p-4 border-b border-slate-200 bg-white">
+                            <h3 className="font-bold text-slate-700 flex items-center mb-1"><User size={18} className="mr-2 text-blue-600"/> 員工報銷與記帳</h3>
+                            <p className="text-xs text-slate-400">自動分發 (Fan-out) 至對應帳戶</p>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {(() => {
+                                const staffList = isFullAccess 
+                                    ? Array.from(new Set([staffId, ...staffLedgers.map(l => l.staffId)])).filter(Boolean)
+                                    : [staffId];
+                                
+                                return staffList.map((sId: any) => {
+                                    const sLedgers = staffLedgers.filter(l => l.staffId === sId);
+                                    // 員工代墊是 payable (公司應付給員工)
+                                    const sBalance = sLedgers.reduce((sum, l) => sum + (l.type === 'payable' ? Number(l.amount) : -Number(l.amount)), 0);
+                                    
+                                    return (
+                                        <div key={sId} onClick={() => setSelectedStaff(sId)} className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center ${selectedStaff === sId ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'hover:bg-white border border-transparent hover:border-slate-200'}`}>
+                                            <span className={`font-bold text-sm truncate ${selectedStaff === sId ? 'text-blue-900' : 'text-slate-700'}`}>{sId === staffId ? '我 (My Account)' : sId}</span>
+                                            {sBalance !== 0 && <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${sBalance > 0 ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>{sBalance > 0 ? '公司欠 ' : ''}${Math.abs(sBalance).toLocaleString()}</span>}
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                    </div>
+
+                    {/* 右側：主工作區 (表單 + 歷史) */}
+                    <div className="flex-1 flex flex-col relative bg-slate-50 overflow-y-auto p-4 md:p-6 space-y-6">
+                        
+                        {/* A. 記帳表單 (StaffExpenseEntry) */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center border-b pb-3">
+                                <CreditCard className="mr-2 text-indigo-600" /> 員工記帳與報銷中心 (Expense Entry)
+                            </h2>
+
+                            <form onSubmit={handleStaffExpenseSubmit} className="space-y-5">
+                                {/* 1. 資金來源 */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">1. 錢是誰出的？ (資金來源)</label>
+                                    <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                                        <button type="button" onClick={() => setStaffExpForm({...staffExpForm, fundSource: 'company'})} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition-all ${staffExpForm.fundSource === 'company' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <Building2 size={16} className="mr-2"/> 公司帳戶/支票
+                                        </button>
+                                        <button type="button" onClick={() => setStaffExpForm({...staffExpForm, fundSource: 'personal'})} className={`flex-1 py-2 text-sm font-bold rounded-md flex items-center justify-center transition-all ${staffExpForm.fundSource === 'personal' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <User size={16} className="mr-2"/> 我自己先墊付 (代墊)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 2. 支出歸屬 */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">2. 這筆錢付給誰/做什麼？ (費用歸屬)</label>
+                                    <select 
+                                        value={staffExpForm.targetType} 
+                                        onChange={e => setStaffExpForm({...staffExpForm, targetType: e.target.value})}
+                                        className="w-full p-3 border border-slate-300 rounded-lg outline-none focus:ring-2 ring-indigo-200 font-bold text-slate-700 bg-slate-50"
+                                    >
+                                        <option value="company_general">🏢 一般公司雜費 (如水電、交際、文具)</option>
+                                        <option value="vehicle_cost">🚗 特定車輛成本 (維修/中港代辦費)</option>
+                                        <option value="partner_payment">🤝 直接付給行家 / 指標主</option>
+                                    </select>
+                                </div>
+
+                                {/* 動態顯示細節表單 */}
+                                <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-4">
+                                    {staffExpForm.targetType === 'company_general' && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-indigo-700 mb-1">費用類別</label>
+                                            <select value={staffExpForm.generalCategory} onChange={e => setStaffExpForm({...staffExpForm, generalCategory: e.target.value})} className="w-full p-2.5 border border-indigo-200 rounded-lg outline-none font-bold bg-white text-indigo-900">
+                                                {settings?.ledgerCategories?.map((c:any) => <option key={c.name} value={c.name}>{c.name}</option>) || <option value="其他雜支">其他雜支</option>}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {staffExpForm.targetType === 'vehicle_cost' && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-indigo-700 mb-1 flex items-center"><Car size={14} className="mr-1"/> 選擇關聯車輛</label>
+                                            <select value={staffExpForm.targetVehicleId} onChange={e => setStaffExpForm({...staffExpForm, targetVehicleId: e.target.value})} className="w-full p-2.5 border border-indigo-200 bg-white rounded-lg outline-none font-mono font-bold text-indigo-900" required>
+                                                <option value="">請選擇車輛...</option>
+                                                {inventory?.map((v:any) => <option key={v.id} value={v.id}>{v.regMark || '未出牌'} - {v.make} {v.model}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {staffExpForm.targetType === 'partner_payment' && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-indigo-700 mb-1 flex items-center"><Users size={14} className="mr-1"/> 選擇行家 / 指標主</label>
+                                            <input list="staff_partner_list" value={staffExpForm.targetPartnerId} onChange={e => setStaffExpForm({...staffExpForm, targetPartnerId: e.target.value})} placeholder="選擇或輸入名稱..." className="w-full p-2.5 border border-indigo-200 bg-white rounded-lg outline-none font-bold text-indigo-900" required />
+                                            <datalist id="staff_partner_list">
+                                                {allPartners?.map((p:string) => <option key={p} value={p}/>)}
+                                            </datalist>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 3. 金額與備註 */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">日期</label>
+                                        <input type="date" value={staffExpForm.date} onChange={e => setStaffExpForm({...staffExpForm, date: e.target.value})} className="w-full p-3 border rounded-lg outline-none font-bold font-mono bg-slate-50" required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-1">金額 (HKD)</label>
+                                        <div className="flex items-center border rounded-lg bg-white focus-within:ring-2 ring-indigo-200">
+                                            <span className="pl-3 text-slate-400 font-bold">$</span>
+                                            <input type="text" value={staffExpForm.amount} onChange={e => setStaffExpForm({...staffExpForm, amount: formatNumberInput(e.target.value)})} placeholder="0.00" className="w-full p-3 outline-none font-mono font-black text-right text-lg text-indigo-600" required />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1">支出備註 / 說明</label>
+                                    <input type="text" value={staffExpForm.description} onChange={e => setStaffExpForm({...staffExpForm, description: e.target.value})} placeholder="例如：幫忙付威仔的中檢費..." className="w-full p-3 border rounded-lg outline-none focus:ring-2 ring-indigo-200 bg-slate-50" required />
+                                </div>
+
+                                {/* 總結提示與送出 */}
+                                <div className="pt-2">
+                                    <button type="submit" disabled={isSubmittingStaffExp} className="w-full bg-slate-900 text-white font-black py-4 rounded-xl hover:bg-slate-800 transition-all flex justify-center items-center shadow-lg active:scale-95">
+                                        {isSubmittingStaffExp ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />}
+                                        {staffExpForm.fundSource === 'personal' ? '紀錄代墊款 並 拋轉至各帳戶' : '紀錄公司支出'}
+                                    </button>
+                                    {staffExpForm.fundSource === 'personal' && (
+                                        <p className="text-center text-xs text-amber-600 mt-3 font-bold bg-amber-50 py-2 rounded-lg border border-amber-200">
+                                            💡 提示：提交後，此筆款項將自動寫入下方的「員工往來帳」，您可以隨時查看公司欠您的總額。
+                                        </p>
+                                    )}
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* B. 員工代墊款歷史 (Staff Ledger History) */}
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                            <div className="flex justify-between items-end mb-4 border-b pb-3">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-800 tracking-wide">{selectedStaff} <span className="text-sm font-bold text-slate-400 ml-2">代墊款往來帳</span></h3>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">公司目前欠款 (Company Payable)</p>
+                                    <span className={`text-3xl font-black font-mono ${myBalance > 0 ? 'text-green-500' : 'text-slate-300'}`}>
+                                        ${formatCurrency(myBalance)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                {myLedgers.map(l => (
+                                    <div key={l.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black ${l.type === 'payable' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>{l.type === 'payable' ? '墊' : '還'}</div>
+                                            <div>
+                                                <div className="font-bold text-slate-800">{l.note || '-'}</div>
+                                                <div className="text-xs text-slate-400 font-mono mt-0.5">{l.date}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`text-lg font-black font-mono ${l.type === 'payable' ? 'text-amber-600' : 'text-green-600'}`}>{l.type === 'payable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {myLedgers.length === 0 && (
+                                    <div className="text-center p-10 text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl bg-white">目前沒有代墊紀錄。</div>
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
