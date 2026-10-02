@@ -567,6 +567,93 @@ const VehicleFormModal = ({
             alert(`✅ 結息完成！\n產生利息: $${calculatedInterest.toLocaleString()}`);
         }
     };
+
+    // ★★★ 新增：輸出墊資借貸協議 PDF ★★★
+    const executeLoanAgreementPrint = (e: React.MouseEvent, f: any) => {
+        e.preventDefault();
+        
+        const reportTitle = `Loan_Agreement_${f.lenderName}_${v.regMark || 'TBC'}`;
+        const currentDate = new Date().toLocaleDateString('zh-HK');
+        
+        const htmlContent = `
+            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1e293b;">
+                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1e293b; padding-bottom: 20px;">
+                    <h1 style="margin: 0 0 5px 0; font-size: 26px; font-weight: 900; letter-spacing: 2px;">GOLD LAND AUTO</h1>
+                    <h2 style="margin: 0 0 10px 0; font-size: 16px; color: #475569; letter-spacing: 5px;">金田汽車</h2>
+                    <p style="margin: 0; font-size: 16px; font-weight: bold; background: #f3e8ff; color: #6b21a8; display: inline-block; padding: 4px 12px; border-radius: 4px; border: 1px solid #d8b4fe;">車輛墊資借貸協議 (VEHICLE FINANCING AGREEMENT)</p>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 25px; font-size: 13px;">
+                    <table style="width: 48%; border-collapse: collapse;">
+                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 8px; width: 120px;">借款方 (Borrower):</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">GOLD LAND AUTO (金田汽車)</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 8px; padding-bottom: 8px;">貸款方 (Lender):</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-top: 8px; padding-bottom: 8px; color: #7e22ce;">${f.lenderName}</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 8px;">簽署日期 (Date):</td><td style="padding-top: 8px; font-family: monospace;">${currentDate}</td></tr>
+                    </table>
+                    <table style="width: 48%; border-collapse: collapse;">
+                        <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 8px; width: 120px;">融資本金 (Principal):</td><td style="font-weight: 900; font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; font-family: monospace; color: #b91c1c;">${formatCurrency(f.principal)}</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 8px; padding-bottom: 8px;">雙方議定年利率:</td><td style="padding-top: 8px; padding-bottom: 8px; font-family: monospace; font-weight: bold; border-bottom: 1px solid #e2e8f0;">${f.annualRate}% (P.A.)</td></tr>
+                        <tr><td style="font-weight: bold; color: #64748b; padding-top: 8px;">起息日 (Start Date):</td><td style="padding-top: 8px; font-family: monospace; font-weight: bold;">${f.startDate}</td></tr>
+                    </table>
+                </div>
+
+                <h3 style="font-size: 14px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 15px; margin-top: 30px;">1. 抵押/標的車輛資料 (Vehicle Particulars)</h3>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 30px; text-align: left;">
+                    <tr style="background-color: #f8fafc;">
+                        <th style="padding: 10px; border: 1px solid #cbd5e1; width: 25%;">車牌號碼 (Reg Mark)</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1; width: 25%;">廠牌及型號 (Make & Model)</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1; width: 15%;">年份 (Year)</th>
+                        <th style="padding: 10px; border: 1px solid #cbd5e1; width: 35%;">底盤號碼 (Chassis No.)</th>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold; font-family: monospace;">${v.regMark || 'TBC (未出牌)'}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">${v.make || ''} ${v.model || ''}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; text-align: center;">${v.year || '-'}</td>
+                        <td style="padding: 10px; border: 1px solid #e2e8f0; font-family: monospace; font-weight: bold;">${v.chassisNo || 'TBC'}</td>
+                    </tr>
+                </table>
+
+                <h3 style="font-size: 14px; color: #334155; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; margin-bottom: 15px;">2. 借貸條款與細則 (Terms & Conditions)</h3>
+                <div style="font-size: 12px; line-height: 1.8; color: #475569; background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                    <ol style="margin: 0; padding-left: 20px;">
+                        <li style="margin-bottom: 8px;"><b>借款目的：</b>本筆墊資款項專用於上述標的車輛之進貨或營運周轉。</li>
+                        <li style="margin-bottom: 8px;"><b>利息計算：</b>利息自「起息日」起算，按雙方議定之年利率 <b>${f.annualRate}%</b> 計算。利息結算週期以每三個月為一期，不足三個月按三個月計算 (或按雙方另行書面約定辦理)。</li>
+                        <li style="margin-bottom: 8px;"><b>本息償還：</b>借款方須於標的車輛成功售出並收到客戶尾數後，或於貸款方要求之合理期限內，將融資本金及已產生之利息全數歸還予貸款方。</li>
+                        <li style="margin-bottom: 8px;"><b>資產擔保：</b>於本金及利息全數結清前，上述標的車輛之處分權及相關權益受本協議約束，作為本筆債務之參考擔保。</li>
+                        <li><b>爭議解決：</b>本協議受香港特別行政區法律管轄。雙方如有爭議，應本著誠信原則協商解決。</li>
+                    </ol>
+                </div>
+
+                <div style="margin-top: 80px; display: flex; justify-content: space-between;">
+                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                        <b>借款方 (Borrower)</b><br/>
+                        GOLD LAND AUTO<br/>
+                        Authorized Signature & Chop
+                    </div>
+                    <div style="width: 40%; border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569;">
+                        <b>貸款方 (Lender)</b><br/>
+                        ${f.lenderName}<br/>
+                        Authorized Signature
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const globalPrintFn = (window as any).triggerSmartPrint || (window as any).triggerDocumentPrint;
+        if (typeof globalPrintFn === 'function') {
+            globalPrintFn(htmlContent, reportTitle);
+        } else {
+            const printWin = window.open('', '_blank');
+            if (printWin) {
+                printWin.document.write(`<html><head><title>${reportTitle}</title><style>@page { size: A4; margin: 15mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${htmlContent}</body></html>`);
+                printWin.document.close();
+                printWin.focus();
+                printWin.onafterprint = () => printWin.close();
+                setTimeout(() => { printWin.print(); printWin.close(); }, 250);
+            } else {
+                alert("⚠️ 瀏覽器阻擋了彈出視窗，請允許彈出視窗以進行列印！");
+            }
+        }
+    };
  
     // ★ 新增：維修保養的修改(Edit)狀態與函數
     const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
@@ -2543,6 +2630,11 @@ const VehicleFormModal = ({
                                                 </div>
                                             )}
                                             <div className="flex items-center gap-2 border-l pl-3 ml-2">
+                                                {/* ★ 加入輸出 PDF 協議按鈕 */}
+                                                <button type="button" onClick={(e) => executeLoanAgreementPrint(e, f)} className="text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 p-1.5 rounded shadow-sm transition-colors" title="列印墊資借貸協議">
+                                                    <FileText size={14}/>
+                                                </button>
+
                                                 {f.status === 'Active' && <button type="button" onClick={(e) => { e.preventDefault(); handleSettleFinancing(f); }} className="bg-purple-600 text-white text-[10px] px-2 py-1 rounded shadow hover:bg-purple-700 font-bold">結算利息</button>}
                                                 <button type="button" onClick={(e) => { e.preventDefault(); handleDeleteFinancing(f.id); }} className="text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
                                             </div>
