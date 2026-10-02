@@ -294,7 +294,16 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // ★ 輔助函數：行家來往 & 一鍵掃描功能
     // ============================================================================
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
-    const filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
+    
+    // ★ 新增：過濾並將選中的行家置頂
+    let filteredPartners = allPartners.filter(p => p.toLowerCase().includes(partnerSearch.toLowerCase()));
+    if (selectedPartner && filteredPartners.includes(selectedPartner)) {
+        filteredPartners = [
+            selectedPartner,
+            ...filteredPartners.filter(p => p !== selectedPartner)
+        ];
+    }
+
     const partnerHistory = ledgers.filter(l => l.partner === selectedPartner).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const partnerBalance = partnerHistory.reduce((sum, l) => sum + (l.type === 'receivable' ? Number(l.amount) : -Number(l.amount)), 0);
 
@@ -372,7 +381,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                 
                 batch.set(ledgerRef, {
                     partner: selectedPartner,
-                    // ★ 核心修復：使用車輛端原始紀錄的日期，若沒有則使用當前日期
                     date: item.date || new Date().toISOString().split('T')[0],
                     type: 'payable',
                     amount: Number(amount),
