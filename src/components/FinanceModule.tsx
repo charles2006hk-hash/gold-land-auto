@@ -27,7 +27,6 @@ const formatNumberInput = (value: string) => {
 
 export default function FinanceModule({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) {
     
-    // --- 模塊狀態鎖定 ---
     const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
     const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital' | 'staff'>(() => {
         if (typeof window !== 'undefined') {
@@ -45,7 +44,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     }, [financeTab, isFullAccess]);
 
-    // --- 資金預算沙盤狀態 ---
     const [capPrincipal, setCapPrincipal] = useState<string>('10000000');
     const [capInterest, setCapInterest] = useState<number>(8);
     const [capFee, setCapFee] = useState<number>(6);
@@ -57,7 +55,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const [yieldLimited, setYieldLimited] = useState<number>(25);
     const [yieldRental, setYieldRental] = useState<number>(10);
 
-    // --- 統計報表狀態 ---
     const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_type') as any : null) || 'receivable');
     const [reportCategory, setReportCategory] = useState<'All' | 'Vehicle' | 'Service'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_cat') as any : null) || 'All');
     const [reportSearchTerm, setReportSearchTerm] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_rep_search') || '' : '');
@@ -74,11 +71,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; 
     });
 
-    // --- 會計帳目專屬狀態 ---
     const [accSearchTerm, setAccSearchTerm] = useState(() => typeof window !== 'undefined' ? sessionStorage.getItem('gla_acc_search') || '' : '');
     const [accFilterType, setAccFilterType] = useState<'All' | 'IN' | 'OUT'>(() => (typeof window !== 'undefined' ? sessionStorage.getItem('gla_acc_filter') as any : null) || 'All');
 
-    // --- 行家來往狀態 ---
     const [ledgers, setLedgers] = useState<any[]>([]);
     const [selectedPartner, setSelectedPartner] = useState<string>('');
     const [partnerSearch, setPartnerSearch] = useState('');
@@ -99,8 +94,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         return [];
     });
 
-    // --- 員工記帳與報銷狀態 ---
     const [staffLedgers, setStaffLedgers] = useState<any[]>([]);
+    // ★ 新增：公司雜費監聽
+    const [companyExpenses, setCompanyExpenses] = useState<any[]>([]);
     const [selectedStaff, setSelectedStaff] = useState<string>(staffId); 
     const [staffExpForm, setStaffExpForm] = useState({
         date: new Date().toISOString().split('T')[0],
@@ -115,7 +111,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     });
     const [isSubmittingStaffExp, setIsSubmittingStaffExp] = useState(false);
 
-    // 自動儲存狀態
     useEffect(() => {
         if (typeof window !== 'undefined') {
             sessionStorage.setItem('gla_fin_tab', financeTab);
@@ -135,6 +130,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     }, [financeTab, reportType, reportCategory, reportSearchTerm, reportCompany, isDateFilterEnabled, reportStartDate, reportEndDate, accSearchTerm, accFilterType, isPartnerDateFilter, partnerStart, partnerEnd, recentPartners]);
 
+    // ★ 升級：同時載入 3 個關聯數據庫
     useEffect(() => {
         if (!db || !appId) return;
         const qPartner = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
@@ -143,7 +139,10 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const qStaff = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), orderBy('createdAt', 'desc'));
         const unsubS = onSnapshot(qStaff, (snap: any) => { setStaffLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
 
-        return () => { unsubP(); unsubS(); };
+        const qCompExp = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), orderBy('createdAt', 'desc'));
+        const unsubC = onSnapshot(qCompExp, (snap: any) => { setCompanyExpenses(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        return () => { unsubP(); unsubS(); unsubC(); };
     }, [db, appId]);
 
     const handleReportItemClick = (vehicleId: string) => {
@@ -260,17 +259,45 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // ============================================================================
     const generateLedger = () => {
         const ledger: any[] = [];
+        
         inventory.forEach((v: any) => {
             (v.payments || []).forEach((p: any) => ledger.push({ id: `pay_${p.id}`, date: p.date, type: 'IN', amount: Number(p.amount), category: '營業收入 (Sales)', desc: `[收款] ${p.type}`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
             (v.acquisition?.payments || []).forEach((p: any) => ledger.push({ id: `acq_${p.id}`, date: p.date, type: 'OUT', amount: Number(p.amount), category: '進貨成本 (COGS)', desc: `[進貨付款]`, ref: v.regMark || '未出牌', method: p.method || '', remark: p.note || '', rawDate: new Date(p.date).getTime() }));
-            (v.expenses || []).filter((e:any) => e.status === 'Paid').forEach((e: any) => ledger.push({ id: `exp_${e.id}`, date: e.date, type: 'OUT', amount: Number(e.amount), category: '營運開支 (Expenses)', desc: `[雜費支出] ${e.type} - ${e.company}`, ref: v.regMark || '未出牌', method: e.paymentMethod || '', remark: e.invoiceNo || '', rawDate: new Date(e.date).getTime() }));
+            
+            // ★ 升級排除：員工代墊 (Staff_Advance) 不消耗公司現金，因此不計入 OUT
+            (v.expenses || []).filter((e:any) => e.status === 'Paid' && e.paymentMethod !== 'Staff_Advance').forEach((e: any) => ledger.push({ id: `exp_${e.id}`, date: e.date, type: 'OUT', amount: Number(e.amount), category: '營運開支 (Expenses)', desc: `[雜費支出] ${e.type} - ${e.company}`, ref: v.regMark || '未出牌', method: e.paymentMethod || '', remark: e.invoiceNo || '', rawDate: new Date(e.date).getTime() }));
             (v.maintenanceRecords || []).filter((m:any) => m.chargeStatus === 'Paid' && m.charge > 0).forEach((m: any) => ledger.push({ id: `maint_in_${m.id}`, date: m.chargeDate || m.date, type: 'IN', amount: Number(m.charge), category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, ref: v.regMark || '未出牌', method: m.chargeMethod || '', remark: m.chargeRemark || '', rawDate: new Date(m.chargeDate || m.date).getTime() }));
-            (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0).forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.costDate || m.date, type: 'OUT', amount: Number(m.cost), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', method: m.costMethod || '', remark: m.costRemark || '', rawDate: new Date(m.costDate || m.date).getTime() }));
+            (v.maintenanceRecords || []).filter((m:any) => m.costStatus === 'Paid' && m.cost > 0 && m.costMethod !== 'Staff_Advance').forEach((m: any) => ledger.push({ id: `maint_out_${m.id}`, date: m.costDate || m.date, type: 'OUT', amount: Number(m.cost), category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor}`, ref: v.regMark || '未出牌', method: m.costMethod || '', remark: m.costRemark || '', rawDate: new Date(m.costDate || m.date).getTime() }));
         });
+
+        // 公司雜費 (非代墊)
+        companyExpenses.forEach((c: any) => {
+            if (c.paymentMethod !== 'Staff_Advance') {
+                ledger.push({ 
+                    id: `comp_${c.id}`, date: c.paymentDate || c.date || new Date().toISOString().split('T')[0], 
+                    type: c.flow || 'OUT', amount: Number(c.amount), category: '營運開支 (Company)', 
+                    desc: `[公司雜費] ${c.category} - ${c.title}`, ref: '內部', method: c.paymentMethod || '', 
+                    remark: '', rawDate: new Date(c.paymentDate || c.createdAt?.seconds * 1000 || Date.now()).getTime() 
+                });
+            }
+        });
+
         ledgers.forEach((l: any) => {
             const isCashIn = l.type === 'receivable' ? (l.note.includes('收') || l.note.includes('還')) : (l.note.includes('借入') || l.note.includes('收'));
             ledger.push({ id: `ptn_${l.id}`, date: l.date, type: isCashIn ? 'IN' : 'OUT', amount: Number(l.amount), category: '往來帳 (Partner Ledger)', desc: `[行家] ${l.note}`, ref: l.partner, method: l.method || '', remark: l.refNo || '', rawDate: new Date(l.date).getTime() });
         });
+
+        // 員工代墊還款 (當公司還錢給員工時，才是真正的公司現金 OUT)
+        staffLedgers.forEach((l: any) => {
+            if (l.type === 'receivable') { 
+                ledger.push({ 
+                    id: `staff_${l.id}`, date: l.date, type: 'OUT', amount: Number(l.amount), 
+                    category: '營運開支 (Reimbursement)', desc: `[員工報銷] 還款給 ${l.staffId} - ${l.note}`, 
+                    ref: l.staffId, method: l.method || 'Transfer', remark: '', rawDate: new Date(l.date).getTime() 
+                });
+            }
+        });
+
         return ledger.sort((a, b) => b.rawDate - a.rawDate);
     };
 
@@ -311,6 +338,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             }
         });
 
+        // 加上行家戶口結餘
         const partnerBalances: Record<string, number> = {};
         ledgers.forEach(l => {
             if (!partnerBalances[l.partner]) partnerBalances[l.partner] = 0;
@@ -321,14 +349,22 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             else if (bal < 0) totalAP += Math.abs(bal);
         });
 
+        // ★ 加上員工代墊結餘
+        let staffPayable = 0;
+        staffLedgers.forEach(l => {
+            staffPayable += (l.type === 'payable' ? Number(l.amount) : -Number(l.amount));
+        });
+        if (staffPayable > 0) totalAP += staffPayable;
+
         const stockValue = inventory.filter((v: any) => v.status === 'In Stock').reduce((sum: number, v: any) => sum + (v.price || 0), 0);
+
         return { monthIn, monthOut, monthNet, totalAR, totalAP, stockValue };
     };
 
     const dashStats = calculateDashboardStats();
 
     // ============================================================================
-    // ★ 行家來往 & 員工報銷 邏輯
+    // ★ 行家來往 邏輯
     // ============================================================================
     const allPartners = Array.from(new Set([...(settings.expenseCompanies || []), ...ledgers.map(l => l.partner)])).filter(Boolean).sort();
     
@@ -603,6 +639,9 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     };
 
+    // ============================================================================
+    // ★ 員工記帳與報銷 (Staff Ledger)
+    // ============================================================================
     const handleStaffExpenseSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const amt = Number(staffExpForm.amount.replace(/,/g, ''));
@@ -685,6 +724,34 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const myLedgers = staffLedgers.filter(l => l.staffId === (isFullAccess ? selectedStaff : staffId));
     const myBalance = myLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? -Number(l.amount) : Number(l.amount)), 0);
 
+    // ★ 新增：一鍵結清員工代墊款 (公司還款)
+    const handleSettleStaffBalance = async () => {
+        if (myBalance === 0 || !db) return;
+        const confirmSettle = confirm(`確定要結清並還款給 ${selectedStaff} 共 $${formatCurrency(myBalance)} 嗎？\n(此筆還款將計入公司會計流水帳的現金流出)`);
+        if (!confirmSettle) return;
+
+        try {
+            const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), {
+                staffId: selectedStaff,
+                date: new Date().toISOString().split('T')[0],
+                type: 'receivable', 
+                amount: myBalance,
+                note: `結清代墊款 (Reimbursement)`,
+                method: 'Transfer',
+                createdAt: serverTimestamp(),
+                createdBy: staffId
+            });
+            alert('✅ 結清成功！公司已還款。');
+        } catch (err) {
+            console.error(err);
+            alert('結清失敗');
+        }
+    };
+
+    // ============================================================================
+    // ★ 輔助函數：會計流水帳
+    // ============================================================================
     const filteredAccLedger = rawLedger.filter(l => {
         if (isDateFilterEnabled) {
             if (reportStartDate && l.date < reportStartDate) return false;
@@ -779,7 +846,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         <div className="bg-gradient-to-br from-slate-100 to-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
                             <h3 className="font-bold text-slate-500 text-sm mb-4 uppercase tracking-widest">總應付帳款 (Total A/P)</h3>
                             <p className="text-4xl font-black font-mono text-red-500 mb-2">{formatCurrency(dashStats.totalAP)}</p>
-                            <p className="text-xs text-slate-400">包含未找車房數、收車尾數、行家欠款</p>
+                            <p className="text-xs text-slate-400">包含未找車房數、墊支款項、行家欠款</p>
                         </div>
 
                         <div className="bg-gradient-to-br from-slate-100 to-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden">
@@ -984,7 +1051,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                             const isSystemAuto = !!l.sourceModule;
                                             return (
                                                 <div key={l.id} className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-white rounded-xl border shadow-sm transition-colors group ${isSystemAuto ? 'border-blue-200 hover:border-blue-400 bg-blue-50/10' : 'border-slate-200 hover:border-amber-300'}`}>
-                                                    <div className="flex items-start gap-4">
+                                                    <div className="flex items-center gap-4">
                                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black flex-shrink-0 ${l.type === 'receivable' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>{l.type === 'receivable' ? '入' : '出'}</div>
                                                         <div>
                                                             <div className="font-bold text-slate-800 flex items-center flex-wrap gap-2">
@@ -1561,9 +1628,17 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                 </div>
                                 <div className="text-left sm:text-right">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">公司目前欠款 (Company Payable)</p>
-                                    <span className={`text-3xl font-black font-mono ${myBalance > 0 ? 'text-green-500' : 'text-slate-300'}`}>
-                                        ${formatCurrency(myBalance)}
-                                    </span>
+                                    <div className="flex items-center sm:justify-end gap-3">
+                                        <span className={`text-3xl font-black font-mono ${myBalance > 0 ? 'text-green-500' : 'text-slate-300'}`}>
+                                            ${formatCurrency(myBalance)}
+                                        </span>
+                                        {/* ★ 新增：老闆一鍵結清還款按鈕 */}
+                                        {myBalance > 0 && isFullAccess && (
+                                            <button type="button" onClick={handleSettleStaffBalance} className="bg-slate-800 hover:bg-slate-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shadow-sm">
+                                                一鍵還款
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
