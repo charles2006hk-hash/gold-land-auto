@@ -415,31 +415,59 @@ const VehicleFormModal = ({
     const handleAddCbExpenseClick = async () => {
         const amt = Number(newCbExpense.amount.replace(/,/g, ''));
         if (amt > 0) {
-            const isPaid = newCbExpense.paymentMethod && newCbExpense.paymentMethod !== 'Unpaid';
-            let finalStatus = isPaid ? 'Paid' : 'Unpaid';
-            const finalMethod = isPaid ? newCbExpense.paymentMethod : '';
+            let finalStatus = 'Unpaid';
+            let finalMethod = newCbExpense.paymentMethod;
 
-            // 核心連動：未付且有對象，自動詢問轉入行家總帳
-            if (finalStatus === 'Unpaid' && newCbExpense.company && db && appId && staffId) {
-                const transfer = confirm(`是否將此筆中港費用 [${newCbExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newCbExpense.company}」統一對數結算？`);
-                if (transfer) {
+            // ★ 核心連動 1：員工代墊邏輯
+            if (finalMethod === 'Staff_Advance') {
+                finalStatus = 'Paid';
+                if (db && appId && staffId) {
+                    const confirmAdvance = confirm(`確定要以「員工代墊」記錄這筆 ${newCbExpense.type} $${amt} 嗎？\n\n系統將自動標記此單為已付，並將款項加入您的「員工往來帳」中。`);
+                    if (!confirmAdvance) return;
+
                     try {
                         const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-                        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
-                            partner: newCbExpense.company, 
-                            date: newCbExpense.date || new Date().toISOString().split('T')[0], 
+                        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), {
+                            staffId: staffId,
+                            date: newCbExpense.date || new Date().toISOString().split('T')[0],
                             type: 'payable', 
-                            amount: amt, 
-                            note: `[中港費用] ${v.regMark || '未出牌'} - ${newCbExpense.type}`,
-                            sourceModule: 'vehicle_expense', 
-                            vehicleId: v.id || 'new_vehicle',
-                            createdAt: serverTimestamp(), 
-                            createdBy: staffId 
+                            amount: amt,
+                            note: `[中港代墊] ${v.regMark || '未出牌'} - ${newCbExpense.type} ${newCbExpense.company ? `(${newCbExpense.company})` : ''}`,
+                            relatedEntryId: `entry_${Date.now()}`,
+                            createdAt: serverTimestamp()
                         });
-                        finalStatus = 'Transferred'; 
-                        alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！`);
+                        alert('✅ 代墊紀錄已成功拋轉至【財務總覽 -> 員工報銷】！');
                     } catch (err) {
-                        console.error("轉帳失敗", err);
+                        console.error("寫入員工帳戶失敗", err);
+                    }
+                }
+            } else {
+                // ★ 核心連動 2：公司應付轉總帳邏輯
+                const isPaid = finalMethod && finalMethod !== 'Unpaid';
+                finalStatus = isPaid ? 'Paid' : 'Unpaid';
+                finalMethod = isPaid ? finalMethod : '';
+
+                if (finalStatus === 'Unpaid' && newCbExpense.company && db && appId && staffId) {
+                    const transfer = confirm(`是否將此筆中港費用 [${newCbExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newCbExpense.company}」統一對數結算？`);
+                    if (transfer) {
+                        try {
+                            const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                                partner: newCbExpense.company, 
+                                date: newCbExpense.date || new Date().toISOString().split('T')[0], 
+                                type: 'payable', 
+                                amount: amt, 
+                                note: `[中港費用] ${v.regMark || '未出牌'} - ${newCbExpense.type}`,
+                                sourceModule: 'vehicle_expense', 
+                                vehicleId: v.id || 'new_vehicle',
+                                createdAt: serverTimestamp(), 
+                                createdBy: staffId 
+                            });
+                            finalStatus = 'Transferred'; 
+                            alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！`);
+                        } catch (err) {
+                            console.error("轉帳失敗", err);
+                        }
                     }
                 }
             }
@@ -848,31 +876,59 @@ const VehicleFormModal = ({
     const handleAddExpenseClick = async () => {
         const amt = Number(newExpense.amount.replace(/,/g, ''));
         if (amt > 0) {
-            const isPaid = newExpense.paymentMethod && newExpense.paymentMethod !== 'Unpaid';
-            let finalStatus = isPaid ? 'Paid' : 'Unpaid';
-            const finalMethod = isPaid ? newExpense.paymentMethod : '';
+            let finalStatus = 'Unpaid';
+            let finalMethod = newExpense.paymentMethod;
 
-            // ★ 核心連動：如果是未付，且有填寫對象，自動詢問是否轉總帳
-            if (finalStatus === 'Unpaid' && newExpense.company && db && appId && staffId) {
-                const transfer = confirm(`是否將此筆費用 [${newExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newExpense.company}」統一對數結算？`);
-                if (transfer) {
+            // ★ 核心連動 1：員工代墊邏輯
+            if (finalMethod === 'Staff_Advance') {
+                finalStatus = 'Paid'; // 對外已付
+                if (db && appId && staffId) {
+                    const confirmAdvance = confirm(`確定要以「員工代墊」記錄這筆 ${newExpense.type} $${amt} 嗎？\n\n系統將自動標記此單為已付，並將款項加入您的「員工往來帳」中。`);
+                    if (!confirmAdvance) return;
+
                     try {
                         const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-                        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
-                            partner: newExpense.company, 
-                            date: newExpense.date || new Date().toISOString().split('T')[0], 
-                            type: 'payable', 
-                            amount: amt, 
-                            note: `[車輛費用] ${v.regMark || '未出牌'} - ${newExpense.type}`,
-                            sourceModule: 'vehicle_expense',
-                            vehicleId: v.id || 'new_vehicle', // 防呆：如果車輛尚未建立
-                            createdAt: serverTimestamp(), 
-                            createdBy: staffId 
+                        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), {
+                            staffId: staffId,
+                            date: newExpense.date || new Date().toISOString().split('T')[0],
+                            type: 'payable', // 公司應付給員工
+                            amount: amt,
+                            note: `[車輛代墊] ${v.regMark || '未出牌'} - ${newExpense.type} ${newExpense.company ? `(${newExpense.company})` : ''}`,
+                            relatedEntryId: `entry_${Date.now()}`,
+                            createdAt: serverTimestamp()
                         });
-                        finalStatus = 'Transferred'; // 鎖定狀態
-                        alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！日後請在總帳中與 ${newExpense.company} 統一結算。`);
+                        alert('✅ 代墊紀錄已成功拋轉至【財務總覽 -> 員工報銷】！');
                     } catch (err) {
-                        console.error("轉帳失敗", err);
+                        console.error("寫入員工帳戶失敗", err);
+                    }
+                }
+            } else {
+                // ★ 核心連動 2：公司應付轉總帳邏輯
+                const isPaid = finalMethod && finalMethod !== 'Unpaid';
+                finalStatus = isPaid ? 'Paid' : 'Unpaid';
+                finalMethod = isPaid ? finalMethod : '';
+
+                if (finalStatus === 'Unpaid' && newExpense.company && db && appId && staffId) {
+                    const transfer = confirm(`是否將此筆費用 [${newExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newExpense.company}」統一對數結算？`);
+                    if (transfer) {
+                        try {
+                            const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+                            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
+                                partner: newExpense.company, 
+                                date: newExpense.date || new Date().toISOString().split('T')[0], 
+                                type: 'payable', 
+                                amount: amt, 
+                                note: `[車輛費用] ${v.regMark || '未出牌'} - ${newExpense.type}`,
+                                sourceModule: 'vehicle_expense',
+                                vehicleId: v.id || 'new_vehicle',
+                                createdAt: serverTimestamp(), 
+                                createdBy: staffId 
+                            });
+                            finalStatus = 'Transferred'; 
+                            alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！日後請在總帳中與 ${newExpense.company} 統一結算。`);
+                        } catch (err) {
+                            console.error("轉帳失敗", err);
+                        }
                     }
                 }
             }
@@ -881,7 +937,6 @@ const VehicleFormModal = ({
             if (v.id) addExpense(v.id, obj as any);
             else setEditingVehicle((prev: any) => ({ ...prev, expenses: [...(prev.expenses || []), obj] }));
             
-            // 智能記憶設定
             if (newExpense.type && !settings.expenseTypes.some((t:any) => typeof t === 'string' ? t === newExpense.type : t.name === newExpense.type)) {
                 updateSettings('expenseTypes', [...settings.expenseTypes, { name: newExpense.type, defaultCompany: newExpense.company, defaultAmount: amt, defaultDays: '0' }]);
             }
@@ -2691,10 +2746,11 @@ const VehicleFormModal = ({
                                                     className={`px-2 py-1 rounded-md text-[10px] font-bold border outline-none cursor-pointer shadow-sm transition-colors ${exp.paymentMethod === 'Included' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}
                                                 >
                                                     <option value="Included">併入車價 (Included)</option>
-                                                    <option value="Cash">現金 (Cash)</option>
-                                                    <option value="Transfer">轉帳 (Transfer)</option>
-                                                    <option value="Cheque">支票 (Cheque)</option>
-                                                    <option value="USDT">USDT</option>
+                                                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
+                                                                    <option value="Cash">現金 (Cash)</option>
+                                                                    <option value="Transfer">轉帳 (Transfer)</option>
+                                                                    <option value="Cheque">支票 (Cheque)</option>
+                                                                    <option value="USDT">USDT</option>
                                                 </select>
                                             )}
                                         </div>
@@ -2742,8 +2798,9 @@ const VehicleFormModal = ({
                                 </div>
 
                                 {/* ★ 新增：付款方式與狀態下拉 */}
-                                <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
+                                <select value={newExpense.paymentMethod || 'Unpaid'} onChange={e => setNewExpense({...newExpense, paymentMethod: e.target.value})} className="w-full lg:w-36 text-sm md:text-xs p-3 md:p-2 border rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
                                     <option value="Unpaid">未付 (Unpaid)</option>
+                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
                                     <option value="Included">併入車價 (Included)</option>
                                     <option value="Cash">現金 (Cash)</option>
                                     <option value="Cheque">支票 (Cheque)</option>
@@ -2938,6 +2995,7 @@ const VehicleFormModal = ({
                                                                                     <label className="block text-[10px] text-slate-500 font-bold mb-1">支付方式</label>
                                                                                     <select value={m.costMethod || 'Transfer'} onChange={(e) => updateMaintDetail(m.id, 'costMethod', e.target.value)} className="w-full text-xs p-2 border rounded outline-none cursor-pointer">
                                                                                         <option value="Transfer">轉帳 (Bank Transfer)</option>
+                                                                                        <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
                                                                                         <option value="Cash">現金 (Cash)</option>
                                                                                         <option value="Cheque">支票 (Cheque)</option>
                                                                                         <option value="Shareholder">股東墊付</option>
@@ -3343,6 +3401,7 @@ const VehicleFormModal = ({
                                                                     }}
                                                                     className="px-2 py-1 rounded-md text-[10px] font-bold border outline-none cursor-pointer bg-white text-slate-600 border-slate-200"
                                                                 >
+                                                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
                                                                     <option value="Transfer">轉帳 (Transfer)</option>
                                                                     <option value="Cash">現金 (Cash)</option>
                                                                     <option value="Cheque">支票 (Cheque)</option>
@@ -3423,8 +3482,9 @@ const VehicleFormModal = ({
                                                     )}
                                                 </div>
 
-                                                <select value={newCbExpense.paymentMethod || 'Unpaid'} onChange={e => setNewCbExpense({...newCbExpense, paymentMethod: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
+                                                <select value={newCbExpense.paymentMethod || 'Unpaid'} onChange={e => setNewCbExpense({...newCbExpense, paymentMethod: e.target.value})} className="w-full lg:w-36 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
                                                     <option value="Unpaid">未付 (Unpaid)</option>
+                                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
                                                     <option value="Cash">現金 (Cash)</option>
                                                     <option value="Transfer">轉帳 (Transfer)</option>
                                                     <option value="Cheque">支票 (Cheque)</option>
