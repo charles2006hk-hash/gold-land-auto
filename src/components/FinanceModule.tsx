@@ -749,6 +749,38 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     };
 
+    // ★ 新增：修改與刪除員工代墊款紀錄
+    const promptEditStaffLedgerRecord = async (l: any) => {
+        const newAmountStr = window.prompt(`請修改金額 (原本: ${l.amount}):`, String(l.amount));
+        if (newAmountStr === null) return;
+        const newAmount = Number(newAmountStr.replace(/,/g, ''));
+        if (isNaN(newAmount) || newAmount <= 0) return alert('無效金額');
+
+        const newNote = window.prompt(`請修改備註 (原本: ${l.note}):`, l.note);
+        if (newNote === null) return;
+
+        try {
+            const { updateDoc, doc } = await import('firebase/firestore');
+            await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers', l.id), {
+                amount: newAmount,
+                note: newNote
+            });
+        } catch (e) {
+            console.error(e);
+            alert('修改失敗');
+        }
+    };
+
+    const handleDeleteStaffLedgerRecord = async (id: string) => {
+        if (!db || !confirm("確定刪除此筆員工帳目紀錄？\n\n⚠️ 注意：若此筆為「車輛代墊/中港費用」連動產生，此操作僅刪除員工報銷帳單，車輛面板中的該筆費用需另行手動退回未付狀態。")) return;
+        try {
+            const { deleteDoc, doc } = await import('firebase/firestore');
+            await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers', id));
+        } catch (e) {
+            console.error(e);
+            alert('刪除失敗');
+        }
+    };
     // ============================================================================
     // ★ 輔助函數：會計流水帳
     // ============================================================================
@@ -1644,16 +1676,27 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
                             <div className="space-y-3">
                                 {myLedgers.map(l => (
-                                    <div key={l.id} className="flex justify-between items-center p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                        <div className="flex items-center gap-3 md:gap-4">
-                                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-black text-xs md:text-base ${l.type === 'payable' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>{l.type === 'payable' ? '墊' : '還'}</div>
-                                            <div>
-                                                <div className="font-bold text-slate-800 text-sm md:text-base line-clamp-1" title={l.note}>{l.note || '-'}</div>
+                                    <div key={l.id} className="flex justify-between items-center p-3 md:p-4 bg-slate-50 rounded-xl border border-slate-200 group transition-colors hover:border-blue-300 shadow-sm">
+                                        <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">
+                                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center font-black text-xs md:text-base flex-shrink-0 ${l.type === 'payable' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>{l.type === 'payable' ? '墊' : '還'}</div>
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-slate-800 text-sm md:text-base truncate" title={l.note}>{l.note || '-'}</div>
                                                 <div className="text-[10px] md:text-xs text-slate-400 font-mono mt-0.5">{l.date}</div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <span className={`text-base md:text-lg font-black font-mono ${l.type === 'payable' ? 'text-amber-600' : 'text-green-600'}`}>{l.type === 'payable' ? '+' : '-'}${Number(l.amount).toLocaleString()}</span>
+                                        <div className="flex items-center gap-4 flex-shrink-0 border-l border-slate-200 pl-4 ml-2">
+                                            <span className={`text-base md:text-lg font-black font-mono ${l.type === 'payable' ? 'text-amber-600' : 'text-green-600'}`}>
+                                                {l.type === 'payable' ? '+' : '-'}${Number(l.amount).toLocaleString()}
+                                            </span>
+                                            {/* ★ 新增：Hover 時才出現的修改與刪除按鈕 */}
+                                            <div className="opacity-100 md:opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
+                                                <button type="button" onClick={() => promptEditStaffLedgerRecord(l)} className="p-1.5 md:p-2 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-colors" title="修改">
+                                                    <Edit size={14}/>
+                                                </button>
+                                                <button type="button" onClick={() => handleDeleteStaffLedgerRecord(l.id)} className="p-1.5 md:p-2 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded-lg shadow-sm transition-colors" title="刪除">
+                                                    <Trash2 size={14}/>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
