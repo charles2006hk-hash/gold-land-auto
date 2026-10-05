@@ -61,9 +61,12 @@ export const compressImageSmart = (file: File, type: 'vehicle' | 'document' = 'v
 // ==================================================================
 // 2. ★★★ 終極雙軌版：圖片編輯器 (精準 4 點透視遮罩 + 拖曳裁剪) ★★★
 // ==================================================================
+interface Point { x: number; y: number; }
+
 const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onClose: () => void, onSave: (dataUrl: string) => void }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const loupeCanvasRef = useRef<HTMLCanvasElement>(null); // ★ 放大鏡 Canvas
     
     // 核心影像資料
     const [snapshot, setSnapshot] = useState<ImageData | null>(null);
@@ -74,9 +77,13 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
     const [maskStyle, setMaskStyle] = useState<'blur' | 'front' | 'rear'>('blur');
     
     // 遮罩與裁剪座標狀態
-    const [points, setPoints] = useState<{x: number, y: number}[]>([]);
-    const [cropStart, setCropStart] = useState<{x: number, y: number} | null>(null);
-    const [cropEnd, setCropEnd] = useState<{x: number, y: number} | null>(null);
+    const [points, setPoints] = useState<Point[]>([]);
+    const [cropStart, setCropStart] = useState<Point | null>(null);
+    const [cropEnd, setCropEnd] = useState<Point | null>(null);
+    
+    // ★ 移動端觸控與放大鏡狀態
+    const [activePointIdx, setActivePointIdx] = useState<number | null>(null);
+    const [touchPos, setTouchPos] = useState<Point | null>(null);
     const [isDragging, setIsDragging] = useState(false);
 
     // 1. 初始化畫布與圖片
@@ -88,6 +95,16 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         img.src = imageUrl;
         img.onload = () => {
             if (canvas && ctx) {
+                // 如果一開始是 mask 模式，預設給出車牌的 4 個角
+                if (mode === 'mask' && points.length === 0) {
+                    setPoints([
+                        { x: img.width * 0.3, y: img.height * 0.4 },
+                        { x: img.width * 0.7, y: img.height * 0.4 },
+                        { x: img.width * 0.7, y: img.height * 0.6 },
+                        { x: img.width * 0.3, y: img.height * 0.6 }
+                    ]);
+                }
+                
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -95,7 +112,7 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
                 setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
             }
         };
-    }, [imageUrl]);
+    }, [imageUrl, mode]); // 注意 mode 改變時重置
 
     // 2. 共用繪製引擎 (處理紅點、紅線、以及半透明裁剪遮罩)
     const drawOverlay = () => {
@@ -106,26 +123,37 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         // 永遠先還原乾淨底圖
         ctx.putImageData(snapshot, 0, 0);
 
-        if (mode === 'mask' && points.length > 0) {
+        if (mode === 'mask' && points.length === 4) {
+            // 畫出半透明預覽遮罩 (讓使用者知道擋住了哪裡)
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < 4; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.closePath();
+            
+            if (maskStyle === 'blur') {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; 
+            } else {
+                ctx.fillStyle = maskStyle === 'front' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(250, 204, 21, 0.5)';
+            }
+            ctx.fill();
+
+            // 畫框線
             const dynamicLineWidth = Math.max(4, canvas.width / 250);
             ctx.strokeStyle = '#ef4444';
             ctx.lineWidth = dynamicLineWidth;
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
             ctx.stroke();
 
+            // 畫 4 個控制點
             points.forEach((p, idx) => {
-                ctx.fillStyle = '#ef4444';
+                ctx.fillStyle = idx === activePointIdx ? '#3b82f6' : '#ffffff';
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, dynamicLineWidth * 1.5, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, dynamicLineWidth * 2, 0, Math.PI * 2);
                 ctx.fill();
-
-                ctx.fillStyle = '#ffffff';
-                ctx.font = `bold ${dynamicLineWidth * 3}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText((idx + 1).toString(), p.x, p.y - (dynamicLineWidth * 3.5));
+                ctx.lineWidth = dynamicLineWidth;
+                ctx.strokeStyle = '#ef4444';
+                ctx.stroke();
             });
         } else if (mode === 'crop' && cropStart && cropEnd) {
             const x = Math.min(cropStart.x, cropEnd.x);
@@ -150,9 +178,54 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
     };
 
     // 監聽狀態改變並觸發重繪
-    useEffect(() => { drawOverlay(); }, [points, cropStart, cropEnd, mode, snapshot]);
+    useEffect(() => { drawOverlay(); }, [points, cropStart, cropEnd, mode, snapshot, activePointIdx, maskStyle]);
 
-    // 3. 處理游標與觸控事件
+    // ★ 3. 放大鏡引擎 (Loupe Engine) - 完美解決手指遮擋
+    useEffect(() => {
+        if (mode !== 'mask' || activePointIdx === null || !touchPos || !originalImg || !canvasRef.current || !loupeCanvasRef.current) return;
+
+        const mainCanvas = canvasRef.current;
+        const loupeCanvas = loupeCanvasRef.current;
+        const loupeCtx = loupeCanvas.getContext('2d');
+        if (!loupeCtx) return;
+
+        const loupeSize = 120; // 放大鏡尺寸 (120x120px)
+        const zoomFactor = 2.5; // 放大 2.5 倍
+
+        loupeCanvas.width = loupeSize;
+        loupeCanvas.height = loupeSize;
+
+        // 清空放大鏡
+        loupeCtx.clearRect(0, 0, loupeSize, loupeSize);
+
+        // 計算當前按住點在 Original Image 的像素座標
+        const targetPx = points[activePointIdx].x;
+        const targetPy = points[activePointIdx].y;
+
+        // 擷取圖片以該點為中心的區域，並放大繪製到 Loupe Canvas
+        const sourceSize = loupeSize / zoomFactor;
+        const sourceX = targetPx - sourceSize / 2;
+        const sourceY = targetPy - sourceSize / 2;
+
+        loupeCtx.drawImage(
+            originalImg,
+            sourceX, sourceY, sourceSize, sourceSize,
+            0, 0, loupeSize, loupeSize
+        );
+
+        // 在放大鏡中心繪製精準十字準星 (Crosshair)
+        loupeCtx.strokeStyle = '#ef4444'; // 紅色準心
+        loupeCtx.lineWidth = 1.5;
+        loupeCtx.beginPath();
+        loupeCtx.moveTo(loupeSize / 2 - 15, loupeSize / 2); // 橫線
+        loupeCtx.lineTo(loupeSize / 2 + 15, loupeSize / 2);
+        loupeCtx.moveTo(loupeSize / 2, loupeSize / 2 - 15); // 豎線
+        loupeCtx.lineTo(loupeSize / 2, loupeSize / 2 + 15);
+        loupeCtx.stroke();
+
+    }, [touchPos, activePointIdx, points, originalImg, mode]);
+
+    // 4. 處理游標與觸控事件
     const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
@@ -167,10 +240,24 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         const { x, y } = getCoordinates(e);
 
         if (mode === 'mask') {
-            if (points.length >= 4) return;
-            const newPoints = [...points, { x, y }];
-            setPoints(newPoints);
-            if (newPoints.length === 4) applyMask(newPoints);
+            // 尋找是否點擊在 4 個點的近郊 (容錯半徑，按比例計算)
+            if (!canvasRef.current) return;
+            const canvasWidth = canvasRef.current.width;
+            let closestIdx = -1;
+            let minDist = canvasWidth * 0.08; // 大約 8% 的畫面寬度作為容錯
+
+            points.forEach((p, idx) => {
+                const dist = Math.hypot(p.x - x, p.y - y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestIdx = idx;
+                }
+            });
+
+            if (closestIdx !== -1) {
+                setActivePointIdx(closestIdx);
+                setTouchPos({ x: e.clientX, y: e.clientY }); // 螢幕絕對座標，用來定位放大鏡
+            }
         } else if (mode === 'crop') {
             setIsDragging(true);
             setCropStart({ x, y });
@@ -180,31 +267,42 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 
     const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
         e.preventDefault();
-        if (mode === 'crop' && isDragging) {
+        
+        if (mode === 'mask' && activePointIdx !== null) {
+            const { x, y } = getCoordinates(e);
+            setPoints(prev => prev.map((p, idx) => idx === activePointIdx ? { x, y } : p));
+            setTouchPos({ x: e.clientX, y: e.clientY });
+        } else if (mode === 'crop' && isDragging) {
             setCropEnd(getCoordinates(e));
         }
     };
 
     const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
         e.preventDefault();
-        if (mode === 'crop') setIsDragging(false);
+        if (mode === 'mask') {
+            setActivePointIdx(null);
+            setTouchPos(null);
+        } else if (mode === 'crop') {
+            setIsDragging(false);
+        }
     };
 
-    // 4. 執行透視遮罩 (專剋斜角車牌)
-    const applyMask = (quad: {x: number, y: number}[]) => {
+    // 5. 執行透視遮罩 (寫入 Snapshot)
+    const handleApplyMaskClick = () => {
+        if (points.length !== 4) return;
         const canvas = canvasRef.current;
         const ctx = canvas?.getContext('2d');
         if (!canvas || !ctx || !snapshot || !originalImg) return;
 
-        // 還原底圖，擦除紅點
+        // 還原底圖，擦除紅點與紅線
         ctx.putImageData(snapshot, 0, 0);
 
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(quad[0].x, quad[0].y);
-        ctx.lineTo(quad[1].x, quad[1].y);
-        ctx.lineTo(quad[2].x, quad[2].y);
-        ctx.lineTo(quad[3].x, quad[3].y);
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(points[1].x, points[1].y);
+        ctx.lineTo(points[2].x, points[2].y);
+        ctx.lineTo(points[3].x, points[3].y);
         ctx.closePath();
 
         if (maskStyle === 'blur') {
@@ -220,9 +318,10 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         }
         ctx.restore();
 
-        // 寫入新的 Snapshot，讓下一次操作(或裁剪)基於已遮罩的圖
+        // 寫入新的 Snapshot，讓下一次操作基於已遮罩的圖
         const newSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
         setSnapshot(newSnapshot);
+        
         // 更新 originalImg 確保連續操作不出錯
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
@@ -230,11 +329,18 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         const newImg = new Image();
         newImg.onload = () => setOriginalImg(newImg);
         newImg.src = tempCanvas.toDataURL();
-
-        setPoints([]); 
+        
+        // 重置為預設的框，方便連續打碼
+        setPoints([
+            { x: originalImg.width * 0.3, y: originalImg.height * 0.4 },
+            { x: originalImg.width * 0.7, y: originalImg.height * 0.4 },
+            { x: originalImg.width * 0.7, y: originalImg.height * 0.6 },
+            { x: originalImg.width * 0.3, y: originalImg.height * 0.6 }
+        ]);
+        alert("✅ 已打碼！如需儲存請點擊右下角「儲存並替換」。");
     };
 
-    // 5. 輸出儲存邏輯 (智能判定裁剪範圍)
+    // 6. 輸出儲存邏輯 (智能判定裁剪範圍)
     const handleSaveClick = () => {
         const canvas = canvasRef.current;
         if (!canvas || !snapshot) return;
@@ -269,17 +375,14 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 
     const promptText = mode === 'crop' 
         ? "🖱️ 請在圖片上拖曳框選要保留的區域"
-        : points.length === 0 ? "👆 請點擊車牌【左上角】(第 1 點)" :
-          points.length === 1 ? "👆 請點擊車牌【右上角】(第 2 點)" :
-          points.length === 2 ? "👆 請點擊車牌【右下角】(第 3 點)" :
-          "👆 請點擊車牌【左下角】(第 4 點) 即可完成！";
+        : "👆 請拖曳 4 個角覆蓋車牌";
 
     return (
-        <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-2 md:p-6 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-800 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full max-h-[90vh]">
+        <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-0 md:p-6 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-800 w-full max-w-4xl rounded-none md:rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full md:max-h-[90vh]">
                 
                 {/* 頂部工具列 */}
-                <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
+                <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0 pt-[max(1rem,env(safe-area-inset-top))]">
                     <h3 className="text-white font-bold text-sm md:text-base flex items-center">
                         <span className="bg-blue-600 p-1.5 rounded-lg mr-2"><PenTool size={16}/></span> 
                         智能圖片編輯器
@@ -289,65 +392,87 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 
                 {/* 雙軌模式切換區 */}
                 <div className="bg-slate-800 p-2 flex justify-center border-b border-slate-700 shrink-0">
-                    <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
-                        <button onClick={() => { setMode('mask'); setPoints([]); }} className={`flex items-center gap-2 px-6 py-2 rounded-md text-sm font-bold transition-all ${mode === 'mask' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
-                            <Shield size={16}/> 四點透視遮罩
+                    <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 w-full md:w-auto">
+                        <button onClick={() => { setMode('mask'); }} className={`flex-1 md:flex-none flex justify-center items-center gap-2 px-6 py-2.5 rounded-md text-sm font-bold transition-all ${mode === 'mask' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                            <Shield size={16}/> 智能遮罩
                         </button>
-                        <button onClick={() => { setMode('crop'); setCropStart(null); setCropEnd(null); }} className={`flex items-center gap-2 px-6 py-2 rounded-md text-sm font-bold transition-all ${mode === 'crop' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
-                            <Crop size={16}/> 裁剪 / 縮放
+                        <button onClick={() => { setMode('crop'); setCropStart(null); setCropEnd(null); }} className={`flex-1 md:flex-none flex justify-center items-center gap-2 px-6 py-2.5 rounded-md text-sm font-bold transition-all ${mode === 'crop' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                            <Crop size={16}/> 裁剪
                         </button>
                     </div>
                 </div>
 
                 {/* 遮罩專屬設定 */}
                 {mode === 'mask' && (
-                    <div className="bg-slate-800 p-2 flex flex-wrap justify-center gap-3 border-b border-slate-700 shrink-0 animate-in fade-in">
-                        <button onClick={() => { setMaskStyle('blur'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'blur' ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>💧 質感毛玻璃</button>
-                        <button onClick={() => { setMaskStyle('front'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'front' ? 'bg-white text-slate-800' : 'bg-slate-700 text-slate-300'}`}>⬜ 前牌 (純白)</button>
-                        <button onClick={() => { setMaskStyle('rear'); setPoints([]); }} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'rear' ? 'bg-yellow-400 text-yellow-950' : 'bg-slate-700 text-slate-300'}`}>🟨 後牌 (純黃)</button>
+                    <div className="bg-slate-800 p-3 flex flex-wrap justify-center gap-3 border-b border-slate-700 shrink-0 animate-in fade-in">
+                        <button onClick={() => setMaskStyle('blur')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'blur' ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>💧 毛玻璃</button>
+                        <button onClick={() => setMaskStyle('front')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'front' ? 'bg-white text-slate-800' : 'bg-slate-700 text-slate-300'}`}>⬜ 白牌</button>
+                        <button onClick={() => setMaskStyle('rear')} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${maskStyle === 'rear' ? 'bg-yellow-400 text-yellow-950' : 'bg-slate-700 text-slate-300'}`}>🟨 黃牌</button>
+                        
+                        <div className="w-px h-6 bg-slate-600 mx-1 hidden md:block"></div>
+                        
+                        <button onClick={handleApplyMaskClick} className="ml-auto md:ml-0 flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition-all active:scale-95">
+                            執行打碼
+                        </button>
                     </div>
                 )}
 
                 {/* 畫布區塊 */}
-                <div ref={containerRef} className="flex-1 overflow-hidden bg-black/80 relative flex items-center justify-center p-2 touch-none select-none">
+                <div ref={containerRef} className="flex-1 overflow-hidden bg-black relative flex items-center justify-center p-0 md:p-2 touch-none select-none">
                     <canvas
                         ref={canvasRef}
                         onPointerDown={handlePointerDown}
                         onPointerMove={handlePointerMove}
                         onPointerUp={handlePointerUp}
-                        className="cursor-crosshair shadow-2xl touch-none rounded-sm max-w-full max-h-full object-contain"
+                        onPointerCancel={handlePointerUp} // 防斷線
+                        className="cursor-crosshair touch-none max-w-full max-h-full object-contain"
                         style={{ display: 'block' }}
                     />
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white font-bold pointer-events-none drop-shadow-md bg-black/60 px-5 py-2.5 rounded-full flex items-center shadow-lg border border-white/10">
+                    
+                    {/* 操作提示文字 */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/80 font-bold pointer-events-none drop-shadow-md bg-black/60 px-5 py-2 rounded-full text-xs shadow-lg border border-white/10">
                         {promptText}
-                        {mode === 'mask' && points.length > 0 && (
-                            <span 
-                                className="ml-4 pl-4 border-l border-white/30 text-red-400 pointer-events-auto cursor-pointer hover:text-red-300 underline"
-                                onPointerDown={(e) => { e.stopPropagation(); setPoints(prev => prev.slice(0, -1)); }}
-                            >
-                                撤銷上一步
-                            </span>
-                        )}
                     </div>
+
+                    {/* ★ 懸浮放大鏡 (Loupe Overlay) - 專治粗手指 */}
+                    {mode === 'mask' && activePointIdx !== null && touchPos && (
+                        <div 
+                            className="fixed pointer-events-none z-50 rounded-full border-[3px] border-white shadow-[0_10px_25px_rgba(0,0,0,0.5)] overflow-hidden bg-black"
+                            style={{
+                                width: 120,
+                                height: 120,
+                                left: touchPos.x - 60,
+                                top: touchPos.y - 140 // 在手指上方 140px，不會被手擋住！
+                            }}
+                        >
+                            <canvas ref={loupeCanvasRef} className="w-full h-full" />
+                        </div>
+                    )}
                 </div>
 
                 {/* 底部操作區 */}
-                <div className="p-4 bg-slate-900 flex justify-between items-center shrink-0">
+                <div className="p-4 md:p-5 bg-slate-900 flex justify-between items-center shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <button onClick={() => {
                         const canvas = canvasRef.current;
                         const ctx = canvas?.getContext('2d');
                         if (canvas && ctx && originalImg) {
                             ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
                             setSnapshot(ctx.getImageData(0, 0, canvas.width, canvas.height));
-                            setPoints([]);
+                            // 重置為預設的框
+                            setPoints([
+                                { x: originalImg.width * 0.3, y: originalImg.height * 0.4 },
+                                { x: originalImg.width * 0.7, y: originalImg.height * 0.4 },
+                                { x: originalImg.width * 0.7, y: originalImg.height * 0.6 },
+                                { x: originalImg.width * 0.3, y: originalImg.height * 0.6 }
+                            ]);
                             setCropStart(null);
                             setCropEnd(null);
                         }
-                    }} className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-xl transition-colors">
-                        還原重來
+                    }} className="px-5 py-3 md:py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-xl border border-slate-700 transition-colors shadow-sm">
+                        還原原圖
                     </button>
-                    <button onClick={handleSaveClick} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-2">
-                        <Check size={18}/> 儲存並替換
+                    <button onClick={handleSaveClick} className="px-8 py-3 md:py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-black rounded-xl shadow-lg shadow-blue-900/50 transition-transform active:scale-95 flex items-center gap-2">
+                        <Save size={18}/> <span className="hidden sm:inline">儲存並替換</span><span className="sm:hidden">儲存</span>
                     </button>
                 </div>
             </div>
@@ -424,7 +549,7 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
             });
             setMediaItems(myImages);
         });
-    }, [db, staffId, appId, inventory, currentUser]); // 👈 確保依賴陣列有 currentUser
+    }, [db, staffId, appId, inventory, currentUser]); 
 
     const libraryGroups = useMemo(() => {
         const groups: Record<string, { key: string, title: string, items: MediaLibraryItem[], status: string, timestamp: number }> = {};
@@ -652,7 +777,6 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
         }
     };
 
-    
     const inboxItems = mediaItems.filter(i => i.status === 'unassigned' || !i.status);
 
     return (
@@ -737,20 +861,35 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                 const isExpanded = expandedGroupKey === group.key;
                                 const currentActiveImgUrl = activeGroupImages[group.key] || group.items[0]?.url;
                                 const activeItem = group.items.find(img => img.url === currentActiveImgUrl) || group.items[0];
+                                
+                                const linkedCar = inventory.find((v:any) => v.id === group.key);
+                                const displayPlate = linkedCar?.regMark || '';
 
                                 return (
                                     <div key={group.key} className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-500/50 shadow-lg' : 'hover:border-blue-300'}`}>
                                         <div className="p-3 flex justify-between items-center bg-white border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
                                             <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className="w-16 h-12 rounded-md bg-slate-900 flex-shrink-0 overflow-hidden relative shadow-inner">
-                                                    {group.items[0] ? <img src={group.items[0].url} className="w-full h-full object-cover opacity-90"/> : <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>}
+                                                {/* ★ UI 優化：懸浮車牌縮圖卡片 */}
+                                                <div className="w-16 h-12 rounded-md bg-slate-900 flex-shrink-0 overflow-hidden relative shadow-inner group-hover:shadow-md transition-shadow">
+                                                    {group.items[0] ? (
+                                                        <>
+                                                            <img src={group.items[0].url} className="w-full h-full object-cover opacity-90"/>
+                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                                                            {displayPlate && (
+                                                                <div className="absolute bottom-0.5 left-1 z-10">
+                                                                    <span className="inline-flex items-center justify-center bg-[#FFD600] text-black font-mono font-black text-[8px] px-1 py-0.5 rounded-sm border border-black shadow-sm transform -skew-x-2 tracking-wider leading-none">
+                                                                        {displayPlate}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
+                                                    )}
                                                 </div>
+                                                
                                                 <div className="flex flex-col justify-center min-w-0 gap-1.5">
-                                                    {(() => {
-                                                        const linkedCar = inventory.find((v:any) => v.id === group.key);
-                                                        const displayPlate = linkedCar?.regMark || '';
-                                                        return displayPlate ? <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[11px] px-1.5 py-0.5 rounded-[3px] shadow-sm w-max truncate leading-none">{displayPlate}</span> : <span className="font-bold text-sm text-slate-800 truncate w-full">{group.title.split(' (')[0]}</span>;
-                                                    })()}
+                                                    <span className="font-bold text-sm text-slate-800 truncate w-full">{group.title.split(' (')[0]}</span>
                                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                         <span className="text-[10px] text-slate-600 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-[4px] flex items-center leading-none"><ImageIcon size={10} className="mr-1"/> {group.items.length}</span>
                                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-[4px] font-bold shadow-sm leading-none ${group.status === 'In Stock' ? 'bg-green-500 text-white' : group.status === 'Reserved' ? 'bg-yellow-500 text-white' : group.status === 'Sold' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{group.status === 'In Stock' ? '在庫' : group.status === 'Reserved' ? '已訂' : group.status === 'Sold' ? '已售' : group.status}</span>
