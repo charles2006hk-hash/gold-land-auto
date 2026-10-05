@@ -1054,6 +1054,12 @@ const VehicleFormModal = ({
     
     // 2. 總成本 = 買車本金 + 維修雜費
     const totalCostAll = baseCost + totalExpenses;
+
+    // ★ 智能計算：預估/實際淨利潤 (只有全權限者可見)
+    const hasFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
+    // 計算所有中港支出成本 (包含在 totalExpenses 內，但中港任務的收費會算在 totalRevenue 內)
+    const netProfit = totalRevenue - totalCostAll;
+ 
     // 3. 總已付 = 買車已付 + 對數抵銷 + 維修雜費已付
     const totalPaidAll = totalAcqPaid + acqOffsetAmount + totalExpensesPaid;
     // 4. 總欠款
@@ -2076,12 +2082,18 @@ const VehicleFormModal = ({
                                 <span className="text-blue-700 font-black text-base bg-blue-50 px-2 py-0.5 rounded">總應收: {formatCurrency(totalRevenue)}</span>
                             </div>
                             <div className="flex items-center gap-3 text-xs md:text-sm font-bold">
-                                <span className="text-green-600">已收: <span className="font-mono">{formatCurrency(totalReceived)}</span></span>
+                                {/* ★ 新增：機密淨利潤顯示 */}
+                                {hasFullAccess && (
+                                    <span className={`font-black ${netProfit > 0 ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : 'text-red-700 bg-red-100 border-red-300'} px-2 py-0.5 rounded border shadow-sm flex items-center`}>
+                                        💰 利潤: {formatCurrency(netProfit)}
+                                    </span>
+                                )}
+                                <span className="text-green-600 border-l pl-3 ml-1">已收: <span className="font-mono">{formatCurrency(totalReceived)}</span></span>
                                 <span className={`font-black ${balance > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'} px-2 py-0.5 rounded border shadow-sm`}>
                                     尾數: {formatCurrency(balance)}
                                 </span>
                             </div>
-                        </div>    
+                        </div>
                     
                     {/* 客戶資料 */}
                         <div className="relative">
@@ -2356,7 +2368,7 @@ const VehicleFormModal = ({
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
 
-                                <div className="sticky top-0 z-[40] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-red-200 shadow-sm flex flex-wrap justify-between items-center gap-2 mt-[-10px] mx-[-10px] mb-4 animate-in slide-in-from-top-4">
+                        <div className="sticky top-0 z-[40] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-red-200 shadow-sm flex flex-wrap justify-between items-center gap-2 mt-[-10px] mx-[-10px] mb-4 animate-in slide-in-from-top-4">
                             <div className="flex items-center gap-3 text-xs md:text-sm font-bold text-slate-700">
                                 <span>買車本金: <span className="font-mono text-red-700">{formatCurrency(baseCost)}</span></span>
                                 <span className="text-slate-300">+</span>
@@ -2365,7 +2377,13 @@ const VehicleFormModal = ({
                                 <span className="text-red-800 font-black text-base bg-red-100 px-2 py-0.5 rounded border border-red-300 shadow-sm">總成本: {formatCurrency(totalCostAll)}</span>
                             </div>
                             <div className="flex items-center gap-3 text-xs md:text-sm font-bold">
-                                <span className="text-green-600">總已付: <span className="font-mono">{formatCurrency(totalPaidAll)}</span></span>
+                                {/* ★ 新增：機密淨利潤顯示 */}
+                                {hasFullAccess && (
+                                    <span className={`font-black ${netProfit > 0 ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : 'text-red-700 bg-red-100 border-red-300'} px-2 py-0.5 rounded border shadow-sm flex items-center`}>
+                                        💰 利潤: {formatCurrency(netProfit)}
+                                    </span>
+                                )}
+                                <span className="text-green-600 border-l pl-3 ml-1">總已付: <span className="font-mono">{formatCurrency(totalPaidAll)}</span></span>
                                 <span className={`font-black ${acqBalance > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'} px-2 py-0.5 rounded border shadow-sm`}>
                                     總欠款: {formatCurrency(acqBalance)}
                                 </span>
