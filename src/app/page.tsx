@@ -3332,7 +3332,7 @@ const DatabaseSelector = ({
                                     {car.engineSize && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.engineSize}{car.fuelType === 'Electric' ? 'Kw' : 'cc'}</span>}
                                     {car.mileage ? <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{Number(car.mileage).toLocaleString()}km</span> : null}
                                     
-                                    {/* ★ 牌費智能顯示接入點：接在最後面，樣式統一 */}
+                                    {/* ★ 牌費智能顯示接入點 */}
                                     {car.licenseExpiry && (
                                         <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">
                                             {getLicenseFeeText(car.licenseExpiry)}
@@ -3341,7 +3341,8 @@ const DatabaseSelector = ({
                                 </div>
 
                                 {/* 底部操作區 */}
-                                <div className="flex flex-col gap-1 items-start text-[10px]">
+                                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                                    <div className="flex flex-col gap-1 items-start text-[10px]">
                                         {/* 只保留行政進度徽章 */}
                                         {logisticsBadge ? (
                                             <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${logisticsBadge.color}`}>
