@@ -263,6 +263,30 @@ const getDaysRemaining = (targetDate?: string) => {
     return diffDays;
 };
 
+// ★ 智能計算牌費剩餘月份 (多出 1 天無條件進位為 1 個月)
+const getLicenseFeeText = (expiryDateStr: string | null | undefined) => {
+    if (!expiryDateStr) return null; // 沒有填寫牌費日則不顯示
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // 抹除時分秒誤差
+    const expDate = new Date(expiryDateStr);
+    expDate.setHours(0, 0, 0, 0);
+
+    const diffTime = expDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+        return <span className="text-red-500 font-bold ml-1">牌費過期</span>;
+    }
+    if (diffDays === 0) {
+        return <span className="text-orange-500 font-bold ml-1">牌費今日到期</span>;
+    }
+
+    // 以 30 天為一期，只要 > 0 就無條件進位
+    const months = Math.ceil(diffDays / 30);
+    return <span className="text-blue-600 font-bold ml-1">牌費 {months} 個月</span>;
+};
+
 // ★★★ 修改：全域日期狀態組件 (綠=正常, 紅=過期, 黃=30天內) ★★★
 const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
     if (!date) return <div className="text-gray-300 text-xs text-center">-</div>;
@@ -3299,34 +3323,33 @@ const DatabaseSelector = ({
                                     {cbTags.map((t,i) => <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
                                 </div>
 
-                                {/* 規格微標籤 (升級：加入座位與排檔) */}
+                                {/* 規格微標籤 (升級：加入座位、排檔與牌費到期) */}
                                 <div className="flex flex-wrap gap-1.5 mt-auto mb-4">
                                     {car.colorExt && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 flex items-center"><div className="w-2 h-2 rounded-full border border-gray-300 mr-1.5 shadow-inner" style={{backgroundColor: getColorHex(car.colorExt)}}></div>{car.colorExt}</span>}
                                     <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.previousOwners || 0}手</span>
-                                    {/* ★ 新增：座位數 */}
                                     {car.seating && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.seating}座</span>}
-                                    {/* ★ 新增：排檔 */}
                                     {car.transmission && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.transmission === 'Manual' ? '手波' : '自動波'}</span>}
                                     {car.engineSize && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.engineSize}{car.fuelType === 'Electric' ? 'Kw' : 'cc'}</span>}
                                     {car.mileage ? <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{Number(car.mileage).toLocaleString()}km</span> : null}
+                                    
+                                    {/* ★ 牌費智能顯示接入點：接在最後面，樣式統一 */}
+                                    {car.licenseExpiry && (
+                                        <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">
+                                            {getLicenseFeeText(car.licenseExpiry)}
+                                        </span>
+                                    )}
                                 </div>
 
                                 {/* 底部操作區 */}
-                                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
-                                    <div className="flex flex-col gap-1 items-start text-[10px]">
-                                        {car.licenseExpiry && (() => {
-                                            const isExp = new Date(car.licenseExpiry) < new Date();
-                                            return <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${isExp?'bg-red-50 text-red-600 border-red-200':'bg-slate-50 text-slate-500 border-slate-200'}`}>牌費: {car.licenseExpiry} {isExp&&'!'}</span>;
-                                        })()}
-                                        
-                                        {/* ★ 進度徽章移到這裡，與牌費上下排列 */}
-                                        {logisticsBadge && (
+                                <div className="flex flex-col gap-1 items-start text-[10px]">
+                                        {/* 只保留行政進度徽章 */}
+                                        {logisticsBadge ? (
                                             <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${logisticsBadge.color}`}>
                                                 {logisticsBadge.text}
                                             </span>
+                                        ) : (
+                                            <span className="text-gray-300">-</span>
                                         )}
-
-                                        {(!car.licenseExpiry && !logisticsBadge) && <span className="text-gray-300">-</span>}
                                     </div>
                                     <div className="flex gap-2 items-center">
                                         <button onClick={(e) => { e.stopPropagation(); setShareCleanMode(true); setShareVehicle(car); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><Share2 size={16}/></button>
