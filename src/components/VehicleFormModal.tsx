@@ -2550,10 +2550,14 @@ const VehicleFormModal = ({
                                                     if (docId) {
                                                         const selectedDoc = allSalesDocs?.find((d:any) => d.id === docId);
                                                         if (selectedDoc) {
-                                                            const basePrice = Number(selectedDoc.formData?.price) || 0;
-                                                            const extrasTotal = (selectedDoc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
-                                                            // 自動帶入金額並加上千分位
-                                                            setAcqOffsetStr(formatNumberInput(String(basePrice + extrasTotal)));
+                                                            // ★★★ 原本的錯誤邏輯：帶入了新車的總價
+                                                            // const basePrice = Number(selectedDoc.formData?.price) || 0;
+                                                            // const extrasTotal = (selectedDoc.docItems || []).filter((i:any) => i.isSelected && !i.isFree).reduce((sum:number, i:any) => sum + i.amount, 0);
+                                                            // setAcqOffsetStr(formatNumberInput(String(basePrice + extrasTotal)));
+                                                            
+                                                            // ★★★ 修正後的防呆邏輯：只帶入當前這台舊車的收車本金
+                                                            const currentCost = Number(costStr.replace(/,/g, '')) || 0;
+                                                            setAcqOffsetStr(formatNumberInput(String(currentCost)));
                                                         }
                                                     } else {
                                                         setAcqOffsetStr('');
