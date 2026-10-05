@@ -1,3 +1,4 @@
+// src/components/DashboardModule.tsx
 'use client';
 
 import React, { useState } from 'react';
@@ -253,6 +254,30 @@ export default function DashboardModule({
   };
 
   const renderDashboardCard = (car: any) => {
+    // ★ 智能計算牌費剩餘月份 (多出 1 天無條件進位為 1 個月)
+    const getLicenseFeeText = (expiryDateStr: string | null | undefined) => {
+        if (!expiryDateStr) return '無牌費';
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); 
+        const expDate = new Date(expiryDateStr);
+        expDate.setHours(0, 0, 0, 0);
+
+        const diffTime = expDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) {
+            return '無牌費'; // 過期顯示無牌費
+        }
+        if (diffDays === 0) {
+            return '今日到期';
+        }
+
+        // 以 30 天為一期，只要 > 0 就無條件進位
+        const months = Math.ceil(diffDays / 30);
+        return `牌費 ${months} 個月`;
+    };
+
     const getLogisticsBadge = (vehicleData: any) => {
       const log = vehicleData.logistics || {};
       if (log.registeredDate) return null;
@@ -320,6 +345,9 @@ export default function DashboardModule({
     if (car.engineSize) specs.push(`${car.engineSize}${car.fuelType === 'Electric' ? 'Kw' : 'cc'}`);
     if (car.colorExt) specs.push(car.colorExt.split(' ')[0].replace(/[()]/g, ''));
     if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
+    
+    // ★ 將牌費到期狀態加入屬性列中
+    specs.push(getLicenseFeeText(car.licenseExpiry));
 
     return (
       <div 
