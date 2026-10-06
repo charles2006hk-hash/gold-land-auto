@@ -1687,7 +1687,7 @@ useEffect(() => {
       }
   }, [user, staffId, loading]); // 👈 必須補上 loading 依賴項
 
-// ★★★ 核心修復：把 Hooks 移到 Early Return 之前，解決 Error #310 崩潰問題 ★★★
+// ★★★ 核心修復：資料庫提醒權限隔離 (放在 Early Return 之前避免 Error #310) ★★★
   const databaseReminders = useMemo(() => {
       const expired: any[] = [];
       const soon: any[] = [];
@@ -1695,6 +1695,10 @@ useEffect(() => {
       today.setHours(0,0,0,0);
 
       dbEntries.forEach(entry => {
+          // ★ 權限隔離邏輯：如果這筆資料的負責人(managedBy)不是當前登入者，就不產生提醒
+          // 這能確保每個人 (包含 BOSS) 的儀表板只會看到屬於自己的資料庫預警
+          if (entry.managedBy && entry.managedBy !== staffId) return;
+
           if (entry.reminderEnabled && entry.expiryDate) {
               const target = new Date(entry.expiryDate);
               const diffTime = target.getTime() - today.getTime();
@@ -1742,7 +1746,7 @@ useEffect(() => {
           expired: expired.sort((a, b) => a.days - b.days), 
           soon: soon.sort((a, b) => a.days - b.days) 
       };
-  }, [dbEntries]);
+  }, [dbEntries, staffId]); // 👈 必須確保 staffId 在這裡，當帳號切換時才會重新計算
 
   
   if (!staffId) {
