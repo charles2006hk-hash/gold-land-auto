@@ -180,6 +180,7 @@ export type CrossBorderData = {
     cb_remind_HkInspection?: boolean;
     documentLogs?: DocCustodyLog[]; 
     tasks?: CrossBorderTask[];
+    hiddenDocs?: string[]; // ★ 新增：記錄使用者手動隱藏的關聯文件 ID
 };
 
 export type Vehicle = {
