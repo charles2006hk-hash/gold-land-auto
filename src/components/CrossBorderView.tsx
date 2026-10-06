@@ -825,7 +825,26 @@ export default function CrossBorderView({
                                     // 🛑 黑名單過濾：如果這份文件被使用者手動移除了，就不要顯示
                                     if (hiddenDocs.includes(entry.id)) return false;
 
-                                    // 整理資料庫文件的特徵
+                                    // ★ 核心修復 1：車輛嚴格模式 (Strict Vehicle Match)
+                                    // 如果這份文件是「車輛類別」或「牌簿」，絕對不能只靠車主名字關聯！
+                                    // 必須嚴格要求「車牌」或「底盤號」互相吻合，避免把同車主的其他車拉進來。
+                                    if (entry.category === 'Vehicle' || entry.docType === '牌簿 (VRD)') {
+                                        const docPlates = [
+                                            normalize(entry.plateNoHK), normalize(entry.plateNoCN), 
+                                            normalize(entry.relatedPlateNo), normalize(entry.chassisNo)
+                                        ].filter(k => k.length > 1);
+                                        
+                                        const currentCarPlates = [
+                                            normalize(activeCar.regMark), normalize(activeCar.crossBorder?.mainlandPlate), 
+                                            normalize(activeCar.chassisNo)
+                                        ].filter(k => k.length > 1);
+
+                                        // 檢查是否有車牌交集
+                                        const hasPlateMatch = docPlates.some(dp => currentCarPlates.some(cp => dp.includes(cp) || cp.includes(dp)));
+                                        return hasPlateMatch; // 有交集才顯示，沒交集直接剔除
+                                    }
+
+                                    // 整理一般文件的特徵 (Person, Company 等)
                                     const entryFields = [
                                         normalize(entry.plateNoHK),
                                         normalize(entry.plateNoCN),
@@ -837,8 +856,7 @@ export default function CrossBorderView({
                                     
                                     if (entryFields.length === 0) return false;
 
-                                    // 2. ★ 雙向模糊比對 (Bi-directional Fuzzy Match)：
-                                    // A 包含 B，或 B 包含 A 都算命中！(完美解決 "陳大文 Chan Tai Man" vs "陳大文" 的問題)
+                                    // 2. ★ 雙向模糊比對 (Bi-directional Fuzzy Match) 適用於人名/公司名
                                     return carFeatures.some(carFeat => 
                                         entryFields.some(entryFeat => 
                                             carFeat.includes(entryFeat) || entryFeat.includes(carFeat)
