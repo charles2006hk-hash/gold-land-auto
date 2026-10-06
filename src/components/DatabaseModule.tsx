@@ -800,31 +800,54 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         return timeB - timeA; 
     });
 
+    // ★ 智能防呆升級：掃描重複資料 (Deduplication Scan)
+    // 規則：同一個名字，如果沒有綁定特定的車牌，才是真正的重複。
+    // 如果同一個人名下有多台不同的車牌，應該視為「合法的多筆紀錄」，不強制合併。
     const scanForDuplicates = () => {
         const groupMap = new Map<string, DatabaseEntry[]>();
+        
         entries.forEach(e => {
-            const nameKey = e.name.trim(); 
+            const nameKey = (e.name || '').trim().toLowerCase(); 
             if (!nameKey) return;
-            const groupKey = `${e.category}::${nameKey}`; 
+            
+            // 使用「分類 + 小寫姓名 + 關聯車牌」作為群組 Key。
+            // 這樣同一人、同一車牌才會被歸在同一組，避免把客人買的不同車子錯誤合併。
+            const plateKey = (e.plateNoHK || e.relatedPlateNo || '').trim().toUpperCase();
+            const groupKey = `${e.category}::${nameKey}::${plateKey}`; 
+            
             if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
             groupMap.get(groupKey)?.push(e);
         });
+
         const duplicates: DatabaseEntry[][] = [];
         const allIds: string[] = []; 
+        
         groupMap.forEach((group) => { 
+            // 只有當同一人、同一車牌 (或同樣沒車牌) 出現兩次以上，才算重複
             if (group.length > 1) {
+                // 將資料豐富度最高（例如有附件或字數較多）或最新的排在最前面
+                group.sort((a, b) => {
+                    const aScore = (a.attachments?.length || 0) * 10 + (a.description?.length || 0);
+                    const bScore = (b.attachments?.length || 0) * 10 + (b.description?.length || 0);
+                    if (aScore !== bScore) return bScore - aScore;
+                    return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
+                });
+
                 duplicates.push(group); 
                 group.forEach(e => allIds.push(e.id));
             }
         });
-        if (duplicates.length === 0) { showToast("未發現重複資料"); } 
-        else { 
+
+        if (duplicates.length === 0) { 
+            showToast("✨ 太棒了！未發現任何異常重複資料。"); 
+        } else { 
             setDupeGroups(duplicates); 
             setSelectedDupeIds(allIds); 
             setShowDupeModal(true); 
         }
     };
 
+    // ★ 智能一鍵合併 (Smart Resolution)
     const resolveDuplicate = async (keepId: string, group: DatabaseEntry[]) => {
         const otherEntries = group.filter(e => e.id !== keepId && selectedDupeIds.includes(e.id));
         
@@ -833,7 +856,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             return;
         }
 
-        if (!confirm(`確定執行「智能合併」？\n系統將保留您點擊的主體，並吸收已勾選的 ${otherEntries.length} 筆資料。\n(未勾選的資料將會維持原狀不被影響)`)) return;
+        if (!confirm(`確定執行「智能合併」？\n系統將保留您點擊的主體，並吸收已勾選的 ${otherEntries.length} 筆資料。\n(合併後，多餘的空殼紀錄將被刪除)`)) return;
         if (!db) return;
 
         try {
@@ -843,6 +866,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
             const mergedData: any = { ...keepEntry };
 
             otherEntries.forEach(other => {
+                // 1. 填補空缺欄位
                 Object.keys(other).forEach(key => {
                     if (key === 'extractedData') return; 
                     const val = mergedData[key];
@@ -851,6 +875,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                     }
                 });
 
+                // 2. 合併 AI 提取數據
                 let otherExt: any = {};
                 let mergedExt: any = {};
                 try { otherExt = typeof other.extractedData === 'string' ? JSON.parse(other.extractedData || '{}') : (other.extractedData || {}); } catch(e){}
@@ -861,6 +886,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                 });
                 mergedData.extractedData = JSON.stringify(mergedExt);
 
+                // 3. 陣列安全合併與去重
                 if (other.tags) mergedData.tags = Array.from(new Set([...(mergedData.tags || []), ...other.tags]));
                 if (other.roles) mergedData.roles = Array.from(new Set([...(mergedData.roles || []), ...other.roles]));
                 
@@ -1037,8 +1063,23 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                     <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 shadow-sm relative overflow-hidden">
                                         <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                                         <label className="block text-xs font-black text-blue-800 mb-2 uppercase tracking-wider">1. 請先選擇文件類型 (Doc Type)</label>
-                                        <input list="doctype_list" disabled={!isDbEditing} value={editingEntry.docType || ''} onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} className="w-full p-2.5 border border-blue-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none font-bold text-slate-800 shadow-inner transition-all" placeholder="選擇或輸入文件類型..."/>
-                                        <datalist id="doctype_list">{(settings.dbDocTypes[editingEntry.category] || []).map(t => <option key={t} value={t}/>)}</datalist>
+                                        {/* ★ 智能聯動：證件類型隨資料庫大類別變動 */}
+                                        <select 
+                                            disabled={!isDbEditing} 
+                                            value={editingEntry.docType || ''} 
+                                            onChange={e => setEditingEntry({...editingEntry, docType: e.target.value})} 
+                                            className={`w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 outline-none font-bold shadow-inner transition-all cursor-pointer ${
+                                                editingEntry.docType 
+                                                    ? 'border-blue-300 text-blue-800 focus:ring-blue-400' 
+                                                    : 'border-red-300 text-red-600 focus:ring-red-400 animate-pulse'
+                                            }`}
+                                        >
+                                            <option value="" disabled>-- ⚠️ 請必須選擇文件類型 --</option>
+                                            {(settings.dbDocTypes[editingEntry.category || 'Person'] || []).map((t: string) => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                            <option value="其他">其他 (Other)</option>
+                                        </select>
                                         
                                         {/* 專屬數據欄位緊接在文件類型下方 */}
                                         {editingEntry.docType && DOCUMENT_FIELD_SCHEMA[editingEntry.docType] && (
