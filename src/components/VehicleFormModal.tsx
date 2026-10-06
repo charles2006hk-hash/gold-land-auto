@@ -3963,18 +3963,62 @@ const VehicleFormModal = ({
                 </div>
             )}
            
-            {/* 圖片放大預覽 Modal */}
-            {previewImage && (
-                <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in" onClick={() => setPreviewImage(null)}>
-                    <img src={previewImage} className="max-w-full max-h-full object-contain shadow-2xl" onClick={(e) => e.stopPropagation()} />
-                    <button type="button" onClick={() => setPreviewImage(null)} className="absolute top-6 right-6 text-white p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-50">
-                        <X size={28}/>
+
+
+        {/* ★ 圖片放大預覽 Modal (已移出 form 與 overflow 限制區塊，實現真正的全螢幕) */}
+        {previewImage && (
+            <div 
+                className="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in" 
+                onClick={() => setPreviewImage(null)}
+            >
+                <img 
+                    src={previewImage} 
+                    className="max-w-full max-h-full object-contain shadow-2xl cursor-default" 
+                    onClick={(e) => e.stopPropagation()} 
+                    alt="預覽圖片"
+                />
+                
+                {/* 頂部操作按鈕區 */}
+                <div className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-3 z-50">
+                    {/* 下載按鈕 */}
+                    <button 
+                        type="button" 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            // 使用 fetch 轉換為 blob 強制觸發下載，避免瀏覽器直接開新分頁
+                            fetch(previewImage)
+                                .then(res => res.blob())
+                                .then(blob => {
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = `Vehicle_Photo_${Date.now()}.jpg`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    window.URL.revokeObjectURL(url);
+                                })
+                                .catch(() => window.open(previewImage, '_blank')); // 備用方案
+                        }} 
+                        className="text-white p-3 bg-white/10 hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
+                        title="下載圖片"
+                    >
+                        <DownloadCloud size={24}/>
+                    </button>
+                    
+                    {/* 關閉按鈕 */}
+                    <button 
+                        type="button" 
+                        onClick={() => setPreviewImage(null)} 
+                        className="text-white p-3 bg-white/10 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
+                        title="關閉預覽"
+                    >
+                        <X size={24}/>
                     </button>
                 </div>
-            )}
+            </div>
+        )}
 
-          </form>
-        </div>
       </div>
     );
 };
