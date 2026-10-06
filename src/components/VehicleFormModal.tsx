@@ -3963,7 +3963,8 @@ const VehicleFormModal = ({
                 </div>
             )}
            
-
+</form>
+        </div>
 
         {/* ★ 圖片放大預覽 Modal (已移出 form 與 overflow 限制區塊，實現真正的全螢幕) */}
         {previewImage && (
