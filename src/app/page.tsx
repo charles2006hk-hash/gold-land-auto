@@ -1783,65 +1783,83 @@ useEffect(() => {
   // --- CRUD Actions ---
 
 // ★★★ 防死鎖版的同步函數 ★★★
-    // ★★★ 靜默智能覆蓋引擎 (Smart Upsert) ★★★
+    // ★★★ 靜默智能覆蓋引擎 2.0 (Smart Upsert - 防重複與多車牌追加) ★★★
     const syncToDatabase = async (data: any, category: string) => {
         if (!db || !appId || !staffId) return;
 
         try {
-            // 自動將 '客戶'、'司機' 映射為標準 'Person' 分類，並打上標籤
             let stdCategory = category;
             let roleTag = '';
             if (category === '客戶') { stdCategory = 'Person'; roleTag = '客戶'; }
             if (category === '司機') { stdCategory = 'Person'; roleTag = '司機'; }
+            if (category === '前車主/行家') { stdCategory = 'Person'; roleTag = '前車主/行家'; }
             
             const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
             
-            // 1. 決定智能比對條件 (優先電話 -> 再來身份證 -> 最後姓名)
-            let q;
-            if (data.phone) {
-                q = query(dbRef, where('phone', '==', data.phone), where('category', '==', stdCategory));
-            } else if (data.idNumber) {
-                q = query(dbRef, where('idNumber', '==', data.idNumber), where('category', '==', stdCategory));
-            } else if (data.chassisNo) {
-                q = query(dbRef, where('chassisNo', '==', data.chassisNo), where('category', '==', stdCategory));
-            } else {
-                if (!data.name) return; // 完全沒名字就不存
-                q = query(dbRef, where('name', '==', data.name), where('category', '==', stdCategory));
-            }
-
+            // 1. 取得當前所有同類型的資料進行「客戶端模糊比對」(無視大小寫與空格)
+            const q = query(dbRef, where('category', '==', stdCategory));
             const snapshot = await getDocs(q);
             
-            if (snapshot.empty) {
-                // 不存在 -> 直接新增 (靜默，完全不彈窗打擾業務)
+            let matchedDoc: any = null;
+            const incomingName = (data.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            const incomingPhone = (data.phone || '').trim();
+
+            snapshot.forEach(doc => {
+                const dbData = doc.data();
+                const dbName = (dbData.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                const dbPhone = (dbData.phone || '').trim();
+                
+                // 比對邏輯：名字完全一樣 (無視大小寫)，或者電話一樣且都不為空
+                if ((incomingName && dbName === incomingName) || (incomingPhone && dbPhone === incomingPhone)) {
+                    matchedDoc = { id: doc.id, ...dbData };
+                }
+            });
+            
+            // 處理車牌關聯 (避免洗掉這個人原本的其他車)
+            let finalPlateNo = data.relatedPlateNo || '';
+
+            if (!matchedDoc) {
+                // 不存在 -> 全新建立
+                // 自動判斷是否為公司 (含 BR)
+                const isCompany = data.idNumber && (data.idNumber.toUpperCase().includes('BR') || data.idNumber.toUpperCase().includes('CI'));
+                
                 await addDoc(dbRef, {
                     ...data,
-                    category: stdCategory,
+                    // 強制名稱標準化 (英文轉大寫)
+                    name: data.name.toUpperCase() === data.name.toLowerCase() ? data.name : data.name.toUpperCase(),
+                    category: isCompany ? 'Company' : stdCategory,
                     tags: roleTag ? [roleTag] : [],
                     managedBy: staffId,
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp()
                 });
             } else {
-                // 已存在 -> 智能覆蓋 (只更新有填寫的值，不洗掉原本的舊資料)
-                const docId = snapshot.docs[0].id;
-                const existingData = snapshot.docs[0].data();
-                
+                // 已存在 -> 智能合併 (Merge)
                 const mergedData: any = {};
+                
+                // 只更新有填寫的新值
                 Object.keys(data).forEach(key => {
-                    // 如果新資料有填，且不為空字串，就覆寫更新
-                    if (data[key] !== undefined && data[key] !== '') {
+                    if (data[key] !== undefined && data[key] !== '' && key !== 'relatedPlateNo') {
                         mergedData[key] = data[key];
                     }
                 });
 
-                // 智能合併標籤 (如果原本是客，現在變司機，就兩個 Tag 都保留)
-                let newTags = existingData.tags || [];
+                // ★ 核心修復：車牌追加機制 (不洗掉舊車牌)
+                if (data.relatedPlateNo) {
+                    const existingPlates = matchedDoc.relatedPlateNo ? matchedDoc.relatedPlateNo.split(',').map((p:string) => p.trim()) : [];
+                    if (!existingPlates.includes(data.relatedPlateNo)) {
+                        existingPlates.push(data.relatedPlateNo);
+                    }
+                    mergedData.relatedPlateNo = existingPlates.filter(Boolean).join(', ');
+                }
+
+                let newTags = matchedDoc.tags || [];
                 if (roleTag && !newTags.includes(roleTag)) {
                     newTags = [...newTags, roleTag];
                     mergedData.tags = newTags;
                 }
 
-                await updateDoc(doc(dbRef, docId), {
+                await updateDoc(doc(dbRef, matchedDoc.id), {
                     ...mergedData,
                     updatedAt: serverTimestamp()
                 });
