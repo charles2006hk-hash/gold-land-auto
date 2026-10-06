@@ -172,8 +172,8 @@ export default function CrossBorderView({
     const [showExpired, setShowExpired] = useState(false); 
     const [showSoon, setShowSoon] = useState(false);
     
-    // ★ 新增：控制關聯文件的摺疊狀態與全螢幕放大預覽
-    const [isRelatedDocsOpen, setIsRelatedDocsOpen] = useState(false);
+    // ★ 新增：控制關聯文件的摺疊狀態與全螢幕放大預覽 (預設展開)
+    const [isRelatedDocsOpen, setIsRelatedDocsOpen] = useState(true);
     const [previewDoc, setPreviewDoc] = useState<any | null>(null);
     
     const [isMobileDetail, setIsMobileDetail] = useState(false);
@@ -800,32 +800,44 @@ export default function CrossBorderView({
                                 </div>
                             )}
 
-                            {/* 2. ★ 新增：自動連動資料庫中心的中港文件 ★ */}
+                            {/* 2. ★ 升級版：智能關聯雷達 (多維度特徵掃描) ★ */}
                             {(() => {
-                                // ★ 核心修復：智能車牌清洗器 (去除所有空白與特殊符號，強制轉大寫，消除人為輸入誤差)
-                                const normalizePlate = (p?: string) => (p || '').replace(/[^A-Z0-9\u4e00-\u9fa5]/ig, '').toUpperCase();
+                                const normalize = (p?: string) => (p || '').replace(/[^A-Za-z0-9\u4e00-\u9fa5]/ig, '').toUpperCase();
 
-                                const carHK = normalizePlate(activeCar.regMark);
-                                const carCN = normalizePlate(activeCar.crossBorder?.mainlandPlate);
+                                // 1. 收集這台車「所有的身份特徵」
+                                const carFeatures = [
+                                    normalize(activeCar.regMark),                             // 香港車牌
+                                    normalize(activeCar.crossBorder?.mainlandPlate),          // 內地車牌
+                                    normalize(activeCar.chassisNo),                           // 底盤號碼
+                                    normalize(activeCar.crossBorder?.quotaNumber),            // 指標號 (批文號)
+                                    normalize(activeCar.crossBorder?.hkCompany),              // 香港公司
+                                    normalize(activeCar.crossBorder?.mainlandCompany),        // 內地公司
+                                    normalize(activeCar.crossBorder?.driver1),                // 司機 1
+                                    normalize(activeCar.crossBorder?.driver2),                // 司機 2
+                                    normalize(activeCar.crossBorder?.driver3)                 // 司機 3
+                                ].filter(k => k.length > 2); // 過濾掉空值或太短的雜訊字元
 
                                 const relatedDocs = dbEntries?.filter(entry => {
-                                    // ★ 核心升級：移除 category 限制！
-                                    // 只要這份文件有綁定這台車的「香港車牌」或「內地車牌」，
-                                    // 不管它是「車輛牌簿」、「公司文件」還是「司機證件」，通通拉出來顯示！
+                                    // 清理資料庫文件的特徵
+                                    const entryHK = normalize(entry.plateNoHK);
+                                    const entryCN = normalize(entry.plateNoCN);
+                                    const entryRelated = normalize(entry.relatedPlateNo);
+                                    const entryChassis = normalize(entry.chassisNo);
+                                    const entryQuota = normalize(entry.quotaNo);
+                                    const entryName = normalize(entry.name);
                                     
-                                    // 清洗資料庫中的所有潛在車牌欄位
-                                    const docHK = normalizePlate(entry.plateNoHK);
-                                    const docCN = normalizePlate(entry.plateNoCN);
-                                    const docRelated = normalizePlate(entry.relatedPlateNo);
+                                    // 防呆：如果沒有任何有意義的內容就不比對
+                                    if (!entryHK && !entryCN && !entryRelated && !entryChassis && !entryQuota && !entryName) return false;
 
-                                    // 🛑 防呆機制：如果這份文件完全沒有任何車牌資料，絕對不能配對
-                                    if (!docHK && !docCN && !docRelated) return false;
-
-                                    // ✅ 只要精準命中，就拉出來顯示
-                                    if (carHK && (carHK === docHK || carHK === docCN || carHK === docRelated)) return true;
-                                    if (carCN && (carCN === docHK || carCN === docCN || carCN === docRelated)) return true;
-
-                                    return false;
+                                    // 2. 交叉比對：只要有任何一個特徵互相吻合，就關聯！
+                                    return carFeatures.some(feature => 
+                                        feature === entryHK || 
+                                        feature === entryCN || 
+                                        feature === entryRelated || 
+                                        feature === entryChassis || 
+                                        feature === entryQuota || 
+                                        feature === entryName
+                                    );
                                 }) || [];
 
                                if (relatedDocs.length === 0) return null;
