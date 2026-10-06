@@ -800,43 +800,49 @@ export default function CrossBorderView({
                                 </div>
                             )}
 
-                            {/* 2. ★ 升級版：智能關聯雷達 (多維度特徵掃描) ★ */}
+                            {/* 2. ★ 升級版 2.0：智能模糊關聯雷達 + 黑名單排除機制 ★ */}
                             {(() => {
+                                // 將字串去空白、轉大寫，保留中英數字
                                 const normalize = (p?: string) => (p || '').replace(/[^A-Za-z0-9\u4e00-\u9fa5]/ig, '').toUpperCase();
 
-                                // 1. 收集這台車「所有的身份特徵」
+                                // 1. 收集這台車「所有的身份特徵」(長度 > 1 才能比對，避免單字誤判)
                                 const carFeatures = [
-                                    normalize(activeCar.regMark),                             // 香港車牌
-                                    normalize(activeCar.crossBorder?.mainlandPlate),          // 內地車牌
-                                    normalize(activeCar.chassisNo),                           // 底盤號碼
-                                    normalize(activeCar.crossBorder?.quotaNumber),            // 指標號 (批文號)
-                                    normalize(activeCar.crossBorder?.hkCompany),              // 香港公司
-                                    normalize(activeCar.crossBorder?.mainlandCompany),        // 內地公司
-                                    normalize(activeCar.crossBorder?.driver1),                // 司機 1
-                                    normalize(activeCar.crossBorder?.driver2),                // 司機 2
-                                    normalize(activeCar.crossBorder?.driver3)                 // 司機 3
-                                ].filter(k => k.length > 2); // 過濾掉空值或太短的雜訊字元
+                                    normalize(activeCar.regMark),
+                                    normalize(activeCar.crossBorder?.mainlandPlate),
+                                    normalize(activeCar.chassisNo),
+                                    normalize(activeCar.crossBorder?.quotaNumber),
+                                    normalize(activeCar.crossBorder?.hkCompany),
+                                    normalize(activeCar.crossBorder?.mainlandCompany),
+                                    normalize(activeCar.crossBorder?.driver1),
+                                    normalize(activeCar.crossBorder?.driver2),
+                                    normalize(activeCar.crossBorder?.driver3)
+                                ].filter(k => k.length > 1);
+
+                                // ★ 取得這台車專屬的「已隱藏/取消關聯」文件清單 (黑名單)
+                                const hiddenDocs = activeCar.crossBorder?.hiddenDocs || [];
 
                                 const relatedDocs = dbEntries?.filter(entry => {
-                                    // 清理資料庫文件的特徵
-                                    const entryHK = normalize(entry.plateNoHK);
-                                    const entryCN = normalize(entry.plateNoCN);
-                                    const entryRelated = normalize(entry.relatedPlateNo);
-                                    const entryChassis = normalize(entry.chassisNo);
-                                    const entryQuota = normalize(entry.quotaNo);
-                                    const entryName = normalize(entry.name);
-                                    
-                                    // 防呆：如果沒有任何有意義的內容就不比對
-                                    if (!entryHK && !entryCN && !entryRelated && !entryChassis && !entryQuota && !entryName) return false;
+                                    // 🛑 黑名單過濾：如果這份文件被使用者手動移除了，就不要顯示
+                                    if (hiddenDocs.includes(entry.id)) return false;
 
-                                    // 2. 交叉比對：只要有任何一個特徵互相吻合，就關聯！
-                                    return carFeatures.some(feature => 
-                                        feature === entryHK || 
-                                        feature === entryCN || 
-                                        feature === entryRelated || 
-                                        feature === entryChassis || 
-                                        feature === entryQuota || 
-                                        feature === entryName
+                                    // 整理資料庫文件的特徵
+                                    const entryFields = [
+                                        normalize(entry.plateNoHK),
+                                        normalize(entry.plateNoCN),
+                                        normalize(entry.relatedPlateNo),
+                                        normalize(entry.chassisNo),
+                                        normalize(entry.quotaNo),
+                                        normalize(entry.name)
+                                    ].filter(k => k.length > 1);
+                                    
+                                    if (entryFields.length === 0) return false;
+
+                                    // 2. ★ 雙向模糊比對 (Bi-directional Fuzzy Match)：
+                                    // A 包含 B，或 B 包含 A 都算命中！(完美解決 "陳大文 Chan Tai Man" vs "陳大文" 的問題)
+                                    return carFeatures.some(carFeat => 
+                                        entryFields.some(entryFeat => 
+                                            carFeat.includes(entryFeat) || entryFeat.includes(carFeat)
+                                        )
                                     );
                                 }) || [];
 
@@ -844,7 +850,6 @@ export default function CrossBorderView({
 
                                 return (
                                     <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex-none transition-all">
-                                        {/* 標題列：改為可點擊摺疊 */}
                                         <div 
                                             className="flex justify-between items-center cursor-pointer select-none"
                                             onClick={() => setIsRelatedDocsOpen(!isRelatedDocsOpen)}
@@ -859,26 +864,44 @@ export default function CrossBorderView({
                                             </div>
                                         </div>
                                         
-                                        {/* 內容區：動畫展開 */}
                                         {isRelatedDocsOpen && (
-                                            <div className="flex gap-3 overflow-x-auto pt-3 pb-1 scrollbar-thin animate-in slide-in-from-top-2 fade-in duration-200">
+                                            <div className="flex gap-3 overflow-x-auto pt-4 pb-2 scrollbar-thin animate-in slide-in-from-top-2 fade-in duration-200">
                                                 {relatedDocs.map(doc => {
-                                                    // ★ 智能圖片抓取：同時相容舊版 images 陣列與新版 attachments 陣列
                                                     const thumbUrl = doc.attachments?.[0]?.data || doc.images?.[0] || null;
                                                     
                                                     return (
                                                         <div 
                                                             key={doc.id} 
-                                                            onClick={() => setPreviewDoc(doc)} // ★ 修復：直接傳入整份文件資料
-                                                            className="w-32 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group flex-shrink-0"
+                                                            onClick={() => setPreviewDoc(doc)} 
+                                                            className="w-32 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group flex-shrink-0 relative mt-1"
                                                         >
+                                                            {/* ★ 新增：移除關聯按鈕 (Hover 時顯示) */}
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if(confirm('確定要取消關聯此文件嗎？\n(這只會在此車輛面板隱藏該文件，不會刪除資料庫檔案)')) {
+                                                                        const currentHidden = activeCar.crossBorder?.hiddenDocs || [];
+                                                                        updateVehicle(activeCar.id!, {
+                                                                            crossBorder: {
+                                                                                ...activeCar.crossBorder,
+                                                                                hiddenDocs: [...currentHidden, doc.id]
+                                                                            }
+                                                                        } as any);
+                                                                    }
+                                                                }}
+                                                                className="absolute -top-2 -right-2 w-5 h-5 bg-slate-800 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-md z-30"
+                                                                title="隱藏此關聯文件"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+
                                                             <div className="h-20 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
                                                                 {thumbUrl ? (
                                                                     <img src={thumbUrl} alt="doc" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                                                                 ) : (
                                                                     <FileText size={24} className="text-slate-300 opacity-50"/>
                                                                 )}
-                                                                <div className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                                                                <div className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm z-20">
                                                                     {doc.docType || '文件'}
                                                                 </div>
                                                             </div>
