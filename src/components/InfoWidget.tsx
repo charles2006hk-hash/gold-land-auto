@@ -7,13 +7,19 @@ const InfoWidget = () => {
     const [portStatus, setPortStatus] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // ★ 新增：隧道資料與輪播螢幕狀態
+    // ★ 隧道資料與輪播螢幕狀態
     const [tunnelStatus, setTunnelStatus] = useState<any>(null);
     const [trafficScreen, setTrafficScreen] = useState<'ports' | 'tunnels'>('ports');
 
+    // ★ 升級版口岸映射字典 (涵蓋入境處所有可能的代碼變體)
     const PORT_MAPPING: Record<string, string> = {
-        'SBC': '深圳灣', 'LMC': '皇崗(落馬洲)', 'HZM': '港珠澳大橋',
-        'HYW': '蓮塘/香園圍', 'MKT': '文錦渡', 'STK': '沙頭角'
+        'SBC': '深圳灣', 
+        'LMC': '皇崗/落馬洲', 
+        'LMCC': '皇崗/落馬洲', // 某些 API 版本可能使用的代碼
+        'HZM': '港珠澳大橋',
+        'HYW': '蓮塘/香園圍', 
+        'MKT': '文錦渡', 
+        'STK': '沙頭角'
     };
 
     const getStatusText = (code: number) => {
@@ -32,7 +38,7 @@ const InfoWidget = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // ★ 1. 控制畫面：每 10 秒切換一次屏幕
+    // ★ 控制畫面：每 10 秒切換一次屏幕
     useEffect(() => {
         const interval = setInterval(() => {
             setTrafficScreen(prev => prev === 'ports' ? 'tunnels' : 'ports');
@@ -40,24 +46,55 @@ const InfoWidget = () => {
         return () => clearInterval(interval);
     }, []);
 
-    // ★ 2. 抓取資料：每 60 秒在背景雙管齊下更新數據
+    // ★ 抓取資料：每 60 秒在背景雙管齊下更新數據
     useEffect(() => {
         const fetchTraffic = async () => {
             try {
                 const res = await fetch(`/api/traffic?t=${Date.now()}`);
                 if (!res.ok) throw new Error('API Error');
                 const data = await res.json();
+                
                 if (data && typeof data === 'object') {
-                    const formatted = Object.keys(data).filter(key => PORT_MAPPING[key]).map(key => {
-                        const info = data[key];
-                        return { name: PORT_MAPPING[key], up: info.depQueue, down: info.arrQueue };
+                    // ★ 使用 Map 去重，避免 API 回傳了 LMC 和 LMCC 導致重複顯示
+                    const uniquePorts = new Map<string, any>();
+                    
+                    Object.keys(data).forEach(key => {
+                        const portName = PORT_MAPPING[key];
+                        if (portName) {
+                            const info = data[key];
+                            uniquePorts.set(portName, { 
+                                name: portName, 
+                                up: info.depQueue, 
+                                down: info.arrQueue 
+                            });
+                        }
                     });
-                    const sortOrder = ['深圳灣', '皇崗(落馬洲)', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
-                    formatted.sort((a, b) => sortOrder.indexOf(a.name) - sortOrder.indexOf(b.name));
-                    if (formatted.length > 0) setPortStatus(formatted);
+
+                    const formatted = Array.from(uniquePorts.values());
+
+                    // 強制固定排序 (確保皇崗一定會出現在第二個)
+                    const sortOrder = ['深圳灣', '皇崗/落馬洲', '港珠澳大橋', '蓮塘/香園圍', '文錦渡', '沙頭角'];
+                    formatted.sort((a, b) => {
+                        const idxA = sortOrder.indexOf(a.name);
+                        const idxB = sortOrder.indexOf(b.name);
+                        // 若不在名單內則排在最後
+                        return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+                    });
+                    
+                    // 為了確保畫面完整，如果 API 暫時沒回傳某個口岸，我們手動補上
+                    const finalDisplay = sortOrder.map(portName => {
+                        const found = formatted.find(p => p.name === portName);
+                        return found || { name: portName, up: 99, down: 99 }; // 如果沒有數據，預設顯示關閉或未知
+                    });
+
+                    setPortStatus(finalDisplay);
                 }
-            } catch (e) { console.warn("口岸數據延遲"); } 
-            finally { setLoading(false); }
+            } catch (e) { 
+                console.warn("口岸數據延遲"); 
+            } 
+            finally { 
+                setLoading(false); 
+            }
         };
 
         const fetchTunnels = async () => {
@@ -78,13 +115,11 @@ const InfoWidget = () => {
         return () => clearInterval(trafficTimer);
     }, []);
 
-    // ★★★ 終極修復：數學運算版農曆轉換 (無視瀏覽器格式差異，100% 顯示生肖) ★★★
+    // ★ 數學運算版農曆轉換
     const getLunarDate = () => {
         try {
-            // 1. 取得準確的中文月日 (讓瀏覽器處理閏月等複雜邏輯)
             let mdStr = new Intl.DateTimeFormat('zh-HK', { calendar: 'chinese', month: 'long', day: 'numeric' }).format(currentTime);
             
-            // 防呆：如果某些舊手機瀏覽器偷懶回傳數字 (如 "4月24日")，我們手動轉中文字
             if (/\d/.test(mdStr)) {
                 const parts = new Intl.DateTimeFormat('en-US', { calendar: 'chinese', month: 'numeric', day: 'numeric' }).formatToParts(currentTime);
                 let m = 0, d = 0;
@@ -92,23 +127,19 @@ const InfoWidget = () => {
                     if (p.type === 'month') m = parseInt(p.value.match(/\d+/)?.[0] || '1', 10);
                     if (p.type === 'day') d = parseInt(p.value.match(/\d+/)?.[0] || '1', 10);
                 });
-                const dayNames = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿5','廿六','廿七','廿八','廿九','三十'];
+                const dayNames = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
                 const monthNames = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
                 mdStr = `${monthNames[m - 1] || m + '月'}${dayNames[d - 1] || d + '日'}`;
             }
 
-            // 2. 利用英文 locale 穩定抓取農曆年份的「純數字」(例如 2026)
             const yearParts = new Intl.DateTimeFormat('en-US', { calendar: 'chinese', year: 'numeric' }).formatToParts(currentTime);
-            let y = currentTime.getFullYear(); // 預設值防呆
+            let y = currentTime.getFullYear();
             yearParts.forEach(p => {
-                // 有些瀏覽器叫 'year'，有些叫 'relatedYear'
-                // ★ 加上 (p.type as string) 繞過 TypeScript 字典太舊的問題
                 if (p.type === 'year' || (p.type as string) === 'relatedYear') {
                     const match = p.value.match(/\d+/);
                     if (match) y = parseInt(match[0], 10);
                 }
             });
-            // 3. 核心魔法：使用數學公式推算天干地支與生肖！
             const stems = ["癸", "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬"];
             const branches = ["亥", "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌"];
             const zodiacs = ["豬", "鼠", "牛", "虎", "兔", "龍", "蛇", "馬", "羊", "猴", "雞", "狗"];
@@ -119,7 +150,6 @@ const InfoWidget = () => {
 
             if (!mdStr.includes('日')) mdStr += '日';
 
-            // 4. 完美輸出
             return `${stem}${branch}年 (${zodiac}年) ${mdStr}`;
         } catch (e) {
             console.error("農曆轉換錯誤:", e);
@@ -128,9 +158,8 @@ const InfoWidget = () => {
     };
 
     return (
-        // 🍏 登入頁同款：深色透底的玻璃輸入框質感 (Deep Dark Glass Cutout)
         <div className="mx-3 mb-3 p-3 bg-black/30 rounded-2xl border border-white/5 text-xs backdrop-blur-md shadow-inner transition-all hover:bg-black/40 relative z-10 overflow-hidden pb-5">
-            {/* 時間日期區 (固定在頂部不輪播) */}
+            {/* 時間日期區 */}
             <div className="mb-3 border-b border-white/5 pb-2 relative z-10">
                 <div className="text-xl font-mono font-bold text-white tracking-widest text-center">{currentTime.toLocaleTimeString('en-GB', { hour12: false })}</div>
                 <div className="flex justify-between mt-1 text-slate-300">
@@ -142,7 +171,7 @@ const InfoWidget = () => {
                 </div>
             </div>
             
-            {/* ★ 戰情雙屏幕輪播區 (鎖定高度，防止畫面跳動) */}
+            {/* 戰情雙屏幕輪播區 */}
             <div className="relative min-h-[175px]">
                 {trafficScreen === 'ports' ? (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
