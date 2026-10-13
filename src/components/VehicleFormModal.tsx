@@ -119,18 +119,16 @@ const VehicleFormModal = ({
         try {
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
             const snap = await getDocs(q);
-            // 加上 trim() 去除前後空白防呆
-            const term = transferSearch.toLowerCase().trim(); 
+            // ★ 升級：加上 replace 去除空格與橫線防呆
+            const term = transferSearch.toLowerCase().replace(/[\s-]/g, ''); 
             
             const res = snap.docs.map(d => ({id: d.id, ...d.data()}))
                 .filter((c: any) => 
                     c.id !== v.id && // 排除自己
-                    // ★ 升級 1：放寬狀態，讓「已售 (Sold)」的車也能被搜出來繼承指標！
                     (c.status === 'In Stock' || c.status === 'Reserved' || c.status === 'Sold') && 
-                    // ★ 升級 2：擴大搜尋範圍，現在搜車牌、底盤、廠牌、型號都可以！
                     (
-                        (c.regMark || '').toLowerCase().includes(term) || 
-                        (c.chassisNo || '').toLowerCase().includes(term) ||
+                        (c.regMark || '').toLowerCase().replace(/[\s-]/g, '').includes(term) || 
+                        (c.chassisNo || '').toLowerCase().replace(/[\s-]/g, '').includes(term) ||
                         (c.make || '').toLowerCase().includes(term) ||
                         (c.model || '').toLowerCase().includes(term)
                     )
