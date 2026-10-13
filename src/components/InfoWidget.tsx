@@ -1,6 +1,6 @@
 // src/components/InfoWidget.tsx
 import React, { useState, useEffect } from 'react';
-
+ 
 // --- 1. InfoWidget (外部組件) ---
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
