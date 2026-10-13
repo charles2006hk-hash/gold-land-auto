@@ -792,8 +792,21 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
 
     const filteredEntries = entries.filter(entry => {
         const matchCat = selectedCatFilter === 'All' || entry.category === selectedCatFilter;
-        const searchContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''} ${entry.chassisNo || ''} ${entry.engineNo || ''}`;
-        return matchCat && searchContent.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        // ★ 智能搜尋：將所有內容轉小寫，並特別處理底盤號與引擎號的空格/橫線
+        const cleanSearch = searchTerm.toLowerCase().replace(/[\s-]/g, '');
+        const safeChassis = (entry.chassisNo || '').toLowerCase().replace(/[\s-]/g, '');
+        const safeEngine = (entry.engineNo || '').toLowerCase().replace(/[\s-]/g, '');
+        
+        // 組合一般文字內容 (保留原本的寬鬆比對)
+        const generalContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''}`.toLowerCase();
+
+        // 只要符合一般內容，或是精準命中底盤號/引擎號即可
+        const matchSearch = generalContent.includes(searchTerm.toLowerCase()) || 
+                            (safeChassis && safeChassis.includes(cleanSearch)) || 
+                            (safeEngine && safeEngine.includes(cleanSearch));
+
+        return matchCat && matchSearch;
     }).sort((a, b) => {
         const timeA = a.updatedAt?.seconds || a.createdAt?.seconds || 0;
         const timeB = b.updatedAt?.seconds || b.createdAt?.seconds || 0;
@@ -951,7 +964,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="搜尋姓名、車牌、標籤..." className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
+                        <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="搜尋姓名、車牌、底盤號、標籤..." className="w-full pl-9 p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/></div>
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">{['All', ...DB_CATEGORIES.map(c => c.id)].map(cat => (<button key={cat} type="button" onClick={() => setSelectedCatFilter(cat)} className={`px-3 py-1 text-xs rounded-full whitespace-nowrap border transition-colors ${selectedCatFilter === cat ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}>{cat === 'All' ? '全部' : (DB_CATEGORIES.find(c => c.id === cat)?.label.split(' ')[0] || cat)}</button>))}</div>
                     </div>
                 </div>
