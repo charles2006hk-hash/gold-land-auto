@@ -5,14 +5,15 @@ import React, { useState, useEffect } from 'react';
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [portStatus, setPortStatus] = useState<any[]>([]);
+    const [passengerStatus, setPassengerStatus] = useState<any[]>([]); // ★ 新增：旅客口岸狀態
     const [loading, setLoading] = useState(true);
 
     const [tunnelStatus, setTunnelStatus] = useState<any>(null);
-    // ★ 升級為 3 個屏幕輪播：口岸 -> 過海隧道 -> 新界隧道
-    const [trafficScreen, setTrafficScreen] = useState<'ports' | 'tunnels-ch' | 'tunnels-nt'>('ports');
+    // ★ 升級為 4 個屏幕輪播：私家車口岸 -> 旅客口岸 -> 過海隧道 -> 新界隧道
+    const [trafficScreen, setTrafficScreen] = useState<'ports-car' | 'ports-passenger' | 'tunnels-ch' | 'tunnels-nt'>('ports-car');
 
-    // 口岸名稱映射
-    const PORT_MAPPING: Record<string, string> = {
+    // 私家車口岸名稱映射
+    const CAR_PORT_MAPPING: Record<string, string> = {
         'SBC': '深圳灣', 
         'LMC': '皇崗', 
         'LMCC': '皇崗', 
@@ -22,17 +23,31 @@ const InfoWidget = () => {
         'STK': '沙頭角'
     };
 
-    // ★ 新增：口岸通關時間庫
+    // ★ 旅客口岸名稱映射 (根據入境處 API 文件)
+    const PASSENGER_PORT_MAPPING: Record<string, string> = {
+        'LWS': '羅湖',
+        'LSC': '落馬洲支線',
+        'SBC': '深圳灣',
+        'HZM': '港珠澳大橋',
+        'HYW': '香園圍 (蓮塘)',
+        'MKT': '文錦渡',
+        'HGP': '皇崗', // 注意：旅客 API 中皇崗的代碼是 HGP
+        'STK': '沙頭角'
+    };
+
+    // 口岸通關時間庫
     const PORT_HOURS: Record<string, string> = {
+        '羅湖': '06:30 - 24:00',
+        '落馬洲支線': '06:30 - 22:30',
         '深圳灣': '06:30 - 24:00',
-        '皇崗': '24小時',
         '港珠澳大橋': '24小時',
         '香園圍 (蓮塘)': '07:00 - 22:00',
         '文錦渡': '07:00 - 22:00',
+        '皇崗': '24小時',
         '沙頭角': '07:00 - 22:00'
     };
 
-    // 圓點狀態指示器
+    // 圓點狀態指示器 (對應 0, 1, 2, 4, 99)
     const getStatusIndicator = (code: number) => {
         if (code === 0) return <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] mx-auto"></div>;
         if (code === 1) return <div className="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)] animate-pulse mx-auto"></div>;
@@ -46,20 +61,22 @@ const InfoWidget = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // ★ 輪播控制器：每 8 秒切換一次屏幕
+    // ★ 輪播控制器：每 8 秒切換一次屏幕 (4屏循環)
     useEffect(() => {
         const interval = setInterval(() => {
             setTrafficScreen(prev => {
-                if (prev === 'ports') return 'tunnels-ch';
+                if (prev === 'ports-car') return 'ports-passenger';
+                if (prev === 'ports-passenger') return 'tunnels-ch';
                 if (prev === 'tunnels-ch') return 'tunnels-nt';
-                return 'ports';
+                return 'ports-car';
             });
         }, 8000);
         return () => clearInterval(interval);
     }, []);
 
     useEffect(() => {
-        const fetchTraffic = async () => {
+        // 1. 抓取私家車口岸數據
+        const fetchCarTraffic = async () => {
             try {
                 const res = await fetch(`/api/traffic?t=${Date.now()}`);
                 if (!res.ok) throw new Error('API Error');
@@ -68,7 +85,7 @@ const InfoWidget = () => {
                 if (data && typeof data === 'object') {
                     const uniquePorts = new Map<string, any>();
                     Object.keys(data).forEach(key => {
-                        const portName = PORT_MAPPING[key];
+                        const portName = CAR_PORT_MAPPING[key];
                         if (portName) {
                             uniquePorts.set(portName, { 
                                 name: portName, 
@@ -93,9 +110,46 @@ const InfoWidget = () => {
 
                     setPortStatus(finalDisplay);
                 }
-            } catch (e) { console.warn("口岸數據延遲"); } finally { setLoading(false); }
+            } catch (e) { console.warn("私家車口岸數據延遲"); } finally { setLoading(false); }
         };
 
+        // 2. ★ 抓取旅客 (居民) 口岸數據
+        const fetchPassengerTraffic = async () => {
+            try {
+                // 為了避免 CORS，如果直接 fetch 失敗，建議在 Vercel 建立 /api/passengers 代理這支官方 API
+                // 這裡嘗試直接抓取官方 JSON
+                const res = await fetch('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json', { cache: 'no-store' });
+                if (!res.ok) throw new Error('API Error');
+                const data = await res.json();
+
+                if (data && typeof data === 'object') {
+                    const formatted: any[] = [];
+                    Object.keys(data).forEach(key => {
+                        const portName = PASSENGER_PORT_MAPPING[key];
+                        if (portName) {
+                            formatted.push({
+                                name: portName,
+                                up: data[key].depQueue,   // 出境
+                                down: data[key].arrQueue  // 入境
+                            });
+                        }
+                    });
+
+                    const sortOrder = ['羅湖', '落馬洲支線', '深圳灣', '港珠澳大橋', '香園圍 (蓮塘)', '文錦渡', '皇崗', '沙頭角'];
+                    formatted.sort((a, b) => {
+                        const idxA = sortOrder.indexOf(a.name);
+                        const idxB = sortOrder.indexOf(b.name);
+                        return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+                    });
+
+                    setPassengerStatus(formatted);
+                }
+            } catch (e) {
+                console.warn("旅客口岸數據延遲 (若持續失敗，請設定 Vercel API Proxy)");
+            }
+        };
+
+        // 3. 抓取隧道數據
         const fetchTunnels = async () => {
             try {
                 const res = await fetch(`/api/tunnels?t=${Date.now()}`);
@@ -104,8 +158,15 @@ const InfoWidget = () => {
             } catch (e) { console.warn("隧道數據延遲"); }
         };
 
-        fetchTraffic(); fetchTunnels();
-        const trafficTimer = setInterval(() => { fetchTraffic(); fetchTunnels(); }, 60000);
+        fetchCarTraffic(); 
+        fetchPassengerTraffic();
+        fetchTunnels();
+        
+        const trafficTimer = setInterval(() => { 
+            fetchCarTraffic(); 
+            fetchPassengerTraffic();
+            fetchTunnels(); 
+        }, 60000);
         return () => clearInterval(trafficTimer);
     }, []);
 
@@ -159,10 +220,10 @@ const InfoWidget = () => {
                 </div>
             </div>
             
-            {/* ★ 戰情屏幕輪播區：高度加大至 200px 解決沙頭角被切斷的問題 */}
-            <div className="relative h-[200px]">
-                {/* 第一屏：口岸通關 */}
-                {trafficScreen === 'ports' && (
+            {/* ★ 戰情屏幕輪播區 (加高至 240px 以容納 8 個旅客口岸) */}
+            <div className="relative h-[240px]">
+                {/* 第一屏：私家車口岸 */}
+                {trafficScreen === 'ports-car' && (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
                         <div className="flex justify-between items-center text-slate-400 text-[10px] mb-1 px-1 border-b border-white/10 pb-1">
                             <span>私家車口岸</span>
@@ -170,10 +231,9 @@ const InfoWidget = () => {
                         </div>
 
                         {portStatus.length > 0 ? portStatus.map((port, idx) => (
-                            <div key={`port_${idx}`} className="flex justify-between items-center text-slate-200 py-0.5 hover:bg-white/5 rounded transition-colors px-1">
+                            <div key={`port_car_${idx}`} className="flex justify-between items-center text-slate-200 py-0.5 hover:bg-white/5 rounded transition-colors px-1">
                                 <div className="flex flex-col min-w-0 pr-2">
                                     <span className="truncate font-medium text-white text-[11px] leading-tight">{port.name}</span>
-                                    {/* ★ 將通關時間以微小字體整合在下方 */}
                                     <span className="text-[8px] text-slate-500 tracking-tighter mt-[1px]">{PORT_HOURS[port.name] || ''}</span>
                                 </div>
                                 <div className="flex gap-4 text-right pr-2 shrink-0">
@@ -181,11 +241,34 @@ const InfoWidget = () => {
                                     <div className="w-8 flex justify-center items-center">{getStatusIndicator(port.down)}</div>
                                 </div>
                             </div>
-                        )) : (<div className="text-center text-slate-400 italic py-6">{loading ? '數據連線中...' : '暫無口岸數據'}</div>)}
+                        )) : (<div className="text-center text-slate-400 italic py-6">{loading ? '數據連線中...' : '暫無私家車口岸數據'}</div>)}
                     </div>
                 )}
 
-                {/* 第二屏：過海隧道 (Cross Harbour) */}
+                {/* 第二屏：旅客口岸 (香港居民) */}
+                {trafficScreen === 'ports-passenger' && (
+                    <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex justify-between items-center text-slate-400 text-[10px] mb-1 px-1 border-b border-white/10 pb-1">
+                            <span className="text-teal-400 font-bold">旅客通關 (香港居民)</span>
+                            <div className="flex gap-4 pr-1"><span className="w-8 text-center">出境</span><span className="w-8 text-center">入境</span></div>
+                        </div>
+
+                        {passengerStatus.length > 0 ? passengerStatus.map((port, idx) => (
+                            <div key={`port_pax_${idx}`} className="flex justify-between items-center text-slate-200 py-0.5 hover:bg-white/5 rounded transition-colors px-1">
+                                <div className="flex flex-col min-w-0 pr-2">
+                                    <span className="truncate font-medium text-white text-[11px] leading-tight">{port.name}</span>
+                                    <span className="text-[8px] text-slate-500 tracking-tighter mt-[1px]">{PORT_HOURS[port.name] || ''}</span>
+                                </div>
+                                <div className="flex gap-4 text-right pr-2 shrink-0">
+                                    <div className="w-8 flex justify-center items-center">{getStatusIndicator(port.up)}</div>
+                                    <div className="w-8 flex justify-center items-center">{getStatusIndicator(port.down)}</div>
+                                </div>
+                            </div>
+                        )) : (<div className="text-center text-slate-400 italic py-6">載入旅客通關數據中...</div>)}
+                    </div>
+                )}
+
+                {/* 第三屏：過海隧道 (Cross Harbour) */}
                 {trafficScreen === 'tunnels-ch' && (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
                         <div className="flex justify-between text-slate-400 text-[10px] mb-1 px-1 border-b border-white/10 pb-1">
@@ -208,7 +291,7 @@ const InfoWidget = () => {
                     </div>
                 )}
 
-                {/* 第三屏：新界隧道 (New Territories) */}
+                {/* 第四屏：新界隧道 (New Territories) */}
                 {trafficScreen === 'tunnels-nt' && (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
                         <div className="flex justify-between text-slate-400 text-[10px] mb-1 px-1 border-b border-white/10 pb-1">
@@ -217,7 +300,6 @@ const InfoWidget = () => {
                         </div>
                         {tunnelStatus ? (
                             <div className="space-y-1.5 pt-0.5">
-                                {/* ★ 顯示全部新界隧道，利用拉高的空間 */}
                                 {tunnelStatus.newTerritories.map((t: any, idx: number) => (
                                     <div key={`nt_${idx}`} className="flex justify-between items-center text-slate-200 py-0.5 px-1 hover:bg-white/5 rounded transition-colors">
                                         <span className="truncate mr-2 font-bold text-slate-300 text-[11px]">{t.short}</span>
@@ -233,9 +315,10 @@ const InfoWidget = () => {
                 )}
             </div>
 
-            {/* ★ 底部 3 點小圓點進度指示器 */}
+            {/* ★ 底部 4 點小圓點進度指示器 */}
             <div className="absolute bottom-1.5 left-0 w-full flex justify-center gap-1.5 z-20">
-                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports' ? 'w-4 bg-emerald-500' : 'w-1.5 bg-white/20'}`}></div>
+                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports-car' ? 'w-4 bg-emerald-500' : 'w-1.5 bg-white/20'}`}></div>
+                <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports-passenger' ? 'w-4 bg-teal-400' : 'w-1.5 bg-white/20'}`}></div>
                 <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'tunnels-ch' ? 'w-4 bg-amber-500' : 'w-1.5 bg-white/20'}`}></div>
                 <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'tunnels-nt' ? 'w-4 bg-blue-500' : 'w-1.5 bg-white/20'}`}></div>
             </div>
