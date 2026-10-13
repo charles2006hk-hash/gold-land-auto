@@ -1,179 +1,21 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Car, FileText, LayoutDashboard, Plus, Printer, Trash2, DollarSign, 
-  Menu, X, Building2, Database, Loader2, DownloadCloud, AlertTriangle, User as UserIcon,
-  Users, LogOut, UserCircle, ArrowRight, Settings, Save, Wrench, 
-  Calendar, CheckCircle, XCircle, Filter, ChevronDown, ChevronUp, Edit,
-  ArrowUpDown, Briefcase, BarChart3, FileBarChart, ExternalLink,
-  StickyNote, CreditCard, Armchair, Fuel, Zap, Search, ChevronLeft, ChevronRight, Layout,
-  Receipt, FileCheck, CalendarDays, Bell, ShieldCheck, Clock, CheckSquare,
-  Check, AlertCircle, Link, Share2, Key, Sun, Crop, Move, MousePointer2, Palette,
-  CreditCard as PaymentIcon, MapPin, Info, RefreshCw, Globe, Upload, Image as ImageIcon, File, ArrowLeft, // Added Upload, Image as ImageIcon, File
-  Minimize2, Maximize2, Eye, Star, Clipboard, Copy, GitMerge, Play, Camera, History, BellRing, MessageCircle, Send, ListTodo, Ship, FileSignature
+  FileText, Plus, Check, ChevronUp, ChevronDown, 
+  Trash2, Edit, X, ArrowRight, ImageIcon, Loader2, 
+  DownloadCloud, Upload, DollarSign, Car, ChevronLeft, ChevronRight,
+  AlertTriangle, Clock, Building2, RefreshCw, History, Database,
+  Printer, CalendarDays
 } from 'lucide-react';
-
-// --- 匯入抽離的型別與常數 ---
-import {
-    DatabaseEntry, MediaLibraryItem, Expense, Payment, CrossBorderTask,
-    DocCustodyLog, CrossBorderData, Vehicle, SystemSettings, Customer,
-    DocType, DatabaseAttachment
-} from '@/types';
-
-import {
-    COMPANY_INFO, DEFAULT_SETTINGS, WORKFLOW_TEMPLATES,
-    PORTS_HK_GD, PORTS_MO_GD, ALL_CB_PORTS, AVAILABLE_PORTS,
-    DB_CATEGORIES, DOCUMENT_FIELD_SCHEMA
-} from '@/config/constants';
-
-// --- 輔助工具函數 ---
-const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
-const formatDate = (date: Date) => date.toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' });
-
+import { Vehicle, CrossBorderTask, Payment, SystemSettings } from '@/types';
+import { PORTS_HK_GD, PORTS_MO_GD, ALL_CB_PORTS, COMPANY_INFO } from '@/config/constants';
 import { compressImage } from '@/utils/imageHelpers';
-import { triggerCardPrint, triggerSmartPrint } from '@/utils/printHelper';
-import ImportOrderManager from '@/components/ImportOrderManager';
-import DocumentTemplate from '@/components/DocumentTemplate';
-import CreateDocModule from '@/components/CreateDocModule';
-import CompanyFinanceLedger from '@/components/CompanyFinanceLedger';
-import VehicleFormModal from '@/components/VehicleFormModal';
-import SettingsManager from '@/components/SettingsManager';
-import FinanceModule from '@/components/FinanceModule';
-import TeamHubDrawer from '@/components/TeamHubDrawer';
-import ChangePasswordModal from '@/components/ChangePasswordModal';
-import MarketIntelligence from '@/components/MarketIntelligence';
-import MediaLibraryModule from '@/components/MediaLibraryModule';
-import DatabaseModule from '@/components/DatabaseModule';
-import CrossBorderView from '@/components/CrossBorderView';
-import BusinessProcessModule from '@/components/BusinessProcessModule';
-import SmartNewsTicker from '@/components/SmartNewsTicker';
-import InfoWidget from '@/components/InfoWidget';
-import SmartNotificationCenter from '@/components/SmartNotificationCenter';
-import TradePlateWidget from '@/components/TradePlateWidget'; // 請確認路徑是否正確
-import DashboardModule from '@/components/DashboardModule';
 
-// --- Firebase Imports ---
-import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { 
-  getAuth, onAuthStateChanged, signInWithCustomToken, 
-  initializeAuth, browserLocalPersistence, inMemoryPersistence, Auth,
-  signInWithEmailAndPassword, createUserWithEmailAndPassword 
-} from "firebase/auth";
-import type { User } from "firebase/auth";
-import { 
-  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, // ★ 新增：本地快取模組
-  collection, addDoc, deleteDoc, doc, onSnapshot, query, 
-  orderBy, serverTimestamp, writeBatch, Firestore, updateDoc, getDoc, setDoc,
-  getDocs, where, limit,
-} from "firebase/firestore";
-import { 
-  getStorage, deleteObject, 
-  ref, 
-  uploadString, 
-  uploadBytes,      // 新增：處理 Blob/File 上傳
-  getDownloadURL    // 新增：獲取下載連結
-} from "firebase/storage";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
-
-// ------------------------------------------------------------------
-// ★★★ 終極防死鎖魔法：全域攔截系統 alert 轉為 HTML Toast ★★★
-// ------------------------------------------------------------------
-if (typeof window !== 'undefined') {
-    window.alert = function(message) {
-        // 移除畫面上舊的提示，避免重疊
-        const existing = document.getElementById('global-custom-toast');
-        if (existing && existing.parentNode) {
-            existing.parentNode.removeChild(existing);
-        }
-        
-        const toast = document.createElement('div');
-        toast.id = 'global-custom-toast';
-        const isError = String(message).includes('失敗') || String(message).includes('錯誤') || String(message).includes('Error');
-        
-        toast.className = `fixed top-10 left-1/2 transform -translate-x-1/2 z-[999999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center text-white transition-all duration-300 opacity-0 translate-y-[-20px] ${isError ? 'bg-red-600' : 'bg-emerald-600'}`;
-        toast.innerText = message;
-        
-        document.body.appendChild(toast);
-        
-        // 觸發滑入動畫
-        setTimeout(() => {
-            toast.style.opacity = '1';
-            toast.style.transform = 'translate(-50%, 0)';
-        }, 10);
-        
-        // 3秒後滑出並銷毀
-        setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translate(-50%, -20px)';
-            setTimeout(() => {
-                if (document.body.contains(toast)) {
-                    document.body.removeChild(toast);
-                }
-            }, 300);
-        }, 3000);
-    };
-}
-
-// ------------------------------------------------------------------
-// ★★★ Firebase 設定 (已鎖定) ★★★
-// ------------------------------------------------------------------
-const firebaseConfig = {
-  apiKey: "AIzaSyCHt7PNXd5NNh8AsdSMDzNfbvhyEsBG2YY",
-  authDomain: "gold-land-auto.firebaseapp.com",
-  projectId: "gold-land-auto",
-  storageBucket: "gold-land-auto.firebasestorage.app",
-  messagingSenderId: "817229766566",
-  appId: "1:817229766566:web:73314925fe0a4d43917967",
-  measurementId: "G-DQ9N75DH5V"
-};
-
-// --- Global Firebase Instances ---
-let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-let storage: any = null;
-
-// --- Initialize Firebase ---
-const initFirebaseSystem = () => {
-  try {
-    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-    try {
-      auth = getAuth(app);
-    } catch (e) {
-      if (!auth) {
-        try {
-          auth = initializeAuth(app, { persistence: [browserLocalPersistence, inMemoryPersistence] });
-        } catch (err) {
-          try { auth = initializeAuth(app, { persistence: inMemoryPersistence }); } catch(final) {}
-        }
-      }
-    }
-    
-    // ★★★ 效能大升級：啟用 Firestore 本地永久快取 + 強制關閉 QUIC 解決斷線 ★★★
-    try {
-        db = initializeFirestore(app, {
-            localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-            experimentalForceLongPolling: true // ★ 打上疫苗：強制使用最穩定的 HTTP 長連線
-        });
-    } catch (e) {
-        // 如果瀏覽器唔支援快取 (例如無痕模式)，就降級用普通版，但也必須強制長連線
-        db = initializeFirestore(app, {
-            experimentalForceLongPolling: true // ★ 打上疫苗：強制使用最穩定的 HTTP 長連線
-        });
-    }
-    
-    storage = getStorage(app);
-    return true;
-  } catch (e) {
-    console.error("Firebase Init Failed:", e);
-    return false;
-  }
-};
-
-// --- 輔助函數：將顏色名稱轉為 CSS 顏色代碼 ---
+// --- 共用小工具函數 ---
+const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 const getColorHex = (colorName: string) => {
-    if (!colorName) return '#e2e8f0'; // Default gray
+    if (!colorName) return '#e2e8f0'; 
     const lower = colorName.toLowerCase();
     if (lower.includes('white') || lower.includes('白')) return '#ffffff';
     if (lower.includes('black') || lower.includes('黑')) return '#000000';
@@ -187,3389 +29,1569 @@ const getColorHex = (colorName: string) => {
     if (lower.includes('brown') || lower.includes('啡')) return '#a52a2a';
     if (lower.includes('yellow') || lower.includes('黃')) return '#facc15';
     if (lower.includes('orange') || lower.includes('橙')) return '#f97316';
-    return '#94a3b8'; // Unknown color
+    return '#94a3b8';
 };
-
-const isFirebaseReady = initFirebaseSystem();
-const appId = firebaseConfig.projectId || 'gold-land-auto';
-
-
-
-// ... existing code ...
-const formatNumberInput = (value: string) => {
-  // 1. 移除非數字、非小數點、非負號的字符
-  let cleanVal = value.replace(/[^0-9.-]/g, '');
-
-  // 2. 處理負號：只允許在開頭出現一次
-  const isNegative = cleanVal.startsWith('-');
-  cleanVal = cleanVal.replace(/-/g, ''); // 先移除所有負號
-
-  // 3. 處理小數點：只允許出現一次
-  const parts = cleanVal.split('.');
-  if (parts.length > 2) {
-      cleanVal = parts[0] + '.' + parts.slice(1).join('');
-  }
-
-  // 4. 如果為空，根據是否為負數返回
-  if (!cleanVal) return isNegative ? '-' : '';
-
-  // 5. 格式化整數部分 (千分位)
-  const [integer, decimal] = cleanVal.split('.');
-  const formattedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  
-  let result = formattedInteger;
-  if (decimal !== undefined) {
-      result += '.' + decimal;
-  }
-  
-  return isNegative ? '-' + result : result;
-};
-// ... existing code ...
-
-const calculateLicenseFee = (fuelType: 'Petrol' | 'Diesel' | 'Electric', engineSize: number) => {
-  if (!engineSize) return 0;
-  if (fuelType === 'Petrol') {
-    if (engineSize <= 1500) return 5074;
-    if (engineSize <= 2500) return 7498;
-    if (engineSize <= 3500) return 9929;
-    if (engineSize <= 4500) return 12360;
-    return 14694;
-  }
-  if (fuelType === 'Diesel') {
-    if (engineSize <= 1500) return 6972;
-    if (engineSize <= 2500) return 9396;
-    if (engineSize <= 3500) return 11827;
-    if (engineSize <= 4500) return 14258;
-    return 16592;
-  }
-  if (fuelType === 'Electric') {
-    if (engineSize <= 75) return 1614;
-    if (engineSize <= 125) return 2114;
-    if (engineSize <= 175) return 2614;
-    if (engineSize <= 225) return 3114;
-    return 5114;
-  }
-  return 0;
-};
-
-// 計算日期剩餘天數
 const getDaysRemaining = (targetDate?: string) => {
     if (!targetDate) return null;
     const today = new Date();
     today.setHours(0,0,0,0);
     const target = new Date(targetDate);
     const diffTime = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-// ★★★ 修改：全域日期狀態組件 (綠=正常, 紅=過期, 黃=30天內) ★★★
-const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
-    if (!date) return <div className="text-gray-300 text-xs text-center">-</div>;
-    
-    // 計算天數差異
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const target = new Date(date);
-    const diffTime = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+// --- 內部組件 1：文件交收打卡 Modal ---
+const DocumentCustodyModal = ({ vehicle, onClose, onSaveLog, staffId }: any) => {
+    const [action, setAction] = useState<'CheckIn' | 'CheckOut'>('CheckIn');
+    const [docName, setDocName] = useState('牌簿 (VRD)');
+    const [target, setTarget] = useState(action === 'CheckIn' ? (vehicle.customerName || '客戶') : '客戶');
+    const [photo, setPhoto] = useState<string | null>(null);
+    const [note, setNote] = useState('');
+    const [isCompressing, setIsCompressing] = useState(false);
+    const [previewZoom, setPreviewZoom] = useState<string | null>(null);
 
-    let colorClass = "text-green-700 bg-green-100 border-green-200"; // 預設綠色 (正常)
-    let statusText = "有效";
+    const commonDocs = ['牌簿 (VRD)', '行車證', '香港身份證', '回鄉證', '公司註冊證 (CI)', '商業登記 (BR)', '批文卡', '禁區紙', '驗車紙'];
 
-    if (diffDays < 0) {
-        colorClass = "text-red-700 bg-red-100 border-red-200 font-bold"; // 過期 (紅色)
-        statusText = `過期 ${Math.abs(diffDays)}天`;
-    } else if (diffDays <= 30) {
-        colorClass = "text-amber-700 bg-amber-100 border-amber-200 font-bold"; // 30天內 (黃色)
-        statusText = `剩 ${diffDays}天`;
-    }
+    const getCurrentStatus = () => {
+        const statusMap: Record<string, string> = {};
+        (vehicle.crossBorder?.documentLogs || []).forEach((log: any) => {
+            statusMap[log.docName] = log.action === 'CheckIn' ? '🏢 在公司' : `📤 在 ${log.direction}`;
+        });
+        return statusMap;
+    };
+    const currentStatus = getCurrentStatus();
 
-    return (
-        <div className={`border rounded px-2 py-1 text-[10px] inline-flex flex-col items-center justify-center min-w-[80px] text-center leading-tight ${colorClass}`} title={`${label}: ${date}`}>
-            <div className="font-bold mb-0.5 scale-95 opacity-80">{label}</div>
-            <div className="font-mono font-bold text-sm">{date}</div>
-            <div className="scale-90 opacity-90">{statusText}</div>
-        </div>
-    );
-};
-
-// --- Components: Modern Staff Login Screen v2.1 (Fix: Case Sensitivity) ---
-const StaffLoginScreen = ({ onLogin, systemUsers }: { onLogin: (user: any) => void, systemUsers: any[] }) => {
-  const [userId, setUserId] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  // 自動登入檢查
-  useEffect(() => {
-      const savedUser = localStorage.getItem('gla_saved_user');
-      if (savedUser) {
-          try {
-              const parsed = JSON.parse(savedUser);
-              // 簡單驗證過期時間 (例如 7 天)
-              if (new Date().getTime() - parsed.timestamp < 7 * 24 * 60 * 60 * 1000) {
-                  onLogin(parsed.user);
-              }
-          } catch (e) { localStorage.removeItem('gla_saved_user'); }
-      }
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
-
-    const inputId = userId.trim();
-    // 自動補全內部網域 Email 格式
-    const authEmail = inputId.includes('@') ? inputId : `${inputId.toLowerCase()}@gla.local`;
-
-    try {
-        if (!auth) throw new Error("系統連線尚未準備好");
-
-        let userCredential;
-
-        // ====================================================
-        // 1. BOSS 超級管理員通道 (自動同步 Firebase Auth 憑證)
-        // ====================================================
-        if (inputId.toUpperCase() === 'BOSS' && password === '8888') {
-            const bossEmail = 'boss@gla.local';
-            const bossAuthPassword = 'boss888888'; // Firebase Auth 密碼最少需 6 碼
-
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setIsCompressing(true);
             try {
-                userCredential = await signInWithEmailAndPassword(auth, bossEmail, bossAuthPassword);
-            } catch (bossAuthErr: any) {
-                if (bossAuthErr.code === 'auth/user-not-found' || bossAuthErr.code === 'auth/invalid-credential') {
-                    userCredential = await createUserWithEmailAndPassword(auth, bossEmail, bossAuthPassword);
-                } else {
-                    console.warn("BOSS Firebase Auth 同步警告:", bossAuthErr);
-                }
-            }
-
-            const adminUser = { email: 'BOSS', role: 'admin', modules: ['all'], dataAccess: 'all', defaultTab: 'dashboard' };
-            handleSuccess(adminUser);
-            setIsLoading(false);
-            return;
-        }
-
-        // ====================================================
-        // 2. 普通員工 Email/Password 標準簽核登入
-        // ====================================================
-        userCredential = await signInWithEmailAndPassword(auth, authEmail, password);
-
-        // 登入成功後讀取個人權限表 (加上 as string[] 避免 TS 報錯)
-        let finalUser = { email: inputId, modules: [] as string[], dataAccess: 'all', defaultTab: 'dashboard' };
-        
-        try {
-            const currentDb = getFirestore();
-            const docSnap = await getDoc(doc(currentDb, 'artifacts', 'gold-land-auto', 'staff', 'CHARLES_data', 'system', 'users'));
-            
-            if (docSnap.exists()) {
-                const usersList = docSnap.data().list || [];
-                
-                // 核心修復：智能雙重比對
-                const dbUserConfig = usersList.find((u: any) => 
-                    u.email.toLowerCase() === inputId.toLowerCase() || 
-                    u.email.toLowerCase() === authEmail.toLowerCase()
-                );
-                
-                if (dbUserConfig) {
-                    finalUser = {
-                        ...finalUser,
-                        modules: dbUserConfig.modules || [],
-                        dataAccess: dbUserConfig.dataAccess || 'all',
-                        defaultTab: dbUserConfig.defaultTab || 'dashboard'
-                    };
-
-                    // 企業級安全補丁：依賴後台 UI 設定自動補齊 'all' 標籤
-                    if (finalUser.dataAccess === 'all') {
-                        if (!finalUser.modules.includes('all')) {
-                            finalUser.modules.push('all');
-                        }
-                    }
-                }
-            }
-        } catch (dbErr) {
-            console.warn("讀取權限配置失敗:", dbErr);
-        }
-
-        handleSuccess(finalUser);
-
-    } catch (err: any) {
-        console.error("Login Error:", err);
-        setError('帳號或密碼錯誤 (Invalid Credentials)');
-    } finally {
-        setIsLoading(false);
-    }
-  };
-
-  const handleSuccess = (user: any) => {
-      if (rememberMe) {
-          localStorage.setItem('gla_saved_user', JSON.stringify({ user, timestamp: new Date().getTime() }));
-      }
-      onLogin(user);
-  };
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-      
-      {/* ★★★ 新增：動態宇宙光暈背景 (無限呼吸移動) ★★★ */}
-      <div className="absolute inset-0 w-full h-full overflow-hidden opacity-30 pointer-events-none">
-          {/* 左上角深空藍色流動 */}
-          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-600 rounded-full blur-[120px] animate-[pulse_8s_ease-in-out_infinite]"></div>
-          {/* 右下角金色光芒流動 */}
-          <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-yellow-500 rounded-full blur-[150px] animate-[pulse_10s_ease-in-out_infinite_alternate] mix-blend-screen"></div>
-      </div>
-
-      <div className="bg-white/5 backdrop-blur-xl p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-white/10 relative z-10">
-        
-        <div className="text-center mb-8">
-          {/* ★★★ 巔峰奢華版 Logo：零實體邊框 + 玻璃反光懸浮 + 金色流光 ★★★ */}
-          <div className="relative w-32 h-32 mx-auto mb-5 group">
-              {/* 底層：極度柔和的金色呼吸光暈 */}
-              <div className="absolute inset-0 bg-yellow-500 rounded-full blur-[25px] opacity-20 animate-pulse transition-opacity duration-1000 group-hover:opacity-40"></div>
-              
-              {/* 核心：徹底移除實體邊框，只保留若隱若現的玻璃高光 (Highlight) */}
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-white/5 via-transparent to-white/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center p-1 backdrop-blur-[2px] z-10">
-                  {/* Logo 本體：賦予極強的金屬質感與微弱的陰影浮凸感 */}
-                  <img 
-                      src={COMPANY_INFO.logo_url} 
-                      className="w-[85%] h-[85%] object-contain drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] group-hover:drop-shadow-[0_0_15px_rgba(255,215,0,0.8)] transition-all duration-500" 
-                      onError={(e) => { e.currentTarget.style.display='none'; }} 
-                  />
-              </div>
-          </div>
-          
-          <h1 className="text-2xl font-black text-white tracking-widest drop-shadow-md">GOLD LAND AUTO</h1>
-          <p className="text-yellow-500/80 text-[10px] mt-1.5 font-bold tracking-[0.3em] uppercase drop-shadow">Secure DMS Access</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-blue-200 ml-1 uppercase">User ID</label>
-            <div className="relative">
-                <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" size={18}/>
-                <input 
-                  type="text" 
-                  className="w-full pl-10 pr-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white placeholder-white/30 focus:ring-2 focus:ring-yellow-500 outline-none transition" 
-                  placeholder="員工帳號" 
-                  value={userId} 
-                  onChange={e => setUserId(e.target.value)} 
-                  autoFocus 
-                />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-blue-200 ml-1 uppercase">Password</label>
-            <div className="relative">
-                <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" size={18}/>
-                <input 
-                  type="password" 
-                  className="w-full pl-10 pr-4 py-3 bg-black/20 border border-white/10 rounded-xl text-white placeholder-white/30 focus:ring-2 focus:ring-yellow-500 outline-none transition" 
-                  placeholder="密碼" 
-                  value={password} 
-                  onChange={e => setPassword(e.target.value)} 
-                />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-blue-200">
-              <label className="flex items-center cursor-pointer hover:text-white transition">
-                  <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="mr-2 rounded text-yellow-500 focus:ring-yellow-500 bg-white/10 border-white/20"/>
-                  鎖定本機 (Keep me signed in)
-              </label>
-          </div>
-
-          {error && <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-xs text-center flex items-center justify-center"><AlertTriangle size={14} className="mr-2"/>{error}</div>}
-
-          <button type="submit" disabled={isLoading} className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black p-3.5 rounded-xl font-bold text-sm flex items-center justify-center transition transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
-              {isLoading ? <Loader2 className="animate-spin" size={20}/> : <><span className="mr-2">安全登入</span> <ArrowRight size={16}/></>}
-          </button>
-        </form>
-        
-        <div className="mt-6 text-center">
-            <p className="text-[10px] text-white/20">Authorized Personnel Only</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-
-
-
-
-// --- 2. Sidebar (外部組件 - 🍏 終極升級：True Gemini Style 側欄圖標條) ---
-type SidebarProps = {
-    activeTab: string;
-    setActiveTab: (tab: any) => void;
-    isMobileMenuOpen: boolean;
-    setIsMobileMenuOpen: (open: boolean) => void;
-    isSidebarCollapsed: boolean;
-    setIsSidebarCollapsed: (collapsed: boolean) => void;
-    staffId: string | null;
-    setStaffId: (id: string | null) => void;
-    currentUser: { email: string, modules: string[] } | null;
-    onOpenChangePwd: () => void;
-};
-
-const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, isSidebarCollapsed, setIsSidebarCollapsed, staffId, setStaffId, currentUser, onOpenChangePwd }: SidebarProps) => {
-    
-    const handleLogout = () => {
-        if (confirm("確定登出系統？(Confirm Logout?)")) {
-            localStorage.removeItem('gla_saved_user');
-            setStaffId(null);
+                const compressedDataUrl = await compressImage(file, 100);
+                setPhoto(compressedDataUrl);
+            } catch (err) { alert("圖片處理失敗，請重試"); } 
+            finally { setIsCompressing(false); }
         }
     };
 
-    const allMenuItems = [
-        { id: 'dashboard', label: '業務儀表板', icon: LayoutDashboard, permission: 'dashboard' },
-        { id: 'inventory', label: '車輛管理', icon: Car, permission: 'inventory' },
-        { id: 'import_orders', label: '海外訂車管家', icon: Ship, permission: 'import_orders' },
-        { id: 'create_doc', label: '開單系統', icon: FileText, permission: 'inventory' }, 
-        { id: 'reports', label: '財務總覽', icon: Briefcase, permission: 'reports' },
-        { id: 'company_ledger', label: '公司營運總帳', icon: Receipt, permission: 'company_ledger' },
-        { id: 'cross_border', label: '中港業務', icon: Globe, permission: 'business' }, 
-        { id: 'business', label: '業務辦理流程', icon: Briefcase, permission: 'business' },
-        { id: 'database', label: '資料庫中心', icon: Database, permission: 'database' },
-        { id: 'media_center', label: '智能圖庫', icon: ImageIcon, permission: 'inventory' },
-        { id: 'settings', label: '系統設置', icon: Settings, permission: 'settings' }
-    ];
-
-    const visibleMenuItems = allMenuItems.filter(item => {
-        if (!currentUser) return false;
-        if (currentUser.modules?.includes('all') || currentUser.email.toUpperCase() === 'BOSS') return true;
-        if (item.id === 'dashboard') return true;
-        return currentUser.modules?.includes(item.permission);
-    });
+    const handleSubmit = () => {
+        if (!target) { alert("請輸入來源/去向"); return; }
+        onSaveLog({ docName, action, direction: target, handler: staffId, note, photoUrl: photo });
+        setPhoto(null); setNote(''); alert("紀錄已保存！");
+    };
 
     return (
-        <>
-          {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
-      
-          {/* 🍏 True Gemini Style：完美修正行動端定位，移除非法 relative，改用 md:relative 順應桌面排版 */}
-           <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
-                ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
-                ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
-            >
-            {/* 內建隱形氛圍宇宙光暈 */}
-            <div className="absolute inset-0 w-full h-full overflow-hidden opacity-25 pointer-events-none z-0">
-                <div className="absolute top-[-5%] left-[-20%] w-[80%] h-[30%] bg-blue-600 rounded-full blur-[80px]"></div>
-                <div className="absolute bottom-[10%] right-[-20%] w-[80%] h-[40%] bg-yellow-500 rounded-full blur-[100px] opacity-40"></div>
-            </div>
-
-            {/* 🍏 Gemini Style 頂部：收起時 Logo 精準置中，點擊 Logo 即可逆向展開側欄 */}
-            <div className={`relative z-10 pt-[max(1rem,env(safe-area-inset-top))] pb-3 min-h-[4rem] border-b border-white/5 flex items-center transition-all duration-300 flex-none ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
-                {isSidebarCollapsed ? (
-                    <button 
-                        onClick={() => setIsSidebarCollapsed(false)} 
-                        className="w-10 h-10 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all duration-300 transform active:scale-95 group shadow-md"
-                        title="展開導航選單"
-                    >
-                        <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-7 h-7 object-contain p-0.5 group-hover:rotate-12 transition-transform duration-300" />
-                    </button>
-                ) : (
-                    <>
-                        <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-white/5 rounded-lg border border-slate-600">
-                                <img src={COMPANY_INFO.logo_url} alt="Logo" className="w-full h-full object-contain p-0.5" />
-                            </div>
-                            <div className="animate-fade-in">
-                                <h1 className="text-base font-bold text-yellow-500 tracking-tight leading-none">金田汽車</h1>
-                                <span className="text-[10px] text-slate-400 font-medium">DMS 智能管理系統</span>
-                            </div>
-                        </div>
-                        <button onClick={() => setIsSidebarCollapsed(true)} className="text-slate-400 hover:text-white hover:bg-white/10 p-1.5 rounded-xl transition-colors" title="收起選單">
-                            <ChevronLeft size={16} />
-                        </button>
-                    </>
-                )}
-            </div>
-
-            {/* 導航列表與工具區合體 */}
-            <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
-                <style>{`
-                    .sidebar-no-scroll::-webkit-scrollbar { display: none; }
-                    .sidebar-no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
-                `}</style>
-                
-                {/* 🍏 Apple 級修復：將導航與 InfoWidget 一同包進滾動區 */}
-                <div className="sidebar-no-scroll relative z-10 flex-1 p-2 overflow-y-auto overflow-x-hidden pb-4 flex flex-col">
-                    <nav className="space-y-1 flex-none">
-                      {visibleMenuItems.map(item => {
-                         const IconComponent = item.icon;
-                         return (
-                            <button 
-                                key={item.id} 
-                                onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }} 
-                                className={`flex items-center w-full p-2.5 rounded-xl transition-all duration-300 group relative ${activeTab === item.id ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-[0_4px_15px_rgba(234,179,8,0.25)] font-black' : 'hover:bg-white/5 text-slate-400 hover:text-white'} ${isSidebarCollapsed ? 'justify-center px-0' : 'justify-start px-3'}`} 
-                                title={isSidebarCollapsed ? item.label : ''}
-                            >
-                                <IconComponent size={18} className={`flex-shrink-0 ${isSidebarCollapsed ? 'mx-auto' : 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
-                                {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide animate-fade-in">{item.label}</span>}
-                                
-                                {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-2xl border border-white/10 transition-opacity font-bold">{item.label}</div>}
-                            </button>
-                         );
-                      })}
-                    </nav>
-
-                    {/* 🍏 智能判斷：把 InfoWidget 移入滾動區，徹底解決橫屏 (Landscape) 高度擠壓問題 */}
-                    {!isSidebarCollapsed && (
-                        <div className="mt-4 flex-none">
-                            <InfoWidget />
-                        </div>
-                    )}
+        <div className="fixed inset-0 z-[100] bg-black/90 flex items-end md:items-center justify-center p-4 backdrop-blur-sm animate-in slide-in-from-bottom-10">
+            <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+                    <div><h3 className="font-bold text-lg">📁 文件交收打卡</h3><p className="text-xs text-slate-400">{vehicle.regMark}</p></div>
+                    <button onClick={onClose} className="p-2 bg-white/10 rounded-full"><X size={20}/></button>
                 </div>
-                <div className="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-[#090E17] to-transparent pointer-events-none z-10"></div>
-            </div>
-            
-            {/* 🍏 底部登出資訊區：收起時全自動收縮為置中大底膠囊 */}
-            <div className="relative z-10 p-3 bg-transparent border-t border-white/5 flex-none pb-[max(1.5rem,env(safe-area-inset-bottom))] flex flex-col items-center justify-center">
-                 {isSidebarCollapsed ? (
-                     <button onClick={handleLogout} className="p-2.5 bg-white/5 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-xl border border-white/5 transition-all active:scale-95 shadow-sm" title="登出系統">
-                         <LogOut size={16} />
-                     </button>
-                 ) : (
-                     <div className="flex items-center justify-between w-full px-1 animate-fade-in">
-                        <div className="flex items-center space-x-2 overflow-hidden">
-                            <div className="w-7 h-7 bg-slate-800 rounded-full flex items-center justify-center text-yellow-500 border border-slate-700"><UserCircle size={16} /></div>
-                            <div className="flex-1 min-w-0"><p className="text-xs font-bold text-white truncate">{staffId}</p><p className="text-[9px] text-slate-500">在線</p></div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <button onClick={onOpenChangePwd} className="text-slate-400 hover:text-yellow-400 transition p-1.5 hover:bg-slate-800 rounded" title="修改密碼"><Key size={14} /></button>
-                            <button onClick={handleLogout} className="text-slate-500 hover:text-red-400 transition p-1.5 hover:bg-slate-800 rounded" title="登出"><LogOut size={14} /></button>
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <h4 className="text-xs font-bold text-slate-500 mb-2 uppercase">當前文件位置</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {Object.entries(currentStatus).map(([name, status]: any) => (
+                                <div key={name} className={`px-2 py-1 rounded text-xs border flex items-center gap-1 ${status.includes('在公司') ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-100 text-gray-500'}`}><span className="font-bold">{name}:</span> {status}</div>
+                            ))}
+                            {Object.keys(currentStatus).length === 0 && <span className="text-xs text-gray-400">尚無紀錄</span>}
                         </div>
                     </div>
-                 )}
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-lg">
+                            <button onClick={() => { setAction('CheckIn'); setTarget(vehicle.customerName||'客戶'); }} className={`py-2 rounded-md text-sm font-bold flex items-center justify-center transition-all ${action==='CheckIn'?'bg-white shadow text-green-600':'text-gray-500'}`}><ArrowRight size={16} className="mr-1 rotate-180"/> 收件 (Check In)</button>
+                            <button onClick={() => { setAction('CheckOut'); setTarget('客戶'); }} className={`py-2 rounded-md text-sm font-bold flex items-center justify-center transition-all ${action==='CheckOut'?'bg-white shadow text-red-500':'text-gray-500'}`}>交出 (Check Out) <ArrowRight size={16} className="ml-1"/></button>
+                        </div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">文件</label><div className="flex flex-wrap gap-2 mb-2">{commonDocs.map(d => (<button key={d} onClick={() => setDocName(d)} className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${docName===d ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-gray-50'}`}>{d}</button>))}</div><input value={docName} onChange={e=>setDocName(e.target.value)} className="w-full border-b-2 border-slate-200 p-2 text-sm font-bold outline-none bg-transparent" placeholder="輸入文件名稱..."/></div>
+                        <div><label className="block text-xs font-bold text-gray-500 mb-1">{action === 'CheckIn' ? '來自' : '交給'}</label><input value={target} onChange={e=>setTarget(e.target.value)} className="w-full bg-gray-50 p-3 rounded-lg text-sm outline-none font-bold" /><div className="flex gap-2 mt-1">{['客戶', '運輸署', '中檢', '快遞'].map(t => <button key={t} onClick={() => setTarget(t)} className="text-[10px] bg-gray-100 px-2 py-1 rounded text-gray-600">{t}</button>)}</div></div>
+                        <div className="flex items-center gap-4">
+                            <label className={`w-16 h-16 rounded-lg flex flex-col items-center justify-center text-gray-400 cursor-pointer border border-dashed transition-colors ${isCompressing ? 'bg-gray-200 cursor-not-allowed' : 'bg-gray-100 hover:bg-gray-200'}`}>
+                                {isCompressing ? <Loader2 size={20} className="animate-spin text-blue-600"/> : <ImageIcon size={20}/>}
+                                <span className="text-[9px]">{isCompressing ? '壓縮中' : '相機'}</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} disabled={isCompressing}/>
+                            </label>
+                            {photo && (
+                                <div className="relative w-16 h-16 rounded-lg overflow-hidden border cursor-zoom-in" onClick={() => setPreviewZoom(photo)}>
+                                    <img src={photo} className="w-full h-full object-cover"/>
+                                    <button onClick={(e) => { e.stopPropagation(); setPhoto(null); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5"><X size={10}/></button>
+                                </div>
+                            )}
+                            <input value={note} onChange={e=>setNote(e.target.value)} placeholder="備註..." className="flex-1 text-xs border-b p-2 outline-none h-16 align-top"/>
+                        </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-bold text-slate-500 mb-2">最近紀錄</h4>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {[...(vehicle.crossBorder?.documentLogs || [])].reverse().slice(0, 10).map((log:any, idx:number) => (
+                                <div key={idx} className="flex justify-between items-start text-xs p-2 bg-gray-50 rounded border">
+                                    <div><div className="font-bold">{log.docName} <span className={log.action==='CheckIn'?'text-green-600':'text-red-500'}>{log.action==='CheckIn'?'收':'交'}</span></div><div className="text-gray-400 scale-90 origin-left">{log.timestamp.split(' ')[0]} - {log.handler}</div></div>
+                                    <div className="flex items-center gap-2"><span className="text-gray-500">{log.direction}</span>{log.photoUrl && (<button onClick={() => setPreviewZoom(log.photoUrl)} className="text-blue-600 flex items-center bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100"><ImageIcon size={10} className="mr-1"/> 查看</button>)}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <div className="p-4 border-t bg-slate-50"><button onClick={handleSubmit} disabled={isCompressing} className={`w-full py-3 rounded-xl text-white font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center ${action==='CheckIn'?'bg-green-600 hover:bg-green-700':'bg-red-500 hover:bg-red-600'} ${isCompressing ? 'opacity-50' : ''}`}>{isCompressing ? '處理中...' : (action==='CheckIn' ? <><DownloadCloud size={18} className="mr-2"/> 確認紀錄</> : <><Upload size={18} className="mr-2"/> 確認紀錄</>)}</button></div>
             </div>
-            <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden absolute top-[max(1rem,env(safe-area-inset-top))] right-4 text-slate-400 hover:text-white z-50"><X size={24} /></button>
-          </div>
-        </>
+            {previewZoom && (
+                <div className="fixed inset-0 z-[110] bg-black/95 flex items-center justify-center p-2 animate-in fade-in" onClick={() => setPreviewZoom(null)}>
+                    <img src={previewZoom} className="max-w-full max-h-full object-contain" />
+                    <button className="absolute top-4 right-4 p-2 bg-white/20 text-white rounded-full"><X size={24}/></button>
+                </div>
+            )}
+        </div>
     );
 };
 
-
-
-// ------------------------------------------------------------------
-// ★★★ 1. CrossBorderView (已移至外部，解決輸入跳走問題) ★★★
-// ------------------------------------------------------------------
-type CrossBorderViewProps = {
+// --- 主組件：中港業務管家 ---
+interface CrossBorderViewProps {
     inventory: Vehicle[];
     settings: SystemSettings;
+    dbEntries: any[];
     activeCbVehicleId: string | null;
     setActiveCbVehicleId: (id: string | null) => void;
     setEditingVehicle: (v: Vehicle | null) => void;
     addCbTask: (vid: string, task: CrossBorderTask) => void;
     updateCbTask: (vid: string, task: CrossBorderTask) => void;
     deleteCbTask: (vid: string, tid: string) => void;
-    addPayment: (vid: string, payment: Payment) => void;
-};
-
-
-
-// ------------------------------------------------------------------
-// ★★★ 新增：系統啟動與資料同步 Loading 畫面 ★★★
-// ------------------------------------------------------------------
-const GlobalDataLoadingScreen = () => {
-    const [loadingText, setLoadingText] = useState('建立安全連線中...');
-    
-    useEffect(() => {
-        const texts = ['正在同步雲端資料庫...', '載入車輛庫存清單...', '更新最新報表數據...', '驗證使用者權限...', '即將完成...'];
-        let i = 0;
-        const timer = setInterval(() => {
-            i = (i + 1) % texts.length;
-            setLoadingText(texts[i]);
-        }, 800); // 每 0.8 秒換一句話，讓畫面感覺很忙碌在做事
-        return () => clearInterval(timer);
-    }, []);
-
-    return (
-        <div className="fixed inset-0 z-[9999] bg-slate-900 flex flex-col items-center justify-center overflow-hidden">
-            {/* 科技感背景光暈裝飾 */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-30 pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-blue-600 rounded-full blur-[120px] animate-pulse"></div>
-                <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-yellow-500 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
-            </div>
-            
-           <div className="relative z-10 flex flex-col items-center">
-                {/* ★ 升級版 Loading Logo：無底色透視 + 純金屬光暈彈跳 */}
-                <div className="relative w-28 h-28 mb-8 animate-bounce" style={{ animationDuration: '2s' }}>
-                    <div className="absolute inset-0 bg-yellow-400 rounded-full blur-[30px] opacity-20"></div>
-                    <img src={COMPANY_INFO.logo_url} alt="Logo" className="relative z-10 w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]" onError={(e) => { e.currentTarget.style.display='none'; }}/>
-                </div>
-                
-                <h1 className="text-3xl font-black text-white tracking-widest mb-2 drop-shadow-lg">GOLD LAND AUTO</h1>
-                <p className="text-yellow-500 font-bold text-sm tracking-[0.3em] mb-12 uppercase drop-shadow-md">DMS System</p>
-                
-                {/* 現代化漸層進度條 (無限流動效果) */}
-                <div className="w-64 h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4 shadow-inner relative">
-                    <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-transparent via-blue-500 to-yellow-400 w-1/2 animate-[marquee-inline_1.5s_ease-in-out_infinite]"></div>
-                </div>
-                
-                {/* 動態狀態文字 */}
-                <div className="text-slate-400 text-xs font-mono flex items-center h-4">
-                    <Loader2 size={12} className="animate-spin mr-2 text-blue-400"/> {loadingText}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-// ------------------------------------------------------------------
-// ★★★ 2. SettingsManager (完整無縮減版：含所有編輯器與匯入功能) ★★★
-// ------------------------------------------------------------------
-type SettingsManagerProps = {
-    settings: SystemSettings;
-    setSettings: React.Dispatch<React.SetStateAction<SystemSettings>>;
-    db: Firestore | null;
-    staffId: string | null;
-    appId: string;
-    inventory: Vehicle[];
-    updateSettings: (key: keyof SystemSettings, newItem: string, action: 'add' | 'remove', parentKey?: string) => void;
-};
-
-
-
-
-// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
-const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
-    const [photos, setPhotos] = useState<string[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [customRemark, setCustomRemark] = useState(vehicle.salesRemarks || '');
-
-    useEffect(() => {
-        if (!db || !vehicle.id) return;
-        const q = query(
-            collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), 
-            where('status', '==', 'linked'), 
-            where('relatedVehicleId', '==', vehicle.id)
-        );
-        const unsub = onSnapshot(q, (snap) => {
-            const list: any[] = [];
-            snap.forEach(d => list.push(d.data()));
-            
-            // ★ 核心防線 1：雙重過濾！只要 mediaType 是文件，或者標籤(tags)包含文件，一律剔除
-            const vehiclePhotos = list.filter(item => {
-                const isDocType = item.mediaType === 'document';
-                const hasDocTag = Array.isArray(item.tags) && item.tags.includes('文件');
-                return !isDocType && !hasDocTag;
-            });
-
-            // ★ 核心防線 2：依照智能圖庫拖曳後的時間戳 (createdAt) 進行排序
-            vehiclePhotos.sort((a, b) => {
-                const timeA = a.createdAt?.seconds || 0;
-                const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA; // 越新的排越前面 (對應拖曳排序邏輯)
-            });
-
-            // ★ 核心防線 3：確保有星星標記 (isPrimary) 的封面圖絕對置頂
-            vehiclePhotos.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
-            
-            setPhotos(vehiclePhotos.map(i => i.url).slice(0, 6)); 
-            setLoading(false);
-        });
-        return () => unsub();
-    }, [vehicle.id]);
-
-    // ★ 呼叫獨立 Blob 列印引擎，允許無限跨頁
-    const handlePrint = () => {
-        const content = document.getElementById('share-content');
-        if (content) {
-            // ★ 動態組合檔名：年份_廠牌_型號_座位數
-            const parts = [
-                vehicle.year,
-                vehicle.make,
-                vehicle.model,
-                vehicle.seating ? `${vehicle.seating}座` : ''
-            ].filter(Boolean); // 過濾掉空值
-            
-            // 將陣列組合成字串，並把所有空格自動替換成底線，讓存檔名稱更乾淨
-            const fileName = parts.join('_').replace(/\s+/g, '_');
-            
-            triggerCardPrint(content.outerHTML, fileName);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-sm md:max-w-md rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                <div className="p-3 bg-slate-900 text-white flex justify-between items-center print:hidden flex-none">
-                    <span className="text-xs font-bold">{cleanMode ? '✨ 預覽車輛規格 (純淨無公司版)' : '💰 預覽對客推介單 (完整版)'}</span>
-                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full"><X size={20}/></button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 bg-white" id="share-content">
-                    {!cleanMode ? (
-                        <div className="flex items-center gap-4 border-b-2 border-yellow-500 pb-4 mb-4">
-                            <img src={COMPANY_INFO.logo_url} className="w-16 h-16 object-contain" onError={(e) => e.currentTarget.style.display='none'}/>
-                            <div>
-                                <h1 className="text-xl font-black text-slate-900 leading-none tracking-wide">{COMPANY_INFO.name_en}</h1>
-                                <h2 className="text-sm font-bold text-slate-600 mt-1 tracking-widest">{COMPANY_INFO.name_ch}</h2>
-                            </div>
-                        </div>
-                    ) : (<div className="pt-2"></div>)}
-
-                    <div className="mb-4 flex justify-between items-end">
-                        <div className={cleanMode ? "w-full text-center border-b border-slate-100 pb-3" : ""}>
-                            <h3 className="text-2xl font-black text-slate-800 leading-tight">{vehicle.make} {vehicle.model}</h3>
-                            <p className="text-sm text-slate-500 font-mono mt-1">製造年份: {vehicle.year}</p>
-                        </div>
-                        {!cleanMode && (
-                            <div className="text-right pb-1">
-                                <span className="text-lg font-black text-yellow-600">{new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price)}</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">外觀/內飾</span><span className="font-bold text-slate-800 text-[10px] truncate">{vehicle.colorExt || '-'} / {vehicle.colorInt || (vehicle as any).colorInterior || '-'}</span></div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">手數</span><span className="font-bold text-slate-800 text-xs">{vehicle.previousOwners || '0'} 手</span></div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">容積</span><span className="font-bold text-slate-800 text-xs">{vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-'}</span></div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">里數</span><span className="font-bold text-slate-800 text-xs">{vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-'}</span></div>
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 col-span-2 flex flex-col justify-center"><span className="block text-[9px] text-slate-400 font-bold uppercase mb-0.5">牌費到期日</span><span className="font-bold text-slate-800 text-xs font-mono">{vehicle.licenseExpiry || '未出牌 / 已過期'}</span></div>
-                    </div>
-
-                    {/* ★ 核心修改 1：銷售備註選擇性列印 */}
-                    {!cleanMode && (
-                        <div className={`mb-6 relative group ${!customRemark.trim() ? 'print:hidden' : ''}`}>
-                            <span className="block text-[9px] text-slate-400 font-bold uppercase mb-1 print:hidden">銷售備註</span>
-                            
-                            {/* 網頁編輯用 (列印時隱藏) */}
-                            <textarea 
-                                value={customRemark} 
-                                onChange={(e) => setCustomRemark(e.target.value)} 
-                                placeholder="在這裡輸入車輛亮點或給客戶的話..." 
-                                className="w-full text-sm text-slate-700 bg-blue-50/50 border border-dashed border-blue-300 rounded-lg p-3 outline-none resize-none focus:bg-blue-50 focus:border-blue-500 transition-colors print:hidden min-h-[60px] leading-relaxed"
-                            />
-                            
-                            {/* 列印專用純文字 (網頁上隱藏，列印時才顯示) */}
-                            {customRemark.trim() && (
-                                <div className="hidden print:block text-sm text-slate-800 bg-blue-50/30 p-3 rounded-lg border border-blue-100 whitespace-pre-wrap leading-relaxed">
-                                    {customRemark}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ★ 核心修改 2：排版優化，改為「上 1 大圖 + 下排最多 5 小圖」，絕對保證 1 頁印完 */}
-                    <div className="mb-4">
-                        {loading ? <div className="text-center text-xs py-10">載入圖片中...</div> : 
-                        photos.length > 0 ? (
-                            <div className="flex flex-col gap-2 break-inside-avoid">
-                                {/* 第一張大圖 (高度稍微壓縮，完美對齊 A4 比例) */}
-                                <div className="rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[16/7] md:aspect-[21/9]">
-                                    <img src={photos[0]} className="w-full h-full object-cover"/>
-                                </div>
-                                {/* 後續小圖並排 (最多 5 張，自動均分寬度縮小) */}
-                                {photos.length > 1 && (
-                                    <div className="flex gap-2">
-                                        {photos.slice(1, 6).map((url, i) => (
-                                            <div key={i} className="flex-1 rounded-lg overflow-hidden border border-slate-100 bg-slate-50 aspect-[4/3]">
-                                                <img src={url} className="w-full h-full object-cover"/>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (<div className="text-center py-8 bg-gray-50 text-gray-400 text-xs rounded border border-dashed border-gray-200">暫無圖片</div>)}
-                    </div>
-
-                    {!cleanMode && (
-                        <div className="text-center border-t border-slate-100 pt-4 mt-4 break-inside-avoid">
-                            <p className="text-xs font-bold text-slate-800 tracking-wide">{COMPANY_INFO.name_en} - {COMPANY_INFO.name_ch}</p>
-                            <p className="text-[10px] text-slate-500 mt-1 font-mono">Tel: {COMPANY_INFO.phone}</p>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-4 bg-slate-100 border-t print:hidden flex-none">
-                    <button onClick={handlePrint} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
-                        📸 {cleanMode ? '列印純淨規格' : '列印完整推介單'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-// ==================================================================
-// ★★★ 新增：28car 大數據實時比對標籤組件 ★★★
-// ==================================================================
-const MarketPriceChecker = ({ make, model, year, myPrice, isEnabled }: { make: string, model: string, year: string|number, myPrice: number, isEnabled: boolean }) => {
-    const [marketData, setMarketData] = React.useState<any>(null);
-    const [loading, setLoading] = React.useState(false);
-
-    React.useEffect(() => {
-        // ★ 如果設定關閉，或者缺乏廠牌型號，就直接罷工不抓資料！
-        if (!isEnabled || !make || !model) return;
-        
-        setLoading(true);
-        // 去敲我們剛剛建立好的 NAS 橋樑 API
-        fetch(`/api/market-data?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&year=${year}`)
-            .then(res => res.json())
-            .then(data => { if (data.success) setMarketData(data); })
-            .catch(err => console.error(err))
-            .finally(() => setLoading(false));
-    }, [make, model, year, isEnabled]);
-
-    // ★ 如果開關關閉，直接回傳 null (什麼都不渲染，完全隱藏)
-    if (!isEnabled) return null;
-
-    if (loading) return <div className="text-[9px] text-slate-400 font-mono animate-pulse mt-1 mb-1">🔍 正在對比 28car...</div>;
-    if (!marketData || marketData.count === 0) return <div className="text-[9px] text-slate-400 mt-1 mb-1">28car 暫無同款</div>;
-
-    // 計算利潤與市場競爭力
-    const diff = myPrice - marketData.avgPrice;
-    const isHigherThanMarket = diff > 0;
-
-    return (
-        <div className="mt-1.5 mb-1.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-[2px] rounded-[3px] shadow-sm">
-                28car 盤源: {marketData.count}台
-            </span>
-            <span className="text-[9px] font-mono font-bold text-slate-700 bg-slate-100 border border-slate-200 px-1.5 py-[2px] rounded-[3px] shadow-sm" title={`最低: $${marketData.minPrice.toLocaleString()} | 最高: $${marketData.maxPrice.toLocaleString()}`}>
-                均價: ${(marketData.avgPrice / 1000).toFixed(0)}k
-            </span>
-            {isHigherThanMarket ? (
-                <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1.5 py-[2px] rounded-[3px] shadow-sm animate-pulse" title={`比市場均價貴 $${Math.abs(diff).toLocaleString()}`}>
-                    📈 偏貴 ${(Math.abs(diff) / 1000).toFixed(1)}k
-                </span>
-            ) : (
-                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-[2px] rounded-[3px] shadow-sm" title={`比市場均價便宜 $${Math.abs(diff).toLocaleString()}`}>
-                    📉 具競爭力 ${(Math.abs(diff) / 1000).toFixed(1)}k
-                </span>
-            )}
-        </div>
-    );
-};
-
-// --- 主應用程式 ---
-export default function GoldLandAutoDMS() {
-  const [user, setUser] = useState<User | null>(null);
-  const [staffId, setStaffId] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ email: string, modules: string[], dataAccess?: string } | null>(null);
-  const [systemUsers, setSystemUsers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'create_doc' | 'settings' | 'inventory_add' | 'reports' | 'cross_border' | 'business' | 'database' | 'media_center' | 'import_orders' | 'company_ledger'>('dashboard');
-  const [allSalesDocs, setAllSalesDocs] = useState<any[]>([]); // 儲存所有單據供車輛詳情查詢
-  const [externalDocRequest, setExternalDocRequest] = useState<any | null>(null); // 跨頁面編輯請求
-  const [isDataSyncing, setIsDataSyncing] = useState(true);
-  const [isTeamHubOpen, setIsTeamHubOpen] = useState(false);
-  // ★★★ 新增：控制右下角選單與 T牌彈窗的狀態 ★★★
-  const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
-  const [isTPlateModalOpen, setIsTPlateModalOpen] = useState(false);
-  const [isChangePwdOpen, setIsChangePwdOpen] = useState(false); // ★ 新增這行
-  const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock'); // ★ 新增：手機版儀表板分頁狀態
-  const [dashSearchInStock, setDashSearchInStock] = useState('');
-  const [dashSearchAction, setDashSearchAction] = useState('');
-  // ★★★ 新增：全域現代化自動消失提示 (Toast) 控制器 ★★★
-  const [globalToast, setGlobalToast] = useState<{text: string, type: 'success'|'error'} | null>(null);
-
-  const showGlobalToast = (text: string, type: 'success' | 'error' = 'success') => {
-      setGlobalToast({text, type});
-      setTimeout(() => setGlobalToast(null), 3000); // 3秒後自動消失
-  };
-  
-  // ★★★ 終極魔法：全域攔截所有原生的 alert ★★★
-  useEffect(() => {
-      // 只要代碼裡呼叫了 alert('xxx')，全部都會被導向我們安全又漂亮的 Toast！
-      window.alert = (message: string) => {
-          // 如果訊息包含"失敗"或"錯誤"，就顯示紅色，否則顯示綠色
-          const isError = message.includes('失敗') || message.includes('錯誤') || message.includes('Error');
-          showGlobalToast(message, isError ? 'error' : 'success');
-      };
-  }, []);
-
-  // ★★★ 終極喚醒主畫面機制 (解決重新整理後空白問題) ★★★
-  const [hasInitialized, setHasInitialized] = useState(false);
-
-  useEffect(() => {
-      // 只有在使用者剛驗證完身份，且還沒執行過喚醒動作時才執行
-      if (currentUser && !hasInitialized) {
-          // 故意先切換到別的空標籤 (打破 React 的偷懶機制)
-          setActiveTab('settings'); 
-          
-          // 10 毫秒後，光速切回業務儀表板，保證 100% 觸發完整畫面重繪
-          setTimeout(() => {
-              setActiveTab('dashboard');
-              setHasInitialized(true); // 標記為已喚醒，避免重複執行
-          }, 10);
-      }
-  }, [currentUser, hasInitialized]);
-
-  // ★★★ 新增：監聽前景 (Foreground) 推送通知 ★★★
-  useEffect(() => {
-      if (typeof window !== 'undefined' && 'Notification' in window && app) {
-          try {
-              const messaging = getMessaging(app);
-              const unsub = onMessage(messaging, (payload) => {
-                  console.log("【前景收到通知】", payload);
-                  // 當使用者開住系統時，用我哋嘅全域 Toast 彈出通知
-                  const title = payload.notification?.title || '新通知';
-                  const body = payload.notification?.body || '';
-                  showGlobalToast(`🔔 ${title} : ${body}`, 'success');
-              });
-              return () => unsub();
-          } catch (e) {
-              console.log("前景通知監聽失敗:", e);
-          }
-      }
-  }, []);
-
- // ★★★ 企業級防呆機制：鎖住瀏覽器上一頁與防誤關閉 ★★★
-    useEffect(() => {
-        // 只有在「已登入 (有 staffId)」的狀態下才啟動鎖定
-        if (!staffId) return;
-
-        // 【防護一】阻擋瀏覽器上一頁 (Swipe Back / Back Button)
-        // 先塞入一個歷史紀錄當作「緩衝墊」
-        window.history.pushState(null, '', window.location.href);
-        const handlePopState = () => {
-            // 當使用者觸發上一頁時，立刻再把緩衝墊塞回去，抵銷退出的動作
-            window.history.pushState(null, '', window.location.href);
-            // (未來如果您有做 Toast 提示組件，也可以在這裡跳出："請使用左下角登出按鈕來離開系統")
-        };
-        window.addEventListener('popstate', handlePopState);
-
-        // 【防護二】阻擋意外刷新或關閉分頁 (F5 / Cmd+R / 點擊關閉標籤)
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            e.preventDefault();
-            // Chrome 等現代瀏覽器需要設定 returnValue 才會跳出原生的防呆警告框
-            e.returnValue = ''; 
-        };
-        window.addEventListener('beforeunload', handleBeforeUnload);
-
-        // 組件卸載或登出時，解除防護鎖
-        return () => {
-            window.removeEventListener('popstate', handlePopState);
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [staffId]);
- 
-  // --- User Management Helper (v13.1 新增) ---
-    const updateSystemUsers = async (newUsers: any[]) => {
-        setSystemUsers(newUsers); // 更新畫面
-        if (db && appId) {
-            try {
-                // 同步寫入 Firebase
-                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users');
-                await setDoc(docRef, { list: newUsers }, { merge: true });
-            } catch (err) {
-                console.error("Failed to update users:", err);
-            }
-        }
-    };
-
-  const addSystemLog = async (action: string, detail: string) => {
-    if (!db || !appId) return;
-    try {
-        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
-            user: staffId || 'System',
-            action: action,
-            detail: detail,
-            timestamp: serverTimestamp()
-        });
-    } catch (e) { console.error("Log error:", e); }
-    };
-
-  // ★ 第一段重構：公司營運總帳未付項目監聽 (補全 !user 防護與錯誤處理)
-const [unpaidCompanyExpenses, setUnpaidCompanyExpenses] = useState<any[]>([]);
-
-useEffect(() => {
-    // 1. 未登入 (!user) 前絕對不上傳請求，徹底消除 403 權限報錯
-    if (!db || !appId || !user) return;
-
-    const q = query(
-        collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), 
-        where('status', '==', 'Unpaid')
-    );
-
-    const unsub = onSnapshot(
-        q, 
-        (snapshot) => {
-            const list: any[] = [];
-            snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
-            setUnpaidCompanyExpenses(list);
-        },
-        (err) => {
-            console.warn("公司營運總帳監聽警告:", err);
-        }
-    );
-
-    return () => unsub();
-}, [db, appId, user]); // 2. 補全 user 依賴項
-  
-  // Data States
-  const [inventory, setInventory] = useState<Vehicle[]>([]);
-  // 1. 定義預設設定 (修正版：補回 dbCategories 與 dbRoles)
-    const defaultSettings: SystemSettings = {
-        makes: ['Toyota', 'Honda', 'BMW', 'Mercedes-Benz', 'Audi', 'Lexus', 'Nissan', 'Mazda', 'Porsche', 'Tesla'],
-        models: { 
-            'Toyota': ['Alphard', 'Vellfire', 'Noah', 'Sienta', 'Corolla', 'Camry', 'Hiace'], 
-            'Honda': ['Stepwgn', 'Freed', 'Jazz', 'Odyssey', 'Civic'], 
-            'BMW': ['X5', 'X3', '520i', '320i', '118i'], 
-            'Mercedes-Benz': ['E200', 'C200', 'S500', 'V250', 'A200', 'GLC'],
-            'Audi': ['A3', 'A4', 'Q3', 'Q5', 'Q7'],
-            'Lexus': ['RX', 'NX', 'UX', 'ES'],
-            'Porsche': ['Cayenne', 'Macan', 'Panamera', '911'],
-            'Tesla': ['Model 3', 'Model Y', 'Model S', 'Model X']
-        },
-        colors: ['White', 'Black', 'Silver', 'Grey', 'Blue', 'Red', 'Pearl White', 'Metallic Grey'],
-        expenseTypes: [
-            { name: '維修費', defaultCompany: '捷信車房', defaultAmount: 0, defaultDays: '0' },
-            { name: '美容費', defaultCompany: '3M美容中心', defaultAmount: 0, defaultDays: '0' },
-            { name: '驗車費', defaultCompany: '政府驗車中心', defaultAmount: 580, defaultDays: '0' },
-            { name: '牌費', defaultCompany: '運輸署', defaultAmount: 0, defaultDays: '0' },
-            { name: '保險費', defaultCompany: '安盛保險', defaultAmount: 0, defaultDays: '0' },
-            { name: '入油', defaultCompany: 'Shell', defaultAmount: 0, defaultDays: '0' },
-            { name: '泊車', defaultCompany: '領展', defaultAmount: 0, defaultDays: '0' }
-        ],
-        expenseCompanies: ['捷信車房', '3M美容中心', '政府驗車中心', '運輸署', '安盛保險', '中石化', 'Shell', 'Caltex', '領展'],
-        paymentTypes: ['Deposit', 'Balance', 'Full Payment', 'Installment', 'Service Fee', 'Commission'],
-        serviceItems: ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢'],
-        cbItems: [
-            { name: '代辦驗車', defaultInst: '中檢公司', defaultFee: 500, defaultDays: '7' },
-            { name: '批文延期', defaultInst: '廣東省公安廳', defaultFee: 0, defaultDays: '14' }
-        ],
-        cbInstitutions: ['中檢公司', '廣東省公安廳', '海關', '邊檢', '保險公司'],
-        
-        // ★★★ 補回缺少的這兩個欄位 ★★★
-        dbCategories: ['Person', 'Company', 'Vehicle', 'CrossBorder', 'Other'],
-        dbRoles: ['Admin', 'Manager', 'Staff', 'Viewer'],
-        // ★★★ 補回結束 ★★★
-
-        dbDocTypes: {
-            'Person': ['身份證', '回鄉證', '駕駛執照', '住址證明'],
-            'Company': ['商業登記證 (BR)', '公司註冊證 (CI)', '周年申報表 (NAR1)'],
-            'Vehicle': ['牌簿 (VRD)', '行車證', '保險單', '驗車紙'],
-            'CrossBorder': ['批文卡', '禁區紙', '行駛證', '海關本']
-        },
-        reminders: { isEnabled: true, daysBefore: 30, time: '10:00', categories: { license: true, insurance: true, crossBorder: true, installments: true } },
-        backup: { frequency: 'monthly', lastBackupDate: '', autoCloud: true }
-    };
-
-  
-  
-  // 1. ★★★ 定義資料權限過濾器 ★★★
-  const getVisibleInventory = () => {
-      // 1. 管理員看全部
-      if (staffId === 'BOSS' || (currentUser?.modules?.includes('all')) || (currentUser as any)?.dataAccess === 'all') {
-          return inventory;
-      }
-
-      // 2. ★ 嚴格模式：只看「負責人是自己」的車
-      // 移除了 !v.managedBy 的判斷
-      return inventory.filter(v => v.managedBy === staffId);
-  };
-
-  // 2. ★★★ 產生過濾後的清單 (這就是員工能看到的所有車) ★★★
-  const visibleInventory = getVisibleInventory();  
-
-  // =========================================================
-  // ★★★ 智慧中港車「兜圈」死線自動追蹤器 (只針對粵港車 + 有事才顯現) ★★★
-  // =========================================================
-  const loopReminders = useMemo(() => {
-      return visibleInventory.filter((v: any) => {
-          // ★ 核心修復：只針對「粵港車」(檢查口岸是否有香港關口，或者車牌是否包含'港')
-          const isYueGang = (v.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (v.crossBorder?.mainlandPlate || '').includes('港');
-          if (!isYueGang) return false; // 不是粵港車，直接放行，不追蹤！
-
-          // 支援讀取根目錄或 crossBorder 裡的最後出境日期
-          const dateStr = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
-          if (!dateStr) return false;
-          
-          const lastOut = new Date(dateStr);
-          if (isNaN(lastOut.getTime())) return false;
-          
-          // 計算 90 天強制回港死線
-          const deadline = new Date(lastOut.getTime() + 90 * 24 * 60 * 60 * 1000);
-          const diffTime = deadline.getTime() - new Date().getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
-          // 只抓取距離死線剩餘 30 天以內的車輛
-          return diffDays <= 30;
-      }).map((v: any) => {
-          const dateStr = v.lastOutboundDate || v.crossBorder?.lastOutboundDate;
-          const lastOut = new Date(dateStr);
-          const deadline = new Date(lastOut.getTime() + 90 * 24 * 60 * 60 * 1000);
-          const diffTime = deadline.getTime() - new Date().getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
-          return {
-              ...v,
-              diffDays,
-              deadlineStr: deadline.toISOString().split('T')[0]
-          };
-      }).sort((a, b) => a.diffDays - b.diffDays); // 最緊急的排在最前面
-  }, [visibleInventory]);
-
-  const [primaryImages, setPrimaryImages] = useState<Record<string, string>>({});
-
-    // 2. 初始化 State (使用上面的 defaultSettings 作為初始值)
-  const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
-  const [dbEntries, setDbEntries] = useState<DatabaseEntry[]>([]);
-  // UI States
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null); 
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null); 
-  const [shareVehicle, setShareVehicle] = useState<Vehicle | null>(null); // ★ 新增：控制分享彈窗
-  const [shareCleanMode, setShareCleanMode] = useState(false); // ★ 新增：控制彈窗是否為純淨版 (隱藏價格)
-
-  // ★★★ 新增：將資料庫編輯狀態提升到這裡，讓 Dashboard 也能控制 ★★★
-  const [editingEntry, setEditingEntry] = useState<DatabaseEntry | null>(null);
-  const [isDbEditing, setIsDbEditing] = useState(false);
-
-// ★★★ 新增：現代化自動消失提示 (Toast) 狀態 ★★★
-    const [toastMsg, setToastMsg] = useState<{text: string, type: 'success'|'error'} | null>(null);
-
-    const showToast = (text: string, type: 'success' | 'error' = 'success') => {
-        setToastMsg({text, type});
-        setTimeout(() => setToastMsg(null), 3000); // 3秒後自動消失
-    };
-
-  // Cross Border UI State
-  const [activeCbVehicleId, setActiveCbVehicleId] = useState<string | null>(null);
-
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); 
-  const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
-  
-  // Doc Preview State
-  const [previewDoc, setPreviewDoc] = useState<{ 
-      type: DocType, 
-      vehicle: Vehicle, 
-      payment?: Payment, // 保留舊有兼容性
-      selectedItems?: (Payment | CrossBorderTask)[] // 新增：支援多選列表
-  } | null>(null);
-
-  // Search & Filter
-  const [searchTerm, setSearchTerm] = useState(''); 
-  const [filterStatus, setFilterStatus] = useState<string>('All');
-  const [filterSource, setFilterSource] = useState<'All' | 'own' | 'partner'>('All'); // ★ 新增：自家/行家過濾狀態
-  const [sortConfig, setSortConfig] = useState<{ key: keyof Vehicle; direction: 'asc' | 'desc' } | null>(null);
-
-  // Report States
-  const [reportType, setReportType] = useState<'receivable' | 'payable' | 'paid_expenses' | 'sales'>('receivable');
-  const [reportStartDate, setReportStartDate] = useState(new Date().getFullYear() + '-01-01');
-  const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportCompany, setReportCompany] = useState('');
-
-  // Legacy Forms
-  const [customer, setCustomer] = useState<Customer>({ name: '', phone: '', hkid: '', address: '' });
-  const [deposit, setDeposit] = useState<number>(0);
-  const [docType, setDocType] = useState<DocType>('sales_contract');
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
-
-  const printAreaRef = useRef<HTMLDivElement>(null);
-  
-  // ★ 套用智能列印引擎並加上自動檔名
-  const handlePrint = () => {
-      const printRoot = document.getElementById('print-root');
-      if (printRoot) {
-          let fileName = 'Vehicle_Document';
-          if (previewDoc && previewDoc.vehicle) {
-              const v = previewDoc.vehicle;
-              const reg = v.regMark && v.regMark !== 'TBC' ? v.regMark : '未出牌';
-              const yr = v.year || '';
-              const mk = v.make || '';
-              const md = v.model || '';
-              // 組合檔名：車牌_年份_廠牌_型號 (空格會自動替換為底線)
-              fileName = `${reg}_${yr}_${mk}_${md}`.replace(/\s+/g, '_');
-          }
-          triggerSmartPrint(printRoot.outerHTML, fileName);
-      }
-  };
-
-  const clients = useMemo(() => dbEntries.filter(e => e.category === 'Person'), [dbEntries]);
-
-  // ★ 第二段重構：延遲監聽所有銷售單據 (補全 !user 防護與簡化依賴)
-useEffect(() => {
-    // 1. 未登入 (!user) 前立即攔截
-    if (!db || !appId || !user) return;
-    
-    // 2. 惰性加載邏輯：僅在打開車輛詳情或開單模組時才發起監聽
-    if (!editingVehicle && activeTab !== 'create_doc') return;
-
-    const q = query(
-        collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), 
-        orderBy('updatedAt', 'desc')
-    );
-
-    const unsub = onSnapshot(
-        q, 
-        (snapshot) => {
-            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setAllSalesDocs(list);
-        },
-        (err) => {
-            console.warn("銷售單據監聽警告:", err);
-        }
-    );
-
-    return () => unsub();
-}, [db, appId, user, activeTab, editingVehicle]); // 3. 簡化並補全 user 與 editingVehicle 依賴
-
-  // ★★★ 新增：處理從車輛詳情跳轉到開單系統 ★★★
-  const handleJumpToDoc = (docData: any) => {
-      setExternalDocRequest(docData); // 設定目標單據
-      setActiveTab('create_doc');     // 切換到開單分頁
-      setEditingVehicle(null);        // 關閉車輛詳情彈窗
-  };
-
-  useEffect(() => {
-    // ★ 修復 1：加入 !user 防護，未完成登入前絕對不向資料庫發起請求 (消除 403 報錯)
-    if (!db || !appId || !user) return;
-
-    const unsub = onSnapshot(
-      doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'users'), 
-      (docSnap) => {
-        if (docSnap.exists()) {
-            const rawList = docSnap.data().list || [];
-            setSystemUsers(rawList);
-        } else {
-            // 如果還沒有用戶名單，預設建立一個 BOSS 帳號 (密碼 8888)
-            setSystemUsers([{ email: 'BOSS', password: '8888', modules: ['all'] }]);
-        }
-      },
-      // ★ 修復 2：加入錯誤回傳處理 (Error Callback)，避免網絡短暫斷連時拋出未捕獲例外
-      (err) => {
-        console.warn("系統用戶名單同步提示:", err);
-      }
-    );
-
-    return () => unsub();
-  }, [db, appId, user]); // ★ 修復 3：依賴項必須補上 user，登入成功時才能自動觸發監聽
-
-
-  // ★★★ 智能首圖修復：加入未登入防護 + 優先級降級比對 (isPrimary -> 最新相片) ★★★
-  useEffect(() => {
-      // 核心防護：未登入 (user === null) 時絕對不對資料庫發起請求，避免 403 錯誤
-      if (!db || !appId || !user) return;
-
-      const q = query(
-          collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'),
-          where('status', '==', 'linked')
-      );
-
-      const unsub = onSnapshot(q, (snapshot) => {
-          const map: Record<string, string> = {};
-          const vehicleMediaMap: Record<string, any[]> = {};
-
-          // 1. 依車輛 ID 分組整理所有關聯圖片 (自動剔除 PDF 文件)
-          snapshot.forEach(docSnap => {
-              const data = docSnap.data();
-              if (data.relatedVehicleId && data.url && data.mediaType !== 'document') {
-                  if (!vehicleMediaMap[data.relatedVehicleId]) {
-                      vehicleMediaMap[data.relatedVehicleId] = [];
-                  }
-                  vehicleMediaMap[data.relatedVehicleId].push(data);
-              }
-          });
-
-          // 2. 為每台車算出一張最合適的首圖
-          Object.keys(vehicleMediaMap).forEach(vId => {
-              const mediaList = vehicleMediaMap[vId];
-              
-              // 優先級 A：有星星標記 (isPrimary === true) 的封面圖
-              const primaryItem = mediaList.find(m => m.isPrimary === true);
-              
-              if (primaryItem) {
-                  map[vId] = primaryItem.url;
-              } else {
-                  // 優先級 B：若無設定封面，自動取最新上傳的一張相片
-                  mediaList.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-                  map[vId] = mediaList[0].url;
-              }
-          });
-
-          setPrimaryImages(map);
-      }, (err) => {
-          console.warn("圖庫首圖同步警告:", err);
-      });
-
-      return () => unsub();
-  }, [db, appId, user]); // ★ 必須加入 user 依賴項
-  
- // -------------------------------------------------------------
-  // ★★★ 系統設定讀取 (v14.6 安全修復版：加入 Auth 登入防護) ★★★
-  // -------------------------------------------------------------
-  useEffect(() => {
-      // ★ 核心修復：未完成 Firebase Auth 驗證 (!user) 前絕不發起請求，徹底消除 403 權限錯誤
-      if (!db || !appId || !user) return;
-
-      const fetchSettings = async () => {
-          try {
-              // ★ 修復：加回 db! 與 appId!，滿足 TypeScript 嚴格模式的要求
-              const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings');
-              const docSnap = await getDoc(docRef);
-
-              if (docSnap.exists()) {
-                  const dbData = docSnap.data() as Partial<SystemSettings>;
-                  
-                  setSettings(prev => ({
-                      ...defaultSettings, 
-                      ...dbData,          
-                      
-                      // 1. 陣列保護
-                      warrantyTypes: dbData.warrantyTypes?.length ? dbData.warrantyTypes : defaultSettings.warrantyTypes,
-                      expenseTypes: dbData.expenseTypes?.length ? dbData.expenseTypes : defaultSettings.expenseTypes,
-                      expenseCompanies: dbData.expenseCompanies?.length ? dbData.expenseCompanies : defaultSettings.expenseCompanies,
-                      cbItems: dbData.cbItems?.length ? dbData.cbItems : defaultSettings.cbItems,
-                      cbInstitutions: dbData.cbInstitutions?.length ? dbData.cbInstitutions : defaultSettings.cbInstitutions,
-                      
-                      // 2. 物件保護
-                      models: (() => {
-                          const merged: Record<string, string[]> = { ...defaultSettings.models };
-                          if (dbData.models) {
-                              Object.keys(dbData.models).forEach(k => {
-                                  merged[k] = Array.isArray((dbData.models as any)[k]) ? (dbData.models as any)[k] : [];
-                              });
-                          }
-                          return merged;
-                      })(),
-                      
-                      // 3. Reminders 保護
-                      reminders: { 
-                          isEnabled: dbData.reminders?.isEnabled ?? defaultSettings.reminders?.isEnabled ?? true,
-                          daysBefore: dbData.reminders?.daysBefore ?? defaultSettings.reminders?.daysBefore ?? 30,
-                          time: dbData.reminders?.time ?? defaultSettings.reminders?.time ?? '10:00',
-                          categories: {
-                              license: dbData.reminders?.categories?.license ?? defaultSettings.reminders?.categories?.license ?? true,
-                              insurance: dbData.reminders?.categories?.insurance ?? defaultSettings.reminders?.categories?.insurance ?? true,
-                              crossBorder: dbData.reminders?.categories?.crossBorder ?? defaultSettings.reminders?.categories?.crossBorder ?? true,
-                              installments: dbData.reminders?.categories?.installments ?? defaultSettings.reminders?.categories?.installments ?? false
-                          }
-                      },
-                      
-                      // 4. Backup 保護
-                      backup: { 
-                          frequency: dbData.backup?.frequency ?? defaultSettings.backup?.frequency ?? 'monthly',
-                          lastBackupDate: dbData.backup?.lastBackupDate ?? defaultSettings.backup?.lastBackupDate ?? '',
-                          autoCloud: dbData.backup?.autoCloud ?? defaultSettings.backup?.autoCloud ?? true
-                      }
-                  }));
-              } else {
-                  await setDoc(docRef, defaultSettings);
-                  setSettings(defaultSettings);
-              }
-          } catch (error) {
-              console.error("❌ 設定讀取失敗:", error);
-          }
-      };
-
-      fetchSettings();
-  }, [db, appId, user]); // ★ 必須包含 user 依賴，登入完成後才會自動觸發資料同步
-
-  // ★★★ 終極智能背景自動備份 (Lazy Cron) ★★★
-  useEffect(() => {
-      // ★ 加入 !user 防護，避免無權限時觸發備份被 Firebase Storage 阻擋
-      if (!db || !storage || !appId || !user || !settings.backup?.autoCloud || inventory.length === 0) return;
-
-      const checkAndRunBackup = async () => {
-          const freq = settings.backup?.frequency || 'manual';
-          if (freq === 'manual') return;
-
-          const lastBackup = settings.backup?.lastBackupDate;
-          const now = new Date();
-          let shouldBackup = false;
-
-          if (!lastBackup) {
-              shouldBackup = true;
-          } else {
-              const lastD = new Date(lastBackup);
-              const diffDays = Math.ceil(Math.abs(now.getTime() - lastD.getTime()) / (1000 * 60 * 60 * 24));
-
-              if (freq === 'daily' && diffDays >= 1) shouldBackup = true;
-              if (freq === 'weekly' && diffDays >= 7) shouldBackup = true;
-              if (freq === 'monthly' && diffDays >= 30) shouldBackup = true;
-          }
-
-          if (shouldBackup) {
-              try {
-                  console.log("🔄 系統檢測到備份週期已到，正在背景執行自動備份...");
-                  const dataStr = JSON.stringify({ version: "2.0", type: "auto", timestamp: now.toISOString(), settings, inventory });
-                  const fileName = `backups/auto_${freq}_${now.toISOString().slice(0,10)}_${Date.now()}.json`;
-                  
-                  // ★ 修復：補上 storage!
-                  const storageRef = ref(storage!, fileName); 
-                  await uploadString(storageRef, dataStr);
-
-                  // ★ 修復：補上 db! 與 appId!
-                  const docRef = doc(db!, 'artifacts', appId!, 'staff', 'CHARLES_data', 'system', 'settings'); 
-                  await setDoc(docRef, { backup: { ...settings.backup, lastBackupDate: now.toISOString() } }, { merge: true });
-                  
-                  setSettings(prev => ({ ...prev, backup: { ...prev.backup!, lastBackupDate: now.toISOString() } }));
-                  showGlobalToast(`✅ 系統已自動完成 ${freq === 'daily' ? '每日' : (freq === 'weekly' ? '每週' : '每月')} 雲端備份！`, 'success');
-              } catch (e) {
-                  console.warn("⚠️ 背景自動備份中斷 (權限或網路問題):", e);
-              }
-          }
-      };
-
-      const timer = setTimeout(() => { checkAndRunBackup(); }, 15000);
-      return () => clearTimeout(timer);
-  }, [db, storage, appId, user, settings.backup?.frequency, settings.backup?.autoCloud, inventory.length]); // ★ 補全 user 依賴
-  
-  // --- Auth & Data Loading ---
-  useEffect(() => {
-    // 修正：強化 PWA/App Icon 及瀏覽器 Favicon 更新邏輯
-    const setAppIcon = () => {
-        const logoPath = COMPANY_INFO.logo_url;
-        const appName = "金田汽車DMS系統";
-        
-        // 移除舊的所有 icon 連結
-        const existingIcons = document.querySelectorAll("link[rel*='icon']");
-        existingIcons.forEach(el => el.parentNode?.removeChild(el));
-
-        // 建立新連結的輔助函數，加入時間戳版本號強制更新緩存
-        const setLink = (rel: string, href: string) => {
-            const link = document.createElement('link');
-            link.rel = rel;
-            // 加入 ?v= 時間戳，確保瀏覽器不會讀取舊緩存
-            link.href = `${href}?v=${new Date().getTime()}`;
-            document.getElementsByTagName('head')[0].appendChild(link);
-        };
-
-        const setMeta = (propertyOrName: string, content: string, isProperty: boolean = false) => {
-            const attr = isProperty ? 'property' : 'name';
-            let meta = document.querySelector(`meta[${attr}='${propertyOrName}']`);
-            if (!meta) {
-                meta = document.createElement('meta');
-                meta.setAttribute(attr, propertyOrName);
-                document.getElementsByTagName('head')[0].appendChild(meta);
-            }
-            meta.setAttribute('content', content);
-        };
-
-        // 設定標題與各類 Icon
-        document.title = appName;
-        setLink('icon', logoPath);
-        setLink('shortcut icon', logoPath); // 針對舊版或特定瀏覽器
-        setLink('apple-touch-icon', logoPath); 
-        setLink('manifest', '/manifest.json'); // ★ 新增這行，連結 PWA 描述檔
-
-        // Web App Meta
-        // ★ 核心修復：全面屏 viewport 設定已經交由 layout.tsx 負責，這裡必須刪除，否則會發生「雙重 meta 衝突」導致 iPhone 邊界失效！
-        setMeta('theme-color', '#f1f5f9'); 
-        setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent'); // ★ 必須是 black-translucent 才能讓網頁完美透底
-        
-        setMeta('apple-mobile-web-app-title', appName); 
-        setMeta('application-name', appName); 
-        setMeta('apple-mobile-web-app-capable', 'yes');
-        setMeta('mobile-web-app-capable', 'yes');
-
-        // Social Media / Open Graph Meta
-        setMeta('og:title', appName, true);
-        setMeta('og:site_name', appName, true);
-        setMeta('og:image', logoPath, true);
-    };
-    
-    setAppIcon();
-    
-    // 監控標題防止被外部竄改
-    const observer = new MutationObserver(() => {
-        if (document.title !== "金田汽車DMS系統") {
-            document.title = "金田汽車DMS系統";
-        }
-    });
-    observer.observe(document.querySelector('title') || document.head, { subtree: true, characterData: true, childList: true });
-
-    // --- Auth & Data Loading (安全重構版：徹底移除匿名授權) ---
-    const currentAuth = auth;
-    if (!currentAuth) { 
-      setLoading(false); 
-      return; 
-    }
-
-    // 1. 純粹監聽 Auth 狀態，將驗證邏輯完整交給登入表單與 Firebase
-    const unsubscribe = onAuthStateChanged(currentAuth, (u) => { 
-      setUser(u); 
-      setLoading(false); 
-    });
-
-    // 2. 僅在存在 SSR Token 時才進行憑證簽核，否則靜默交由用戶手動登入
-    const initAuth = async () => {
-      try {
-        if (typeof window !== 'undefined' && (window as any).__initial_auth_token) {
-          await signInWithCustomToken(currentAuth, (window as any).__initial_auth_token);
-        }
-      } catch (error: any) {
-        if (!error.message?.includes('storage')) setAuthError(error.message);
-      }
-    };
-
-    initAuth();
-    return () => unsubscribe();
-  }, []);
-
-  // --- Fetch Inventory ---
-  useEffect(() => {
-    // ★ 加入 !user 防護，徹底杜絕 LocalStorage 快於 Firebase Auth 的時間差報錯
-    if (!db || !appId || !staffId || !user) return;
-    
-    const invRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory');
-    const q = query(invRef, orderBy('createdAt', 'desc')); 
-    const minLoadingTime = new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const unsubInv = onSnapshot(q, async (snapshot) => {
-      const list: Vehicle[] = [];
-      snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() } as Vehicle));
-      setInventory(list);
-      
-      await minLoadingTime;
-      setIsDataSyncing(false);
-    }, (err) => {
-        console.warn("車輛庫存同步警告:", err);
-        setIsDataSyncing(false); 
-    });
-
-    return () => { unsubInv(); };
-  }, [staffId, db, appId, user]); // ★ 補全 user 依賴
-
-  // --- Fetch Database ---
-  useEffect(() => {
-        // ★ 加入 !user 防護
-        if (!db || !appId || !staffId || !user) return;
-        const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-        
-        const unsubDb = onSnapshot(dbRef, (snapshot) => {
-            const list: DatabaseEntry[] = [];
-            snapshot.forEach(doc => {
-                const data = doc.data();
-                list.push({ 
-                    id: doc.id, 
-                    ...data,
-                    category: data.category || 'Person',
-                    name: data.name || '',
-                    reminderEnabled: data.reminderEnabled || false,
-                    expiryDate: data.expiryDate || '',
-                    tags: data.tags || [],
-                    plateNoHK: data.plateNoHK || '',
-                    relatedPlateNo: data.relatedPlateNo || '',
-                    make: data.make || '',
-                    model: data.model || '',
-                    chassisNo: data.chassisNo || '',
-                    engineNo: data.engineNo || '',
-                    attachments: data.attachments || [],
-                    roles: data.roles || [],
-                    managedBy: data.managedBy || ''
-                } as DatabaseEntry);
-            });
-
-            const filteredDbList = list.filter(entry => {
-                if (staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') return true;
-                if (entry.docType === '市場大數據') return true;
-                return entry.managedBy === staffId;
-            });
-
-            filteredDbList.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-            setDbEntries(filteredDbList); 
-        }, (err) => console.warn("資料庫中心同步警告:", err));
-
-        return () => unsubDb();
-    }, [staffId, db, appId, currentUser, user]); // ★ 補全 user 依賴
-
- // ==================================================================
-  // ✅ 終極修復：強制同步 Firebase Auth 與前端 LocalStorage 狀態 (防誤殺版)
-  // ==================================================================
-  useEffect(() => {
-      // ★ 核心修復：加入 !loading 判斷！
-      // 必須等待 Firebase Auth 完全初始化結束後 (!loading)，才能斷定 user 真的是 null
-      if (!loading && user === null && staffId !== null) {
-          console.warn("Firebase Auth 憑證真正失效，清除殘留狀態並返回登入頁");
-          setStaffId(null);
-          setCurrentUser(null);
-          localStorage.removeItem('gla_saved_user');
-          setIsDataSyncing(true); // 重置載入狀態以供下次使用
-      }
-  }, [user, staffId, loading]); // 👈 必須補上 loading 依賴項
-
-// ★★★ 核心修復：資料庫提醒權限隔離 (放在 Early Return 之前避免 Error #310) ★★★
-  const databaseReminders = useMemo(() => {
-      const expired: any[] = [];
-      const soon: any[] = [];
-      const today = new Date();
-      today.setHours(0,0,0,0);
-
-      dbEntries.forEach(entry => {
-          // ★ 權限隔離邏輯：如果這筆資料的負責人(managedBy)不是當前登入者，就不產生提醒
-          // 這能確保每個人 (包含 BOSS) 的儀表板只會看到屬於自己的資料庫預警
-          if (entry.managedBy && entry.managedBy !== staffId) return;
-
-          if (entry.reminderEnabled && entry.expiryDate) {
-              const target = new Date(entry.expiryDate);
-              const diffTime = target.getTime() - today.getTime();
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-              const alertItem = {
-                  id: entry.id,
-                  plate: entry.plateNoHK || entry.plateNoCN || '-',
-                  item: `${entry.name} - ${entry.docType || entry.category}`,
-                  date: entry.expiryDate,
-                  days: diffDays,
-                  category: 'document', 
-                  vid: entry.id 
-              };
-
-              if (diffDays < 0) expired.push(alertItem);
-              else if (diffDays <= 30) soon.push(alertItem);
-          }
-          
-          if (entry.customReminders && Array.isArray(entry.customReminders)) {
-              entry.customReminders.forEach((rem: any) => {
-                  if (rem.expiryDate) {
-                      const target = new Date(rem.expiryDate);
-                      const diffTime = target.getTime() - today.getTime();
-                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                      
-                      const alertItem = {
-                          id: `${entry.id}_${rem.id}`,
-                          plate: entry.plateNoHK || entry.plateNoCN || '-',
-                          item: `${entry.name} - ${rem.title}`,
-                          date: rem.expiryDate,
-                          days: diffDays,
-                          category: 'document',
-                          vid: entry.id
-                      };
-                      
-                      if (diffDays < 0) expired.push(alertItem);
-                      else if (diffDays <= 30) soon.push(alertItem);
-                  }
-              });
-          }
-      });
-
-      return { 
-          expired: expired.sort((a, b) => a.days - b.days), 
-          soon: soon.sort((a, b) => a.days - b.days) 
-      };
-  }, [dbEntries, staffId]); // 👈 必須確保 staffId 在這裡，當帳號切換時才會重新計算
-
-  
-  if (!staffId) {
-    return (
-        <StaffLoginScreen 
-            systemUsers={systemUsers}
-            onLogin={(userObj: any) => {
-                const uid = userObj.email || userObj;
-                setStaffId(uid);
-                setCurrentUser(userObj); 
-
-                // 2. 登入時記錄日誌
-                if (db) {
-                    addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_logs'), {
-                        user: uid, action: 'Login', detail: 'User logged in successfully', timestamp: serverTimestamp()
-                    }).catch(err => console.warn("系統日誌寫入失敗 (可忽略):", err));
-                }
-
-                // ★★★ 修改：優先使用用戶設定的「預設首頁」 ★★★
-                if (userObj.defaultTab) {
-                    setActiveTab(userObj.defaultTab);
-                } 
-                // 若無設定，且有權限限制，則跳第一個允許的模組
-                else if (userObj.modules && !userObj.modules.includes('all') && !userObj.modules.includes('dashboard') && userObj.modules.length > 0) {
-                    const firstModule = userObj.modules[0];
-                    const map: Record<string,any> = { 'inventory': 'inventory', 'business': 'business', 'database': 'database', 'settings': 'settings' };
-                    setActiveTab(map[firstModule] || 'inventory');
-                } else {
-                    setActiveTab('dashboard');
-                }
-            }} 
-        />
-    );
+    addPayment: (vid: string, p: Payment) => void;
+    deletePayment: (vid: string, pid: string) => void;
+    updateVehicle: any;
+    primaryImages: Record<string, string>;
+    onJumpToDoc: (docData: any) => void;
+    staffId?: string; // ★ 新增：接收登入員工 ID
 }
 
-
-
-  // --- CRUD Actions ---
-
-// ★★★ 防死鎖版的同步函數 ★★★
-    // ★★★ 靜默智能覆蓋引擎 2.0 (Smart Upsert - 防重複與多車牌追加) ★★★
-    const syncToDatabase = async (data: any, category: string) => {
-        if (!db || !appId || !staffId) return;
-
-        try {
-            let stdCategory = category;
-            let roleTag = '';
-            if (category === '客戶') { stdCategory = 'Person'; roleTag = '客戶'; }
-            if (category === '司機') { stdCategory = 'Person'; roleTag = '司機'; }
-            if (category === '前車主/行家') { stdCategory = 'Person'; roleTag = '前車主/行家'; }
-            
-            const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
-            
-            // 1. 取得當前所有同類型的資料進行「客戶端模糊比對」(無視大小寫與空格)
-            const q = query(dbRef, where('category', '==', stdCategory));
-            const snapshot = await getDocs(q);
-            
-            let matchedDoc: any = null;
-            const incomingName = (data.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
-            const incomingPhone = (data.phone || '').trim();
-
-            snapshot.forEach(doc => {
-                const dbData = doc.data();
-                const dbName = (dbData.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
-                const dbPhone = (dbData.phone || '').trim();
-                
-                // 比對邏輯：名字完全一樣 (無視大小寫)，或者電話一樣且都不為空
-                if ((incomingName && dbName === incomingName) || (incomingPhone && dbPhone === incomingPhone)) {
-                    matchedDoc = { id: doc.id, ...dbData };
-                }
-            });
-            
-            // 處理車牌關聯 (避免洗掉這個人原本的其他車)
-            let finalPlateNo = data.relatedPlateNo || '';
-
-            if (!matchedDoc) {
-                // 不存在 -> 全新建立
-                // 自動判斷是否為公司 (含 BR)
-                const isCompany = data.idNumber && (data.idNumber.toUpperCase().includes('BR') || data.idNumber.toUpperCase().includes('CI'));
-                
-                await addDoc(dbRef, {
-                    ...data,
-                    // 強制名稱標準化 (英文轉大寫)
-                    name: data.name.toUpperCase() === data.name.toLowerCase() ? data.name : data.name.toUpperCase(),
-                    category: isCompany ? 'Company' : stdCategory,
-                    tags: roleTag ? [roleTag] : [],
-                    managedBy: staffId,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp()
-                });
-            } else {
-                // 已存在 -> 智能合併 (Merge)
-                const mergedData: any = {};
-                
-                // 只更新有填寫的新值
-                Object.keys(data).forEach(key => {
-                    if (data[key] !== undefined && data[key] !== '' && key !== 'relatedPlateNo') {
-                        mergedData[key] = data[key];
-                    }
-                });
-
-                // ★ 核心修復：車牌追加機制 (不洗掉舊車牌)
-                if (data.relatedPlateNo) {
-                    const existingPlates = matchedDoc.relatedPlateNo ? matchedDoc.relatedPlateNo.split(',').map((p:string) => p.trim()) : [];
-                    if (!existingPlates.includes(data.relatedPlateNo)) {
-                        existingPlates.push(data.relatedPlateNo);
-                    }
-                    mergedData.relatedPlateNo = existingPlates.filter(Boolean).join(', ');
-                }
-
-                let newTags = matchedDoc.tags || [];
-                if (roleTag && !newTags.includes(roleTag)) {
-                    newTags = [...newTags, roleTag];
-                    mergedData.tags = newTags;
-                }
-
-                await updateDoc(doc(dbRef, matchedDoc.id), {
-                    ...mergedData,
-                    updatedAt: serverTimestamp()
-                });
-            }
-        } catch (e) {
-            console.error("Smart Sync error", e);
-        }
-    };
-
-// --- 核心功能：更新單一車輛資料 (通用函數) ---
-    const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
-        if (!db || !appId) return;
-        try {
-            // 1. 更新資料庫
-            const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', id);
-            await setDoc(docRef, updates, { merge: true });
-            
-            // 2. 更新本地狀態 (讓畫面即時反應)
-            setInventory(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
-        } catch (error) {
-            console.error("Update Vehicle Error:", error);
-            alert("資料更新失敗，請檢查網路連線。");
-        }
-    };
-
-// ★★★ 升級版：自動發送推送通知輔助函數 (修復重複發送與冷啟動崩潰) ★★★
-    // targetUsers: 如果留空，就發送俾所有人；如果傳入 ['sales01', 'admin']，就只發俾呢兩個人。
-    const sendPushNotification = async (title: string, body: string, targetUsers?: string[]) => {
-        if (!db || !appId || !settings.pushConfig?.isEnabled) return;
-        try {
-            const tokenRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system_tokens');
-            const tokenSnap = await getDocs(tokenRef);
-            const rawTokens: string[] = [];
-            
-            tokenSnap.forEach(doc => {
-                const data = doc.data();
-                if (data.token) {
-                    // 如果有指定員工名單，就檢查呢個 token 屬唔屬於嗰個員工
-                    if (targetUsers && targetUsers.length > 0) {
-                        if (targetUsers.includes(data.user)) {
-                            rawTokens.push(data.token);
-                        }
-                    } else {
-                        // 如果無指定，就全部人都加落去 (廣播模式)
-                        rawTokens.push(data.token);
-                    }
-                }
-            });
-
-            // ★ 核心修復 1：過濾重複的 Token！ (利用 Set 自動消除陣列中重複的值)
-            const uniqueTokens = Array.from(new Set(rawTokens));
-
-            if (uniqueTokens.length === 0) return;
-
-            const res = await fetch('/api/notify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tokens: uniqueTokens, title, body })
-            });
-
-            // ★ 核心修復 2：攔截 Vercel 冷啟動 HTML 錯誤，防止畫面閃退報錯
-            if (!res.ok) {
-                const contentType = res.headers.get("content-type");
-                // 如果回傳的不是 JSON (通常是 504 Timeout 的 HTML)
-                if (contentType && !contentType.includes("application/json")) {
-                    console.warn("API 喚醒超時 (Cold Start)，但不影響資料儲存。");
-                    return; // 靜默退出，不打擾使用者
-                }
-            }
-        } catch (e) {
-            // 只在背景 Console 印出警告，絕對不要 throw Error 讓畫面崩潰
-            console.warn("發送系統通知失敗 (可忽略):", e);
-        }
-    };
-
-// ==================================================================
-  // ★★★ 終極中心化財務引擎 (v35.0 完美日期回退版)：自動同步至「公司營運總帳」 ★★★
-  // ==================================================================
-  const syncVehicleFinanceToLedger = async (v: any) => {
-      if (!db || !v.id || !appId) return;
-      try {
-          const batch = writeBatch(db);
-          // 🛡️ 核心修改：將目標資料庫改為 company_expenses，與日常帳目完全整合
-          const ledgerRefBase = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'); 
-          
-          const cleanNum = (val: any) => Math.round(Number(String(val || '0').replace(/,/g, '')));
-          const cleanDateStr = (val: any) => {
-              if (!val) return new Date().toISOString().split('T')[0];
-              return String(val).replace(/\//g, '-').split('T')[0];
-          };
-
-          // ★ 雙核相容升級：確保寫入時同時帶有 dueDate 與 date，讓各種檢視完美對齊
-          const syncData = (baseObj: any, dateVal: any) => ({
-              ...baseObj,
-              date: cleanDateStr(dateVal),
-              dueDate: cleanDateStr(dateVal),
-              paymentDate: cleanDateStr(dateVal), // 已付項目直接填滿
-              updatedAt: serverTimestamp()
-          });
-
-          // --------------------------------------------------------------
-          // 【模組一：維修保養 (Maintenance)】
-          // --------------------------------------------------------------
-          if (v.maintenanceRecords && Array.isArray(v.maintenanceRecords)) {
-              v.maintenanceRecords.forEach((m: any) => {
-                  const costAmt = cleanNum(m.cost);
-                  if (m.costStatus === 'Paid' && costAmt > 0) {
-                      batch.set(doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`), syncData({ 
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'OUT', 
-                          category: '營運開支 (Expenses)', desc: `[維修成本] ${m.item} - ${m.vendor || '自理'}`, 
-                          amount: costAmt, method: m.costMethod || 'Transfer', remark: m.costRemark || '', status: 'Paid' 
-                      }, m.costDate || m.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `maint_cost_${v.id}_${m.id}`)); }
-
-                  const chargeAmt = cleanNum(m.charge);
-                  if (m.chargeStatus === 'Paid' && chargeAmt > 0) {
-                      batch.set(doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`), syncData({ 
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'maintenance', type: 'IN', 
-                          category: '售後服務 (Service)', desc: `[維修收費] ${m.item}`, 
-                          amount: chargeAmt, method: m.chargeMethod || 'Transfer', remark: m.chargeRemark || '', status: 'Paid' 
-                      }, m.chargeDate || m.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `maint_charge_${v.id}_${m.id}`)); }
-              });
-          }
-
-          // --------------------------------------------------------------
-          // ✨【模組二：車輛銷售收款 (Sales Payments)】
-          // --------------------------------------------------------------
-          if (v.payments && Array.isArray(v.payments)) {
-              v.payments.forEach((p: any, idx: number) => {
-                  const safePaymentId = p.id || `pay_auto_${idx}_${new Date().getTime()}`;
-                  const pAmount = cleanNum(p.amount);
-                  if (pAmount > 0) {
-                      batch.set(doc(ledgerRefBase, `sales_in_${v.id}_${safePaymentId}`), syncData({
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'sales', type: 'IN', 
-                          category: '營業收入 (Sales)', desc: `[車輛收款] ${v.regMark || ''} ${v.make || ''} ${v.model || ''} - ${p.type || '定金/尾數'}`, 
-                          amount: pAmount, method: p.method || 'Transfer', remark: p.note || '', status: 'Paid' 
-                      }, p.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `sales_in_${v.id}_${safePaymentId}`)); }
-              });
-          }
-
-          // --------------------------------------------------------------
-          // ✨【模組三：中港業務代辦費 (Cross Border Crossings/Tasks)】
-          // --------------------------------------------------------------
-          if (v.crossBorder && v.crossBorder.crossings && Array.isArray(v.crossBorder.crossings)) {
-              v.crossBorder.crossings.forEach((c: any) => {
-                  const cbCostAmt = cleanNum(c.cost);
-                  if (c.costStatus === 'Paid' && cbCostAmt > 0) {
-                      batch.set(doc(ledgerRefBase, `cb_cost_${v.id}_${c.id}`), syncData({
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'OUT',
-                          category: '營運開支 (Expenses)', desc: `[中港成本] ${c.serviceItem || '代辦手續'} - ${c.agency || '代理'}`,
-                          amount: cbCostAmt, method: c.costMethod || 'Transfer', remark: c.costRemark || '', status: 'Paid'
-                      }, c.costDate || c.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `cb_cost_${v.id}_${c.id}`)); }
-
-                  const cbChargeAmt = cleanNum(c.charge);
-                  if (c.chargeStatus === 'Paid' && cbChargeAmt > 0) {
-                      batch.set(doc(ledgerRefBase, `cb_charge_${v.id}_${c.id}`), syncData({
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'crossBorder', type: 'IN',
-                          category: '售後服務 (Service)', desc: `[中港收費] ${c.serviceItem || '代辦手續'}`,
-                          amount: cbChargeAmt, method: c.chargeMethod || 'Transfer', remark: c.chargeRemark || '', status: 'Paid'
-                      }, c.chargeDate || c.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `cb_charge_${v.id}_${c.id}`)); }
-              });
-          }
-
-          // --------------------------------------------------------------
-          // ✨【模組四：車輛墊資/貸款利息 (Floor Plan Interest)】
-          // --------------------------------------------------------------
-          if (v.financingRecords && Array.isArray(v.financingRecords)) {
-              v.financingRecords.forEach((f: any) => {
-                  const finAmt = cleanNum(f.actualInterest);
-                  if (f.status === 'Settled' && finAmt > 0) {
-                      batch.set(doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`), syncData({
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'financing', type: 'OUT',
-                          category: '營運開支 (Expenses)', desc: `[墊資利息] ${f.lenderName} (${f.actualDays}天)`,
-                          amount: finAmt, method: 'Transfer', remark: `本金: ${formatCurrency(f.principal)} | 年息: ${f.annualRate}%`, status: 'Paid'
-                      }, f.endDate || f.startDate), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `fin_interest_${v.id}_${f.id}`)); }
-              });
-          }
-
-          // --------------------------------------------------------------
-          // ✨【模組五：車輛進貨付款 (Acquisition Payments)】
-          // --------------------------------------------------------------
-          if (v.acquisition?.payments && Array.isArray(v.acquisition.payments)) {
-              v.acquisition.payments.forEach((p: any, idx: number) => {
-                  const safePaymentId = p.id || `acq_${idx}_${new Date(p.date || Date.now()).getTime()}`;
-                  const pAmount = cleanNum(p.amount);
-                  if (pAmount > 0) {
-                      batch.set(doc(ledgerRefBase, `acq_cost_${v.id}_${safePaymentId}`), syncData({
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'acquisition', type: 'OUT',
-                          category: '進貨成本 (COGS)', desc: `[買車付款] ${v.make || ''} ${v.model || ''} - ${v.acquisition?.vendor || '供應商'}`,
-                          amount: pAmount, method: p.method || 'Transfer', remark: p.note || '', status: 'Paid'
-                      }, p.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `acq_cost_${v.id}_${safePaymentId}`)); }
-              });
-          }
-
-          // --------------------------------------------------------------
-          // ✨【模組六：一般車輛雜費支出 (Vehicle Expenses)】
-          // --------------------------------------------------------------
-          if (v.expenses && Array.isArray(v.expenses)) {
-              v.expenses.forEach((e: any) => {
-                  const eAmount = cleanNum(e.amount);
-                  if (e.status === 'Paid' && eAmount > 0) {
-                      batch.set(doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`), syncData({
-                          refVehicleId: v.id, refRegMark: v.regMark || '未出牌', sourceModule: 'expenses', type: 'OUT',
-                          category: '營運開支 (Expenses)', desc: `[車輛雜費] ${e.type} - ${e.company}`,
-                          amount: eAmount, method: e.paymentMethod || 'Transfer', remark: e.invoiceNo || '', status: 'Paid'
-                      }, e.date), { merge: true });
-                  } else { batch.delete(doc(ledgerRefBase, `exp_cost_${v.id}_${e.id}`)); }
-              });
-          }
-        
-          await batch.commit();
-          console.log(`🚀 [終極財務引擎] 車輛 ${v.regMark} 流水已完美同步至「公司營運總帳」！`);
-      } catch (error) {
-          console.error("❌ 同步財務流水失敗:", error);
-      }
-  };
- 
-const saveVehicle = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!db || !staffId) return;
-        const formData = new FormData(e.currentTarget);
-        
-        // ★★★ 終極防呆：智能讀取函數 ★★★
-        const getStr = (key: string, isMounted: boolean, oldVal?: string) => {
-            return isMounted ? (formData.get(key) as string || '') : (oldVal || '');
-        };
-        const getNum = (key: string, isMounted: boolean, oldVal?: number) => {
-            if (!isMounted) return oldVal || 0;
-            const val = formData.get(key);
-            return val ? Number(String(val).replace(/,/g, '')) : 0;
-        };
-
-        const status = formData.get('status') as any;
-        const fuelType = formData.get('fuelType') as 'Petrol' | 'Diesel' | 'Electric';
-        const transmission = formData.get('transmission') as 'Automatic' | 'Manual';
-        
-        const valA1 = getNum('priceA1', true);
-        const valTax = getNum('priceTax', true);
-        const valRegistered = valA1 + valTax;
-        const engineSize = getNum('engineSize', true);
-        const licenseFee = calculateLicenseFee(fuelType, engineSize);
-
-        const currentAcqType = (formData.get('acq_type') as string) || (editingVehicle as any)?.acquisition?.type || 'Local';
-        const isImport = currentAcqType === 'Import';
-        const isLocal = currentAcqType === 'Local';
-
-        const acquisitionData = {
-            type: currentAcqType,
-            vendor: formData.get('acq_vendor') as string || '',
-         // ★ 新增：儲存前車主/行家的 ID、電話與地址
-            vendorID: formData.get('acq_vendorID') as string || '',
-            vendorPhone: formData.get('acq_vendorPhone') as string || '',
-            vendorAddress: formData.get('acq_vendorAddress') as string || '',
-            currency: getStr('acq_currency', isImport, (editingVehicle as any)?.acquisition?.currency) || 'HKD',
-            exchangeRate: getNum('acq_exchangeRate', isImport, (editingVehicle as any)?.acquisition?.exchangeRate) || 1,
-            foreignPrice: getNum('acq_foreignPrice', isImport, (editingVehicle as any)?.acquisition?.foreignPrice),
-            localChargesForeign: getNum('acq_localChargesForeign', isImport, (editingVehicle as any)?.acquisition?.localChargesForeign),
-            portFee: getNum('acq_portFee', isImport, (editingVehicle as any)?.acquisition?.portFee),
-            a1Price: getNum('acq_a1Price', isImport, (editingVehicle as any)?.acquisition?.a1Price),
-            frtTax: getNum('acq_frtTax', isImport, (editingVehicle as any)?.acquisition?.frtTax),
-            eta: getStr('acq_eta', isImport, (editingVehicle as any)?.acquisition?.eta),
-            paymentStatus: formData.get('acq_paymentStatus') as string || 'Unpaid',
-            // ★ 新增儲存對數和代支關聯的單據 ID
-            offsetAmount: getNum('acq_offsetAmount', isLocal, (editingVehicle as any)?.acquisition?.offsetAmount),
-            offsetDocId: getStr('acq_offsetDocId', isLocal, (editingVehicle as any)?.acquisition?.offsetDocId),
-            advanceFee: getNum('acq_advanceFee', isLocal, (editingVehicle as any)?.acquisition?.advanceFee),
-            advanceDocId: getStr('acq_advanceDocId', isLocal, (editingVehicle as any)?.acquisition?.advanceDocId),
-            payments: (editingVehicle as any)?.acqPayments || (editingVehicle as any)?.acquisition?.payments || []
-        };
-
-        // ★★★ 修正點：從隱藏欄位安全讀取真實的中港開關狀態 ★★★
-        const isCbActive = formData.get('cb_isEnabled_hidden') === 'true'; 
-
-        const selectedPorts: string[] = [];
-        if (isCbActive) {
-            ALL_CB_PORTS.forEach(port => {
-                if (formData.get(`cb_port_${port}`) === 'on') selectedPorts.push(port);
-            });
-        }
-
-        const crossBorderData: CrossBorderData = {
-            isEnabled: isCbActive,
-            mainlandPlate: getStr('cb_mainlandPlate', isCbActive, editingVehicle?.crossBorder?.mainlandPlate),
-            hkCompany: getStr('cb_hkCompany', isCbActive, editingVehicle?.crossBorder?.hkCompany),
-            mainlandCompany: getStr('cb_mainlandCompany', isCbActive, editingVehicle?.crossBorder?.mainlandCompany),
-            driver1: getStr('cb_driver1', isCbActive, editingVehicle?.crossBorder?.driver1),
-            driver2: getStr('cb_driver2', isCbActive, editingVehicle?.crossBorder?.driver2),
-            driver3: getStr('cb_driver3', isCbActive, editingVehicle?.crossBorder?.driver3),
-            insuranceAgent: getStr('cb_insuranceAgent', isCbActive, editingVehicle?.crossBorder?.insuranceAgent),
-            quotaNumber: getStr('cb_quotaNumber', isCbActive, editingVehicle?.crossBorder?.quotaNumber),
-            ports: isCbActive ? selectedPorts : (editingVehicle?.crossBorder?.ports || []),
-            
-            dateHkInsurance: getStr('cb_dateHkInsurance', isCbActive, editingVehicle?.crossBorder?.dateHkInsurance),
-            dateReservedPlate: getStr('cb_dateReservedPlate', isCbActive, editingVehicle?.crossBorder?.dateReservedPlate),
-            dateBr: getStr('cb_dateBr', isCbActive, editingVehicle?.crossBorder?.dateBr),
-            dateLicenseFee: getStr('cb_dateLicenseFee', isCbActive, editingVehicle?.crossBorder?.dateLicenseFee),
-            dateMainlandJqx: getStr('cb_dateMainlandJqx', isCbActive, editingVehicle?.crossBorder?.dateMainlandJqx),
-            dateMainlandSyx: getStr('cb_dateMainlandSyx', isCbActive, editingVehicle?.crossBorder?.dateMainlandSyx),
-            dateClosedRoad: getStr('cb_dateClosedRoad', isCbActive, editingVehicle?.crossBorder?.dateClosedRoad),
-            dateApproval: getStr('cb_dateApproval', isCbActive, editingVehicle?.crossBorder?.dateApproval),
-            dateMainlandLicense: getStr('cb_dateMainlandLicense', isCbActive, editingVehicle?.crossBorder?.dateMainlandLicense),
-            dateHkInspection: getStr('cb_dateHkInspection', isCbActive, editingVehicle?.crossBorder?.dateHkInspection),
-            
-            // ★★★ 新增：儲存各個日期的提醒開關狀態 ★★★
-            cb_remind_HkInsurance: formData.get('cb_remind_HkInsurance') !== 'false',
-            cb_remind_ReservedPlate: formData.get('cb_remind_ReservedPlate') !== 'false',
-            cb_remind_Br: formData.get('cb_remind_Br') !== 'false',
-            cb_remind_LicenseFee: formData.get('cb_remind_LicenseFee') !== 'false',
-            cb_remind_MainlandJqx: formData.get('cb_remind_MainlandJqx') !== 'false',
-            cb_remind_MainlandSyx: formData.get('cb_remind_MainlandSyx') !== 'false',
-            cb_remind_ClosedRoad: formData.get('cb_remind_ClosedRoad') !== 'false',
-            cb_remind_Approval: formData.get('cb_remind_Approval') !== 'false',
-            cb_remind_MainlandLicense: formData.get('cb_remind_MainlandLicense') !== 'false',
-            cb_remind_HkInspection: formData.get('cb_remind_HkInspection') !== 'false',
-
-            tasks: editingVehicle?.crossBorder?.tasks || [],
-            documentLogs: editingVehicle?.crossBorder?.documentLogs || []
-        };
-
-        const isPublicFormValue = formData.get('isPublic_hidden') === 'true';
-        
-        // ★★★ 新增：從隱藏欄位解析出剛剛打包的進度追蹤資料 ★★★
-        const logisticsStr = formData.get('logistics_hidden') as string;
-        const logisticsData = logisticsStr ? JSON.parse(logisticsStr) : null;
-
-        const vData = {
-            isPublic: isPublicFormValue,
-            logistics: logisticsData, // ★★★ 正確儲存進度資料 ★★★
-            // ★★★ 修正 2：確保正確存入行家歸屬與名稱 ★★★
-            sourceType: (formData.get('sourceType') as string) || 'own',
-            partnerName: (formData.get('sourceType') === 'partner') ? (formData.get('acq_vendor') as string || '') : '',
+export default function CrossBorderView({ 
+    inventory, settings, dbEntries, activeCbVehicleId, setActiveCbVehicleId, 
+    setEditingVehicle, addCbTask, updateCbTask, deleteCbTask, addPayment, 
+    deletePayment, updateVehicle, primaryImages, onJumpToDoc,
+    staffId = 'Staff' // ★ 新增：解構出 staffId，若無則預設顯示 'Staff'
+}: CrossBorderViewProps) {
+    const [searchTerm, setSearchTerm] = useState('');
+    // ★ 優化 1：將頂部警報面板預設為 false (收起狀態)，釋放巨大垂直空間
+    const [showExpired, setShowExpired] = useState(false); 
+    const [showSoon, setShowSoon] = useState(false);
     
-            // ★★★ 新增：接收來自 Modal 的上會計數機資料並存入 Firebase ★★★
-            financePrice: getNum('financePrice', true, (editingVehicle as any)?.financePrice),
-            financeDeposit: getNum('financeDeposit', true, (editingVehicle as any)?.financeDeposit),
-            financeMonths: getNum('financeMonths', true, (editingVehicle as any)?.financeMonths),
-            financeRate: parseFloat(formData.get('financeRate') as string) || (editingVehicle as any)?.financeRate || 0,
-            financeType: (formData.get('financeType') as string) || (editingVehicle as any)?.financeType || 'HP',
-            financeAdvanceMonths: getNum('financeAdvanceMonths', true, (editingVehicle as any)?.financeAdvanceMonths),
-            financeCommOverride: (formData.get('financeCommOverride') as string) || (editingVehicle as any)?.financeCommOverride || '',
-
-            financeStatus: (formData.get('financeStatus') as string) || (editingVehicle as any)?.financeStatus || 'Pending',
-            financeStartDate: (formData.get('financeStartDate') as string) || (editingVehicle as any)?.financeStartDate || '',
-
-            licenseReminderEnabled: formData.get('licenseReminderEnabled') === 'true',
-            purchaseType: formData.get('purchaseType'),
-            acquisition: acquisitionData,
-            regMark: (formData.get('regMark') as string)?.toUpperCase() || '',
-            make: formData.get('make'),
-            model: formData.get('model'),
-            year: formData.get('year'),
-            colorExt: formData.get('colorExt'),
-            colorInt: formData.get('colorInt'),
-            chassisNo: (formData.get('chassisNo') as string)?.toUpperCase() || '',
-            engineNo: (formData.get('engineNo') as string)?.toUpperCase() || '',
-            licenseExpiry: formData.get('licenseExpiry') || '',
-            registeredOwnerDate: formData.get('registeredOwnerDate') as string || '', // ★ 新增儲存：登記為車主日期
-            
-            price: getNum('price', true),
-            costPrice: getNum('costPrice', true),
-            mileage: getNum('mileage', true),
-            
-            previousOwners: formData.get('previousOwners') || '', 
-            remarks: formData.get('remarks') || '', 
-            salesRemarks: formData.get('salesRemarks') as string || '', // 👈 新增這行：抓取賣點資料存入資料庫
-            seating: Number(formData.get('seating') || 5), 
-            priceA1: valA1, 
-            priceTax: valTax,
-            priceRegistered: valRegistered,
-            fuelType: fuelType,
-            managedBy: (formData.get('managedBy') as string) || editingVehicle?.managedBy || staffId,
-            transmission: transmission,
-            engineSize: engineSize,
-            licenseFee: licenseFee,
-            customerName: formData.get('customerName') as string,
-            customerPhone: formData.get('customerPhone') as string,
-            customerID: formData.get('customerID') as string,
-            customerAddress: formData.get('customerAddress') as string,
-            status: status,
-            // ★★★ 終極升級版：智能儲存 4 個狀態專屬日期 (完美兼容舊數據) ★★★
-            // 1. 入庫：確保永遠有一個入庫日期
-            stockInDate: formData.get('stockInDate') || editingVehicle?.stockInDate || new Date().toISOString().split('T')[0],
-            
-            // 2. 已訂：讀取隱藏欄位，無就保留舊紀錄
-            reservedDate: formData.get('reservedDate') || (editingVehicle as any)?.reservedDate || null,
-            
-            // 3. 已售：保留您原本的防呆！如果是已售，優先用輸入框的日期，無就用舊紀錄，再無就用今日。
-            stockOutDate: status === 'Sold' 
-                ? (formData.get('stockOutDate') || editingVehicle?.stockOutDate || new Date().toISOString().split('T')[0]) 
-                : (formData.get('stockOutDate') || editingVehicle?.stockOutDate || null), 
-                
-            // 4. 撤回：讀取隱藏欄位
-            withdrawnDate: formData.get('withdrawnDate') || (editingVehicle as any)?.withdrawnDate || null,
-            expenses: editingVehicle?.expenses || [], 
-            payments: editingVehicle?.payments || [], 
-            salesAddons: (editingVehicle as any)?.salesAddons || [], 
-            warrantyType: formData.get('warrantyType') as string || '',
-            insuranceExpiry: formData.get('insuranceExpiry') as string || '',
-            insuranceReminderEnabled: formData.get('insuranceReminderEnabled') !== 'false',
-            maintenanceRecords: editingVehicle?.maintenanceRecords || [],
-            updatedAt: serverTimestamp(),
-            crossBorder: crossBorderData
-        };
-
-        // ★ 智能記憶：如果手動輸入了新的保養條款，自動存入資料庫
-        const inputWarranty = formData.get('warrantyType') as string;
-        if (inputWarranty && !(settings.warrantyTypes || []).includes(inputWarranty)) {
-            updateSettings('warrantyTypes', [...(settings.warrantyTypes || []), inputWarranty]);
-        }
-  
-        try {
-            let targetVehicleId = editingVehicle?.id; // ★ 記下車輛 ID 給財務引擎使用
-
-            if (editingVehicle && editingVehicle.id) {
-                await updateDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', editingVehicle.id), vData);
-                addSystemLog('Update Vehicle', `Updated RegMark: ${vData.regMark}`);
-                
-                if (settings.pushConfig?.events?.sold && status === 'Sold' && editingVehicle.status !== 'Sold') {
-                    sendPushNotification('🎉 車輛已售出！', `車牌 ${vData.regMark || '未出牌'} (${vData.make} ${vData.model}) 剛剛已成功售出！`);
-                }
-                alert('✅ 車輛資料已成功更新！');
-            } else {
-                const newDocRef = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), {
-                    ...vData,
-                    createdAt: serverTimestamp(),
-                    expenses: [],
-                    payments: [],
-                    salesAddons: []
-                });
-                targetVehicleId = newDocRef.id; // ★ 取得全新入庫車輛的 ID
-                
-                addSystemLog('Create Vehicle', `Created RegMark: ${vData.regMark}`);
-                if (settings.pushConfig?.events?.newCar) {
-                    sendPushNotification('🚗 新車入庫通知', `車牌 ${vData.regMark || '未出牌'} (${vData.make} ${vData.model}) 已成功加入庫存！`);
-                }
-                alert('✅ 新車輛已成功入庫！');
-            }
-
-            // ★★★ 核心觸發：儲存成功後，無縫將資料同步至全域財務總帳 (Ledger) ★★★
-              if (targetVehicleId) {
-                  await syncVehicleFinanceToLedger({ id: targetVehicleId, ...vData });
-              }
-
-            // ★★★ 防呆修復：幫所有資料加上 || ''，防止 undefined 炸毀資料庫 ★★★
-            if (vData.customerName) {
-                await syncToDatabase({ 
-                    name: vData.customerName || '', 
-                    phone: vData.customerPhone || '',
-                    idNumber: vData.customerID || '',
-                    address: vData.customerAddress || ''
-                }, '客戶');
-            }
-            if (crossBorderData.isEnabled) {
-                if (crossBorderData.driver1) await syncToDatabase({ name: crossBorderData.driver1 || '', relatedPlateNo: crossBorderData.mainlandPlate || '', quotaNo: crossBorderData.quotaNumber || '' }, '司機');
-                if (crossBorderData.driver2) await syncToDatabase({ name: crossBorderData.driver2 || '', relatedPlateNo: crossBorderData.mainlandPlate || '' }, '司機');
-                if (crossBorderData.driver3) await syncToDatabase({ name: crossBorderData.driver3 || '', relatedPlateNo: crossBorderData.mainlandPlate || '' }, '司機');
-            }
-
-            setEditingVehicle(null);
-            if (activeTab === 'inventory_add') {
-                setActiveTab('inventory');
-            }
-        } catch (e) { 
-            console.error(e); 
-            alert('❌ 儲存失敗，請檢查網路連線'); 
-        }
-        
-       
-    };
-  
-const deleteVehicle = async (id: string) => {
-    if (!db || !staffId) return;
-    if (confirm('確定刪除？資料將無法復原。')) {
-      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', id));
-      addSystemLog('Delete Vehicle', `Deleted Vehicle ID: ${id}`);
-    }
-  };
-
-  // --- Sub-Item Management (完美防清洗版：只更新陣列，絕對保留其他未 Save 的輸入資料) ---
-  const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder'|'salesAddons', newItems: any) => {
-    if (!db || !staffId) return;
-    const currentDb = db;
+    // ★ 新增：控制關聯文件的摺疊狀態與全螢幕放大預覽 (預設展開)
+    const [isRelatedDocsOpen, setIsRelatedDocsOpen] = useState(true);
+    const [previewDoc, setPreviewDoc] = useState<any | null>(null);
     
-    // 1. 立即安全地更新畫面
-    if (editingVehicle && editingVehicle.id === vehicleId) {
-        setEditingVehicle(prev => {
-             if (!prev) return null;
-             if (field === 'crossBorder') {
-                 return { ...prev, crossBorder: { ...(prev.crossBorder || {} as any), tasks: newItems } };
-             } else {
-                 return { ...prev, [field]: newItems };
-             }
-        });
-    }
+    const [isMobileDetail, setIsMobileDetail] = useState(false);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [showDocModal, setShowDocModal] = useState(false); 
+    const [newTaskDate, setNewTaskDate] = useState('');
+    const [pendingTasks, setPendingTasks] = useState<{item: string, fee: number, note: string, days: string}[]>([]);
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+    const [editForm, setEditForm] = useState<Partial<CrossBorderTask>>({});
+    const [expandedPaymentTaskId, setExpandedPaymentTaskId] = useState<string | null>(null);
+    const [newPayAmount, setNewPayAmount] = useState('');
+    const [newPayMethod, setNewPayMethod] = useState('Cash');
+    const [reportModalData, setReportModalData] = useState<{ title: string, type: 'expired' | 'soon', items: any[] } | null>(null);
+    // ★ 新增：行動清單專用狀態與函數
+    const [reportSelectedIds, setReportSelectedIds] = useState<string[]>([]);
+    const [reportNotes, setReportNotes] = useState<Record<string, string>>({});
+    const [reportActionDates, setReportActionDates] = useState<Record<string, string>>({}); // ★ 新增：辦事日期
 
-    // 2. 背景寫入 Firebase Inventory
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-
-    let updateData: any = {}; 
-    if (field === 'crossBorder') {
-        updateData = { crossBorder: { ...v.crossBorder, tasks: newItems } };
-    } else {
-        updateData = { [field]: newItems };
-    }
-
-    await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), updateData);
-
-    // ★★★ 核心修復：無論是新增/刪除收款或維修，強制觸發財務總帳同步引擎 ★★★
-    const updatedVehicleData = { ...v };
-    if (field === 'crossBorder') {
-        updatedVehicleData.crossBorder = { ...(v.crossBorder || {} as any), tasks: newItems };
-    } else {
-        (updatedVehicleData as any)[field] = newItems;
-    }
-    // 執行同步，確保總帳與車輛內部資料絕對一致
-    await syncVehicleFinanceToLedger(updatedVehicleData);
-  };
-
-  const addPayment = async (vehicleId: string, payment: Payment) => {
-    if (!db || !appId) return; 
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    
-    // 1. 更新車輛本身的收款紀錄 (包含原本已收 + 本次新增)
-    const newPaymentsList = [...(v.payments || []), payment];
-    updateSubItem(vehicleId, 'payments', newPaymentsList);
-
-    // ★ 2. 抓取車輛的「額外收費項目」(中港、附加費、未付維修等) 確保開單系統的總價計算精準
-    const extraItems: any[] = [];
-    if (v.crossBorder?.tasks) {
-        v.crossBorder.tasks.forEach((t: any, i: number) => { 
-            if (t.fee > 0) {
-                // ✅ 智能拼接備註
-                const remarkText = (t.remark || t.note) ? ` (${t.remark || t.note})` : '';
-                extraItems.push({ 
-                    id: `cb_${i}`, 
-                    desc: `[中港] ${t.item}${remarkText}`.trim(), 
-                    amount: t.fee, 
-                    isSelected: true 
-                }); 
-            }
-        });
-    }
-    if ((v as any).salesAddons) {
-        (v as any).salesAddons.forEach((addon: any, i: number) => { 
-            if (addon.amount > 0) extraItems.push({ id: `addon_${i}`, desc: addon.name, amount: addon.amount, isSelected: true, isFree: addon.isFree || false }); 
-        });
-    }
-    if (v.maintenanceRecords) {
-        const unpaidMaint = v.maintenanceRecords.filter((m:any) => m.charge > 0 && m.chargeStatus !== 'Paid');
-        unpaidMaint.forEach((m:any, i:number) => {
-            extraItems.push({ id: `maint_${i}`, desc: `[維修] ${m.item}`, amount: m.charge, isSelected: true });
-        });
-    }
-
-    // ★ 3. 整理所有收款紀錄為「收據明細」(歷史收款 + 本次收款)
-    const depositItemsList = newPaymentsList.map((p: any, idx: number) => ({
-        id: p.id || `pay_${idx}`,
-        // 判斷：如果是本次這筆，標示「本次收款」，如果是歷史紀錄，標示「前期已付」
-        label: p.id === payment.id ? `本次收款 (${p.type})` : `前期已付 (${p.type} @ ${p.date})`,
-        amount: Number(p.amount) || 0
-    }));
-
-    // ★★★ 4. 自動於「開單系統」生成完美對應的收據 (Receipt) ★★★
-    try {
-        const receiptData = {
-            type: 'receipt', // 指定為收據
-            formData: {
-                companyNameEn: "GOLD LAND AUTO", companyNameCh: "金田汽車",
-                companyAddress: COMPANY_INFO.address_ch, 
-                companyPhone: COMPANY_INFO.phone, 
-                companyEmail: COMPANY_INFO.email,
-                customerName: v.customerName || '未填寫客戶', 
-                customerId: v.customerID || '', 
-                customerAddress: v.customerAddress || '', 
-                customerPhone: v.customerPhone || '',
-                regMark: v.regMark || '', 
-                make: v.make || '', 
-                model: v.model || '', 
-                chassisNo: v.chassisNo || '', 
-                engineNo: v.engineNo || '', 
-                year: v.year || '',
-                price: v.price ? v.price.toString() : '0', 
-                docDate: payment.date,      // ★ 核心修復：強制讓收據頂部的單據日期同步為「收款日」
-                deliveryDate: payment.date, // 使用收款日期
-                paymentMethod: payment.method || 'Cash',
-                remarks: payment.note || '',
-                // 加入海外訂單支援
-                orderType: v.acquisition?.type === 'Import' ? 'Overseas' : 'None',
-                overseasCountry: 'Japan',
-                overseasTotalFee: v.acquisition?.localChargesForeign || 0,
-                localTotalFee: v.acquisition?.portFee || 0,
-            },
-            checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
-            docItems: extraItems,           // 帶入額外費用 (對齊車價)
-            depositItems: depositItemsList, // 帶入所有歷史+本次收款 (讓尾數正確遞減)
-            showTerms: false, 
-            summary: `${v.customerName || '未填寫客戶'} - ${v.regMark || '無車牌'} - 自動生成收據 (${payment.type})`,
-            updatedAt: serverTimestamp(),
-            createdAt: serverTimestamp(),
-            createdBy: staffId
-        };
-        
-        // 寫入開單系統的資料庫
-        await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'sales_documents'), receiptData);
-        
-        // 彈出成功提示
-        alert(`✅ 收款已記錄！\n系統已自動於開單模塊生成一張餘額精準的「正式收據」。`);
-    } catch (e) {
-        console.error("自動生成收據失敗:", e);
-    }
-  };
-
-  const deletePayment = (vehicleId: string, paymentId: string) => {
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    updateSubItem(vehicleId, 'payments', (v.payments || []).filter(p => p.id !== paymentId));
-  };
-  const deleteExpense = (vehicleId: string, expenseId: string) => {
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    updateSubItem(vehicleId, 'expenses', (v.expenses || []).filter(e => e.id !== expenseId));
-  };
-  const updateExpenseStatus = (vehicleId: string, expenseId: string, status: 'Paid'|'Unpaid') => {
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    updateSubItem(vehicleId, 'expenses', (v.expenses || []).map(e => e.id===expenseId ? {...e, status} : e));
-  };
-  const addExpense = (vehicleId: string, expense: Expense) => {
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    updateSubItem(vehicleId, 'expenses', [...(v.expenses || []), expense]);
-  };
-
-  // ★★★ 新增：對客附加收費管理 ★★★
-  const addSalesAddon = (vehicleId: string, addon: {id: string, name: string, amount: number}) => {
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    updateSubItem(vehicleId, 'salesAddons', [...((v as any).salesAddons || []), addon]);
-  };
-  const deleteSalesAddon = (vehicleId: string, addonId: string) => {
-    const v = inventory.find(v => v.id === vehicleId);
-    if (!v) return;
-    updateSubItem(vehicleId, 'salesAddons', ((v as any).salesAddons || []).filter((a:any) => a.id !== addonId));
-  };
-
-  // Cross Border Tasks Management
-  const addCbTask = (vehicleId: string, task: CrossBorderTask) => {
-      const v = inventory.find(v => v.id === vehicleId);
-      if (!v) return;
-      const newTasks = [...(v.crossBorder?.tasks || []), task];
-      updateSubItem(vehicleId, 'crossBorder', newTasks);
-  };
-
-  const updateCbTask = (vehicleId: string, updatedTask: CrossBorderTask) => {
-      // ★★★ 修正：確保 db 存在 ★★★
-      if (!db || !staffId) return;
-      
-      const v = inventory.find(v => v.id === vehicleId);
-      if (!v) return;
-      
-      // 注意：這裡我們假設 updateSubItem 已經修正為使用 db 局部變數，
-      // 如果 updateSubItem 還沒修正，這裡也要改為直接調用 updateDoc
-      // 為了保險起見，我們這裡直接用 updateDoc 來更新 (或者確保 updateSubItem 已修復)
-      // 這裡直接使用 updateSubItem 應該沒問題，因為 updateSubItem 內部也有 db 檢查 (但最好也是在那裡修正)
-      
-      const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === updatedTask.id ? updatedTask : t);
-      updateSubItem(vehicleId, 'crossBorder', newTasks);
-  };
-  
-  const deleteCbTask = async (vehicleId: string, taskId: string) => {
-      // ★★★ 修正：使用局部變數 currentDb ★★★
-      if (!db || !staffId) return;
-      const currentDb = db; // 將全域 db 存為局部變數，確保它不是 null
-      
-      const safeStaffId = staffId.replace(/[^a-zA-Z0-9]/g, '_');
-      const v = inventory.find(v => v.id === vehicleId);
-      if (!v) return;
-      
-      const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
-      const newPayments = (v.payments || []).filter(p => p.relatedTaskId !== taskId);
-
-      // 使用 currentDb 替代 db
-      await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), {
-          crossBorder: { ...v.crossBorder, tasks: newTasks },
-          payments: newPayments
-      });
-
-      if (editingVehicle && editingVehicle.id === vehicleId) {
-          setEditingVehicle(prev => {
-              if(!prev) return null;
-              return {
-                  ...prev,
-                  crossBorder: { ...prev.crossBorder!, tasks: newTasks },
-                  payments: newPayments
-              }
-          });
-      }
-  };
-
-  // 更新設定並同步到資料庫
-    const updateSettings = async (key: keyof SystemSettings, value: any) => {
-        const newSettings = { ...settings, [key]: value };
-        setSettings(newSettings); // 更新畫面
-        
-        // ★ 寫入資料庫 ★
-        if (db && appId) {
-            try {
-                const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
-                await setDoc(docRef, newSettings, { merge: true });
-                // console.log(`Setting [${key}] saved.`);
-            } catch (err) {
-                console.error("Save setting failed:", err);
-            }
-        }
+    // 匯出為 Apple/Google 行事曆 (.ics)
+    const exportToCalendar = (item: any, note: string, actionDateStr: string) => {
+        const targetDate = actionDateStr || item.date;
+        const dateStr = targetDate.replace(/-/g, ''); // 轉為 YYYYMMDD
+        const summary = `[${item.plate}] ${item.item}`;
+        const description = note ? `${note}\\n\\n(原本到期日: ${item.date})\\n系統自動排程` : `車牌: ${item.plate}\\n項目: ${item.item}\\n原本到期: ${item.date}\\n\\n系統自動排程`;
+        const icsData = `BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nDTSTART;VALUE=DATE:${dateStr}\nSUMMARY:${summary}\nDESCRIPTION:${description}\nEND:VEVENT\nEND:VCALENDAR`;
+        const blob = new Blob([icsData], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.setAttribute('download', `${item.plate}_${item.item}.ics`);
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
     };
 
-  // --- Sorting & View ---
-  const handleSort = (key: keyof Vehicle) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
-    setSortConfig({ key, direction });
-  };
- 
-  // ★★★ 新增：標籤判斷函數 ★★★
-  const getCbTags = (ports: string[] = []) => {
-    const tags = [];
-    if (ports && ports.some(p => PORTS_HK_GD.includes(p))) tags.push({label: '粵港', color: 'bg-blue-100 text-blue-700 border-blue-200'});
-    if (ports && ports.some(p => PORTS_MO_GD.includes(p))) tags.push({label: '粵澳', color: 'bg-green-100 text-green-700 border-green-200'});
-    return tags;
-  };
+    // 輸出列印行動清單 PDF (智能排版版)
+    const printActionList = () => {
+        if (!reportModalData) return;
+        const selectedItems = reportModalData.items.filter(it => reportSelectedIds.includes(it.id));
+        if (selectedItems.length === 0) return alert("請至少勾選一個項目列印");
 
-  const getSortedInventory = () => {
-    let sorted = [...visibleInventory];
-    if (filterStatus !== 'All') sorted = sorted.filter(v => v.status === filterStatus);
-    
-    // ★ 新增：過濾自家或行家盤
-    if (filterSource === 'own') sorted = sorted.filter(v => !v.sourceType || v.sourceType === 'own' || v.sourceType === 'consignment');
-    if (filterSource === 'partner') sorted = sorted.filter(v => v.sourceType === 'partner');
+        const printWin = window.open('', '_blank');
+        if (!printWin) return alert("請允許彈出視窗以進行列印");
 
-    if (searchTerm) {
-        // ★ 智能搜尋：移除搜尋詞的空格與橫線，並全部轉小寫
-        const cleanSearch = searchTerm.toLowerCase().replace(/[\s-]/g, '');
-        
-        sorted = sorted.filter(v => {
-            const safeRegMark = (v.regMark || '').toLowerCase().replace(/[\s-]/g, '');
-            const safeMake = (v.make || '').toLowerCase();
-            const safeModel = (v.model || '').toLowerCase();
-            const safeMainland = (v.crossBorder?.mainlandPlate || '').toLowerCase().replace(/[\s-]/g, '');
-            // 清洗資料庫中的車身號碼
-            const safeChassis = (v.chassisNo || '').toLowerCase().replace(/[\s-]/g, '');
-
-            return safeRegMark.includes(cleanSearch) ||
-                   safeMake.includes(cleanSearch) ||
-                   safeModel.includes(cleanSearch) ||
-                   safeMainland.includes(cleanSearch) ||
-                   safeChassis.includes(cleanSearch); // 支援完整或部分底盤號
+        // ★ 智能排版：依照辦事日期進行分組與排序
+        const grouped: Record<string, typeof selectedItems> = {};
+        selectedItems.forEach(it => {
+            const date = reportActionDates[it.id];
+            const groupKey = date ? date : '待定日期 (TBC)';
+            if (!grouped[groupKey]) grouped[groupKey] = [];
+            grouped[groupKey].push(it);
         });
-    }
-    if (sortConfig) {
-      sorted.sort((a, b) => {
-        const aVal = a[sortConfig.key] || '';
-        const bVal = b[sortConfig.key] || '';
-        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-    return sorted;
-  };
 
-  // --- Dashboard Logic ---
+        const sortedDates = Object.keys(grouped).sort((a,b) => {
+            if (a === '待定日期 (TBC)') return 1;
+            if (b === '待定日期 (TBC)') return -1;
+            return a.localeCompare(b);
+        });
 
-  // ★★★ 新增：計算資料庫中心的提醒 (文件/執照) ★★★
+        const getWeekday = (d: string) => ['日','一','二','三','四','五','六'][new Date(d).getDay()];
 
-  // ★★★ 升級 Dashboard 統計邏輯：加入「進貨車價」的未付尾數 ★★★
-  const dashboardStats = () => {
-    let totalStockValue = 0;
-    let totalReceivable = 0; 
-    let totalPayable = 0; 
-    let totalSoldThisMonth = 0;
-
-    visibleInventory.forEach(car => {
-      // 1. 庫存總值
-      if (car.status === 'In Stock') totalStockValue += car.price || 0;
-      
-      // 2. 應付未付 A：一般維修與雜費
-          (car.expenses || []).forEach((exp: any) => {
-            if (exp.status === 'Unpaid' && !exp.isIncludedInPrice && exp.paymentMethod !== 'Included') totalPayable += exp.amount || 0;
-          });
-
-      // 3. 應付未付 B：【新增】進貨與收車的「未付尾數」
-      const totalExpenses = (car.expenses || []).reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
-      const baseAcqCost = (car.costPrice || 0) - totalExpenses;
-      
-      const acqPaid = (car.acquisition?.payments || []).reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
-      const acqOffset = Number(car.acquisition?.offsetAmount || 0);
-      
-      // ★ 浮點數精度修復：使用 Math.round() 確保為整數，避免出現 HKD 0.000000004
-      const acqBalance = Math.round(baseAcqCost - acqPaid - acqOffset);
-      if (acqBalance > 0) {
-          totalPayable += acqBalance; 
-      }
-
-      // 4. 應收尾數邏輯 (已售 OR 已訂)
-      if (car.status === 'Sold' || car.status === 'Reserved') {
-        const received = (car.payments || []).reduce((acc: any, p: any) => acc + (Number(p.amount) || 0), 0);
-        const salesAddonsTotal = ((car as any).salesAddons || []).reduce((sum: number, addon: any) => sum + (addon.isFree ? 0 : (Number(addon.amount) || 0)), 0);
-        const maintCharge = (car.maintenanceRecords || []).reduce((sum: number, m: any) => sum + (m.chargeStatus !== 'Paid' ? (Number(m.charge) || 0) : 0), 0);
-        
-        // ★ 浮點數精度修復：同樣確保最終金額為絕對整數
-        const totalDue = Math.round((Number(car.price) || 0) + salesAddonsTotal + maintCharge);
-        const balance = totalDue - Math.round(received);
-        
-        if (balance > 0) totalReceivable += balance;
-        if (car.status === 'Sold') totalSoldThisMonth += Math.round(Number(car.price) || 0);
-      }
-    });
-
-    return { totalStockValue, totalReceivable, totalPayable, totalSoldThisMonth };
-  };
-  const stats = dashboardStats();
-
-  const getInventoryAging = (car: any) => {
-      if (!car.stockInDate) return null; // 沒有入庫日則無法計算
-      
-      const start = new Date(car.stockInDate).getTime();
-      let end = new Date().getTime();
-      let prefix = car.status === 'Sold' ? '售出耗時' : '在庫';
-      
-      // 如果已售出，計算入庫到出庫的天數
-      if (car.status === 'Sold') {
-          if (!car.stockOutDate) return null;
-          end = new Date(car.stockOutDate).getTime();
-      }
-      
-      const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-      
-      if (days < 30) return null; // 30天內不顯示警告
-      
-      if (days >= 365) return { label: `${prefix} 1年+ (${days}天)`, style: 'bg-black text-red-500 border border-red-500 animate-pulse' };
-      if (days >= 270) return { label: `${prefix} 9個月+ (${days}天)`, style: 'bg-red-900 text-white shadow-md' };
-      if (days >= 180) return { label: `${prefix} 6個月+ (${days}天)`, style: 'bg-red-600 text-white shadow-md' };
-      if (days >= 90) return { label: `${prefix} 3個月+ (${days}天)`, style: 'bg-orange-500 text-white shadow-md' };
-      if (days >= 30) return { label: `${prefix} 1個月+ (${days}天)`, style: 'bg-yellow-400 text-yellow-900 shadow-sm' };
-      
-      return null;
-  };
-
-  // --- Cross Border Logic ---
-  const crossBorderStats = () => {
-      // ★ 這裡原本是 inventory.filter，改成 visibleInventory.filter
-      const cbVehicles = visibleInventory.filter(v => {
-          const cb = v.crossBorder;
-          if (!cb) return false;
-          return cb.isEnabled || !!cb.mainlandPlate || !!cb.quotaNumber;
-      });
-      const today = new Date();
-      today.setHours(0,0,0,0);
-
-      let expiredCount = 0;
-      let soonCount = 0;
-
-      cbVehicles.forEach(v => {
-          const dates = [
-              v.crossBorder?.dateHkInsurance,
-              v.crossBorder?.dateReservedPlate,
-              v.crossBorder?.dateBr,
-              v.crossBorder?.dateLicenseFee,
-              v.crossBorder?.dateMainlandJqx,
-              v.crossBorder?.dateMainlandSyx,
-              v.crossBorder?.dateClosedRoad,
-              v.crossBorder?.dateApproval,
-              v.crossBorder?.dateMainlandLicense,
-              v.crossBorder?.dateHkInspection
-          ];
-          
-          let hasExpired = false;
-          let hasSoon = false;
-
-          dates.forEach(d => {
-              if(d) {
-                  const days = getDaysRemaining(d);
-                  if (days !== null) {
-                      if (days < 0) hasExpired = true;
-                      else if (days <= 30) hasSoon = true;
-                  }
-              }
-          });
-
-          if (hasExpired) expiredCount++;
-          else if (hasSoon) soonCount++;
-      });
-
-      return { total: cbVehicles.length, expired: expiredCount, soon: soonCount };
-  };
-  const cbStats = crossBorderStats();
-
-  // --- Print Handling ---
-  const openPrintPreview = (type: DocType, vehicle: Vehicle, data?: Payment | (Payment | CrossBorderTask)[]) => {
-    if (Array.isArray(data)) {
-        // 如果傳入的是陣列 (來自新開單模組)
-        setPreviewDoc({ type, vehicle, selectedItems: data });
-    } else {
-        // 如果傳入的是單個物件 (來自舊的按鈕)
-        setPreviewDoc({ type, vehicle, payment: data });
-    }
-    setIsPreviewMode(true);
-  };
-
-  
-
-  // --- Sub-Components ---
-
-// --- 資料庫選取器組件 (補回) ---
-const DatabaseSelector = ({ 
-    isOpen, 
-    onClose, 
-    type, 
-    entries, 
-    onSelect 
-}: { 
-    isOpen: boolean; 
-    onClose: () => void; 
-    type: 'customer' | 'vehicle_vrd'; 
-    entries: DatabaseEntry[];
-    onSelect: (entry: DatabaseEntry) => void;
-}) => {
-    const [search, setSearch] = useState('');
-    if (!isOpen) return null;
-
-    // 根據類型篩選資料
-    const filtered = entries.filter(e => {
-        const isMatchSearch = (
-            (e.name || '').toLowerCase().includes(search.toLowerCase()) ||
-            (e.phone || '').includes(search) ||
-            (e.plateNoHK || '').toLowerCase().includes(search.toLowerCase()) ||
-            (e.idNumber || '').toLowerCase().includes(search.toLowerCase())
-        );
-
-        if (type === 'customer') {
-            // 選客戶：顯示 Person 或 Company
-            return (e.category === 'Person' || e.category === 'Company') && isMatchSearch;
-        } else {
-            // 選 VRD：顯示 Vehicle
-            return e.category === 'Vehicle' && isMatchSearch;
-        }
-    });
-
-    return (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
-                <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
-                    <h3 className="font-bold text-slate-800">
-                        {type === 'customer' ? '從資料庫選擇客戶' : '從資料庫選擇車輛 VRD'}
-                    </h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-500 hover:text-black"/></button>
-                </div>
-                
-                <div className="p-4 border-b bg-white">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-                        <input 
-                            className="w-full pl-9 p-2 border rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500"
-                            placeholder={type === 'customer' ? "搜尋姓名、電話、身份證..." : "搜尋車牌、底盤號..."}
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            autoFocus
-                        />
+        let contentHtml = '';
+        sortedDates.forEach(dateKey => {
+            const isTBC = dateKey === '待定日期 (TBC)';
+            const weekStr = isTBC ? '' : ` (星期${getWeekday(dateKey)})`;
+            
+            contentHtml += `
+                <div class="date-section">
+                    <div class="date-header">
+                        📅 辦事日期：${dateKey}${weekStr} <span style="font-size:12px; margin-left:10px; font-weight:normal; opacity:0.8;">共 ${grouped[dateKey].length} 項</span>
                     </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-2 space-y-2 bg-slate-50">
-                    {filtered.map(entry => (
-                        <div 
-                            key={entry.id} 
-                            onClick={() => { onSelect(entry); onClose(); }}
-                            className="bg-white p-3 rounded-lg border hover:border-blue-500 hover:shadow-md cursor-pointer transition-all group"
-                        >
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <div className="font-bold text-slate-800 flex items-center">
-                                        {entry.name || '(未命名)'}
-                                        {entry.plateNoHK && <span className="ml-2 bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded border border-yellow-200">{entry.plateNoHK}</span>}
+                    <div class="task-list">
+                        ${grouped[dateKey].map(it => `
+                            <div class="task-row">
+                                <div class="checkbox-col"><div class="checkbox"></div></div>
+                                <div class="content-col">
+                                    <div class="task-header">
+                                        <span class="plate-badge">${it.plate}</span>
+                                        <span class="task-title">${it.item}</span>
+                                        <span class="due-badge ${it.days < 0 ? 'overdue' : ''}">原本期限: ${it.date} (${it.days < 0 ? '已逾期' : '剩餘'} ${Math.abs(it.days)} 天)</span>
                                     </div>
-                                    <div className="text-xs text-slate-500 mt-1 space-y-0.5">
-                                        {type === 'customer' ? (
-                                            <>
-                                                <div>電話: {entry.phone || '-'}</div>
-                                                <div>ID: {entry.idNumber || '-'}</div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <div>廠型: {entry.make} {entry.model}</div>
-                                                <div>底盤: {entry.chassisNo || '-'}</div>
-                                                <div>A1: {entry.priceA1 ? formatCurrency(entry.priceA1) : '-'}</div>
-                                            </>
-                                        )}
+                                    <div class="task-note">
+                                        <b>行動備註：</b>${reportNotes[it.id] ? reportNotes[it.id] : '<span style="color:#cbd5e1;">(手寫區) __________________________________________________________________</span>'}
                                     </div>
                                 </div>
-                                <ArrowRight size={16} className="text-slate-300 group-hover:text-blue-500"/>
                             </div>
-                        </div>
-                    ))}
-                    {filtered.length === 0 && <div className="text-center text-slate-400 py-8 text-sm">找不到相關資料</div>}
+                        `).join('')}
+                    </div>
                 </div>
+            `;
+        });
+
+        const html = `
+            <html><head><title>行動清單 Action List</title>
+            <style>
+                @page { size: A4; margin: 15mm; }
+                body { font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif; padding: 0; margin: 0; color: #1e293b; line-height: 1.5; }
+                .header-area { text-align: center; border-bottom: 3px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px; }
+                h1 { margin: 0 0 5px 0; font-size: 26px; letter-spacing: 2px; }
+                .meta-info { color: #64748b; font-size: 12px; }
+                .date-section { margin-bottom: 25px; page-break-inside: avoid; }
+                .date-header { background: #334155; color: #f8fafc; padding: 8px 15px; font-size: 16px; font-weight: bold; border-radius: 6px; display: flex; align-items: baseline; margin-bottom: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .task-list { border: 2px solid #e2e8f0; border-radius: 6px; padding: 5px 15px; }
+                .task-row { display: flex; align-items: stretch; border-bottom: 1px dashed #cbd5e1; padding: 15px 0; }
+                .task-row:last-child { border-bottom: none; }
+                .checkbox-col { width: 35px; display: flex; align-items: flex-start; padding-top: 2px; }
+                .checkbox { width: 20px; height: 20px; border: 2px solid #64748b; border-radius: 4px; }
+                .content-col { flex: 1; min-width: 0; }
+                .task-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+                .plate-badge { background: #FFD600; color: #000; padding: 2px 8px; border: 2px solid #000; border-radius: 4px; font-family: monospace; font-weight: 900; font-size: 14px; box-shadow: 2px 2px 0px rgba(0,0,0,0.15); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .task-title { font-size: 16px; font-weight: bold; color: #0f172a; }
+                .due-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #d97706; border: 1px solid #fde68a; font-weight: bold; margin-left: auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .due-badge.overdue { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+                .task-note { background: #f8fafc; padding: 8px 10px; border-left: 4px solid #3b82f6; font-size: 14px; color: #334155; min-height: 24px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .footer { text-align: center; font-size: 10px; color: #94a3b8; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+            </style>
+            </head><body>
+                <div class="header-area">
+                    <h1>📋 業務行動排程清單 (Action List)</h1>
+                    <div class="meta-info">列印日期: ${new Date().toLocaleDateString('zh-HK')} | 負責人: ${staffId || '業務部'} | 共 ${selectedItems.length} 項任務</div>
+                </div>
+                ${contentHtml}
+                <div class="footer">-- GOLD LAND AUTO 金田汽車 內部行動文件 --</div>
+            </body></html>
+        `;
+        printWin.document.write(html); printWin.document.close();
+        setTimeout(() => { printWin.print(); printWin.close(); }, 350);
+    };
+    
+    // ★ 新增：控制「項目合併開單選取彈窗」的狀態
+    const [isCombineModalOpen, setIsCombineModalOpen] = useState(false);
+    const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+    // ★ 新增：跨車合併開單專用狀態
+    const [isCrossCombineModalOpen, setIsCrossCombineModalOpen] = useState(false);
+    const [crossTargetName, setCrossTargetName] = useState('');
+    const [crossAvailableTasks, setCrossAvailableTasks] = useState<any[]>([]);
+    const [crossSearchText, setCrossSearchText] = useState(''); // ★ 新增：跨車手動搜尋車牌
+
+    useEffect(() => { if (activeCbVehicleId && window.innerWidth < 768) setIsMobileDetail(true); }, [activeCbVehicleId]);
+    const handleBackToList = () => { setIsMobileDetail(false); setActiveCbVehicleId(null); };
+
+    const settingsCbItems = (settings.cbItems || []).map((i:any) => (typeof i === 'string' ? i : i.name));
+    const defaultServiceItems = ['代辦驗車', '代辦保險', '申請禁區紙', '批文延期', '更換司機', '代辦免檢', '海關年檢', '其他服務'];
+    const serviceOptions = Array.from(new Set([...(settings.serviceItems || []), ...settingsCbItems, ...defaultServiceItems])).filter(Boolean);
+    const dateFields = { dateHkInsurance: '香港保險', dateReservedPlate: '留牌紙', dateBr: '商業登記(BR)', dateLicenseFee: '香港牌費', dateMainlandJqx: '內地交強險', dateMainlandSyx: '內地商業險', dateClosedRoad: '禁區紙', dateApproval: '批文卡', dateMainlandLicense: '內地行駛證', dateHkInspection: '香港驗車' };
+
+    const findItemDefaults = (itemName: string) => {
+        const settingItem = (settings.cbItems || []).find((i:any) => (typeof i === 'string' ? i : i.name) === itemName);
+        let fee = '0'; let days = '7';
+        if (settingItem && typeof settingItem !== 'string') { fee = settingItem.defaultFee?.toString() || '0'; days = settingItem.defaultDays || '7'; }
+        return { fee, days };
+    };
+
+    const cbVehicles = inventory.filter((v:any) => { const cb = v.crossBorder; if (!cb) return false; return cb.isEnabled || !!cb.mainlandPlate || !!cb.quotaNumber || (cb.tasks && cb.tasks.length > 0); });
+    
+    const filteredVehicles = cbVehicles.filter((v:any) => (v.regMark || '').includes(searchTerm.toUpperCase()) || (v.crossBorder?.mainlandPlate || '').includes(searchTerm))
+    .sort((a: any, b: any) => {
+        const timeA = a.updatedAt?.seconds || (typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() / 1000 : 0) || a.createdAt?.seconds || 0;
+        const timeB = b.updatedAt?.seconds || (typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() / 1000 : 0) || b.createdAt?.seconds || 0;
+        return timeB - timeA;
+    });
+
+    const activeCar = inventory.find((v: any) => v.id === activeCbVehicleId) || filteredVehicles[0];
+
+    // ★ 核心修復：使用 Map 來強制去重複 (Deduplication)，保證同一台車同一個項目只出現一次！
+    const expiredMap = new Map();
+    const soonMap = new Map();
+
+    cbVehicles.forEach((v:any) => { 
+        // 1. 一般文件掃描
+        Object.entries(dateFields).forEach(([fieldKey, label]) => { 
+            const dateStr = (v.crossBorder as any)?.[fieldKey]; 
+            const reminderKey = fieldKey.replace('date', 'cb_remind_');
+            const isRemind = (v.crossBorder as any)?.[reminderKey] !== false;
+            
+            if (dateStr && isRemind) { 
+                const days = getDaysRemaining(dateStr); 
+                if (days !== null) { 
+                    const itemData = { id: `${v.id}-${label}`, vid: v.id!, plate: v.regMark || '未出牌', item: label, date: dateStr, days: days };
+                    if (days < 0) expiredMap.set(`${v.id}-${label}`, itemData); 
+                    else if (days <= 30) soonMap.set(`${v.id}-${label}`, itemData); 
+                } 
+            } 
+        }); 
+
+        // 2. ★ 兜圈掃描：只針對粵港車
+        const isYueGang = (v.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (v.crossBorder?.mainlandPlate || '').includes('港');
+        
+        if (isYueGang) {
+            const anyCar = v as any;
+            const lastOutDate = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
+            if (lastOutDate) {
+                const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
+                const days = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                const itemData = { id: `${v.id}-loop`, vid: v.id!, plate: v.regMark || '未出牌', item: '⚠️ 3個月兜圈', date: lastOutDate, days: days }; 
+                if (days < 0) expiredMap.set(`${v.id}-loop`, itemData); 
+                else if (days <= 30) soonMap.set(`${v.id}-loop`, itemData); 
+            }
+        }
+    });
+    
+    // 轉回 Array 並排序
+    const expiredItems = Array.from(expiredMap.values()).sort((a, b) => a.days - b.days); 
+    const soonItems = Array.from(soonMap.values()).sort((a, b) => a.days - b.days);
+
+    const openAddModal = () => { if (!activeCar) { alert("請先選擇車輛"); return; } setNewTaskDate(new Date().toISOString().split('T')[0]); setPendingTasks([]); setIsAddModalOpen(true); };
+
+    const toggleServiceItem = (item: string) => {
+        const exists = pendingTasks.find(t => t.item === item);
+        if (exists) { setPendingTasks(prev => prev.filter(t => t.item !== item)); } 
+        else { const defaults = findItemDefaults(item); setPendingTasks(prev => [...prev, { item: item, fee: Number(defaults.fee) || 0, note: '', days: defaults.days }]); }
+    };
+
+    const updatePendingTask = (item: string, field: 'fee' | 'note', value: any) => { setPendingTasks(prev => prev.map(t => t.item === item ? { ...t, [field]: value } : t)); };
+
+    // ★★★ 新增：智能複製引擎 (全螢幕版專用) ★★★
+    const duplicateTasks = (tasksToCopy: any[]) => {
+        if (!activeCar) return;
+        if (!confirm(`確定要複製這 ${tasksToCopy.length} 個項目為「全新未繳費」的待辦事項嗎？\n(系統將自動把新項目的日期設為今日)`)) return;
+        
+        const newItems = tasksToCopy.map((t, i) => ({
+            ...t,
+            id: Date.now().toString() + '_' + i,
+            date: new Date().toISOString().split('T')[0], // 自動更新為今天
+            isPaid: false
+        }));
+        
+        const existingTasks = activeCar.crossBorder?.tasks || [];
+        updateVehicle(activeCar.id!, { crossBorder: { ...activeCar.crossBorder, tasks: [...existingTasks, ...newItems] } });
+    };
+
+    const handleAddBatchTasks = () => {
+        if (!activeCar) return;
+        if (pendingTasks.length === 0) { alert("請至少選擇一個項目"); return; }
+        
+        // ★ 核心修復：將每個勾選的項目獨立建立，不再合併成一行
+        const newTasks = pendingTasks.map((t, idx) => ({
+            id: Date.now().toString() + idx + Math.random().toString(36).substr(2, 5), 
+            date: newTaskDate, 
+            item: t.item, 
+            fee: t.fee, 
+            days: t.days || '7', 
+            institution: '公司', 
+            handler: '', 
+            currency: 'HKD', 
+            note: t.note || '', 
+            isPaid: false 
+        }));
+        
+        const existingTasks = activeCar.crossBorder?.tasks || [];
+        const updatedTasks = [...existingTasks, ...newTasks];
+
+        // 透過 updateVehicle 一次性寫入所有獨立項目
+        updateVehicle(activeCar.id!, { 
+            crossBorder: { ...activeCar.crossBorder, tasks: updatedTasks } 
+        });
+        
+        setIsAddModalOpen(false);
+    };
+
+    const startEditing = (task: CrossBorderTask) => { setEditingTaskId(task.id); setEditForm({ ...task }); };
+    const saveEdit = () => { if (!activeCar || !editingTaskId || !editForm.item) return; const updatedTask = { ...editForm, fee: Number(editForm.fee) || 0, id: editingTaskId } as CrossBorderTask; updateCbTask(activeCar.id!, updatedTask); setEditingTaskId(null); };
+
+    const handleAddPartPayment = (task: CrossBorderTask) => { 
+        const amount = Number(newPayAmount); if (!activeCar || amount <= 0) return; 
+        addPayment(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], amount: amount, type: 'Service Fee', method: newPayMethod as any, relatedTaskId: task.id, note: `Payment for: ${task.item}` }); 
+        setNewPayAmount(''); 
+    };
+
+    const convertDateToTask = (dateKey: string, dateLabel: string, dateVal: string) => {
+        if (!activeCar) return;
+        const defaults = findItemDefaults(dateLabel) || { fee: '0', days: '7' };
+        if(confirm(`確定轉收費？\n項目: ${dateLabel}\n費用: $${defaults.fee}`)) {
+            addCbTask(activeCar.id!, { id: Date.now().toString(), date: new Date().toISOString().split('T')[0], item: `代辦${dateLabel}`, fee: Number(defaults.fee) || 0, days: defaults.days, institution: '公司', handler: '', currency: 'HKD', note: `來自日期提醒 (${dateVal})`, isPaid: false });
+        }
+    };
+
+    const handleSaveDocLog = (logData: any) => {
+        if (!activeCar || !updateVehicle) return;
+        const newLog = { id: Date.now().toString(), timestamp: new Date().toLocaleString(), ...logData };
+        const newLogs = [...(activeCar.crossBorder?.documentLogs || []), newLog];
+        updateVehicle(activeCar.id, { crossBorder: { ...activeCar.crossBorder, documentLogs: newLogs } });
+    };
+
+    const ScrollableList = ({ items, type }: { items: typeof expiredItems, type: 'expired' | 'soon' }) => (
+        <div className="bg-black/20 mt-3 rounded-lg overflow-hidden text-xs border-t border-white/10 flex-1 min-h-0">
+            <div className="overflow-y-auto h-24 md:h-32 scrollbar-thin scrollbar-thumb-white/20 p-1 space-y-1">
+                {items.length === 0 ? <div className="p-4 text-white/50 text-center flex flex-col items-center justify-center h-full"><span>無項目</span></div> : (
+                    items.map((it, idx) => (
+                        <div key={`${it.vid}-${idx}`} onClick={() => setActiveCbVehicleId(it.vid)} className="flex justify-between items-center p-2 hover:bg-white/10 cursor-pointer rounded border-b border-white/5 last:border-0 transition-colors">
+                            <div className="flex items-center gap-2 min-w-0"><span className="font-bold font-mono bg-black/30 px-1.5 py-0.5 rounded text-white shadow-sm whitespace-nowrap">{it.plate}</span><span className="text-white/90 truncate">{it.item}</span></div>
+                            <div className={`text-right font-mono font-bold whitespace-nowrap ml-2 ${type === 'expired' ? 'text-red-300' : 'text-amber-300'}`}>{type === 'expired' ? `${Math.abs(it.days)}天前` : `剩${it.days}天`}</div>
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     );
-};
 
-// ------------------------------------------------------------------
-// ★★★ 1. Vehicle Form Modal (v21.4: 智能雙軌收支 + Trade-in 對數 + Kw 單位) ★★★
-// ------------------------------------------------------------------
-
-
-  
-
-
-
-
-  return (
-      // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0">
-          
-          {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
-          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
-          <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
-       
-        <style>{`
-            /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
-            html, body { 
-                margin: 0 !important; 
-                padding: 0 !important;
-                width: 100vw !important; 
-                height: 100dvh !important; 
-                overflow: hidden !important; 
-                background-color: #f1f5f9 !important; 
-                overscroll-behavior-y: none;
-                -webkit-overflow-scrolling: touch;
-            }
-            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
-            @media print {
-                html, body {
-                    position: static !important;
-                    width: auto !important;
-                    height: auto !important;
-                    overflow: visible !important;
-                    background-color: #ffffff !important;
-                    display: block !important;
-                }
-            }
-        `}</style>
-
-      {/* 全域資料載入畫面 */}
-      {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
-
-      {/* ★★★ 全域 Toast 提示框 UI ★★★ */}
-      {globalToast && (
-          <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${globalToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
-              {globalToast.text}
-          </div>
-      )}
-
-      {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
-      <Sidebar 
-      activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          isMobileMenuOpen={isMobileMenuOpen}
-          setIsMobileMenuOpen={setIsMobileMenuOpen}
-          isSidebarCollapsed={isSidebarCollapsed}
-          setIsSidebarCollapsed={setIsSidebarCollapsed}
-          staffId={staffId}
-          setStaffId={setStaffId}
-          currentUser={currentUser}
-          onOpenChangePwd={() => setIsChangePwdOpen(true)} />
-           
-
-      {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
-      <main className="flex-1 w-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
-
-        {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
-        {shareVehicle && (
-            <VehicleShareModal 
-                vehicle={shareVehicle} 
-                db={db} 
-                staffId={staffId} 
-                appId={appId} 
-                cleanMode={shareCleanMode} 
-                onClose={() => setShareVehicle(null)} 
-            />
-        )}
-        
-       {/* ★ 手機版頂部 Header (完美適配動態島，擴大左右屏佔比) */}
-          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
-              <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
-              <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
-              <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
-                  <SmartNotificationCenter 
-                      inventory={visibleInventory} 
-                      settings={settings} 
-                      triggerSmartPrint={triggerSmartPrint} 
-                      currentUser={currentUser} 
-                      databaseReminders={databaseReminders} /* ★ 補上這行 */
-                  />
-              </div>
-          </div>
-
-        {isPreviewMode && (
-          <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-center z-50 shadow-xl print:hidden gap-3">
-            <div className="font-bold flex items-center text-sm md:text-base"><FileText className="mr-2" /> 預覽文件</div>
-            <div className="flex space-x-3 w-full md:w-auto"><button onClick={() => setIsPreviewMode(false)} className="flex-1 md:flex-none px-4 py-2 bg-gray-600 rounded hover:bg-gray-500 text-sm">返回</button><button onClick={handlePrint} className="flex-1 md:flex-none px-4 py-2 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400 flex items-center justify-center text-sm shadow-md"><Printer size={18} className="mr-2" /> 列印 / PDF</button></div>
-          </div>
-        )}
-
-        <div className={`${isPreviewMode ? 'block mt-24 md:mt-16' : 'hidden'} ${isPreviewMode ? 'print:block' : 'print:hidden'} print:mt-0 flex-1 overflow-y-auto`}>
-            <div ref={printAreaRef} className="print:w-full">
-                <DocumentTemplate 
-                    previewDoc={previewDoc} 
-                    selectedVehicle={selectedVehicle} 
-                    docType={docType} 
-                    COMPANY_INFO={COMPANY_INFO} 
-                />
-            </div>
-        </div>
-
-        {/* 修正：如果是報表模式 (reports)，則在打印時允許顯示主要內容區 */}
-        <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} flex flex-col h-full overflow-hidden`}>
-          
-          {/* Modal for Add/Edit Vehicle (完整參數版) */}
-          {(activeTab === 'inventory_add' || editingVehicle) && (
-              <VehicleFormModal 
-                  db={db}
-                  staffId={staffId}
-                  appId={appId}
-                  clients={clients}              
-                  settings={settings}
-                  editingVehicle={editingVehicle} 
-                  setEditingVehicle={setEditingVehicle}
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                  saveVehicle={saveVehicle}
-                  addPayment={addPayment}
-                  deletePayment={deletePayment}
-                  addExpense={addExpense}
-                  deleteExpense={deleteExpense}
-                  updateExpenseStatus={updateExpenseStatus}
-                  addSystemLog={addSystemLog}
-                  allSalesDocs={allSalesDocs} 
-                  onJumpToDoc={handleJumpToDoc}
-                  addSalesAddon={addSalesAddon}
-                  deleteSalesAddon={deleteSalesAddon}
-                  updateSettings={updateSettings}
-                  systemUsers={systemUsers}
-                  currentUser={currentUser}
-                  updateSubItem={updateSubItem}
-                  inventory={visibleInventory}
-              />
-          )}
-          
-          {/* Report Tab - 讓它內部也可以滾動 */}
-                {activeTab === 'reports' && (
-                    <div className="flex-1 overflow-hidden flex flex-col">
-                        <FinanceModule 
-                            inventory={visibleInventory} 
-                            settings={settings}
-                            setEditingVehicle={setEditingVehicle}
-                            setActiveTab={setActiveTab}
-                            db={db}
-                            staffId={staffId}
-                            appId={appId}
-                            currentUser={currentUser}
-                        />
-                    </div>
-                )}
-
-        {/* Cross Border Tab (v10.5: TypeScript 類型修復) */}
-          {activeTab === 'cross_border' && (
-            <div className="h-full animate-fade-in">
-                <CrossBorderView 
-                    inventory={visibleInventory}
-                    settings={settings}
-                    dbEntries={dbEntries}
-                    activeCbVehicleId={activeCbVehicleId}
-                    setActiveCbVehicleId={setActiveCbVehicleId}
-                    setEditingVehicle={setEditingVehicle}
-                    updateVehicle={updateVehicle}
-                    primaryImages={primaryImages}
-                    onJumpToDoc={handleJumpToDoc} // ★★★ 跨頁開單能力
-                    
-                    // ★★★ 修正 1: 加入類型標註 (vid: string, task: CrossBorderTask) ★★★
-                    addCbTask={(vid: string, task: CrossBorderTask) => {
-                        const v = inventory.find(i => i.id === vid);
-                        if (v) {
-                            const newTasks = [...(v.crossBorder?.tasks || []), task];
-                            updateVehicle(vid, { crossBorder: { ...v.crossBorder, tasks: newTasks } } as Partial<Vehicle>);
-                            if(addSystemLog) addSystemLog('CB Task', `Added task: ${task.item} to ${v.regMark}`);
-                        }
-                    }}
-                    
-                    // ★★★ 修正 2: 加入類型標註 ★★★
-                    updateCbTask={(vid: string, task: CrossBorderTask) => {
-                        const v = inventory.find(i => i.id === vid);
-                        if (v) {
-                            const newTasks = (v.crossBorder?.tasks || []).map(t => t.id === task.id ? task : t);
-                            updateVehicle(vid, { crossBorder: { ...v.crossBorder, tasks: newTasks } } as Partial<Vehicle>);
-                        }
-                    }}
-                    
-                    // ★★★ 修正 3: 加入類型標註 (taskId: string) ★★★
-                    deleteCbTask={(vid: string, taskId: string) => {
-                        if(!confirm("確定刪除此項目？")) return;
-                        const v = inventory.find(i => i.id === vid);
-                        if (v) {
-                            const newTasks = (v.crossBorder?.tasks || []).filter(t => t.id !== taskId);
-                            updateVehicle(vid, { crossBorder: { ...v.crossBorder, tasks: newTasks } } as Partial<Vehicle>);
-                        }
-                    }}
-                    
-                    // ★★★ 修正 4: 加入類型標註 (p: Payment) ★★★
-                    addPayment={(vid: string, p: Payment) => {
-                        const v = inventory.find(i => i.id === vid);
-                        if (v) {
-                            const newPayments = [...(v.payments || []), p];
-                            updateVehicle(vid, { payments: newPayments });
-                            if(addSystemLog) addSystemLog('Payment', `Received ${p.amount} for ${v.regMark}`);
-                        }
-                    }}
-                    
-                    // ★★★ 修正 5: 加入類型標註 (pid: string) ★★★
-                    deletePayment={(vid: string, pid: string) => {
-                        const v = inventory.find(i => i.id === vid);
-                        if (v) {
-                            const newPayments = (v.payments || []).filter(p => p.id !== pid);
-                            updateVehicle(vid, { payments: newPayments });
-                        }
-                    }}
-                />
-            </div>
-          )}
-
-          
-          {/* Dashboard Tab (v16.3: 修復橫屏滾動穿透與卡片擠壓問題) */}
-          {/* Dashboard Tab (以獨立解耦模組運行，版面高度與警報已重構優化) */}
-            {activeTab === 'dashboard' && (
-            <DashboardModule
-                inventory={visibleInventory}
-                dbEntries={dbEntries}
-                settings={settings}
-                staffId={staffId!}
-                currentUser={currentUser}
-                stats={stats}
-                primaryImages={primaryImages}
-                unpaidCompanyExpenses={unpaidCompanyExpenses}
-                loopReminders={loopReminders}
-                databaseReminders={databaseReminders} /* ★ 新增傳入資料庫提醒 */
-                setActiveTab={setActiveTab}
-                setEditingVehicle={setEditingVehicle}
-                setActiveCbVehicleId={setActiveCbVehicleId}
-                setEditingEntry={setEditingEntry}
-                setIsDbEditing={setIsDbEditing}
-                setShareVehicle={setShareVehicle}
-                setShareCleanMode={setShareCleanMode}
-                deleteVehicle={deleteVehicle}
-                db={db}
-                appId={appId}
-                triggerSmartPrint={triggerSmartPrint}
-            />
-            )}
-         {/* Inventory Tab (v15.3: 擬真車牌 + 粵港澳標籤 + 智能縮圖 + 排序優化) */}
-          {activeTab === 'inventory' && (
-            <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
-              {/* Header Controls */}
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-none">
-                  <h2 className="text-xl font-bold text-slate-800 whitespace-nowrap">車輛庫存 ({getSortedInventory().length})</h2>
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-64">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16}/>
-                            <input 
-                                type="text" 
-                                placeholder="搜尋車牌、底盤號、型號..." 
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
-                            />
+    return (
+        <div className="flex flex-col h-full gap-4 relative">
+            {/* ★★★ 全新升級：業務行動清單中心 (Action List Center) ★★★ */}
+            {reportModalData && (
+                <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setReportModalData(null)}>
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                        
+                        {/* 頂部標題 */}
+                        <div className={`p-4 text-white flex justify-between items-center shrink-0 ${reportModalData.type === 'expired' ? 'bg-gradient-to-r from-red-800 to-red-600' : 'bg-gradient-to-r from-amber-600 to-orange-500'}`}>
+                            <div>
+                                <h3 className="font-bold text-lg flex items-center gap-2">
+                                    <Check size={20}/> 業務行動排程中心
+                                </h3>
+                                <p className="text-xs opacity-80 mt-0.5">{reportModalData.title} · 共 {reportModalData.items.length} 項</p>
+                            </div>
+                            <button onClick={() => setReportModalData(null)} className="p-1.5 hover:bg-white/20 rounded-full transition-colors"><X size={20}/></button>
                         </div>
-                        <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus className="mr-1" size={16}/> 入庫</button>
+
+                        {/* 批次操作列 */}
+                        <div className="bg-slate-50 border-b border-slate-200 p-3 flex justify-between items-center shrink-0">
+                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer select-none">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 accent-blue-600"
+                                    checked={reportSelectedIds.length === reportModalData.items.length && reportModalData.items.length > 0}
+                                    onChange={(e) => {
+                                        if (e.target.checked) setReportSelectedIds(reportModalData.items.map(it => it.id));
+                                        else setReportSelectedIds([]);
+                                    }}
+                                />
+                                全選 ({reportSelectedIds.length})
+                            </label>
+                            <button 
+                                onClick={printActionList}
+                                className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+                            >
+                                <Printer size={14}/> 輸出列印 PDF
+                            </button>
+                        </div>
+
+                        {/* 任務清單區 (模仿協作中心卡片設計) */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100/50">
+                            {reportModalData.items.map(it => {
+                                const isChecked = reportSelectedIds.includes(it.id);
+                                return (
+                                    <div key={it.id} className={`p-4 rounded-xl border transition-all ${isChecked ? 'bg-white border-blue-400 shadow-md ring-1 ring-blue-100' : 'bg-white border-slate-200 shadow-sm opacity-80 hover:opacity-100'}`}>
+                                        <div className="flex gap-3">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isChecked}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setReportSelectedIds([...reportSelectedIds, it.id]);
+                                                    else setReportSelectedIds(reportSelectedIds.filter(id => id !== it.id));
+                                                }}
+                                                className="w-5 h-5 mt-1 accent-blue-600 cursor-pointer shrink-0"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                                    <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-[10px] px-1.5 py-0.5 rounded shadow-sm">
+                                                        {it.plate}
+                                                    </span>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${it.days < 0 ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+                                                        {it.days < 0 ? `已逾期 ${Math.abs(it.days)} 天` : `剩餘 ${it.days} 天`}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400 font-mono ml-auto">
+                                                        到期: {it.date}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="font-bold text-slate-800 text-sm mb-2">{it.item}</div>
+                                                
+                                                <div className="font-bold text-slate-800 text-sm mb-2">{it.item}</div>
+                                                
+                                                {/* ★ 升級：行動日期與手寫備註框 (模擬團隊協作) */}
+                                                <div className={`mt-2 flex flex-col md:flex-row gap-2 transition-opacity duration-200 ${isChecked ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                                                    <div className="flex-none w-full md:w-40 relative">
+                                                        <input 
+                                                            type="date"
+                                                            title="選擇辦事日期"
+                                                            value={reportActionDates[it.id] || ''}
+                                                            onChange={e => setReportActionDates({...reportActionDates, [it.id]: e.target.value})}
+                                                            className="w-full text-xs p-2 rounded-lg border outline-none bg-blue-50/50 border-blue-200 focus:border-blue-400 focus:bg-white text-blue-700 font-bold"
+                                                        />
+                                                        {reportActionDates[it.id] && (
+                                                            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-500 pointer-events-none bg-blue-50 px-1">
+                                                                週{['日','一','二','三','四','五','六'][new Date(reportActionDates[it.id]).getDay()]}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <input 
+                                                        type="text"
+                                                        placeholder="輸入行動備註 (例如：皇崗裝牌、聯絡車主)..."
+                                                        value={reportNotes[it.id] || ''}
+                                                        onChange={e => setReportNotes({...reportNotes, [it.id]: e.target.value})}
+                                                        className="flex-1 text-xs p-2 rounded-lg border outline-none bg-blue-50/50 border-blue-200 focus:border-blue-400 focus:bg-white text-slate-700"
+                                                    />
+                                                </div>
+
+                                                <div className="flex justify-end mt-3">
+                                                    <button 
+                                                        onClick={() => exportToCalendar(it, reportNotes[it.id] || '', reportActionDates[it.id] || '')}
+                                                        disabled={!isChecked}
+                                                        className="text-[10px] bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 px-3 py-1.5 rounded-lg font-bold flex items-center shadow-sm transition-colors disabled:opacity-50"
+                                                    >
+                                                        <CalendarDays size={14} className="mr-1.5 text-blue-600"/> 加入 iPhone/系統行事曆
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
-              </div>
-              
-              {/* Filter Bar */}
-              <div className="flex flex-col sm:flex-row gap-3 overflow-x-auto pb-3 flex-none scrollbar-hide items-start sm:items-center">
-                  {/* 🍏 Apple Style 自家 / 行家 快速切換器 */}
-                  <div className="flex bg-white/50 backdrop-blur-md p-1 rounded-xl border border-white/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0">
-                      <button onClick={() => setFilterSource('All')} className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${filterSource === 'All' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>全部</button>
-                      <button onClick={() => setFilterSource('own')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'own' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>🟢 自家/寄賣</button>
-                      <button onClick={() => setFilterSource('partner')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${filterSource === 'partner' ? 'bg-white shadow-sm text-orange-700' : 'text-slate-500 hover:text-slate-700'}`}>🟠 行家盤</button>
-                  </div>
-                  
-                  {/* 原有的狀態過濾器 */}
-                  <div className="flex gap-2 shrink-0">
-                      {['All', 'Pending', 'In Stock', 'Reserved', 'Sold', 'Withdrawn'].map(s => (
-                          <button key={s} onClick={() => setFilterStatus(s)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${filterStatus === s ? 'bg-yellow-500 text-white shadow-sm' : 'bg-white border text-gray-500 hover:bg-gray-50'}`}>
-                              {s === 'All' ? '全部狀態' : (s === 'Pending' ? '待收/報價' : (s === 'In Stock' ? '在庫' : (s === 'Reserved' ? '已訂' : (s === 'Sold' ? '已售' : '撤回'))))}
-                          </button>
-                      ))}
-                  </div>
-              </div>
+                </div>
+            )}
 
-              {/* Grid Container (v18.0: 現代化 4:3 滿版垂直卡片 + 原有邏輯保留) */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-[calc(2rem+env(safe-area-inset-bottom))] scrollbar-thin">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                    {getSortedInventory()
-                        .sort((a, b) => {
-                            if (sortConfig) return 0;
-                            return (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0);
-                        })
-                        .map((car) => { 
-                        
-                        // ★ 保留原來的計算邏輯
-                        const received = (car.payments || []).reduce((acc, p) => acc + p.amount, 0) || 0; 
-                        const balance = (car.price || 0) - received; 
+            {showDocModal && activeCar && <DocumentCustodyModal vehicle={activeCar} staffId={"Staff"} onClose={() => setShowDocModal(false)} onSaveLog={handleSaveDocLog} />}
 
-                        // ★ 新增：完美融合「船運倒數」與「行政進度」的智能標籤
-                    const getLogisticsBadge = (vehicleData: any) => {
-                        const log = vehicleData.logistics || {};
-                        if (log.registeredDate) return null; // 已出牌隱藏
-                        
-                        if (log.inspectionPassedDate) {
-                            const passed = new Date(log.inspectionPassedDate);
-                            const expiry = new Date(passed.setMonth(passed.getMonth() + 4));
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
-                            expiry.setHours(0,0,0,0);
-                            const diffTime = expiry.getTime() - today.getTime();
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            const expiryStr = expiry.toISOString().split('T')[0];
+            {isAddModalOpen && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white w-[500px] p-5 rounded-xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+                        <h3 className="font-bold text-lg mb-4 flex items-center"><FileText size={20} className="mr-2 text-blue-600"/> 新增代辦項目</h3>
+                        <div className="space-y-4 flex-1 overflow-y-auto pr-2">
+                            <div><label className="text-xs font-bold text-gray-500 mb-1 block">日期</label><input type="date" value={newTaskDate} onChange={e => setNewTaskDate(e.target.value)} className="w-full border p-2 rounded text-sm"/></div>
+                            <div><label className="text-xs font-bold text-gray-500 mb-2 block">1. 勾選項目</label><div className="grid grid-cols-3 gap-2">{serviceOptions.map((opt, idx) => { const isSelected = pendingTasks.some(t => t.item === opt); return (<div key={idx} onClick={() => toggleServiceItem(opt)} className={`p-2 rounded border cursor-pointer text-[10px] flex items-center transition-all ${isSelected ? 'bg-blue-100 border-blue-500 text-blue-700 font-bold' : 'bg-gray-50 hover:bg-gray-100'}`}><div className={`w-3 h-3 rounded border mr-1.5 flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'bg-white'}`}>{isSelected && <Check size={8} className="text-white"/>}</div>{opt}</div>); })}</div></div>
+                            {pendingTasks.length > 0 && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-200"><label className="text-xs font-bold text-gray-500 mb-2 block">2. 確認費用</label><div className="space-y-2 max-h-48 overflow-y-auto pr-1">{pendingTasks.map((task, idx) => (<div key={idx} className="flex items-center gap-2 bg-white p-2 rounded border shadow-sm"><span className="text-xs font-bold w-1/3 truncate" title={task.item}>{task.item}</span><div className="flex-1 flex gap-2"><div className="relative w-24"><span className="absolute left-2 top-1.5 text-xs text-gray-400">$</span><input type="number" value={task.fee} onChange={(e) => updatePendingTask(task.item, 'fee', Number(e.target.value))} className="w-full border rounded p-1 pl-4 text-xs font-mono text-right"/></div><input type="text" value={task.note} onChange={(e) => updatePendingTask(task.item, 'note', e.target.value)} className="flex-1 border rounded p-1 text-xs" placeholder="備註..."/></div></div>))}</div></div>)}
+                        </div>
+                        <div className="flex justify-end gap-2 mt-6 border-t pt-4"><button onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 text-xs bg-gray-200 rounded hover:bg-gray-300">取消</button><button onClick={handleAddBatchTasks} className="px-6 py-2 text-xs bg-blue-600 text-white rounded font-bold hover:bg-blue-700">確認建立 ({pendingTasks.length})</button></div>
+                    </div>
+                </div>
+            )}
+
+            <div className={`grid grid-cols-2 gap-2 flex-none ${isMobileDetail ? 'hidden md:grid' : ''}`}> 
+                <div className="bg-gradient-to-br from-red-900 to-slate-900 rounded-xl p-3 text-white shadow-lg border border-red-800/30 relative overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-start z-10"><div><div className="flex items-center gap-1 mb-1"><AlertTriangle size={14} className="text-red-400"/><span className="text-xs font-bold text-red-100 opacity-80">已過期</span></div><div className="text-xl font-bold font-mono">{expiredItems.length}</div></div><div className="flex gap-1"><button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '已過期項目', type: 'expired', items: expiredItems }); }} className="p-1 hover:bg-white/20 rounded"><FileText size={16}/></button><button onClick={() => setShowExpired(!showExpired)} className="p-1 hover:bg-white/10 rounded">{showExpired ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button></div></div>
+                    {expiredItems.length > 0 && showExpired && <ScrollableList items={expiredItems} type="expired" />}
+                </div>
+                <div className="bg-gradient-to-br from-amber-800 to-slate-900 rounded-xl p-3 text-white shadow-lg border border-amber-800/30 relative overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-start z-10"><div><div className="flex items-center gap-1 mb-1"><Clock size={14} className="text-amber-400"/><span className="text-xs font-bold text-amber-100 opacity-80">即將到期</span></div><div className="text-xl font-bold font-mono">{soonItems.length}</div></div><div className="flex gap-1"><button onClick={(e) => { e.stopPropagation(); setReportModalData({ title: '即將到期', type: 'soon', items: soonItems }); }} className="p-1 hover:bg-white/20 rounded"><FileText size={16}/></button><button onClick={() => setShowSoon(!showSoon)} className="p-1 hover:bg-white/10 rounded">{showSoon ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button></div></div>
+                    {soonItems.length > 0 && showSoon && <ScrollableList items={soonItems} type="soon" />}
+                </div>
+            </div>
+
+            <div className="flex flex-1 gap-4 overflow-hidden min-h-0 relative">
+                <div className={`w-full md:w-1/4 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden ${isMobileDetail ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="p-3 border-b bg-slate-50"><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜尋車牌..." className="w-full px-2 py-1.5 text-xs border rounded"/></div>
+                    {/* ★ 修復：加入底部留白 (手機 pb-24, 電腦 md:pb-20) 避開藍色按鈕 */}
+                    <div className="flex-1 overflow-y-auto p-2 pb-24 md:pb-20 space-y-2 scrollbar-thin">
+                        {filteredVehicles.map((car:any) => {
+                            let expiredCount = 0;
+                            Object.keys(dateFields).forEach(k => { 
+                                const d = (car.crossBorder as any)?.[k]; 
+                                const reminderKey = k.replace('date', 'cb_remind_');
+                                const isRemind = (car.crossBorder as any)?.[reminderKey] !== false;
+                                if(d && isRemind && getDaysRemaining(d)! < 0) expiredCount++; 
+                            });
                             
-                            if (diffDays < 0) return { text: `驗車已過期`, color: 'bg-red-50 text-red-600 border-red-300 animate-pulse' };
-                            if (diffDays <= 30) return { text: `出牌期限: ${expiryStr}`, color: 'bg-orange-50 text-orange-600 border-orange-300' };
-                            return { text: `可於 ${expiryStr} 前出牌`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-                        }
-                        
-                        if (log.emissionsClearDate) return { text: '待驗車', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
-                        
-                        // ★ 完美融合舊版船運 ETA
-                        const arrivalStr = log.arrivalDate || vehicleData.acquisition?.eta || vehicleData.eta;
-                        if (arrivalStr) {
-                            const arr = new Date(arrivalStr);
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
-                            arr.setHours(0,0,0,0);
-                            const diffDays = Math.ceil((arr.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                            // ★ 兜圈紅點判斷 (只限粵港車)
+                            const isYueGang = (car.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (car.crossBorder?.mainlandPlate || '').includes('港');
+                            if (isYueGang) {
+                                const anyCar = car as any;
+                                const lastOut = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
+                                if (lastOut) {
+                                    const deadline = new Date(new Date(lastOut).getTime() + 90 * 24 * 60 * 60 * 1000);
+                                    if (deadline.getTime() < new Date().getTime()) expiredCount++;
+                                }
+                            }
                             
-                            if (diffDays > 0) return { text: `🚢 剩 ${diffDays} 天到港`, color: 'bg-blue-50 text-blue-600 border-blue-200' };
-                            return { text: '🚢 已到港 (待驗環保)', color: 'bg-blue-100 text-blue-700 border-blue-300' };
-                        }
-                        
-                        return null;
-                    };
-                    const logisticsBadge = getLogisticsBadge(car);
-                        
-                        // ★ 保留原來的標籤邏輯
-                        const getRefinedTags = () => {
-                            const tags = [];
-                            const ports = car.crossBorder?.ports || [];
-                            const isCbActive = car.crossBorder?.isEnabled || car.crossBorder?.mainlandPlate || car.crossBorder?.quotaNumber;
-                            
-                            if (isCbActive) {
-                                const isHk = ports.some(p => PORTS_HK_GD.includes(p));
-                                const isMo = ports.some(p => PORTS_MO_GD.includes(p));
+                            const getTags = () => {
+                                const tags = [];
+                                const ports = car.crossBorder?.ports || [];
+                                const isHk = ports.some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p));
+                                const isMo = ports.some((p:string) => ['港珠澳大橋(澳)', '關閘(拱北)', '橫琴', '青茂'].includes(p));
                                 if (isHk) tags.push({ label: '粵港', color: 'bg-indigo-600 border-indigo-800 text-white' });
                                 if (isMo) tags.push({ label: '粵澳', color: 'bg-emerald-600 border-emerald-800 text-white' });
                                 if (!isHk && !isMo) tags.push({ label: '中港', color: 'bg-slate-600 border-slate-800 text-white' });
-                            }
-                            return tags;
-                        };
-                        const cbTags = getRefinedTags();
-                        
-                        // ★★★ 智能車輛首圖獲取引擎 (多層安全降級備援) ★★★
-                        // 1. 優先使用智能圖庫 (primaryImages) 比對出的合規相片
-                        // 2. 次選車輛 document 內部儲存的歷史照片陣列 (car.photos)
-                        // 3. 第三順位觸發「一換一」專屬向量圖案 (SVG)
-                        // 4. 無任何圖片時回退為 null，由 UI 層渲染標準 No-Image 佔位區
+                                return tags;
+                            };
+                            const cbTags = getTags();
 
-                        const primaryUrl = primaryImages[car.id];
-                        const legacyArrayUrl = (car.photos && Array.isArray(car.photos) && car.photos.length > 0) ? car.photos[0] : null;
-                        const baseThumbUrl = primaryUrl || legacyArrayUrl;
-
-                        const isOneForOne = Boolean((car as any).acquisition?.vendor?.includes('一換一'));
-                        const oneForOnePlaceholder = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' viewBox='0 0 600 400'%3E%3Crect width='600' height='400' fill='%231e3a8a'/%3E%3Ctext x='50%25' y='40%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='48' font-weight='bold' fill='%23ffffff'%3E一換一 QUOTA%3C/text%3E%3Ctext x='50%25' y='60%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24' fill='%2393c5fd'%3EEV Replacement Scheme%3C/text%3E%3C/svg%3E";
-
-                        const thumbUrl = baseThumbUrl || (isOneForOne ? oneForOnePlaceholder : null);
-
-                        let statusText = '在庫';
-                        let statusClass = "bg-green-500 text-white";
-                        if (car.status === 'Pending') { statusText = '待收'; statusClass = "bg-purple-100 text-purple-700 border border-purple-300"; }
-                        else if (car.status === 'Reserved') { statusText = '已訂'; statusClass = "bg-yellow-500 text-white"; }
-                        else if (car.status === 'Sold') { statusText = '已售'; statusClass = "bg-blue-600 text-white"; }
-                        else if (car.status === 'Withdrawn') { statusText = '撤回'; statusClass = "bg-gray-500 text-white"; }
-
-                        // ★ 新增：判斷是否為行家盤
-                        const isPartner = car.sourceType === 'partner';
-
-                        return (
-                        // 🍏 Apple Style 大卡片：3XL 超大圓角 + 精密高光邊框 + 彌散陰影
-                        <div key={car.id} className={`bg-white/60 backdrop-blur-xl rounded-3xl border transition-all duration-300 group flex flex-col overflow-hidden cursor-pointer relative active:scale-[0.99] ${isPartner ? 'border-orange-200/80 hover:border-orange-300 shadow-[0_4px_20px_rgba(249,115,22,0.03)] hover:shadow-[0_12px_30px_rgba(249,115,22,0.1)]' : 'border-white/80 hover:border-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]'}`} onClick={() => setEditingVehicle(car)}>
-                         
-                            {/* 上半部：4:3 滿版圖片 */}
-                            <div className="w-full aspect-[4/3] bg-slate-900 relative overflow-hidden flex-none flex items-center justify-center">
-                                {thumbUrl ? (
-                                    <>
-                                        <img src={thumbUrl} className="absolute inset-0 w-full h-full object-cover blur-md opacity-40 scale-110 transition-transform duration-700 group-hover:scale-125" alt="bg" loading="lazy" />
-                                        <img src={thumbUrl} className="relative z-10 w-full h-full object-contain p-0.5 drop-shadow-xl transition-transform duration-700 group-hover:scale-105" alt="Car" loading="lazy" />
-                                    </>
-                                ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-100"><Car size={40} className="mb-2 opacity-50"/><span className="text-xs font-bold uppercase tracking-widest">No Image</span></div>
-                                )}
-                                
-                                {/* ★ 狀態與行家標籤 (左上) ★ */}
-                                <div className="absolute top-2 left-2 z-20 flex flex-col gap-1.5">
-                                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold shadow-md w-fit ${statusClass}`}>{statusText}</span>
-                                    {isPartner && (
-                                        <span className="px-2 py-1 rounded-md text-[10px] font-bold shadow-md bg-orange-500 text-white flex items-center w-fit">
-                                            <Building2 size={10} className="mr-1"/> 行家: {car.partnerName || '未命名'}
-                                        </span>
-                                    )}
+                            return (
+                                <div key={car.id} onClick={() => setActiveCbVehicleId(car.id)} onDoubleClick={() => setEditingVehicle(car)} className={`p-2.5 rounded-lg cursor-pointer border transition-all flex gap-3 items-center ${activeCbVehicleId === car.id ? 'bg-blue-50 border-blue-300 shadow-md ring-1 ring-blue-100' : 'bg-white hover:border-blue-100'}`} title="單擊切換右側中港資訊，雙擊開啟車輛詳細資料">
+                                    {/* ★ 放大圖片，改為 w-24 h-16 (約 96px x 64px) 增強視覺融合 */}
+                                    <div className="w-24 h-16 rounded-md overflow-visible relative flex-shrink-0 bg-slate-100 border border-slate-200 shadow-sm flex items-center justify-center">
+                                        {(() => {
+                                            const thumbUrl = primaryImages[car.id] || (car.photos && car.photos.length > 0 ? (typeof car.photos[0] === 'string' ? car.photos[0] : car.photos[0].url) : null);
+                                            if (thumbUrl) return <img src={thumbUrl} className="w-full h-full object-cover rounded-md" alt="thumbnail" />;
+                                            else return <Car size={24} className="text-slate-300"/>;
+                                        })()}
+                                        {expiredCount > 0 ? (<div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 border border-white rounded-full flex items-center justify-center animate-pulse shadow-sm z-10"><span className="text-[9px] text-white font-bold leading-none">{expiredCount}</span></div>) : (<div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 border border-white rounded-full shadow-sm z-10"></div>)}
+                                    </div>
+                                    <div className="flex-1 min-w-0 flex flex-col justify-center py-0.5">
+                                        <div className="flex justify-between items-start mb-1.5">
+                                            <div className="flex flex-col gap-1 items-start">
+                                                <span className="bg-[#FFD600] text-black border border-black font-black font-mono text-xs px-1.5 rounded-[2px] leading-tight shadow-sm">{car.regMark || '未出牌'}</span>
+                                                {car.crossBorder?.mainlandPlate && (<span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[10px] px-1.5 rounded-[2px] leading-tight shadow-sm`}>{car.crossBorder.mainlandPlate}</span>)}
+                                            </div>
+                                            <ChevronRight size={16} className={`ml-auto mt-0.5 ${activeCbVehicleId === car.id ? 'text-blue-500' : 'text-gray-300'}`}/>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1 items-center justify-between mt-1"><div className="flex gap-1">{cbTags.map((tag: any, i: number) => (<span key={i} className={`text-[9px] px-1 py-0.5 rounded font-bold ${tag.color}`}>{tag.label}</span>))}</div>{car.crossBorder?.quotaNumber && (<span className="text-[9px] font-mono text-gray-400 truncate max-w-[60px]">#{car.crossBorder.quotaNumber}</span>)}</div>
+                                    </div>
                                 </div>
+                            );
+                        })}
+                    </div>
+                </div>
 
-                                {/* 右下角：價格懸浮 */}
-                                <div className="absolute bottom-2 right-2 z-20">
-                                    <span className="bg-white/95 backdrop-blur text-slate-900 font-black px-2 py-1 rounded-lg shadow-lg text-sm border border-slate-200/50">
-                                        {formatCurrency(car.price)}
-                                    </span>
+                <div className={`flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col ${isMobileDetail ? 'fixed inset-0 z-40 m-0 rounded-none' : 'hidden md:flex'}`}>
+                    {activeCar ? (
+                        <>
+                            <div className="p-4 border-b bg-slate-50 flex justify-between items-center flex-none">
+                                <div className="flex items-center gap-2"><button onClick={handleBackToList} className="md:hidden p-2 -ml-2 text-slate-500 hover:text-slate-800"><ChevronLeft size={24}/></button>
+                                  <div className="flex flex-col gap-1.5">
+                                      <div className="flex items-center gap-2">
+                                          <span className="bg-[#FFD600] text-black border-[2px] border-black font-black font-mono text-lg px-2 py-0.5 rounded shadow-sm leading-none">{activeCar.regMark || '未出牌'}</span>
+                                          {activeCar.crossBorder?.mainlandPlate && (
+                                              <span className={`${activeCar.crossBorder.mainlandPlate.startsWith('粵Z') || activeCar.crossBorder.mainlandPlate.startsWith('粤Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border-[2px] font-bold font-mono text-lg px-2 py-0.5 rounded shadow-sm leading-none`}>
+                                                  {activeCar.crossBorder.mainlandPlate}
+                                              </span>
+                                          )}
+                                      </div>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setShowDocModal(true)} className="px-3 py-2 bg-slate-800 text-white rounded text-xs hover:bg-slate-700 flex items-center shadow-md"><FileText size={14} className="mr-1"/> 文件交收</button>
+                                    <button onClick={() => setEditingVehicle(activeCar)} className="px-4 py-2 border rounded text-xs hover:bg-slate-50 flex items-center"><Edit size={12} className="mr-1"/> 編輯資料</button>
                                 </div>
                             </div>
 
-                           {/* 🍏 下半部：改為 bg-transparent 讓背景毛玻璃質感透視過來 */}
-                            <div className="p-4 flex-1 flex flex-col bg-transparent">
-                                <div className="flex justify-between items-start mb-1 gap-2">
-                                    <div className="font-bold text-sm text-slate-800 leading-snug line-clamp-1">
-                                        {car.year} {car.make} {car.model}
-                                    </div>
-                                    <div className="bg-[#FFD600] text-black border-2 border-black font-black font-mono text-xs px-1.5 py-0.5 rounded-[3px] shadow-sm whitespace-nowrap flex-none">
-                                        {car.regMark || '未出牌'}
-                                    </div>
-                                </div>
+                            {/* ========================================================= */}
+                            {/* ★★★ 新增：中港車兜圈打卡專屬管理看板 (只對粵港車顯示) ★★★ */}
+                            {/* ========================================================= */}
+                            {(() => {
+                                // ★ 檢查是否為粵港車，若不是，直接回傳 null 隱藏此看板！
+                                const isYueGang = (activeCar.crossBorder?.ports || []).some((p:string) => ['皇崗', '深圳灣', '蓮塘', '沙頭角', '文錦渡', '港珠澳大橋(港)'].includes(p)) || (activeCar.crossBorder?.mainlandPlate || '').includes('港');
+                                if (!isYueGang) return null;
 
-                                {/* 中港車牌與標籤 */}
-                                <div className="flex flex-wrap gap-1 mb-3">
-                                    {car.crossBorder?.mainlandPlate && (
-                                        <span className={`${car.crossBorder.mainlandPlate.startsWith('粵Z') ? 'bg-black text-white border-white' : 'bg-[#003399] text-white border-white'} border font-bold font-mono text-[9px] px-1.5 py-0.5 rounded shadow-sm leading-tight`}>
-                                            {car.crossBorder.mainlandPlate}
-                                        </span>
-                                    )}
-                                    {cbTags.map((t,i) => <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded shadow-sm font-bold ${t.color}`}>{t.label}</span>)}
-                                </div>
-
-                                {/* 規格微標籤 (升級：加入座位與排檔) */}
-                                <div className="flex flex-wrap gap-1.5 mt-auto mb-4">
-                                    {car.colorExt && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200 flex items-center"><div className="w-2 h-2 rounded-full border border-gray-300 mr-1.5 shadow-inner" style={{backgroundColor: getColorHex(car.colorExt)}}></div>{car.colorExt}</span>}
-                                    <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.previousOwners || 0}手</span>
-                                    {/* ★ 新增：座位數 */}
-                                    {car.seating && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.seating}座</span>}
-                                    {/* ★ 新增：排檔 */}
-                                    {car.transmission && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.transmission === 'Manual' ? '手波' : '自動波'}</span>}
-                                    {car.engineSize && <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{car.engineSize}{car.fuelType === 'Electric' ? 'Kw' : 'cc'}</span>}
-                                    {car.mileage ? <span className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">{Number(car.mileage).toLocaleString()}km</span> : null}
-                                </div>
-
-                                {/* 底部操作區 */}
-                                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
-                                    <div className="flex flex-col gap-1 items-start text-[10px]">
-                                        {car.licenseExpiry && (() => {
-                                            const isExp = new Date(car.licenseExpiry) < new Date();
-                                            return <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${isExp?'bg-red-50 text-red-600 border-red-200':'bg-slate-50 text-slate-500 border-slate-200'}`}>牌費: {car.licenseExpiry} {isExp&&'!'}</span>;
-                                        })()}
+                                // ★ 宣告一個純 any 變數，徹底封印 TypeScript 對這台車的嚴格審查
+                                const anyCar = activeCar as any;
+                                const lastOutDate = anyCar.lastOutboundDate || anyCar.crossBorder?.lastOutboundDate;
+                                
+                                let loopDiff = null;
+                                let deadlineStr = '無';
+                                if (lastOutDate) {
+                                    // 只有在有出境日期的情況下，才計算 90 天死線
+                                    const deadline = new Date(new Date(lastOutDate).getTime() + 90 * 24 * 60 * 60 * 1000);
+                                    loopDiff = Math.ceil((deadline.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                    deadlineStr = deadline.toISOString().split('T')[0];
+                                }
+                                
+                                return (
+                                    <div className="bg-slate-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center p-3 md:px-4 border-b border-slate-800 shadow-inner flex-none gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-white/10 p-2 rounded-lg">
+                                                {lastOutDate 
+                                                    ? <RefreshCw size={20} className={loopDiff !== null && loopDiff <= 14 ? 'text-red-400 animate-spin-slow' : 'text-amber-400'}/> 
+                                                    : <Building2 size={20} className="text-emerald-400" />
+                                                }
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-sm flex items-center gap-2 tracking-wide">
+                                                    強制 3 個月兜圈管理
+                                                    {lastOutDate ? (
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold font-mono border ${loopDiff !== null && loopDiff < 0 ? 'bg-red-500/20 text-red-300 border-red-500/50' : loopDiff !== null && loopDiff <= 30 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-green-500/20 text-green-300 border-green-500/50'}`}>
+                                                            {loopDiff !== null && loopDiff < 0 ? `已逾期 ${Math.abs(loopDiff)} 天` : `剩餘 ${loopDiff} 天`}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold border bg-slate-800 text-emerald-400 border-emerald-500/30">
+                                                            📍 在港停留 (無須計時)
+                                                        </span>
+                                                    )}
+                                                </h4>
+                                                <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                                                    出境狀態：<span className={lastOutDate ? 'text-amber-300 font-bold' : 'text-emerald-300 font-bold'}>{lastOutDate ? `已出境 (${lastOutDate})` : '目前在香港'}</span> 
+                                                    {lastOutDate && <span className="ml-3">強制死線：<span className={loopDiff !== null && loopDiff < 0 ? 'text-red-400' : 'text-slate-300'}>{deadlineStr}</span></span>}
+                                                </div>
+                                            </div>
+                                        </div>
                                         
-                                        {/* ★ 進度徽章移到這裡，與牌費上下排列 */}
-                                        {logisticsBadge && (
-                                            <span className={`px-2 py-1 rounded-md font-bold border shadow-sm ${logisticsBadge.color}`}>
-                                                {logisticsBadge.text}
-                                            </span>
-                                        )}
+                                        <div className="flex w-full md:w-auto gap-2 items-center">
+                                            <input 
+                                                type="date" 
+                                                value={lastOutDate || ''}
+                                                onChange={(e) => updateVehicle(activeCar.id!, { lastOutboundDate: e.target.value } as any)}
+                                                className="bg-black/30 border border-white/20 text-white text-xs px-2 py-2 rounded-lg outline-none flex-1 md:w-36 cursor-pointer focus:border-blue-400 transition-colors font-mono"
+                                                title="手動修改日期"
+                                            />
+                                            {lastOutDate ? (
+                                                <button 
+                                                    onClick={() => {
+                                                        // ★ 核心邏輯：司機回港，清空出境日期，停止計時
+                                                        updateVehicle(activeCar.id!, { lastOutboundDate: '' } as any);
+                                                        alert('✅ 司機已回港！已停止兜圈計時。');
+                                                    }}
+                                                    className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center whitespace-nowrap"
+                                                >
+                                                    <Check size={14} className="mr-1"/> 已回港 (解除計時)
+                                                </button>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => {
+                                                        // ★ 核心邏輯：司機出境，設定今日為出境日期，開始 90 天計時
+                                                        const todayStr = new Date().toISOString().split('T')[0];
+                                                        updateVehicle(activeCar.id!, { lastOutboundDate: todayStr } as any);
+                                                        alert('🚗 登記出境成功！已開始 90 天兜圈倒數。');
+                                                    }}
+                                                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center whitespace-nowrap"
+                                                >
+                                                    <ArrowRight size={14} className="mr-1"/> 登記出境 (開始計時)
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
-                                        {(!car.licenseExpiry && !logisticsBadge) && <span className="text-gray-300">-</span>}
+                            <div className="p-4 border-b overflow-x-auto whitespace-nowrap flex gap-3 bg-slate-50/30 flex-none pb-2 scrollbar-hide">
+                                {Object.entries(dateFields).map(([key, label]) => {
+                                    const dateVal = (activeCar.crossBorder as any)?.[key]; if(!dateVal) return null;
+                                    const days = getDaysRemaining(dateVal);
+                                    let color = "bg-green-50 border-green-200 text-green-700"; if (days! < 0) color = "bg-red-50 border-red-200 text-red-700 font-bold"; else if (days! <= 30) color = "bg-amber-50 border-amber-200 text-amber-700 font-bold";
+                                    return (<div key={key} className={`inline-block p-2 rounded-lg border text-center min-w-[100px] ${color} group relative snap-center`}><div className="text-[10px] opacity-70 mb-1">{label}</div><div className="text-sm font-mono">{dateVal}</div><div className="text-[10px]">{days! < 0 ? `過期 ${Math.abs(days!)}天` : `剩 ${days}天`}</div><button onClick={(e) => { e.stopPropagation(); convertDateToTask(key, label, dateVal); }} className="absolute inset-0 bg-blue-600/90 text-white text-[10px] font-bold opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-lg transition-opacity"><DollarSign size={12} className="mr-1"/> 轉收費</button></div>);
+                                })}
+                            </div>
+
+                           {/* 1. 原本的文件交收狀態 */}
+                            {(activeCar.crossBorder?.documentLogs?.length || 0) > 0 && (
+                                <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100 flex items-center gap-3 overflow-x-auto whitespace-nowrap scrollbar-hide">
+                                    <span className="text-[10px] font-bold text-yellow-800 uppercase">文件狀態:</span>
+                                    {(() => { const logs = activeCar.crossBorder!.documentLogs!; const lastLog = logs[logs.length-1]; return (<span className="text-xs text-slate-600 flex items-center"><span className={`w-2 h-2 rounded-full mr-1 ${lastLog.action==='CheckIn'?'bg-green-500':'bg-red-500'}`}></span>{lastLog.docName} {lastLog.action==='CheckIn'?'已收':'已交'} ({lastLog.handler} @ {lastLog.timestamp.split(' ')[0]})</span>); })()}
+                                    <button onClick={() => setShowDocModal(true)} className="text-[10px] text-blue-600 underline ml-auto">查看詳情</button>
+                                </div>
+                            )}
+
+                            {/* 2. ★ 升級版 2.0：智能模糊關聯雷達 + 黑名單排除機制 ★ */}
+                            {(() => {
+                                // 將字串去空白、轉大寫，保留中英數字
+                                const normalize = (p?: string) => (p || '').replace(/[^A-Za-z0-9\u4e00-\u9fa5]/ig, '').toUpperCase();
+
+                                // 1. 收集這台車「所有的身份特徵」(長度 > 1 才能比對，避免單字誤判)
+                                const carFeatures = [
+                                    normalize(activeCar.regMark),
+                                    normalize(activeCar.crossBorder?.mainlandPlate),
+                                    normalize(activeCar.chassisNo),
+                                    normalize(activeCar.crossBorder?.quotaNumber),
+                                    normalize(activeCar.crossBorder?.hkCompany),
+                                    normalize(activeCar.crossBorder?.mainlandCompany),
+                                    normalize(activeCar.crossBorder?.driver1),
+                                    normalize(activeCar.crossBorder?.driver2),
+                                    normalize(activeCar.crossBorder?.driver3)
+                                ].filter(k => k.length > 1);
+
+                                // ★ 取得這台車專屬的「已隱藏/取消關聯」文件清單 (黑名單)
+                                const hiddenDocs = activeCar.crossBorder?.hiddenDocs || [];
+
+                                const relatedDocs = dbEntries?.filter(entry => {
+                                    // 🛑 黑名單過濾：如果這份文件被使用者手動移除了，就不要顯示
+                                    if (hiddenDocs.includes(entry.id)) return false;
+
+                                    // ★ 核心修復 1：車輛嚴格模式 (Strict Vehicle Match)
+                                    // 如果這份文件是「車輛類別」或「牌簿」，絕對不能只靠車主名字關聯！
+                                    // 必須嚴格要求「車牌」或「底盤號」互相吻合，避免把同車主的其他車拉進來。
+                                    if (entry.category === 'Vehicle' || entry.docType === '牌簿 (VRD)') {
+                                        const docPlates = [
+                                            normalize(entry.plateNoHK), normalize(entry.plateNoCN), 
+                                            normalize(entry.relatedPlateNo), normalize(entry.chassisNo)
+                                        ].filter(k => k.length > 1);
+                                        
+                                        const currentCarPlates = [
+                                            normalize(activeCar.regMark), normalize(activeCar.crossBorder?.mainlandPlate), 
+                                            normalize(activeCar.chassisNo)
+                                        ].filter(k => k.length > 1);
+
+                                        // 檢查是否有車牌交集
+                                        const hasPlateMatch = docPlates.some(dp => currentCarPlates.some(cp => dp.includes(cp) || cp.includes(dp)));
+                                        return hasPlateMatch; // 有交集才顯示，沒交集直接剔除
+                                    }
+
+                                    // 整理一般文件的特徵 (Person, Company 等)
+                                    const entryFields = [
+                                        normalize(entry.plateNoHK),
+                                        normalize(entry.plateNoCN),
+                                        normalize(entry.relatedPlateNo),
+                                        normalize(entry.chassisNo),
+                                        normalize(entry.quotaNo),
+                                        normalize(entry.name)
+                                    ].filter(k => k.length > 1);
+                                    
+                                    if (entryFields.length === 0) return false;
+
+                                    // 2. ★ 雙向模糊比對 (Bi-directional Fuzzy Match) 適用於人名/公司名
+                                    return carFeatures.some(carFeat => 
+                                        entryFields.some(entryFeat => 
+                                            carFeat.includes(entryFeat) || entryFeat.includes(carFeat)
+                                        )
+                                    );
+                                }) || [];
+
+                               if (relatedDocs.length === 0) return null;
+
+                                return (
+                                    <div className="px-4 py-2 bg-slate-100 border-b border-slate-200 flex-none transition-all">
+                                        <div 
+                                            className="flex justify-between items-center cursor-pointer select-none"
+                                            onClick={() => setIsRelatedDocsOpen(!isRelatedDocsOpen)}
+                                        >
+                                            <h4 className="text-xs font-bold text-slate-600 flex items-center">
+                                                <Database size={14} className="mr-1.5 text-slate-400"/> 
+                                                關聯資料庫文件 ({relatedDocs.length})
+                                            </h4>
+                                            <div className="bg-white px-2 py-0.5 rounded shadow-sm border border-slate-200 flex items-center gap-1 text-[10px] text-slate-500 font-bold hover:bg-slate-50 transition-colors">
+                                                {isRelatedDocsOpen ? '收起隱藏' : '點擊展開'}
+                                                {isRelatedDocsOpen ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                                            </div>
+                                        </div>
+                                        
+                                        {isRelatedDocsOpen && (
+                                            <div className="flex gap-3 overflow-x-auto pt-4 pb-2 scrollbar-thin animate-in slide-in-from-top-2 fade-in duration-200">
+                                                {relatedDocs.map(doc => {
+                                                    const thumbUrl = doc.attachments?.[0]?.data || doc.images?.[0] || null;
+                                                    
+                                                    return (
+                                                        <div 
+                                                            key={doc.id} 
+                                                            onClick={() => setPreviewDoc(doc)} 
+                                                            className="w-32 bg-white border border-slate-200 rounded-xl p-2 flex flex-col gap-1.5 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group flex-shrink-0 relative mt-1"
+                                                        >
+                                                            {/* ★ 新增：移除關聯按鈕 (Hover 時顯示) */}
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if(confirm('確定要取消關聯此文件嗎？\n(這只會在此車輛面板隱藏該文件，不會刪除資料庫檔案)')) {
+                                                                        const currentHidden = activeCar.crossBorder?.hiddenDocs || [];
+                                                                        updateVehicle(activeCar.id!, {
+                                                                            crossBorder: {
+                                                                                ...activeCar.crossBorder,
+                                                                                hiddenDocs: [...currentHidden, doc.id]
+                                                                            }
+                                                                        } as any);
+                                                                    }
+                                                                }}
+                                                                className="absolute -top-2 -right-2 w-5 h-5 bg-slate-800 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-md z-30"
+                                                                title="隱藏此關聯文件"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+
+                                                            <div className="h-20 bg-slate-50 rounded-lg overflow-hidden relative flex-shrink-0 border border-slate-100 flex items-center justify-center">
+                                                                {thumbUrl ? (
+                                                                    <img src={thumbUrl} alt="doc" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                                ) : (
+                                                                    <FileText size={24} className="text-slate-300 opacity-50"/>
+                                                                )}
+                                                                <div className="absolute top-1 left-1 bg-black/70 text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm z-20">
+                                                                    {doc.docType || '文件'}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-[10px] font-bold text-slate-800 truncate px-1 text-center" title={doc.name}>{doc.name}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="flex gap-2 items-center">
-                                        <button onClick={(e) => { e.stopPropagation(); setShareCleanMode(true); setShareVehicle(car); }} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><Share2 size={16}/></button>
-                                        <button onClick={(e) => { e.stopPropagation(); deleteVehicle(car.id); }} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={16}/></button>
+                                );
+                            })()}
+
+                            {/* ★ 修復：加入底部留白 (手機 pb-24, 電腦 md:pb-20) 避開藍色按鈕 */}
+                            <div className="flex-1 overflow-y-auto p-4 pb-24 md:pb-20 bg-white scrollbar-thin">
+                                <div className="flex justify-between items-end mb-2">
+                                    <h4 className="font-bold text-slate-700 text-sm">收費項目 ({activeCar.crossBorder?.tasks?.length || 0})</h4>
+                                    <div className="flex gap-2">
+                                        {/* ★ 終極升級：跨車合併結帳雷達 */}
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                const targetName = activeCar.crossBorder?.hkCompany || activeCar.crossBorder?.mainlandCompany || activeCar.customerName || '未命名客戶';
+
+                                                // 自動掃描同名車輛
+                                                const relatedCars = inventory.filter(v => 
+                                                    (v.crossBorder?.hkCompany === targetName || v.crossBorder?.mainlandCompany === targetName || v.customerName === targetName)
+                                                    && targetName !== '未命名客戶'
+                                                );
+
+                                                // ★ 升級：如果沒有同名車輛，我們還是要打開彈窗，讓使用者可以「手動輸入其他車牌」加入！
+                                                const baseCars = relatedCars.length > 0 ? relatedCars : [activeCar];
+
+                                                let allCrossCarItems: any[] = [];
+                                                baseCars.forEach(car => {
+                                                    const plate = car.crossBorder?.mainlandPlate || car.regMark || '未出牌';
+                                                    const unpaidTasks = (car.crossBorder?.tasks || []).filter((t:any) => !(car.payments || []).some((p:any) => p.relatedTaskId === t.id));
+                                                    
+                                                    unpaidTasks.forEach((t:any) => {
+                                                        allCrossCarItems.push({
+                                                            ...t,
+                                                            crossId: `${car.id}__${t.id}`,
+                                                            carId: car.id,
+                                                            plateStr: plate
+                                                        });
+                                                    });
+                                                });
+
+                                                if (allCrossCarItems.length === 0) return alert(`目前這台車沒有未繳費項目！(您可以進入跨車開單後再手動加入其他車輛)`);
+                                                
+                                                setCrossTargetName(targetName);
+                                                setCrossAvailableTasks(allCrossCarItems);
+                                                setSelectedTaskIds(allCrossCarItems.map(t => t.crossId)); // 預設全選
+                                                setIsCrossCombineModalOpen(true);
+                                            }}
+                                            className="text-xs bg-purple-600 text-white border border-purple-700 px-3 py-1.5 rounded hover:bg-purple-700 flex items-center font-bold shadow-sm transition-transform active:scale-95"
+                                            title="尋找此客戶名下的所有車輛，合併結算"
+                                        >
+                                            <Database size={14} className="mr-1"/> 跨車合併開單
+                                        </button>
+
+                                        {/* ★ 進階升級：點擊後自動觸發智能日期篩選並打開勾選彈窗 */}
+                                        {(activeCar.crossBorder?.tasks || []).length > 0 && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    const tasks = activeCar.crossBorder?.tasks || [];
+                                                    if (tasks.length === 0) return;
+
+                                                    // 🧠 智慧大腦：統計哪個日期的項目最多，作為預設日期
+                                                    const dateCounts: Record<string, number> = {};
+                                                    tasks.forEach((t: any) => {
+                                                        if (t.date) dateCounts[t.date] = (dateCounts[t.date] || 0) + 1;
+                                                    });
+                                                    
+                                                    let maxCount = 0;
+                                                    let defaultDate = '';
+                                                    Object.entries(dateCounts).forEach(([date, count]) => {
+                                                        if (count > maxCount) {
+                                                            maxCount = count;
+                                                            defaultDate = date;
+                                                        }
+                                                    });
+
+                                                    // 自動把這個「同日期」的所有項目 ID 塞進預設勾選陣列
+                                                    const autoSelectedIds = tasks
+                                                        .filter((t: any) => t.date === defaultDate)
+                                                        .map((t: any) => t.id);
+
+                                                    setSelectedTaskIds(autoSelectedIds);
+                                                    setIsCombineModalOpen(true);
+                                                }}
+                                                className="text-xs bg-indigo-600 text-white border border-indigo-700 px-3 py-1.5 rounded hover:bg-indigo-700 flex items-center font-bold shadow-sm transition-transform active:scale-95 animate-pulse"
+                                            >
+                                                🧾 項目合併開單
+                                            </button>
+                                        )}
+                                        <button onClick={openAddModal} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 flex items-center font-bold shadow-sm transition-transform active:scale-95">
+                                            <Plus size={14} className="mr-1"/> 新增項目
+                                        </button>
                                     </div>
+                                </div>
+                                {/* ★ 智能收費清單區塊 (進行中 vs 歷史歸檔) ★ */}
+                                {(() => {
+                                    const cbTasks = activeCar.crossBorder?.tasks || [];
+                                    const pendingActiveTasks = cbTasks.filter((t: any) => !(activeCar.payments || []).some((p: any) => p.relatedTaskId === t.id));
+                                    const historyTasks = cbTasks.filter((t: any) => (activeCar.payments || []).some((p: any) => p.relatedTaskId === t.id));
+
+                                    const historyByDate: Record<string, any[]> = {};
+                                    historyTasks.forEach((t: any) => {
+                                        if (!historyByDate[t.date]) historyByDate[t.date] = [];
+                                        historyByDate[t.date].push(t);
+                                    });
+
+                                    // 共用渲染函數
+                                    const renderTaskRow = (task: any, isHistory: boolean) => {
+                                        const isEditing = editingTaskId === task.id;
+                                        const taskPayments = (activeCar.payments || []).filter((p:any) => p.relatedTaskId === task.id);
+                                        const paid = taskPayments.reduce((s:any,p:any)=>s+Number(p.amount),0);
+                                        const remaining = (task.fee || 0) - paid;
+                                        const isExpanded = expandedPaymentTaskId === task.id;
+
+                                        if (isEditing && !isHistory) {
+                                            return (
+                                                <tr key={task.id} className="bg-blue-50/50">
+                                                    <td className="p-2"><input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})} className="w-full text-xs p-1 border rounded"/></td>
+                                                    <td className="p-2"><input type="text" value={editForm.item} onChange={e => setEditForm({...editForm, item: e.target.value})} className="w-full text-xs p-1 border rounded"/></td>
+                                                    <td className="p-2"><input type="number" value={editForm.fee} onChange={e => setEditForm({...editForm, fee: Number(e.target.value)})} className="w-full text-xs p-1 border rounded text-right"/></td>
+                                                    <td className="p-2 text-center text-xs">編輯中...</td>
+                                                    <td className="p-2 text-center"><button onClick={saveEdit} className="text-green-600 p-1 hover:bg-green-100 rounded"><Check size={16}/></button></td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        return (
+                                            <React.Fragment key={task.id}>
+                                                <tr className={`hover:bg-slate-50 transition-colors ${isExpanded ? 'bg-slate-50' : ''} ${isHistory ? 'opacity-80' : ''}`}>
+                                                    <td className="p-2 text-xs font-mono text-gray-500">{task.date}</td>
+                                                    <td className="p-2">
+                                                        <div className="font-bold text-slate-700 flex items-center gap-2">
+                                                            {task.item}
+                                                            {/* ★ 新增：已開單視覺標記 */}
+                                                            {task.isBilled && <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200 shadow-sm whitespace-nowrap">已開單</span>}
+                                                        </div>
+                                                        {/* ✅ 修復：將備註顯示在項目名稱下方 */}
+                                                        {(task.remark || task.note) && (
+                                                            <div className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[200px]" title={task.remark || task.note}>
+                                                                {task.remark || task.note}
+                                                            </div>
+                                                        )}
+                                                        {/* 單項複製按鈕 */}
+                                                        {isHistory && (
+                                                            <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); duplicateTasks([task]); }} className="ml-2 text-[9px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors" title="複製此單一項目為未繳費">
+                                                                📋 複製
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-2 text-right font-mono">{formatCurrency(task.fee)}</td>
+                                                    <td className="p-2 text-center cursor-pointer" onClick={() => setExpandedPaymentTaskId(isExpanded ? null : task.id)}>
+                                                        <div className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-all ${isHistory ? 'bg-green-100 text-green-700 border-green-200' : (paid > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-100')}`}>
+                                                            {isHistory ? '已結清' : (paid > 0 ? `欠 ${remaining}` : '未付款')} {isExpanded ? <ChevronUp size={10}/> : <ChevronDown size={10}/>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-2 text-center flex justify-center gap-1.5 items-center">
+                                                        {!isHistory && (
+                                                            <button type="button" onClick={() => startEditing(task)} className="text-blue-400 hover:text-blue-600 p-1 hover:bg-blue-50 rounded"><Edit size={14}/></button>
+                                                        )}
+                                                        <button type="button" onClick={() => deleteCbTask(activeCar.id!, task.id)} className="text-red-400 hover:text-red-600 p-1 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                                    </td>
+                                                </tr>
+                                                {isExpanded && (
+                                                    <tr className="bg-slate-50/80 border-b-2 border-slate-100 shadow-inner">
+                                                        <td colSpan={5} className="p-3 pl-8">
+                                                            <div className="flex gap-6 items-start">
+                                                                {!isHistory && (
+                                                                    <div className="w-1/3 min-w-[200px] bg-white p-3 rounded border shadow-sm">
+                                                                        <h5 className="text-xs font-bold text-gray-500 mb-2">新增收款</h5>
+                                                                        <div className="flex flex-col gap-2">
+                                                                            <input type="number" value={newPayAmount} onChange={e => setNewPayAmount(e.target.value)} placeholder={`輸入金額 (餘額: ${remaining})`} className="border p-1.5 text-xs rounded w-full"/>
+                                                                            <select value={newPayMethod} onChange={e => setNewPayMethod(e.target.value)} className="border p-1.5 text-xs rounded w-full">
+                                                                                <option value="Cash">現金 (Cash)</option><option value="Bank Transfer">銀行轉帳</option><option value="Cheque">支票</option><option value="WeChat/Alipay">微信/支付寶</option><option value="Trade-in">對數 (Trade-in)</option>
+                                                                            </select>
+                                                                            <button onClick={() => handleAddPartPayment(task)} className="bg-blue-600 text-white py-1.5 rounded text-xs font-bold hover:bg-blue-700 mt-1">確認收款</button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1">
+                                                                    <h5 className="text-xs font-bold text-gray-500 mb-2">收款紀錄 ({taskPayments.length})</h5>
+                                                                    {taskPayments.length === 0 ? (
+                                                                        <p className="text-xs text-gray-400 italic">尚無收款紀錄</p>
+                                                                    ) : (
+                                                                        <table className="w-full text-xs text-left border-collapse">
+                                                                            <thead><tr className="border-b text-gray-400"><th>日期</th><th>金額</th><th>方式</th><th>操作</th></tr></thead>
+                                                                            <tbody>
+                                                                                {taskPayments.map((p: any) => (
+                                                                                    <tr key={p.id} className="border-b last:border-0 h-8">
+                                                                                        <td className="font-mono text-gray-600">{p.date}</td><td className="font-bold text-green-600">{formatCurrency(p.amount)}</td><td>{p.method}</td>
+                                                                                        <td><button onClick={() => deletePayment(activeCar.id!, p.id)} className="text-red-400 hover:text-red-600"><X size={12}/></button></td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    };
+
+                                    return (
+                                        <div className="w-full">
+                                            {/* 區塊 A：進行中 */}
+                                            <div className="mb-6">
+                                                <h4 className="text-xs font-bold text-slate-500 mb-2 pl-2">進行中 / 待繳費 ({pendingActiveTasks.length})</h4>
+                                                <table className="w-full text-sm border-collapse bg-white rounded-lg overflow-hidden shadow-sm border border-slate-200">
+                                                    <thead className="bg-slate-50 font-bold text-xs">
+                                                        <tr className="border-b border-slate-200">
+                                                            <th className="p-2 text-left">日期</th><th className="p-2 text-left">項目</th><th className="p-2 text-right">費用</th><th className="p-2 text-center">收款狀態</th><th className="p-2 text-center">操作</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {pendingActiveTasks.length === 0 ? (
+                                                            <tr><td colSpan={5} className="text-center py-6 text-slate-400 text-xs bg-slate-50/50">目前無待繳費項目</td></tr>
+                                                        ) : (
+                                                            pendingActiveTasks.map((t:any) => renderTaskRow(t, false))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* 區塊 B：歷史歸檔 (摺疊) */}
+                                            {historyTasks.length > 0 && (
+                                                <details className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-6 mb-10">
+                                                    <summary className="p-3 text-sm font-bold text-slate-600 cursor-pointer hover:bg-slate-100 list-none flex items-center justify-between outline-none">
+                                                        <span className="flex items-center"><History size={16} className="mr-2"/> 查看歷史歸檔紀錄 (已付款 {historyTasks.length} 筆)</span>
+                                                        <ChevronDown size={18} className="transition-transform group-open:rotate-180"/>
+                                                    </summary>
+                                                    <div className="p-4 pt-0 space-y-4 border-t border-slate-200 mt-2 bg-slate-100/50">
+                                                        {Object.entries(historyByDate).sort((a,b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([date, tasks]) => (
+                                                            <div key={date} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                                                                <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                                                                    <span className="text-xs font-bold text-slate-600 font-mono">📅 {date} 批次</span>
+                                                                    <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks(tasks); }} className="text-[10px] bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors">
+                                                                        📋 批量複製此批項目
+                                                                    </button>
+                                                                </div>
+                                                                <table className="w-full text-sm border-collapse">
+                                                                    <tbody className="divide-y divide-slate-100">
+                                                                        {tasks.map((t:any) => renderTaskRow(t, true))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </details>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        </>
+                    ) : ( <div className="flex-1 flex flex-col items-center justify-center text-slate-300"><p>請選擇車輛以管理中港業務</p></div> )}
+                </div>
+            </div>
+
+            {/* ★★★ 全新高階功能：合併開單項目精細選取彈窗 ★★★ */}
+            {isCombineModalOpen && activeCar && (
+                <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[85vh] overflow-hidden">
+                        {/* 彈窗標頭 */}
+                        <div className="p-4 bg-gradient-to-r from-indigo-700 to-slate-950 text-white flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="font-bold text-sm flex items-center gap-1.5">🧾 選擇本次開單項目明細</h3>
+                                <p className="text-[10px] text-indigo-200 mt-0.5">{activeCar.regMark} · 已自動預選同日期最集中之項目</p>
+                            </div>
+                            <button onClick={() => setIsCombineModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full text-white"><X size={16}/></button>
+                        </div>
+
+                        {/* 項目清單勾選區 */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
+                            {(activeCar.crossBorder?.tasks || []).map((task: any) => {
+                                const isChecked = selectedTaskIds.includes(task.id);
+                                return (
+                                    <div 
+                                        key={task.id}
+                                        onClick={() => {
+                                            setSelectedTaskIds(prev => 
+                                                prev.includes(task.id) ? prev.filter(id => id !== task.id) : [...prev, task.id]
+                                            );
+                                        }}
+                                        className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all active:scale-99 ${isChecked ? 'bg-indigo-50 border-indigo-400 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {/* 核心選擇框 Checkbox */}
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-none transition-colors ${isChecked ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-slate-300'}`}>
+                                                {isChecked && <Check size={10} className="text-white font-black" />}
+                                            </div>
+                                            <div>
+                                                <div className="text-xs font-bold text-slate-800">{task.item}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{task.date} {task.note && `· ${task.note}`}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
+                                            {formatCurrency(task.fee)}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* 底部按鈕區 (單車版) */}
+                        <div className="p-4 bg-white border-t border-slate-200 shrink-0 flex flex-col gap-3">
+                            <div className="flex justify-between items-center">
+                                <div className="text-xs text-slate-500 font-medium">
+                                    已選取 <span className="font-mono font-bold text-indigo-600">{selectedTaskIds.length}</span> 項
+                                    (共 {formatCurrency((activeCar.crossBorder?.tasks || []).filter((t:any) => selectedTaskIds.includes(t.id)).reduce((sum:number, t:any) => sum + Number(t.fee), 0))})
+                                </div>
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => setIsCombineModalOpen(false)} className="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold">
+                                        取消
+                                    </button>
+                                    
+                                    {/* ★ 修復：一鍵批量收款引擎 */}
+                                    <button 
+                                        type="button" 
+                                        onClick={() => {
+                                            if (selectedTaskIds.length === 0) return alert("請勾選項目");
+                                            const method = prompt("請輸入統一收款方式 (例如：現金、轉帳、支票、對數)：", "轉帳");
+                                            if (!method) return;
+                                            
+                                            const today = new Date().toISOString().split('T')[0];
+                                            let count = 0;
+                                            
+                                            // ★ 核心修復：先複製出舊的付款陣列，將所有新付款 push 進去，最後只執行一次更新
+                                            const newPayments = [...(activeCar.payments || [])];
+                                            
+                                            selectedTaskIds.forEach(tid => {
+                                                const t = activeCar.crossBorder?.tasks?.find((x:any) => x.id === tid);
+                                                if (t) {
+                                                    newPayments.push({
+                                                        id: `batch_${Date.now()}_${count++}_${Math.random().toString(36).substr(2, 5)}`,
+                                                        date: today,
+                                                        type: 'Service Fee',
+                                                        amount: Number(t.fee) || 0,
+                                                        method: method as any,
+                                                        relatedTaskId: t.id,
+                                                        note: `批量結清`
+                                                    });
+                                                }
+                                            });
+                                            
+                                            // ★ 一次性將整個陣列寫入資料庫
+                                            updateVehicle(activeCar.id!, { payments: newPayments });
+                                            setIsCombineModalOpen(false);
+                                            alert(`✅ 成功批量結清 ${count} 個項目！`);
+                                        }}
+                                        className="px-4 py-2 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold shadow-md transition-transform active:scale-95"
+                                    >
+                                        💰 一鍵批量結清
+                                    </button>
+
+                                    <button 
+                                        type="button" 
+                                        onClick={() => {
+                                            if (selectedTaskIds.length === 0) return alert("請至少勾選一個項目開單！");
+                                            if (!onJumpToDoc) return alert("開單系統連動未就緒");
+
+                                            const mainlandPlate = activeCar.crossBorder?.mainlandPlate || '';
+                                            const combinedPlates = mainlandPlate ? `${activeCar.regMark} / ${mainlandPlate}` : activeCar.regMark || '';
+                                            
+                                            const finalInvoiceItems = (activeCar.crossBorder?.tasks || [])
+                                                .filter((t: any) => selectedTaskIds.includes(t.id))
+                                                .map((t: any) => {
+                                                    const remarkText = t.remark || t.note ? ` - ${t.remark || t.note}` : '';
+                                                    return {
+                                                        id: t.id,
+                                                        desc: mainlandPlate ? `[中港代辦] ${t.item}${remarkText} (${mainlandPlate})` : `[中港代辦] ${t.item}${remarkText}`,
+                                                        amount: t.fee, 
+                                                        isSelected: true
+                                                    };
+                                                });
+
+                                            // ★ 核心：為這些項目打上「已開單」的標記
+                                            const updatedTasks = (activeCar.crossBorder?.tasks || []).map((t: any) => 
+                                                selectedTaskIds.includes(t.id) ? { ...t, isBilled: true } : t
+                                            );
+                                            updateVehicle(activeCar.id!, { crossBorder: { ...activeCar.crossBorder, tasks: updatedTasks } });
+
+                                            const invoiceData = {
+                                                id: null,
+                                                type: 'service_invoice', 
+                                                vehicleId: activeCar.id,
+                                                formData: {
+                                                    companyNameEn: COMPANY_INFO?.name_en || '', 
+                                                    companyNameCh: COMPANY_INFO?.name_ch || '',
+                                                    customerName: activeCar.crossBorder?.hkCompany || activeCar.customerName || '', 
+                                                    customerPhone: activeCar.customerPhone || '', 
+                                                    regMark: combinedPlates, 
+                                                    make: activeCar.make || '', model: activeCar.model || '', chassisNo: activeCar.chassisNo || '', engineNo: activeCar.engineNo || '', year: activeCar.year || '',
+                                                    price: '0',
+                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
+                                                    remarks: mainlandPlate ? `【中港車牌：${mainlandPlate}】\n代辦業務收費` : '代辦業務收費'
+                                                },
+                                                checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+                                                docItems: finalInvoiceItems,
+                                                depositItems: [], showTerms: false
+                                            };
+
+                                            setIsCombineModalOpen(false);
+                                            onJumpToDoc(invoiceData); 
+                                        }}
+                                        className="px-6 py-2 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md shadow-indigo-200 transition-transform active:scale-95"
+                                    >
+                                        產生發票草稿 ↗
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                        )})}
+                    </div>
                 </div>
-              </div>
-             </div>
-          )}
+            )}
 
-          {/* Settings Tab */}
-          {activeTab === 'settings' && (
-              <div className="flex-1 overflow-y-auto">
-                  <SettingsManager 
-                      settings={settings}
-                      setSettings={setSettings}
-                      db={db}
-                      storage={storage}
-                      staffId={staffId}
-                      appId={appId}
-                      inventory={visibleInventory}
-                      updateSettings={updateSettings}
-                      addSystemLog={addSystemLog}
-                      systemUsers={systemUsers}
-                      updateSystemUsers={updateSystemUsers}
-                  />
-              </div>
-          )}
+            {/* ★★★ 全新高階功能：跨車項目精細選取彈窗 ★★★ */}
+            {isCrossCombineModalOpen && (
+                <div className="absolute inset-0 z-[65] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-purple-200 flex flex-col max-h-[85vh] overflow-hidden">
+                        <div className="p-4 bg-gradient-to-r from-purple-700 to-indigo-900 text-white flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="font-bold text-sm flex items-center gap-1.5"><Database size={16}/> 跨車合併開單</h3>
+                                <p className="text-[10px] text-purple-200 mt-0.5">客戶：{crossTargetName} · 請勾選要合併的項目</p>
+                            </div>
+                            <button onClick={() => setIsCrossCombineModalOpen(false)} className="p-1 hover:bg-white/20 rounded-full text-white"><X size={16}/></button>
+                        </div>
 
-        {activeTab === 'business' && (
-             <BusinessProcessModule 
-                db={db} 
-                staffId={staffId!} 
-                appId={appId} 
-                inventory={visibleInventory} 
-                updateVehicle={updateVehicle} // ★ 關鍵：必須傳入此函數以更新流程狀態
-                triggerSmartPrint={triggerSmartPrint} // ★ 新增：傳入列印引擎，讓運輸署打包單可以印出 PDF
-            />
-        )}
+                        {/* ★ 新增：手動加入其他車牌的搜尋列 */}
+                        <div className="p-3 bg-slate-50 border-b border-purple-100 flex gap-2 shrink-0 relative items-center">
+                            <span className="text-[10px] font-bold text-purple-700 whitespace-nowrap">➕ 加入其他車輛：</span>
+                            <div className="relative flex-1">
+                                <input 
+                                    list="cross_car_add_list"
+                                    value={crossSearchText}
+                                    onChange={e => {
+                                        setCrossSearchText(e.target.value);
+                                        const cleanVal = e.target.value.toLowerCase().replace(/[\s-]/g, '');
+                                        const selectedCar = inventory.find(c => 
+                                            (c.regMark || '').toLowerCase().replace(/[\s-]/g, '') === cleanVal || 
+                                            (c.crossBorder?.mainlandPlate || '').toLowerCase().replace(/[\s-]/g, '') === cleanVal
+                                        );
+                                        
+                                        if (selectedCar) {
+                                            const plate = selectedCar.crossBorder?.mainlandPlate || selectedCar.regMark || '未出牌';
+                                            const unpaidTasks = (selectedCar.crossBorder?.tasks || []).filter((t:any) => !(selectedCar.payments || []).some((p:any) => p.relatedTaskId === t.id));
+                                            
+                                            if(unpaidTasks.length === 0) {
+                                                alert(`車牌 ${e.target.value} 目前沒有未繳費項目`);
+                                                setCrossSearchText('');
+                                                return;
+                                            }
 
-        {/* Create Doc Tab - 已分離至獨立元件 */}
-        {activeTab === 'create_doc' && (
-              <CreateDocModule 
-                  inventory={visibleInventory} 
-                  openPrintPreview={openPrintPreview} 
-                  db={db}
-                  staffId={staffId!}
-                  appId={appId}
-                  externalRequest={externalDocRequest}
-                  setExternalRequest={setExternalDocRequest}
-                  COMPANY_INFO={COMPANY_INFO}
-                  currentUser={currentUser} 
-                  allSalesDocs={allSalesDocs} // ★★★ 新增：傳入所有歷史單據，供智能防重複查驗使用
-              />
-          )}
-          
-        {/* ★★★ 新增：資料庫模塊渲染 ★★★ */}
-        {activeTab === 'database' && <DatabaseModule 
-          db={db}
-                  staffId={staffId}
-                  appId={appId}
-                  settings={settings}
-                  editingEntry={editingEntry}
-                  setEditingEntry={setEditingEntry}
-                  isDbEditing={isDbEditing}
-                  setIsDbEditing={setIsDbEditing}
-                  inventory={visibleInventory}
-                  currentUser={currentUser} 
-                  systemUsers={systemUsers}/>}
+                                            const newItems = unpaidTasks.map((t:any) => ({
+                                                ...t,
+                                                crossId: `${selectedCar.id}__${t.id}`,
+                                                carId: selectedCar.id,
+                                                plateStr: plate
+                                            }));
+
+                                            // 去重複防呆
+                                            const existingIds = crossAvailableTasks.map(t => t.crossId);
+                                            const itemsToAdd = newItems.filter(t => !existingIds.includes(t.crossId));
+
+                                            if (itemsToAdd.length > 0) {
+                                                setCrossAvailableTasks(prev => [...prev, ...itemsToAdd]);
+                                                setSelectedTaskIds(prev => [...prev, ...itemsToAdd.map(t => t.crossId)]);
+                                                alert(`✅ 已將 ${plate} 的 ${itemsToAdd.length} 項未繳費項目加入合併清單！`);
+                                            }
+                                            setCrossSearchText('');
+                                        }
+                                    }}
+                                    placeholder="🔍 輸入其他車牌自動匯入未繳費項目..."
+                                    className="w-full text-xs p-2 border border-purple-200 rounded outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-200 font-bold bg-white"
+                                />
+                                <datalist id="cross_car_add_list">
+                                    {cbVehicles.filter(c => c.id !== activeCar.id).map(c => (
+                                        <option key={c.id} value={c.crossBorder?.mainlandPlate || c.regMark}>
+                                            {c.crossBorder?.hkCompany || c.customerName || '未命名'}
+                                        </option>
+                                    ))}
+                                </datalist>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
+                            {crossAvailableTasks.map((task: any) => {
+                                const isChecked = selectedTaskIds.includes(task.crossId);
+                                return (
+                                    <div 
+                                        key={task.crossId}
+                                        onClick={() => {
+                                            setSelectedTaskIds(prev => 
+                                                prev.includes(task.crossId) ? prev.filter(id => id !== task.crossId) : [...prev, task.crossId]
+                                            );
+                                        }}
+                                        className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all active:scale-99 ${isChecked ? 'bg-purple-50 border-purple-400 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-none transition-colors ${isChecked ? 'bg-purple-600 border-purple-600' : 'bg-white border-slate-300'}`}>
+                                                {isChecked && <Check size={10} className="text-white font-black" />}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <span className="text-[9px] bg-slate-800 text-white px-1.5 py-[1px] rounded font-mono font-bold">{task.plateStr}</span>
+                                                    <span className="text-xs font-bold text-slate-800">{task.item}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 font-mono">{task.date} {task.note && `· ${task.note}`}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs font-mono font-bold text-purple-700 bg-white px-2 py-1 rounded border border-purple-100">
+                                            {formatCurrency(task.fee)}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="p-4 bg-white border-t border-slate-200 shrink-0 flex justify-between items-center">
+                            <div className="text-xs text-slate-500 font-medium">
+                                已選取 <span className="font-mono font-bold text-purple-600">{selectedTaskIds.length}</span> 項
+                                (共 {formatCurrency(crossAvailableTasks.filter(t => selectedTaskIds.includes(t.crossId)).reduce((sum, t) => sum + Number(t.fee), 0))})
+                            </div>
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setIsCrossCombineModalOpen(false)} className="px-4 py-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold">
+                                    取消
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => {
+                                        if (selectedTaskIds.length === 0) return alert("請至少勾選一個項目開單！");
+                                        if (!onJumpToDoc) return alert("開單系統連動未就緒");
+
+                                        // 收集打勾的項目
+                                        const finalItems = crossAvailableTasks.filter(t => selectedTaskIds.includes(t.crossId));
+                                        
+                                        // 收集所有牽涉到的車牌
+                                        const involvedPlates = Array.from(new Set(finalItems.map(t => t.plateStr)));
+
+                                        // ★ 核心：寫入「已開單」標記 (因為跨車，所以要分開寫入不同車輛的資料庫)
+                                        const carsToUpdate = new Set(finalItems.map(t => t.carId));
+                                        carsToUpdate.forEach(cid => {
+                                            const carObj = inventory.find(v => v.id === cid);
+                                            if (carObj) {
+                                                const taskIdsToMark = finalItems.filter(t => t.carId === cid).map(t => t.id);
+                                                const updatedTasks = (carObj.crossBorder?.tasks || []).map((t:any) => 
+                                                    taskIdsToMark.includes(t.id) ? { ...t, isBilled: true } : t
+                                                );
+                                                updateVehicle(cid, { crossBorder: { ...carObj.crossBorder, tasks: updatedTasks } });
+                                            }
+                                        });
+
+                                        const invoiceData = {
+                                            id: null,
+                                            type: 'service_invoice',
+                                            vehicleId: activeCar!.id, // 依附在當前開啟的車下
+                                            formData: {
+                                                companyNameEn: COMPANY_INFO?.name_en || '', 
+                                                companyNameCh: COMPANY_INFO?.name_ch || '',
+                                                customerName: crossTargetName, 
+                                                customerPhone: activeCar!.customerPhone || '', 
+                                                regMark: '詳見明細 (Multiple)', 
+                                                make: '車隊結帳', model: '', chassisNo: '', engineNo: '', year: '',
+                                                price: '0',
+                                                docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0],
+                                                remarks: `【車隊跨車合併帳單】\n包含車輛：${involvedPlates.join(', ')}`
+                                            },
+                                            checklist: { vrd: false, keys: false, tools: false, manual: false, other: '' },
+                                            docItems: finalItems.map(t => ({
+                                                id: t.crossId,
+                                                desc: `[${t.plateStr}] ${t.item}${t.remark || t.note ? ` - ${t.remark || t.note}` : ''}`,
+                                                amount: t.fee,
+                                                isSelected: true
+                                            })),
+                                            depositItems: [], showTerms: false
+                                        };
+
+                                        setIsCrossCombineModalOpen(false);
+                                        onJumpToDoc(invoiceData); 
+                                    }}
+                                    className="px-6 py-2 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-md transition-transform active:scale-95"
+                                >
+                                    產生跨車發票 ↗
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         
 
-        {activeTab === 'media_center' && (
-              <MediaLibraryModule 
-                  db={db} 
-                  storage={storage} 
-                  staffId={staffId} 
-                  appId={appId} 
-                  settings={settings}
-                  inventory={visibleInventory} 
-                  currentUser={currentUser} /* 👈 核心修正：將使用者的權限屬性傳遞進去 */
-              />
-          )}
+            {/* ★★★ 升級版：綜合文件與圖片預覽 Modal ★★★ */}
+            {previewDoc && (
+                <div 
+                    className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in touch-none" 
+                    onClick={() => setPreviewDoc(null)}
+                >
+                    <div 
+                        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl" 
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="bg-slate-900 p-4 flex justify-between items-center text-white shrink-0">
+                            <h3 className="font-bold flex items-center text-sm"><Database size={16} className="mr-2 text-blue-400"/> 文件資料預覽</h3>
+                            <button onClick={() => setPreviewDoc(null)} className="p-1 hover:bg-white/20 rounded-full transition-colors"><X size={18}/></button>
+                        </div>
+                        
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-5 bg-slate-50 flex flex-col gap-4 scrollbar-thin">
+                            {/* 文字資料區 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">名稱 (Name)</span>
+                                    <span className="font-black text-slate-800 text-lg leading-tight">{previewDoc.name || '-'}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">文件分類</span>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">{previewDoc.category || '未分類'}</span>
+                                        {previewDoc.docType && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs border">{previewDoc.docType}</span>}
+                                    </div>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">電話 (Phone)</span>
+                                    <span className="font-mono font-bold text-slate-700">{previewDoc.phone || '-'}</span>
+                                </div>
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-0.5">證件號碼 (ID/BR)</span>
+                                    <span className="font-mono font-bold text-slate-700">{previewDoc.idNumber || '-'}</span>
+                                </div>
+                            </div>
 
-          {/* ★★★ 新增：掛載獨立的海外訂車管家模塊 ★★★ */}
-        {activeTab === 'import_orders' && (
-            <div className="h-full animate-fade-in">
-                <ImportOrderManager 
-                    db={db}
-                    staffId={staffId}
-                    appId={appId}
-                    inventory={visibleInventory}
-                    settings={settings}
-                    systemUsers={systemUsers}
-                />
-            </div>
-        )}
+                            {previewDoc.description && (
+                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-bold block mb-1">備註 (Remarks)</span>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{previewDoc.description}</p>
+                                </div>
+                            )}
 
-       
-        {activeTab === 'company_ledger' && (
-            <div className="h-full animate-fade-in flex-1 overflow-y-auto">
-                <CompanyFinanceLedger 
-                    db={db}
-                    appId={appId}
-                    staffId={staffId}
-                    currentUser={currentUser}
-                    settings={settings}
-                />
-            </div>
-        )}
+                            {/* 圖片區：同時相容新版 attachments 與舊版 images */}
+                            {(() => {
+                                const imgUrl = previewDoc.attachments?.[0]?.data || previewDoc.images?.[0];
+                                if (!imgUrl) return null;
+                                return (
+                                    <div className="mt-2">
+                                        <span className="text-[10px] text-slate-400 font-bold block mb-2 px-1">附件圖片預覽</span>
+                                        <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
+                                            <img src={imgUrl} className="w-full h-auto max-h-[50vh] object-contain rounded-lg" alt="Document Attachment" />
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </div>
+            )}
 
-         </div>       
-      </main>
-
-     {/* ========================================================= */}
-      {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
-      {/* ========================================================= */}
-      {staffId && !editingVehicle && activeTab !== 'inventory_add' && !isPreviewMode && activeTab !== 'cross_border' && (
-          <div className="fixed bottom-6 right-4 md:right-6 z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
-              
-              <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
-                  
-                  {/* 選項 2: T牌打卡 */}
-                  <div className="flex items-center gap-3 group">
-                      <span className="bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold">試車牌 (T牌) 打卡</span>
-                      <button 
-                          onClick={() => { setIsTPlateModalOpen(true); setIsFabMenuOpen(false); }}
-                          className="pointer-events-auto w-12 h-12 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
-                      >
-                          <Car size={20} />
-                      </button>
-                  </div>
-
-                  {/* 選項 1: 團隊協作中心 */}
-                  <div className="flex items-center gap-3 group">
-                      <span className="bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold">團隊協作 / 對話</span>
-                      <button 
-                          onClick={() => { setIsTeamHubOpen(true); setIsFabMenuOpen(false); }}
-                          className="pointer-events-auto w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
-                      >
-                          <MessageCircle size={20} />
-                      </button>
-                  </div>
-              </div>
-
-              {/* 主按鈕 */}
-              <button 
-                  onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
-                  className={`pointer-events-auto relative w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 active:scale-95 ${isFabMenuOpen ? 'bg-slate-800 rotate-45' : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-110'}`}
-                  title="系統功能表"
-              >
-                  {isFabMenuOpen ? <Plus className="text-white" size={28} /> : (
-                      <>
-                          <Menu className="text-white" size={24} />
-                          <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
-                      </>
-                  )}
-              </button>
-          </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* ★★★ 掛載 T牌打卡專屬彈窗 Modal ★★★ */}
-      {/* ========================================================= */}
-      {isTPlateModalOpen && (
-          <div className="fixed inset-0 z-[9999] bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 md:p-6 animate-fade-in">
-              <div className="bg-slate-50 w-full max-w-4xl max-h-[95vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden">
-                  <div className="p-4 md:px-6 md:py-4 bg-white border-b border-slate-100 flex justify-between items-center z-10 flex-none">
-                      <h2 className="text-lg md:text-xl font-black text-slate-800 flex items-center gap-2">
-                          <Car className="text-emerald-600"/> 試車牌 (T牌) 智能管理
-                      </h2>
-                      <button onClick={() => setIsTPlateModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
-                          <X size={20}/>
-                      </button>
-                  </div>
-                  <div className="p-2 md:p-4 overflow-y-auto flex-1 scrollbar-thin">
-                      {/* 直接把組件包在這裡面 */}
-                      <TradePlateWidget db={db} appId={appId} staffId={staffId!} />
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* 以下接續您原本的 ChangePasswordModal 與 TeamHubDrawer */}
-
-      {/* ★★★ 新增：掛載修改密碼彈窗 ★★★ */}
-      <ChangePasswordModal 
-          isOpen={isChangePwdOpen}
-          onClose={() => setIsChangePwdOpen(false)}
-          staffId={staffId}
-          systemUsers={systemUsers}
-          updateSystemUsers={updateSystemUsers}
-      />
-
-      {/* ★★★ 新增：掛載團隊協作抽屜 ★★★ */}
-      <TeamHubDrawer 
-          isOpen={isTeamHubOpen}
-          onClose={() => setIsTeamHubOpen(false)}
-          db={db}
-          staffId={staffId}
-          appId={appId}
-          systemUsers={systemUsers}
-          inventory={visibleInventory}
-          setEditingVehicle={setEditingVehicle}
-          currentUser={currentUser}
-          sendPushNotification={sendPushNotification}
-      />
-
-    </div>
-  );
+        </div>
+    );
 }
