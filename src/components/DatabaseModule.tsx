@@ -1212,7 +1212,7 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                                         <input 
                                                                             autoFocus
                                                                             type="text"
-                                                                            placeholder="🔍 輸入車牌、品牌或型號..."
+                                                                            placeholder="🔍 輸入車牌、底盤號、品牌或型號..."
                                                                             value={plateSearchText}
                                                                             onChange={e => setPlateSearchText(e.target.value)}
                                                                             className="w-full bg-white p-2 rounded border border-blue-300 text-xs outline-none focus:ring-2 focus:ring-blue-200 transition-all"
@@ -1239,13 +1239,21 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                                                             });
 
                                                                             if (plateSearchText) {
-                                                                                const keyword = plateSearchText.toUpperCase();
-                                                                                sortedVehicles = sortedVehicles.filter(v => 
-                                                                                    (v.regMark || '').toUpperCase().includes(keyword) ||
-                                                                                    (v.make || '').toUpperCase().includes(keyword) ||
-                                                                                    (v.model || '').toUpperCase().includes(keyword) ||
-                                                                                    (v.crossBorder?.mainlandPlate || '').toUpperCase().includes(keyword)
-                                                                                );
+                                                                                // ★ 智能搜尋：移除搜尋詞的空格與橫線，並全部轉小寫
+                                                                                const cleanKeyword = plateSearchText.toLowerCase().replace(/[\s-]/g, '');
+                                                                                sortedVehicles = sortedVehicles.filter(v => {
+                                                                                    const sReg = (v.regMark || '').toLowerCase().replace(/[\s-]/g, '');
+                                                                                    const sMake = (v.make || '').toLowerCase();
+                                                                                    const sModel = (v.model || '').toLowerCase();
+                                                                                    const sPlate = (v.crossBorder?.mainlandPlate || '').toLowerCase().replace(/[\s-]/g, '');
+                                                                                    const sChassis = (v.chassisNo || '').toLowerCase().replace(/[\s-]/g, '');
+
+                                                                                    return sReg.includes(cleanKeyword) ||
+                                                                                           sMake.includes(cleanKeyword) ||
+                                                                                           sModel.includes(cleanKeyword) ||
+                                                                                           sPlate.includes(cleanKeyword) ||
+                                                                                           sChassis.includes(cleanKeyword); // 加入底盤號關聯比對
+                                                                                });
                                                                             }
 
                                                                             if (sortedVehicles.length === 0) {
