@@ -3150,7 +3150,7 @@ const DatabaseSelector = ({
                   <h2 className="text-xl font-bold text-slate-800 whitespace-nowrap">車輛庫存 ({getSortedInventory().length})</h2>
                   <div className="flex items-center gap-2 w-full md:w-auto">
                         <div className="relative flex-1 md:w-64">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size="{16}"/>
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16}/>
                             <input 
                                 type="text" 
                                 placeholder="搜尋車牌、底盤號、型號..." 
@@ -3159,7 +3159,7 @@ const DatabaseSelector = ({
                                 className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
                             />
                         </div>
-                        <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus className="mr-1" size="{16}"/> 入庫</button>
+                        <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus className="mr-1" size={16}/> 入庫</button>
                     </div>
               </div>
               
