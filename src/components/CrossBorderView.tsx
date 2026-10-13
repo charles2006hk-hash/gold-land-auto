@@ -1250,7 +1250,7 @@ export default function CrossBorderView({
                                         取消
                                     </button>
                                     
-                                    {/* ★ 新增：一鍵批量收款引擎 */}
+                                    {/* ★ 修復：一鍵批量收款引擎 */}
                                     <button 
                                         type="button" 
                                         onClick={() => {
@@ -1261,20 +1261,26 @@ export default function CrossBorderView({
                                             const today = new Date().toISOString().split('T')[0];
                                             let count = 0;
                                             
+                                            // ★ 核心修復：先複製出舊的付款陣列，將所有新付款 push 進去，最後只執行一次更新
+                                            const newPayments = [...(activeCar.payments || [])];
+                                            
                                             selectedTaskIds.forEach(tid => {
                                                 const t = activeCar.crossBorder?.tasks?.find((x:any) => x.id === tid);
                                                 if (t) {
-                                                    addPayment(activeCar.id!, {
-                                                        id: `batch_${Date.now()}_${count++}`,
+                                                    newPayments.push({
+                                                        id: `batch_${Date.now()}_${count++}_${Math.random().toString(36).substr(2, 5)}`,
                                                         date: today,
                                                         type: 'Service Fee',
-                                                        amount: t.fee,
+                                                        amount: Number(t.fee) || 0,
                                                         method: method as any,
                                                         relatedTaskId: t.id,
                                                         note: `批量結清`
                                                     });
                                                 }
                                             });
+                                            
+                                            // ★ 一次性將整個陣列寫入資料庫
+                                            updateVehicle(activeCar.id!, { payments: newPayments });
                                             setIsCombineModalOpen(false);
                                             alert(`✅ 成功批量結清 ${count} 個項目！`);
                                         }}
