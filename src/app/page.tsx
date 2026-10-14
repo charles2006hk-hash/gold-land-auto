@@ -2613,13 +2613,23 @@ const deleteVehicle = async (id: string) => {
     if (filterSource === 'partner') sorted = sorted.filter(v => v.sourceType === 'partner');
 
     if (searchTerm) {
-        const lowerSearch = searchTerm.toLowerCase();
-        sorted = sorted.filter(v => 
-            (v.regMark && v.regMark.toLowerCase().includes(lowerSearch)) ||
-            (v.make && v.make.toLowerCase().includes(lowerSearch)) ||
-            (v.model && v.model.toLowerCase().includes(lowerSearch)) ||
-            (v.chassisNo && v.chassisNo.toLowerCase().includes(lowerSearch))
-        );
+        // ★ 智能搜尋：移除搜尋詞的空格與橫線，並全部轉小寫
+        const cleanSearch = searchTerm.toLowerCase().replace(/[\s-]/g, '');
+        
+        sorted = sorted.filter(v => {
+            const safeRegMark = (v.regMark || '').toLowerCase().replace(/[\s-]/g, '');
+            const safeMake = (v.make || '').toLowerCase();
+            const safeModel = (v.model || '').toLowerCase();
+            const safeMainland = (v.crossBorder?.mainlandPlate || '').toLowerCase().replace(/[\s-]/g, '');
+            // 清洗資料庫中的車身號碼
+            const safeChassis = (v.chassisNo || '').toLowerCase().replace(/[\s-]/g, '');
+
+            return safeRegMark.includes(cleanSearch) ||
+                   safeMake.includes(cleanSearch) ||
+                   safeModel.includes(cleanSearch) ||
+                   safeMainland.includes(cleanSearch) ||
+                   safeChassis.includes(cleanSearch); // 支援完整或部分底盤號
+        });
     }
     if (sortConfig) {
       sorted.sort((a, b) => {
@@ -3139,18 +3149,18 @@ const DatabaseSelector = ({
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 flex-none">
                   <h2 className="text-xl font-bold text-slate-800 whitespace-nowrap">車輛庫存 ({getSortedInventory().length})</h2>
                   <div className="flex items-center gap-2 w-full md:w-auto">
-                      <div className="relative flex-1 md:w-64">
-                          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
-                          <input 
-                              type="text" 
-                              placeholder="搜尋車牌、型號..." 
-                              value={searchTerm}
-                              onChange={(e) => setSearchTerm(e.target.value)}
-                              className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
-                          />
-                      </div>
-                      <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus size={16} className="mr-1"/> 入庫</button>
-                  </div>
+                        <div className="relative flex-1 md:w-64">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16}/>
+                            <input 
+                                type="text" 
+                                placeholder="搜尋車牌、底盤號、型號..." 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-9 pr-4 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none"
+                            />
+                        </div>
+                        <button onClick={() => {setEditingVehicle({} as Vehicle); setActiveTab('inventory_add');}} className="bg-slate-900 text-white px-3 py-1.5 rounded text-sm flex items-center shadow-sm whitespace-nowrap"><Plus className="mr-1" size={16}/> 入庫</button>
+                    </div>
               </div>
               
               {/* Filter Bar */}
