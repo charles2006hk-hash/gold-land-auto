@@ -1,29 +1,28 @@
 // src/components/InfoWidget.tsx
 import React, { useState, useEffect } from 'react';
- 
+
 // --- 1. InfoWidget (外部組件) ---
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [portStatus, setPortStatus] = useState<any[]>([]);
-    const [passengerStatus, setPassengerStatus] = useState<any[]>([]); // ★ 新增：旅客口岸狀態
+    const [passengerStatus, setPassengerStatus] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const [tunnelStatus, setTunnelStatus] = useState<any>(null);
-    // ★ 升級為 4 個屏幕輪播：私家車口岸 -> 旅客口岸 -> 過海隧道 -> 新界隧道
     const [trafficScreen, setTrafficScreen] = useState<'ports-car' | 'ports-passenger' | 'tunnels-ch' | 'tunnels-nt'>('ports-car');
 
-    // 私家車口岸名稱映射
+    // ★ 修復：加入 'HGP' 支援新版皇崗口岸代碼
     const CAR_PORT_MAPPING: Record<string, string> = {
         'SBC': '深圳灣', 
         'LMC': '皇崗', 
         'LMCC': '皇崗', 
+        'HGP': '皇崗', 
         'HZM': '港珠澳大橋',
         'HYW': '香園圍 (蓮塘)', 
         'MKT': '文錦渡', 
         'STK': '沙頭角'
     };
 
-    // ★ 旅客口岸名稱映射 (根據入境處 API 文件)
     const PASSENGER_PORT_MAPPING: Record<string, string> = {
         'LWS': '羅湖',
         'LSC': '落馬洲支線',
@@ -31,11 +30,10 @@ const InfoWidget = () => {
         'HZM': '港珠澳大橋',
         'HYW': '香園圍 (蓮塘)',
         'MKT': '文錦渡',
-        'HGP': '皇崗', // 注意：旅客 API 中皇崗的代碼是 HGP
+        'HGP': '皇崗', 
         'STK': '沙頭角'
     };
 
-    // 口岸通關時間庫
     const PORT_HOURS: Record<string, string> = {
         '羅湖': '06:30 - 24:00',
         '落馬洲支線': '06:30 - 22:30',
@@ -47,7 +45,6 @@ const InfoWidget = () => {
         '沙頭角': '07:00 - 22:00'
     };
 
-    // 圓點狀態指示器 (對應 0, 1, 2, 4, 99)
     const getStatusIndicator = (code: number) => {
         if (code === 0) return <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)] mx-auto"></div>;
         if (code === 1) return <div className="w-3 h-3 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)] animate-pulse mx-auto"></div>;
@@ -61,7 +58,6 @@ const InfoWidget = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // ★ 輪播控制器：每 8 秒切換一次屏幕 (4屏循環)
     useEffect(() => {
         const interval = setInterval(() => {
             setTrafficScreen(prev => {
@@ -75,7 +71,6 @@ const InfoWidget = () => {
     }, []);
 
     useEffect(() => {
-        // 1. 抓取私家車口岸數據
         const fetchCarTraffic = async () => {
             try {
                 const res = await fetch(`/api/traffic?t=${Date.now()}`);
@@ -113,13 +108,13 @@ const InfoWidget = () => {
             } catch (e) { console.warn("私家車口岸數據延遲"); } finally { setLoading(false); }
         };
 
-        // 2. ★ 抓取旅客 (居民) 口岸數據
+        // ★ 修復：使用 allorigins 作為 CORS Proxy 繞過前端跨域限制
         const fetchPassengerTraffic = async () => {
             try {
-                // 為了避免 CORS，如果直接 fetch 失敗，建議在 Vercel 建立 /api/passengers 代理這支官方 API
-                // 這裡嘗試直接抓取官方 JSON
-                const res = await fetch('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json', { cache: 'no-store' });
-                if (!res.ok) throw new Error('API Error');
+                const targetUrl = encodeURIComponent('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json');
+                const res = await fetch(`https://api.allorigins.win/raw?url=${targetUrl}&t=${Date.now()}`, { cache: 'no-store' });
+                
+                if (!res.ok) throw new Error('CORS Proxy API Error');
                 const data = await res.json();
 
                 if (data && typeof data === 'object') {
@@ -129,8 +124,8 @@ const InfoWidget = () => {
                         if (portName) {
                             formatted.push({
                                 name: portName,
-                                up: data[key].depQueue,   // 出境
-                                down: data[key].arrQueue  // 入境
+                                up: data[key].depQueue,   
+                                down: data[key].arrQueue  
                             });
                         }
                     });
@@ -145,11 +140,10 @@ const InfoWidget = () => {
                     setPassengerStatus(formatted);
                 }
             } catch (e) {
-                console.warn("旅客口岸數據延遲 (若持續失敗，請設定 Vercel API Proxy)");
+                console.warn("旅客口岸數據延遲:", e);
             }
         };
 
-        // 3. 抓取隧道數據
         const fetchTunnels = async () => {
             try {
                 const res = await fetch(`/api/tunnels?t=${Date.now()}`);
@@ -220,7 +214,6 @@ const InfoWidget = () => {
                 </div>
             </div>
             
-            {/* ★ 戰情屏幕輪播區 (加高至 240px 以容納 8 個旅客口岸) */}
             <div className="relative h-[240px]">
                 {/* 第一屏：私家車口岸 */}
                 {trafficScreen === 'ports-car' && (
@@ -268,7 +261,7 @@ const InfoWidget = () => {
                     </div>
                 )}
 
-                {/* 第三屏：過海隧道 (Cross Harbour) */}
+                {/* 第三屏：過海隧道 */}
                 {trafficScreen === 'tunnels-ch' && (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
                         <div className="flex justify-between text-slate-400 text-[10px] mb-1 px-1 border-b border-white/10 pb-1">
@@ -291,7 +284,7 @@ const InfoWidget = () => {
                     </div>
                 )}
 
-                {/* 第四屏：新界隧道 (New Territories) */}
+                {/* 第四屏：新界隧道 */}
                 {trafficScreen === 'tunnels-nt' && (
                     <div className="absolute inset-0 space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-500">
                         <div className="flex justify-between text-slate-400 text-[10px] mb-1 px-1 border-b border-white/10 pb-1">
@@ -315,7 +308,7 @@ const InfoWidget = () => {
                 )}
             </div>
 
-            {/* ★ 底部 4 點小圓點進度指示器 */}
+            {/* 底部小圓點 */}
             <div className="absolute bottom-1.5 left-0 w-full flex justify-center gap-1.5 z-20">
                 <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports-car' ? 'w-4 bg-emerald-500' : 'w-1.5 bg-white/20'}`}></div>
                 <div className={`h-1 rounded-full transition-all duration-500 ${trafficScreen === 'ports-passenger' ? 'w-4 bg-teal-400' : 'w-1.5 bg-white/20'}`}></div>
