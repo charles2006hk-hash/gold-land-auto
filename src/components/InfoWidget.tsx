@@ -1,17 +1,18 @@
 // src/components/InfoWidget.tsx
 import React, { useState, useEffect } from 'react';
 
-// --- 1. InfoWidget (外部組件) ---
 const InfoWidget = () => {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [portStatus, setPortStatus] = useState<any[]>([]);
+    
+    // ★ 新增：獨立控制旅客數據的載入狀態
     const [passengerStatus, setPassengerStatus] = useState<any[]>([]);
+    const [passengerLoading, setPassengerLoading] = useState(true);
     const [loading, setLoading] = useState(true);
 
     const [tunnelStatus, setTunnelStatus] = useState<any>(null);
     const [trafficScreen, setTrafficScreen] = useState<'ports-car' | 'ports-passenger' | 'tunnels-ch' | 'tunnels-nt'>('ports-car');
 
-    // ★ 修復：加入 'HGP' 支援新版皇崗口岸代碼
     const CAR_PORT_MAPPING: Record<string, string> = {
         'SBC': '深圳灣', 
         'LMC': '皇崗', 
@@ -108,13 +109,21 @@ const InfoWidget = () => {
             } catch (e) { console.warn("私家車口岸數據延遲"); } finally { setLoading(false); }
         };
 
-        // ★ 修復：使用 allorigins 作為 CORS Proxy 繞過前端跨域限制
+        // ★ 終極企業級修復：雙重保險資料擷取
         const fetchPassengerTraffic = async () => {
             try {
-                const targetUrl = encodeURIComponent('https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json');
-                const res = await fetch(`https://api.allorigins.win/raw?url=${targetUrl}&t=${Date.now()}`, { cache: 'no-store' });
+                let res;
+                // 優先嘗試使用我們自己建立的 Vercel 內部 API 代理 (無 CORS 限制)
+                res = await fetch(`/api/passengers?t=${Date.now()}`);
                 
-                if (!res.ok) throw new Error('CORS Proxy API Error');
+                // 如果本地 API 發生 404 (還沒建立) 或失敗，自動降級使用最穩定的 corsproxy 代理
+                if (!res.ok) {
+                    const targetUrl = 'https://secure1.info.gov.hk/immd/mobileapps/2bb9ae17/data/CPQueueTimeR.json';
+                    res = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`, { cache: 'no-store' });
+                }
+                
+                if (!res.ok) throw new Error('CORS Proxy & API Failed');
+                
                 const data = await res.json();
 
                 if (data && typeof data === 'object') {
@@ -140,7 +149,10 @@ const InfoWidget = () => {
                     setPassengerStatus(formatted);
                 }
             } catch (e) {
-                console.warn("旅客口岸數據延遲:", e);
+                console.warn("旅客口岸數據擷取失敗:", e);
+            } finally {
+                // ★ 防呆：無論成功或失敗，一定要解除載入狀態，否則會永遠卡住
+                setPassengerLoading(false);
             }
         };
 
@@ -257,7 +269,12 @@ const InfoWidget = () => {
                                     <div className="w-8 flex justify-center items-center">{getStatusIndicator(port.down)}</div>
                                 </div>
                             </div>
-                        )) : (<div className="text-center text-slate-400 italic py-6">載入旅客通關數據中...</div>)}
+                        )) : (
+                            <div className="text-center text-slate-400 italic py-6">
+                                {/* ★ 如果沒資料，會依據 loading 狀態顯示不同文字 */}
+                                {passengerLoading ? '載入旅客通關數據中...' : '暫無旅客通關數據 (網路阻擋)'}
+                            </div>
+                        )}
                     </div>
                 )}
 
