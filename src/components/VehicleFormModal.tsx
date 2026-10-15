@@ -509,6 +509,11 @@ const VehicleFormModal = ({
         }
     };
 
+    const handleUpdateFinancingField = (id: string, field: string, value: any) => {
+        const newRecords = (v.financingRecords || []).map((f: any) => f.id === id ? { ...f, [field]: value } : f);
+        safeUpdateFinancing(newRecords);
+    };
+ 
     const handleAddFinancing = () => {
         const prin = Number(newFinancing.principal.replace(/,/g, ''));
         const rate = Number(newFinancing.annualRate);
@@ -2678,15 +2683,46 @@ const VehicleFormModal = ({
                             </h4>
                             
                             <div className="space-y-3 mb-4">
-                                {(v.financingRecords || []).map((f: any) => (
+                                {(v.financingRecords || []).map((f: any) => {
+                                    // ★ 即時計算已借貸天數與當前利息 (對齊結算邏輯：3個月為一期)
+                                    let currentDays = 0;
+                                    let currentInterest = 0;
+                                    if (f.status === 'Active') {
+                                        const start = new Date(f.startDate);
+                                        const today = new Date();
+                                        const diffDays = Math.ceil((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                                        currentDays = diffDays > 0 ? diffDays : 1;
+
+                                        let diffMonths = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+                                        if (today.getDate() > start.getDate()) diffMonths++;
+                                        if (diffMonths === 0 && currentDays > 0) diffMonths = 1;
+
+                                        const billedPeriods = Math.ceil(diffMonths / 3) || 1;
+                                        const billedMonths = billedPeriods * 3;
+                                        currentInterest = Math.round(f.principal * (f.annualRate / 100) * (billedMonths / 12));
+                                    }
+
+                                    return (
                                     <div key={f.id} className="flex flex-col md:flex-row justify-between gap-3 p-3 bg-white border border-purple-200 rounded-lg shadow-sm">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-bold text-slate-800">{f.lenderName}</span>
+                                                {/* ★ 1. 允許直接修改借貸人名稱 */}
+                                                <input 
+                                                    type="text" 
+                                                    value={f.lenderName} 
+                                                    onChange={(e) => handleUpdateFinancingField(f.id, 'lenderName', e.target.value)}
+                                                    className="font-bold text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-purple-500 outline-none w-32 md:w-auto transition-colors"
+                                                    title="點擊修改借貸方名稱"
+                                                />
                                                 <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${f.status === 'Active' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-slate-200 text-slate-600'}`}>{f.status === 'Active' ? '計息中' : '已結算'}</span>
                                             </div>
                                             <div className="text-xs text-slate-500 font-mono">
-                                                起息日: {f.startDate} {f.status === 'Settled' && `| 結算日: ${f.endDate} (${f.actualDays}天 / 收費 ${f.billedMonths || 3}個月)`}
+                                                起息日: {f.startDate} 
+                                                {/* ★ 2. 即時顯示已借貸天數與累積利息 */}
+                                                {f.status === 'Settled' 
+                                                    ? ` | 結算日: ${f.endDate} (${f.actualDays}天 / 收費 ${f.billedMonths || 3}個月)`
+                                                    : ` | 至今: ${currentDays} 天 (當前產生利息: ${formatCurrency(currentInterest)})`
+                                                }
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-4 text-right border-t md:border-t-0 pt-2 md:pt-0">
@@ -2705,7 +2741,6 @@ const VehicleFormModal = ({
                                                 </div>
                                             )}
                                             <div className="flex items-center gap-2 border-l pl-3 ml-2">
-                                                {/* ★ 加入輸出 PDF 協議按鈕 */}
                                                 <button type="button" onClick={(e) => executeLoanAgreementPrint(e, f)} className="text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 p-1.5 rounded shadow-sm transition-colors" title="列印墊資借貸協議">
                                                     <FileText size={14}/>
                                                 </button>
@@ -2715,7 +2750,7 @@ const VehicleFormModal = ({
                                             </div>
                                         </div>
                                     </div>
-                                ))}
+                                )})}
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-purple-200 w-full">
