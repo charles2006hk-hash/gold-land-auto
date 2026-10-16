@@ -3999,27 +3999,18 @@ const VehicleFormModal = ({
 </form>
         </div>
 
-        {/* ★ 圖片放大預覽 Modal (已移出 form 與 overflow 限制區塊，實現真正的全螢幕) */}
+        {/* ★ 圖片放大預覽 Modal (畫廊模式：上大圖，下縮圖) */}
         {previewImage && (
             <div 
-                className="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in" 
+                className="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center p-4 md:p-6 animate-in fade-in" 
                 onClick={() => setPreviewImage(null)}
             >
-                <img 
-                    src={previewImage} 
-                    className="max-w-full max-h-full object-contain shadow-2xl cursor-default" 
-                    onClick={(e) => e.stopPropagation()} 
-                    alt="預覽圖片"
-                />
-                
-                {/* 頂部操作按鈕區 */}
+                {/* 頂部操作按鈕區 (右上角) */}
                 <div className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-3 z-50">
-                    {/* 下載按鈕 */}
                     <button 
                         type="button" 
                         onClick={(e) => {
                             e.stopPropagation();
-                            // 使用 fetch 轉換為 blob 強制觸發下載，避免瀏覽器直接開新分頁
                             fetch(previewImage)
                                 .then(res => res.blob())
                                 .then(blob => {
@@ -4032,23 +4023,55 @@ const VehicleFormModal = ({
                                     document.body.removeChild(a);
                                     window.URL.revokeObjectURL(url);
                                 })
-                                .catch(() => window.open(previewImage, '_blank')); // 備用方案
+                                .catch(() => window.open(previewImage, '_blank'));
                         }} 
-                        className="text-white p-3 bg-white/10 hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
+                        className="text-white p-2 md:p-3 bg-white/10 hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
                         title="下載圖片"
                     >
-                        <DownloadCloud size={24}/>
+                        <DownloadCloud size={20} className="md:w-6 md:h-6"/>
                     </button>
                     
-                    {/* 關閉按鈕 */}
                     <button 
                         type="button" 
                         onClick={() => setPreviewImage(null)} 
-                        className="text-white p-3 bg-white/10 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
+                        className="text-white p-2 md:p-3 bg-white/10 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
                         title="關閉預覽"
                     >
-                        <X size={24}/>
+                        <X size={20} className="md:w-6 md:h-6"/>
                     </button>
+                </div>
+
+                {/* 上半部：大圖展示區 */}
+                <div 
+                    className="flex-1 w-full min-h-0 flex items-center justify-center mt-12 md:mt-0 mb-4 md:mb-6" 
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <img 
+                        src={previewImage} 
+                        className="max-w-full max-h-full object-contain drop-shadow-2xl transition-all duration-300" 
+                        alt="預覽大圖"
+                    />
+                </div>
+
+                {/* 下半部：縮圖列表區 */}
+                <div 
+                    className="w-full max-w-5xl h-20 md:h-28 shrink-0 bg-black/60 backdrop-blur-md rounded-xl p-2 md:p-3 overflow-x-auto flex gap-2 md:gap-3 items-center scrollbar-thin scrollbar-thumb-white/20"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {displayPhotos.map((url: string, idx: number) => (
+                        <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setPreviewImage(url)}
+                            className={`relative h-full aspect-[4/3] shrink-0 rounded-lg overflow-hidden transition-all duration-200 border-2 ${
+                                previewImage === url 
+                                    ? 'border-blue-500 scale-100 shadow-[0_0_15px_rgba(59,130,246,0.6)] opacity-100' 
+                                    : 'border-transparent opacity-40 hover:opacity-100 hover:scale-95'
+                            }`}
+                        >
+                            <img src={url} className="w-full h-full object-cover" alt={`thumbnail ${idx}`} />
+                        </button>
+                    ))}
                 </div>
             </div>
         )}
