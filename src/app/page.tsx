@@ -734,7 +734,7 @@ type SettingsManagerProps = {
 
 
 
-// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式 / WhatsApp 助手) ---
+// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
@@ -811,25 +811,23 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
         return `剩餘約 ${diffMonths} 個月 (到期: ${expiryDateStr})`;
     };
 
-    // 動作 1：一鍵複製 WhatsApp 宣傳文字並直接跳轉
-    const handleWhatsAppShare = () => {
+    // 動作 1：一鍵複製宣傳文字 (純淨安全符號版，解決亂碼問題，且不再跳轉)
+    const copyShareText = () => {
         const engine = vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-';
         const seating = vehicle.seating ? `${vehicle.seating}座` : '-';
         const licenseText = getLicenseMonthsLeft(vehicle.licenseExpiry);
-        const priceText = cleanMode ? '' : `\n💰 售價: ${new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price || 0)}`;
+        const priceText = cleanMode ? '' : `\n- 售價: ${new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price || 0)}`;
 
-        const text = `🚗 ${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}\n\n📋 規格資訊:\n▪️ 容積: ${engine}\n▪️ 座位: ${seating}\n▪️ 牌費: ${licenseText}${priceText}\n\n💡 亮點:\n${customRemark || vehicle.salesRemarks || '歡迎查詢'}\n\n如有興趣，歡迎隨時聯絡！`;
+        // 移除容易亂碼的 Emoji，改用標準的全形括號與橫線排版，並移除結尾語
+        const text = `【 ${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''} 】\n\n[規格資訊]\n- 容積: ${engine}\n- 座位: ${seating}\n- 牌費: ${licenseText}${priceText}\n\n[亮點]\n${customRemark || vehicle.salesRemarks || ''}`.trim();
 
-        // 寫入剪貼簿 (讓用戶在 WeChat 等其他地方也可以貼上)
-        navigator.clipboard.writeText(text).catch(err => console.warn('寫入剪貼簿失敗', err));
-
-        // 如果車主有電話，帶入電話；沒有就只帶文字
-        const phone = vehicle.customerPhone ? vehicle.customerPhone.replace(/[^\d]/g, '') : '';
-        const encodedText = encodeURIComponent(text);
-        
-        // 呼叫 WhatsApp API
-        const url = `https://wa.me/${phone}?text=${encodedText}`;
-        window.open(url, '_blank');
+        // 僅複製到剪貼簿
+        navigator.clipboard.writeText(text).then(() => {
+            alert('✅ 宣傳文字已成功複製！\n您可以直接前往 WhatsApp 或 WeChat 貼上。');
+        }).catch(err => {
+            console.error('寫入剪貼簿失敗', err);
+            alert('❌ 複製失敗，請檢查瀏覽器權限。');
+        });
     };
 
     // 動作 2：一鍵批次下載相片
@@ -954,8 +952,8 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                     
                     {/* ★★★ 新增：WhatsApp 快速分享工具列 ★★★ */}
                     <div className="flex gap-2 mb-1">
-                        <button onClick={handleWhatsAppShare} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
-                            <MessageCircle size={16} className="mr-1.5"/> 發送 WhatsApp
+                        <button onClick={copyShareText} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
+                            <Copy size={16} className="mr-1.5"/> 複製宣傳文字
                         </button>
                         <button onClick={downloadAllPhotos} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
                             <DownloadCloud size={16} className="mr-1.5"/> 提取相片
