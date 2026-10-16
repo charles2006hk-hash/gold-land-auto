@@ -734,7 +734,7 @@ type SettingsManagerProps = {
 
 
 
-// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式) ---
+// --- 新增：車輛推介單預覽組件 (iPhone 專用 / 支援純淨版雙軌模式 / WhatsApp 助手) ---
 const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = false }: any) => {
     const [photos, setPhotos] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
@@ -791,6 +791,71 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
             
             triggerCardPrint(content.outerHTML, fileName);
         }
+    };
+
+    // ==========================================
+    // ★★★ WhatsApp 專屬助手功能區塊 ★★★
+    // ==========================================
+
+    // 輔助函數：智能計算牌費剩餘月數
+    const getLicenseMonthsLeft = (expiryDateStr: string) => {
+        if (!expiryDateStr) return '未出牌 / 無資料';
+        const expiry = new Date(expiryDateStr);
+        const today = new Date();
+        const diffTime = expiry.getTime() - today.getTime();
+        
+        if (diffTime < 0) return '已過期';
+        
+        const diffMonths = (expiry.getFullYear() - today.getFullYear()) * 12 + (expiry.getMonth() - today.getMonth());
+        if (diffMonths === 0) return `不足 1 個月 (到期: ${expiryDateStr})`;
+        return `剩餘約 ${diffMonths} 個月 (到期: ${expiryDateStr})`;
+    };
+
+    // 動作 1：一鍵複製 WhatsApp 宣傳文字並直接跳轉
+    const handleWhatsAppShare = () => {
+        const engine = vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-';
+        const seating = vehicle.seating ? `${vehicle.seating}座` : '-';
+        const licenseText = getLicenseMonthsLeft(vehicle.licenseExpiry);
+        const priceText = cleanMode ? '' : `\n💰 售價: ${new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price || 0)}`;
+
+        const text = `🚗 ${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''}\n\n📋 規格資訊:\n▪️ 容積: ${engine}\n▪️ 座位: ${seating}\n▪️ 牌費: ${licenseText}${priceText}\n\n💡 亮點:\n${customRemark || vehicle.salesRemarks || '歡迎查詢'}\n\n如有興趣，歡迎隨時聯絡！`;
+
+        // 寫入剪貼簿 (讓用戶在 WeChat 等其他地方也可以貼上)
+        navigator.clipboard.writeText(text).catch(err => console.warn('寫入剪貼簿失敗', err));
+
+        // 如果車主有電話，帶入電話；沒有就只帶文字
+        const phone = vehicle.customerPhone ? vehicle.customerPhone.replace(/[^\d]/g, '') : '';
+        const encodedText = encodeURIComponent(text);
+        
+        // 呼叫 WhatsApp API
+        const url = `https://wa.me/${phone}?text=${encodedText}`;
+        window.open(url, '_blank');
+    };
+
+    // 動作 2：一鍵批次下載相片
+    const downloadAllPhotos = () => {
+        if (photos.length === 0) return alert('目前沒有相片可下載');
+        alert('⏳ 正在為您打包下載相片...\n如果瀏覽器詢問「是否允許下載多個檔案」，請點擊「允許」。\n下載完成後可直接將相片全選並拖曳至 WhatsApp。');
+        
+        photos.forEach((url, index) => {
+            setTimeout(() => {
+                fetch(url)
+                    .then(res => res.blob())
+                    .then(blob => {
+                        const blobUrl = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = blobUrl;
+                        a.download = `${vehicle.regMark || 'Vehicle'}_Photo_${index + 1}.jpg`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(blobUrl);
+                    })
+                    .catch(() => {
+                        window.open(url, '_blank');
+                    });
+            }, index * 400); 
+        });
     };
 
     return (
@@ -885,7 +950,18 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
                     )}
                 </div>
 
-                <div className="p-4 bg-slate-100 border-t print:hidden flex-none">
+                <div className="p-4 bg-slate-100 border-t print:hidden flex-none flex flex-col gap-2">
+                    
+                    {/* ★★★ 新增：WhatsApp 快速分享工具列 ★★★ */}
+                    <div className="flex gap-2 mb-1">
+                        <button onClick={handleWhatsAppShare} className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
+                            <MessageCircle size={16} className="mr-1.5"/> 發送 WhatsApp
+                        </button>
+                        <button onClick={downloadAllPhotos} className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-xl font-bold text-xs shadow-md active:scale-95 transition-transform flex items-center justify-center">
+                            <DownloadCloud size={16} className="mr-1.5"/> 提取相片
+                        </button>
+                    </div>
+
                     <button onClick={handlePrint} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform flex items-center justify-center">
                         📸 {cleanMode ? '列印純淨規格' : '列印完整推介單'}
                     </button>
