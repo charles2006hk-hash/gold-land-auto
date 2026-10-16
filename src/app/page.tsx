@@ -815,11 +815,13 @@ const VehicleShareModal = ({ vehicle, db, staffId, appId, onClose, cleanMode = f
     const copyShareText = () => {
         const engine = vehicle.engineSize ? `${vehicle.engineSize}${vehicle.fuelType === 'Electric' ? 'Kw' : 'cc'}` : '-';
         const seating = vehicle.seating ? `${vehicle.seating}座` : '-';
+        const color = vehicle.colorExt || '-';
+        const mileage = vehicle.mileage ? `${Number(vehicle.mileage).toLocaleString()} km` : '-';
         const licenseText = getLicenseMonthsLeft(vehicle.licenseExpiry);
         const priceText = cleanMode ? '' : `\n- 售價: ${new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(vehicle.price || 0)}`;
 
-        // 移除容易亂碼的 Emoji，改用標準的全形括號與橫線排版，並移除結尾語
-        const text = `【 ${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''} 】\n\n[規格資訊]\n- 容積: ${engine}\n- 座位: ${seating}\n- 牌費: ${licenseText}${priceText}\n\n[亮點]\n${customRemark || vehicle.salesRemarks || ''}`.trim();
+        // 移除容易亂碼的 Emoji，改用標準的全形括號與橫線排版，並補上顏色與里數
+        const text = `【 ${vehicle.year || ''} ${vehicle.make || ''} ${vehicle.model || ''} 】\n\n[規格資訊]\n- 顏色: ${color}\n- 里數: ${mileage}\n- 容積: ${engine}\n- 座位: ${seating}\n- 牌費: ${licenseText}${priceText}\n\n[亮點]\n${customRemark || vehicle.salesRemarks || ''}`.trim();
 
         // 僅複製到剪貼簿
         navigator.clipboard.writeText(text).then(() => {
