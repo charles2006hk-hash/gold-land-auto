@@ -3999,14 +3999,15 @@ const VehicleFormModal = ({
 </form>
         </div>
 
-        {/* ★ 圖片放大預覽 Modal (畫廊模式：上大圖，下縮圖) */}
+        {/* ★ 圖片放大預覽 Modal (畫廊模式：上大圖，下縮圖，完美適配 iPhone 與防穿透) */}
         {previewImage && (
             <div 
-                className="fixed inset-0 z-[99999] bg-black/95 flex flex-col items-center p-4 md:p-6 animate-in fade-in" 
+                // ★ 1. 提升 z-index 到極限 999999，並使用純黑 bg-black 徹底遮蔽底層小鈴鐺
+                className="fixed inset-0 z-[999999] bg-black flex flex-col items-center p-0 md:p-6 animate-in fade-in" 
                 onClick={() => setPreviewImage(null)}
             >
-                {/* 頂部操作按鈕區 (右上角) */}
-                <div className="absolute top-4 right-4 md:top-6 md:right-6 flex items-center gap-3 z-50">
+                {/* ★ 2. 頂部按鈕區：加入 env(safe-area-inset-top) 自動避開 iPhone 動態島 */}
+                <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 md:right-6 flex items-center gap-3 z-[1000000]">
                     <button 
                         type="button" 
                         onClick={(e) => {
@@ -4025,7 +4026,7 @@ const VehicleFormModal = ({
                                 })
                                 .catch(() => window.open(previewImage, '_blank'));
                         }} 
-                        className="text-white p-2 md:p-3 bg-white/10 hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
+                        className="text-white p-2.5 md:p-3 bg-white/20 hover:bg-blue-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
                         title="下載圖片"
                     >
                         <DownloadCloud size={20} className="md:w-6 md:h-6"/>
@@ -4034,16 +4035,16 @@ const VehicleFormModal = ({
                     <button 
                         type="button" 
                         onClick={() => setPreviewImage(null)} 
-                        className="text-white p-2 md:p-3 bg-white/10 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
+                        className="text-white p-2.5 md:p-3 bg-white/20 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center backdrop-blur-md shadow-lg"
                         title="關閉預覽"
                     >
                         <X size={20} className="md:w-6 md:h-6"/>
                     </button>
                 </div>
 
-                {/* 上半部：大圖展示區 */}
+                {/* ★ 3. 上半部大圖：加入 mt 自動下推，防止在手機上被頂部按鈕遮擋 */}
                 <div 
-                    className="flex-1 w-full min-h-0 flex items-center justify-center mt-12 md:mt-0 mb-4 md:mb-6" 
+                    className="flex-1 w-full min-h-0 flex items-center justify-center mt-[max(4.5rem,calc(env(safe-area-inset-top)+3.5rem))] md:mt-0 mb-4 md:mb-6 px-2 md:px-0" 
                     onClick={(e) => e.stopPropagation()}
                 >
                     <img 
@@ -4053,9 +4054,9 @@ const VehicleFormModal = ({
                     />
                 </div>
 
-                {/* 下半部：縮圖列表區 */}
+                {/* ★ 4. 下半部縮圖：加入 pb 避開 iPhone 底部 Home Bar */}
                 <div 
-                    className="w-full max-w-5xl h-20 md:h-28 shrink-0 bg-black/60 backdrop-blur-md rounded-xl p-2 md:p-3 overflow-x-auto flex gap-2 md:gap-3 items-center scrollbar-thin scrollbar-thumb-white/20"
+                    className="w-full max-w-5xl h-28 md:h-32 shrink-0 bg-white/10 backdrop-blur-xl rounded-t-2xl md:rounded-xl p-3 overflow-x-auto flex gap-3 items-center scrollbar-thin scrollbar-thumb-white/20 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-3"
                     onClick={(e) => e.stopPropagation()}
                 >
                     {displayPhotos.map((url: string, idx: number) => (
@@ -4065,8 +4066,8 @@ const VehicleFormModal = ({
                             onClick={() => setPreviewImage(url)}
                             className={`relative h-full aspect-[4/3] shrink-0 rounded-lg overflow-hidden transition-all duration-200 border-2 ${
                                 previewImage === url 
-                                    ? 'border-blue-500 scale-100 shadow-[0_0_15px_rgba(59,130,246,0.6)] opacity-100' 
-                                    : 'border-transparent opacity-40 hover:opacity-100 hover:scale-95'
+                                    ? 'border-yellow-400 scale-100 shadow-[0_0_15px_rgba(250,204,21,0.6)] opacity-100' 
+                                    : 'border-transparent opacity-50 hover:opacity-100 hover:scale-95'
                             }`}
                         >
                             <img src={url} className="w-full h-full object-cover" alt={`thumbnail ${idx}`} />
