@@ -869,26 +869,25 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                     <div key={group.key} className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-500/50 shadow-lg' : 'hover:border-blue-300'}`}>
                                         <div className="p-3 flex justify-between items-center bg-white border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
                                             <div className="flex items-center gap-3 overflow-hidden">
-                                                {/* ★ UI 優化：懸浮車牌縮圖卡片 */}
+                                                
+                                                {/* ★ UI 優化：純淨無遮擋縮圖 */}
                                                 <div className="w-16 h-12 rounded-md bg-slate-900 flex-shrink-0 overflow-hidden relative shadow-inner group-hover:shadow-md transition-shadow">
                                                     {group.items[0] ? (
-                                                        <>
-                                                            <img src={group.items[0].url} className="w-full h-full object-cover opacity-90"/>
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
-                                                            {displayPlate && (
-                                                                <div className="absolute bottom-0.5 left-1 z-10">
-                                                                    <span className="inline-flex items-center justify-center bg-[#FFD600] text-black font-mono font-black text-[8px] px-1 py-0.5 rounded-sm border border-black shadow-sm transform -skew-x-2 tracking-wider leading-none">
-                                                                        {displayPlate}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </>
+                                                        <img src={group.items[0].url} className="w-full h-full object-cover"/>
                                                     ) : (
                                                         <div className="flex items-center justify-center h-full text-slate-400"><ImageIcon size={20}/></div>
                                                     )}
                                                 </div>
                                                 
-                                                <div className="flex flex-col justify-center min-w-0 gap-1.5">
+                                                {/* ★ 將車牌移到這裡：車型標題上方，不會遮擋圖片 */}
+                                                <div className="flex flex-col justify-center min-w-0 gap-1">
+                                                    {displayPlate && (
+                                                        <div>
+                                                            <span className="inline-flex items-center justify-center bg-[#FFD600] text-black font-mono font-black text-[9px] px-1.5 py-0.5 rounded-[3px] border border-black shadow-sm tracking-wider leading-none">
+                                                                {displayPlate}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                     <span className="font-bold text-sm text-slate-800 truncate w-full">{group.title.split(' (')[0]}</span>
                                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                                                         <span className="text-[10px] text-slate-600 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-[4px] flex items-center leading-none"><ImageIcon size={10} className="mr-1"/> {group.items.length}</span>
