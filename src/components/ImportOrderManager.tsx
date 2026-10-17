@@ -1051,6 +1051,7 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         })}
                                         {filteredHistory.length === 0 && <div className="text-center py-10 text-slate-400 text-xs font-bold">無紀錄</div>}
                                     </div>
+                                  </div>
 
                                 {/* 右側詳情 */}
                                 <div className={`flex-1 h-full bg-slate-50/50 flex flex-col p-4 md:p-6 overflow-y-auto lg:overflow-hidden ${!selectedId && 'hidden md:flex'}`}>
