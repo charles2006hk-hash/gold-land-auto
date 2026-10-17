@@ -867,11 +867,13 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
 
                                 return (
                                     <div key={group.key} className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all duration-300 ${isExpanded ? 'col-span-full ring-2 ring-blue-500/50 shadow-lg' : 'hover:border-blue-300'}`}>
-                                        <div className="p-3 flex justify-between items-center bg-white border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
-                                            <div className="flex items-center gap-3 overflow-hidden">
+                                        <div className="p-2.5 md:p-3 flex justify-between items-center bg-white border-b border-slate-100 transition-colors cursor-pointer hover:bg-slate-50" onClick={() => setExpandedGroupKey(isExpanded ? null : group.key)}>
+                                            
+                                            {/* ★ 左半部：縮圖與文字 (加上 flex-1 min-w-0 確保文字空間不被擠壓) */}
+                                            <div className="flex-1 min-w-0 flex items-center gap-2.5 md:gap-3 pr-2">
                                                 
-                                                {/* ★ UI 優化：純淨無遮擋縮圖 */}
-                                                <div className="w-16 h-12 rounded-md bg-slate-900 flex-shrink-0 overflow-hidden relative shadow-inner group-hover:shadow-md transition-shadow">
+                                                {/* 縮圖 */}
+                                                <div className="w-16 h-12 md:w-20 md:h-14 rounded-md bg-slate-900 shrink-0 overflow-hidden relative shadow-inner group-hover:shadow-md transition-shadow">
                                                     {group.items[0] ? (
                                                         <img src={group.items[0].url} className="w-full h-full object-cover"/>
                                                     ) : (
@@ -879,34 +881,44 @@ export default function MediaLibraryModule({ db, storage, staffId, appId, settin
                                                     )}
                                                 </div>
                                                 
-                                                {/* ★ 將車牌移到這裡：車型標題上方，不會遮擋圖片 */}
-                                                <div className="flex flex-col justify-center min-w-0 gap-1">
+                                                {/* 文字與車牌區塊 (加上 flex-1 min-w-0 確保 truncate 生效) */}
+                                                <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
                                                     {displayPlate && (
-                                                        <div>
-                                                            <span className="inline-flex items-center justify-center bg-[#FFD600] text-black font-mono font-black text-[9px] px-1.5 py-0.5 rounded-[3px] border border-black shadow-sm tracking-wider leading-none">
+                                                        <div className="flex items-center">
+                                                            <span className="inline-flex items-center justify-center bg-[#FFD600] text-black font-mono font-black text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-[3px] border border-black shadow-sm tracking-wider leading-none">
                                                                 {displayPlate}
                                                             </span>
                                                         </div>
                                                     )}
-                                                    <span className="font-bold text-sm text-slate-800 truncate w-full">{group.title.split(' (')[0]}</span>
+                                                    <span className="font-bold text-xs md:text-sm text-slate-800 truncate w-full leading-tight">
+                                                        {group.title.split(' (')[0] || '未分類車輛'}
+                                                    </span>
                                                     <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                                        <span className="text-[10px] text-slate-600 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-[4px] flex items-center leading-none"><ImageIcon size={10} className="mr-1"/> {group.items.length}</span>
-                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-[4px] font-bold shadow-sm leading-none ${group.status === 'In Stock' ? 'bg-green-500 text-white' : group.status === 'Reserved' ? 'bg-yellow-500 text-white' : group.status === 'Sold' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>{group.status === 'In Stock' ? '在庫' : group.status === 'Reserved' ? '已訂' : group.status === 'Sold' ? '已售' : group.status}</span>
+                                                        <span className="text-[9px] md:text-[10px] text-slate-600 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-[4px] flex items-center leading-none">
+                                                            <ImageIcon size={10} className="mr-1"/> {group.items.length}
+                                                        </span>
+                                                        <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded-[4px] font-bold shadow-sm leading-none ${group.status === 'In Stock' ? 'bg-green-500 text-white' : group.status === 'Reserved' ? 'bg-yellow-500 text-white' : group.status === 'Sold' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                                            {group.status === 'In Stock' ? '在庫' : group.status === 'Reserved' ? '已訂' : group.status === 'Sold' ? '已售' : group.status}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-4 pr-1">
+
+                                            {/* ★ 右半部：操作按鈕 (加上 shrink-0 確保按鈕永遠維持原始寬度) */}
+                                            <div className="shrink-0 flex items-center gap-2 md:gap-3 pl-1 border-l border-slate-100">
                                                 {isExpanded && activeItem && (
                                                     <div className="flex items-center bg-slate-100 p-1 rounded-lg shadow-inner" onClick={e => e.stopPropagation()}>
-                                                        <button onClick={() => handleReturnToInbox(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-blue-600 transition-colors tooltip-trigger" title="退回待處理區"><Upload size={16} className="transform rotate-180"/></button>
-                                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                                        <button onClick={() => handleSetPrimary(activeItem.id, group.items)} className={`p-1.5 rounded-md transition-colors ${activeItem.isPrimary ? 'bg-yellow-500 text-white shadow-sm' : 'hover:bg-white text-slate-500 hover:text-yellow-600'}`} title="設為車輛封面"><Star size={16} className={activeItem.isPrimary ? 'fill-white' : ''}/></button>
-                                                        <div className="w-px h-4 bg-slate-300 mx-1"></div>
-                                                        <button onClick={() => setEditingMedia(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-indigo-600 transition-colors" title="編輯圖片 (排版/遮車牌)"><Edit size={16}/></button>
-                                                        <button onClick={() => handleDeleteImage(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-red-500 transition-colors" title="永久刪除"><Trash2 size={16}/></button>
+                                                        <button onClick={() => handleReturnToInbox(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-blue-600 transition-colors tooltip-trigger" title="退回待處理區"><Upload size={14} className="transform rotate-180 md:w-4 md:h-4"/></button>
+                                                        <div className="w-px h-4 bg-slate-300 mx-0.5 md:mx-1"></div>
+                                                        <button onClick={() => handleSetPrimary(activeItem.id, group.items)} className={`p-1.5 rounded-md transition-colors ${activeItem.isPrimary ? 'bg-yellow-500 text-white shadow-sm' : 'hover:bg-white text-slate-500 hover:text-yellow-600'}`} title="設為車輛封面"><Star size={14} className={`md:w-4 md:h-4 ${activeItem.isPrimary ? 'fill-white' : ''}`}/></button>
+                                                        <div className="w-px h-4 bg-slate-300 mx-0.5 md:mx-1"></div>
+                                                        <button onClick={() => setEditingMedia(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-indigo-600 transition-colors" title="編輯圖片 (排版/遮車牌)"><Edit size={14} className="md:w-4 md:h-4"/></button>
+                                                        <button onClick={() => handleDeleteImage(activeItem)} className="p-1.5 rounded-md hover:bg-white text-slate-500 hover:text-red-500 transition-colors" title="永久刪除"><Trash2 size={14} className="md:w-4 md:h-4"/></button>
                                                     </div>
                                                 )}
-                                                <div className="text-slate-400 bg-slate-50 p-2 rounded-full hover:bg-slate-200 transition-colors">{isExpanded ? <Minimize2 size={18}/> : <Maximize2 size={18}/>}</div>
+                                                <div className="text-slate-400 bg-slate-50 p-1.5 md:p-2 rounded-full hover:bg-slate-200 transition-colors ml-1">
+                                                    {isExpanded ? <Minimize2 size={16} className="md:w-4 md:h-4"/> : <Maximize2 size={16} className="md:w-4 md:h-4"/>}
+                                                </div>
                                             </div>
                                         </div>
                                         {isExpanded && activeItem && (
