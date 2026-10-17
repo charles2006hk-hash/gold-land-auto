@@ -1420,8 +1420,26 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
 
                                 {/* Mobile Actions for Calc */}
                                 <div className="md:hidden fixed bottom-0 left-0 w-full bg-slate-900 text-white p-4 flex justify-between items-center z-50 rounded-t-3xl shadow-[0_-10px_30px_rgba(0,0,0,0.3)] safe-area-bottom">
-                                    <div><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Live Cost</p><p className="text-xl font-black font-mono text-blue-400 leading-none">{fmt(totalCost)}</p></div>
-                                    <div className="flex gap-2">{mobileTab !== 'basic' && <button onClick={() => setMobileTab(mobileTab === 'result' ? 'fees' : 'basic')} className="p-3 bg-slate-800 rounded-xl"><ArrowLeft size={16}/></button>}{mobileTab !== 'result' ? (<button onClick={() => setMobileTab(mobileTab === 'basic' ? 'fees' : 'result')} className="px-6 py-3 bg-white text-slate-900 rounded-xl font-black text-sm flex items-center">下一步 <ArrowRight size={16} className="ml-1"/></button>) : (<button onClick={handleSave} className="px-6 py-3 bg-green-600 text-white rounded-xl font-black text-sm flex items-center"><Save size={16} className="mr-1"/> 儲存</button>)}</div>
+                                    <div>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Live Cost</p>
+                                        <p className="text-xl font-black font-mono text-blue-400 leading-none">{fmt(totalCost)}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {mobileTab !== 'basic' && (
+                                            <button onClick={() => setMobileTab(mobileTab === 'result' ? 'fees' : 'basic')} className="p-3 bg-slate-800 rounded-xl transition-colors hover:bg-slate-700">
+                                                <ArrowLeft size={16}/>
+                                            </button>
+                                        )}
+                                        {mobileTab !== 'result' ? (
+                                            <button onClick={() => setMobileTab(mobileTab === 'basic' ? 'fees' : 'result')} className="px-6 py-3 bg-white text-slate-900 rounded-xl font-black text-sm flex items-center transition-transform active:scale-95">
+                                                下一步 <ArrowRight size={16} className="ml-1"/>
+                                            </button>
+                                        ) : (
+                                            <button onClick={handleSave} className="px-6 py-3 bg-green-600 text-white rounded-xl font-black text-sm flex items-center shadow-lg transition-transform active:scale-95">
+                                                <Save size={16} className="mr-1"/> 儲存
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
