@@ -959,9 +959,15 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         {filteredHistory.map(item => {
                                             const st = STATUS_OPTIONS[item.status || 'QUOTING'];
                                             const isSelected = selectedId === item.id;
+                                            
+                                            // 提取第一張圖片作為縮圖
+                                            const thumbUrl = item.photos && item.photos.length > 0 ? item.photos[0] : null;
+
                                             return (
                                                 <div key={item.id} onClick={() => setSelectedId(item.id)} className={`p-4 border-b border-slate-100 cursor-pointer transition-all border-l-4 ${isSelected ? 'bg-blue-50/80 border-l-blue-600' : 'hover:bg-slate-50 border-l-transparent'}`}>
-                                                    <div className="flex justify-between items-start mb-1.5">
+                                                    
+                                                    {/* 頂部：狀態、日期與操作按鈕 */}
+                                                    <div className="flex justify-between items-start mb-2">
                                                         <div className="flex items-center gap-1.5">
                                                             <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider border ${st.color}`}>{st.label}</span>
                                                             <span className="text-[9px] text-slate-400 font-bold">{item.date}</span>
@@ -978,36 +984,65 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    <div className="font-black text-slate-800 text-sm truncate mb-2">{item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}</div>
+
+                                                    {/* ★ 升級版：智能縮圖 + 標題與標籤 Flex 佈局 */}
+                                                    <div className="flex gap-3 mb-2 items-start">
+                                                        {/* 左側縮圖 */}
+                                                        <div className="w-20 h-16 sm:w-24 sm:h-16 shrink-0 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 flex flex-col items-center justify-center relative shadow-sm">
+                                                            {thumbUrl ? (
+                                                                <>
+                                                                    <img src={thumbUrl} className="w-full h-full object-cover" alt="thumbnail" />
+                                                                    {item.photos.length > 1 && (
+                                                                        <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] font-bold px-1.5 py-0.5 rounded backdrop-blur-sm">
+                                                                            {item.photos.length} 圖
+                                                                        </div>
+                                                                    )}
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <ImageIcon size={16} className="text-slate-300 mb-0.5" />
+                                                                    <span className="text-[7px] text-slate-400 font-bold uppercase">無相片</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+
+                                                        {/* 右側標題與小標籤 */}
+                                                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                            <div className="font-black text-slate-800 text-sm leading-tight line-clamp-2 mb-1.5">
+                                                                {item.details?.make || item.details?.manufacturer || item.carInfo?.make} {item.details?.model || item.carInfo?.model}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[9px] text-blue-700 font-black bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded">{item.region}</span>
+                                                                {item.region === 'JP' && (item.details?.year || item.carInfo?.year) && (
+                                                                     <span className="text-[9px] font-bold text-purple-600 bg-purple-50 border border-purple-100 px-1.5 py-0.5 rounded">
+                                                                         {(() => {
+                                                                             const y = parseInt(item.details?.year || item.carInfo?.year);
+                                                                             return y >= 2019 ? `令和${y-2018}` : (y >= 1989 ? `平成${y-1988}` : '-');
+                                                                         })()}
+                                                                     </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     
+                                                    {/* 規格標籤格線 */}
                                                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[10px] text-slate-500 font-medium bg-white p-2 rounded-lg border border-slate-100 mb-2 shadow-sm">
                                                         <div><span className="text-slate-400">HK年:</span> <span className="font-bold text-slate-700">{item.details?.year || item.carInfo?.year || '-'}</span></div>
-                                                        {item.region === 'JP' && (
-                                                            <div><span className="text-slate-400">JP年:</span> <span className="font-bold text-purple-600">{
-                                                                (item.details?.year || item.carInfo?.year) ? (() => {
-                                                                    const y = parseInt(item.details?.year || item.carInfo?.year);
-                                                                    return y >= 2019 ? `令和${y-2018}` : (y >= 1989 ? `平成${y-1988}` : '-');
-                                                                })() : '-'
-                                                            }</span></div>
-                                                        )}
+                                                        <div><span className="text-slate-400">波箱:</span> <span className="font-bold text-slate-700">{item.details?.transmission || item.carInfo?.transmission || '-'}</span></div>
                                                         <div className="col-span-2 flex items-center gap-1 overflow-hidden truncate">
                                                             <span className="text-slate-400 flex-shrink-0">內外:</span>
                                                             <div className="w-2.5 h-2.5 rounded-full border border-slate-300 shadow-inner flex-shrink-0" style={{backgroundColor: getColorHex(item.details?.exteriorColor || item.carInfo?.exteriorColor)}}></div> <span className="text-slate-300">/</span>
                                                             <div className="w-2.5 h-2.5 rounded-full border border-slate-300 shadow-inner flex-shrink-0" style={{backgroundColor: getColorHex(item.details?.interiorColor || item.carInfo?.interiorColor)}}></div>
                                                             <span className="font-bold text-slate-700 truncate">{item.details?.exteriorColor || item.carInfo?.exteriorColor || '-'} / {item.details?.interiorColor || item.carInfo?.interiorColor || '-'}</span>
                                                         </div>
-                                                        <div><span className="text-slate-400">波箱:</span> <span className="font-bold text-slate-700">{item.details?.transmission || item.carInfo?.transmission || '-'}</span></div>
-                                                        <div><span className="text-slate-400">容積:</span> <span className="font-bold text-slate-700">{item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></div>
-                                                        {/* 👇 新增座位數 👇 */}
                                                         <div><span className="text-slate-400">座位:</span> <span className="font-bold text-slate-700">{item.details?.seats || item.carInfo?.seats || '-'} 座</span></div>
+                                                        <div><span className="text-slate-400">容積:</span> <span className="font-bold text-slate-700">{item.details?.cc || item.details?.engineCapacity || item.carInfo?.cc || '-'} cc</span></div>
                                                     </div>
 
+                                                    {/* 底部：底盤號與價格 */}
                                                     <div className="flex justify-between items-end mt-1">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <span className="text-[10px] text-blue-700 font-black bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded">{item.region}</span>
-                                                            {item.photos?.length > 0 && (
-                                                                <span className="flex items-center gap-1 text-[10px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="相片數量"><ImageIcon size={10} className="text-slate-400"/> {item.photos.length}</span>
-                                                            )}
+                                                        <div className="text-[10px] text-slate-400 font-mono">
+                                                            {item.details?.chassisNo || item.details?.chassis || '-'}
                                                         </div>
                                                         <span className="font-black text-blue-700 text-base tracking-tight">{fmt(item.results?.finalPrice)}</span>
                                                     </div>
@@ -1016,7 +1051,6 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
                                         })}
                                         {filteredHistory.length === 0 && <div className="text-center py-10 text-slate-400 text-xs font-bold">無紀錄</div>}
                                     </div>
-                                </div>
 
                                 {/* 右側詳情 */}
                                 <div className={`flex-1 h-full bg-slate-50/50 flex flex-col p-4 md:p-6 overflow-y-auto lg:overflow-hidden ${!selectedId && 'hidden md:flex'}`}>
