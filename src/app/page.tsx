@@ -2885,7 +2885,8 @@ const DatabaseSelector = ({
             (e.name || '').toLowerCase().includes(search.toLowerCase()) ||
             (e.phone || '').includes(search) ||
             (e.plateNoHK || '').toLowerCase().includes(search.toLowerCase()) ||
-            (e.idNumber || '').toLowerCase().includes(search.toLowerCase())
+            (e.idNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+            (e.docType || '').toLowerCase().includes(search.toLowerCase()) // ★ 新增：支援搜尋文件類型
         );
 
         if (type === 'customer') {
