@@ -798,9 +798,9 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
         const safeChassis = (entry.chassisNo || '').toLowerCase().replace(/[\s-]/g, '');
         const safeEngine = (entry.engineNo || '').toLowerCase().replace(/[\s-]/g, '');
         
-        // 組合一般文字內容 (保留原本的寬鬆比對)
-        const generalContent = `${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''}`.toLowerCase();
-
+       // 組合一般文字內容 (保留原本的寬鬆比對，並加入 docType 支援搜尋文件類型)
+        const generalContent = `${entry.docType || ''} ${entry.name} ${entry.phone} ${entry.idNumber} ${entry.plateNoHK} ${entry.plateNoCN} ${entry.quotaNo} ${entry.tags?.join(' ')} ${entry.make || ''} ${entry.model || ''} ${entry.registeredOwnerDate || ''}`.toLowerCase();
+        
         // 只要符合一般內容，或是精準命中底盤號/引擎號即可
         const matchSearch = generalContent.includes(searchTerm.toLowerCase()) || 
                             (safeChassis && safeChassis.includes(cleanSearch)) || 
