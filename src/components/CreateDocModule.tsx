@@ -1009,12 +1009,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                     <div className="flex-1 border-b border-slate-400 pb-2">
                                                         <table className="w-full text-xs">
                                                             <tbody>
-                                                                {depositItems.map((item: any, idx: number) => (
-                                                                    <tr key={idx}>
-                                                                        <td className="py-1 font-bold text-slate-800">• {item.label}</td>
-                                                                        <td className="py-1 text-right font-mono font-bold">{formatCurrency(item.amount)}</td>
-                                                                    </tr>
-                                                                ))}
+                                                                {depositItems.map((item: any, idx: number) => {
+                                                                    const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
+                                                                    const remarkText = item.remark ? ` - ${item.remark}` : '';
+                                                                    return (
+                                                                        <tr key={idx}>
+                                                                            <td className="py-1 font-bold text-slate-800">
+                                                                                • {item.label} <span className="text-[9px] text-slate-500 font-normal">{methodText}{remarkText}</span>
+                                                                            </td>
+                                                                            <td className="py-1 text-right font-mono font-bold text-blue-700">{formatCurrency(item.amount)}</td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
                                                             </tbody>
                                                         </table>
                                                     </div>
@@ -1109,9 +1115,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
                                                             <tr key={i} className="border-b"><td className="p-1 font-bold text-slate-700 pl-4">{item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送)</span> : ''}</td><td className="p-1 text-right font-mono text-[11px]">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                                         ))}
-                                                        {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => (
-                                                            <tr key={`dep-${idx}`} className="border-b bg-blue-50/30"><td className="p-1 font-bold text-blue-700 pl-4">Less: {item.label} (已扣除/已付)</td><td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td></tr>
-                                                        ))}
+                                                        {depositItems.length > 0 && depositItems[0].amount > 0 && depositItems.map((item: any, idx: number) => {
+                                                            const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
+                                                            const remarkText = item.remark ? ` - ${item.remark}` : '';
+                                                            return (
+                                                                <tr key={`dep-${idx}`} className="border-b bg-blue-50/30">
+                                                                    <td className="p-1 font-bold text-blue-700 pl-4">
+                                                                        Less: {item.label} (已扣除) <span className="text-[8px] font-normal ml-1 text-blue-500">{methodText}{remarkText}</span>
+                                                                    </td>
+                                                                    <td className="p-1 text-right font-mono text-blue-600 text-[11px]">- {formatCurrency(item.amount)}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                     </tbody>
                                                     <tfoot><tr className="bg-slate-100 font-bold text-[10px] border-t-2 border-slate-800"><td className="p-1 text-right uppercase tracking-widest">Total Due (應付總額)</td><td className="p-1 text-right font-mono text-[12px] text-red-600">{formatCurrency(extrasTotal - deposit)}</td></tr></tfoot>
                                                 </table>
@@ -1123,9 +1138,18 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                                                         {docItems.filter((i: any) => i.isSelected).map((item: any, i: number) => (
                                                                 <tr key={i} className="border-b"><td className="p-1 font-medium text-slate-600 pl-4">+ {item.desc} {item.isFree ? <span className="font-bold text-slate-400">(贈送 F.O.C.)</span> : ''}</td><td className="p-1 text-right font-mono">{item.isFree ? <span className="line-through text-slate-400">{formatCurrency(item.amount)}</span> : formatCurrency(item.amount)}</td></tr>
                                                             ))}
-                                                        {depositItems.map((item: any, idx: number) => (
-                                                            <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30"><td className="p-1 font-bold pl-4">Less: {item.label}</td><td className="p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td></tr>
-                                                        ))}
+                                                        {depositItems.map((item: any, idx: number) => {
+                                                            const methodText = item.method ? `[${item.method === 'Cheque' ? '支票' : item.method === 'Transfer' ? '過數' : item.method === 'Cash' ? '現金' : item.method}]` : '';
+                                                            const remarkText = item.remark ? ` - ${item.remark}` : '';
+                                                            return (
+                                                                <tr key={`dep-${idx}`} className="border-b text-blue-700 bg-blue-50/30">
+                                                                    <td className="border p-1 font-bold pl-4">
+                                                                        Less: {item.label} <span className="text-[8px] font-normal ml-1 text-blue-500">{methodText}{remarkText}</span>
+                                                                    </td>
+                                                                    <td className="border p-1 text-right font-mono font-bold text-[11px]">- {formatCurrency(item.amount)}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
                                                         {formData.isFinance && (
                                                             <tr className="bg-cyan-50/30 text-[9px]">
                                                                 <td colSpan={2} className="p-1 text-cyan-800"><span className="font-bold">Finance Details (上會安排):</span> Bank: {formData.financeBank} | Loan: {formatCurrency(Number(formData.financeAmount))} | {formData.financeMonths} Mths @ {formData.financeRate}% | <span className="font-bold text-red-600 ml-1">Monthly: {formatCurrency(Number(formData.financeMonthly))}</span></td>
@@ -1770,33 +1794,46 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
 
                                 <div className="space-y-2 mb-3">
                                     {depositItems.map((item: any, idx: number) => (
-                                        <div key={item.id} className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-yellow-100 shadow-sm">
-                                            <input value={item.label} onChange={(e) => { const newArr = [...depositItems]; newArr[idx].label = e.target.value; setDepositItems(newArr); }} className="flex-1 text-[11px] font-bold bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-700 focus:border-yellow-500 px-1" />
-                                            <span className="text-xs font-bold text-slate-400">$</span>
-                                            <input type="number" value={item.amount} onChange={(e) => { const newArr = [...depositItems]; newArr[idx].amount = Number(e.target.value); setDepositItems(newArr); }} className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-sm text-blue-600 font-black font-mono outline-none focus:bg-yellow-50" />
-                                            <button type="button" onClick={() => setDepositItems((prev: any[]) => prev.filter((i: any) => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={14}/></button>
+                                        <div key={item.id} className="flex flex-col gap-2 bg-white p-2 rounded-lg border border-yellow-100 shadow-sm">
+                                            <div className="flex items-center gap-2">
+                                                <input value={item.label} onChange={(e) => { const newArr = [...depositItems]; newArr[idx].label = e.target.value; setDepositItems(newArr); }} className="flex-1 text-[11px] font-bold bg-transparent border-b border-dashed border-yellow-300 outline-none text-slate-700 focus:border-yellow-500 px-1" placeholder="例如：訂金 (Deposit)"/>
+                                                <span className="text-xs font-bold text-slate-400">$</span>
+                                                <input type="number" value={item.amount} onChange={(e) => { const newArr = [...depositItems]; newArr[idx].amount = Number(e.target.value); setDepositItems(newArr); }} className="w-24 bg-white border border-yellow-200 rounded px-1 text-right text-sm text-blue-600 font-black font-mono outline-none focus:bg-yellow-50" placeholder="金額"/>
+                                                <button type="button" onClick={() => setDepositItems((prev: any[]) => prev.filter((i: any) => i.id !== item.id))} className="text-yellow-400 hover:text-red-500"><X size={14}/></button>
+                                            </div>
+                                            
+                                            {/* ★ 每個收款項目獨立設定收款方式 */}
+                                            <div className="flex items-center gap-2 pt-1 border-t border-slate-50">
+                                                <span className="text-[9px] font-bold text-slate-400">收款方式:</span>
+                                                <select 
+                                                    value={item.method || 'Cheque'} 
+                                                    onChange={(e) => { const newArr = [...depositItems]; newArr[idx].method = e.target.value; setDepositItems(newArr); }} 
+                                                    className="flex-1 text-[10px] p-1 rounded border border-slate-200 bg-slate-50 font-bold text-slate-600 outline-none focus:border-yellow-400 cursor-pointer"
+                                                >
+                                                    <option value="Cheque">支票 (Cheque)</option>
+                                                    <option value="Transfer">銀行轉帳 (Bank Transfer)</option>
+                                                    <option value="FPS">轉數快 (FPS)</option>
+                                                    <option value="Cash">現金 (Cash)</option>
+                                                    <option value="Card">信用卡 (Credit Card)</option>
+                                                    <option value="Trade-in">對數 (Trade-in)</option>
+                                                </select>
+                                                <input 
+                                                    type="text" 
+                                                    value={item.remark || ''} 
+                                                    onChange={(e) => { const newArr = [...depositItems]; newArr[idx].remark = e.target.value; setDepositItems(newArr); }} 
+                                                    placeholder="備註 (如支票號碼/過數日期)..." 
+                                                    className="flex-[1.5] text-[10px] p-1 border-b border-dashed border-slate-300 outline-none focus:border-yellow-400 bg-transparent text-slate-600"
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
 
                                 <div className="text-right mb-3">
-                                    <button type="button" onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: selectedDocType === 'receipt' ? 'Payment (本次收款)' : 'Deposit (訂金)', amount: 0 }])} className="text-[10px] font-bold bg-white text-yellow-700 px-3 py-1.5 rounded-lg border border-yellow-200 hover:bg-yellow-100 shadow-sm active:scale-95 transition-transform">
+                                    <button type="button" onClick={() => setDepositItems([...depositItems, { id: Date.now().toString(), label: selectedDocType === 'receipt' ? 'Payment (本次收款)' : 'Deposit (訂金)', amount: 0, method: 'Cheque', remark: '' }])} className="text-[10px] font-bold bg-white text-yellow-700 px-3 py-1.5 rounded-lg border border-yellow-200 hover:bg-yellow-100 shadow-sm active:scale-95 transition-transform">
                                         <Plus size={12} className="inline mr-1"/>新增收款欄位
                                     </button>
                                 </div>
-
-                                {selectedDocType === 'receipt' && (
-                                    <div className="pt-3 border-t border-yellow-200 flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-yellow-800">收款方式:</span>
-                                        <select name="paymentMethod" value={formData.paymentMethod} onChange={handleChange} className="text-xs p-1.5 rounded-lg border border-yellow-300 bg-white font-bold text-slate-700 outline-none shadow-sm cursor-pointer">
-                                            <option value="Cheque">支票 (Cheque)</option>
-                                            <option value="Transfer">銀行轉帳 (Transfer)</option>
-                                            <option value="Cash">現金 (Cash)</option>
-                                            <option value="USDT">USDT (泰達幣)</option>
-                                            <option value="Trade-in">對數 (Trade-in)</option>
-                                        </select>
-                                    </div>
-                                )}
                             </div>
 
                             {(selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') && (
