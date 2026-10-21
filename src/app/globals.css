@@ -39,15 +39,13 @@ input, textarea, [contenteditable="true"] {
   user-select: auto;
 }
 
-/* ★★★ 系統相容性修復：Windows Chrome backdrop-filter 透明破圖問題 ★★★ */
+/* ★★★ 系統相容性修復：Windows Chrome backdrop-filter 終極隔離方案 ★★★ */
 .backdrop-blur-sm, 
 .backdrop-blur-md, 
 .backdrop-blur-lg, 
 .backdrop-blur-xl {
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  /* 確保該毛玻璃層獨立交由 GPU 渲染，不與底層元素發生混合衝突 */
-  will-change: transform; 
+  isolation: isolate !important; /* 強制建立獨立渲染層，阻斷底層 API 穿透 */
+  -webkit-transform: translateZ(0); 
+  transform: translateZ(0);
+  will-change: transform, backdrop-filter;
 }
