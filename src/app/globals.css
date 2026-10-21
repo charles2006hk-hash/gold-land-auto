@@ -39,13 +39,43 @@ input, textarea, [contenteditable="true"] {
   user-select: auto;
 }
 
-/* ★★★ 系統相容性修復：Windows Chrome backdrop-filter 終極隔離方案 ★★★ */
-.backdrop-blur-sm, 
-.backdrop-blur-md, 
-.backdrop-blur-lg, 
-.backdrop-blur-xl {
-  isolation: isolate !important; /* 強制建立獨立渲染層，阻斷底層 API 穿透 */
-  -webkit-transform: translateZ(0); 
-  transform: translateZ(0);
-  will-change: transform, backdrop-filter;
+/* ========================================================
+   ★ Windows 系統自動降維 (Graceful Degradation) 
+   解決 Chrome 硬件加速導致的毛玻璃與半透明層破圖問題
+======================================================== */
+
+/* 1. 強制拔除所有毛玻璃效果 */
+.is-windows .backdrop-blur-sm,
+.is-windows .backdrop-blur-md,
+.is-windows .backdrop-blur-lg,
+.is-windows .backdrop-blur-xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 2. 將上方導航列、通知卡片常用的白色半透明，強制轉為純白實色，並補上邊框維持立體感 */
+.is-windows .bg-white\/50,
+.is-windows .bg-white\/60,
+.is-windows .bg-white\/70,
+.is-windows .bg-white\/80,
+.is-windows .bg-white\/90 {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0; /* 補上一條淡灰線條分隔，取代毛玻璃的立體感 */
+}
+
+/* 3. 將側邊欄、深色模式常用的半透明黑/灰，強制轉為實色深灰 */
+.is-windows .bg-slate-900\/50,
+.is-windows .bg-slate-900\/80,
+.is-windows .bg-slate-900\/90,
+.is-windows .bg-slate-900\/95,
+.is-windows .bg-black\/50,
+.is-windows .bg-black\/80,
+.is-windows .bg-black\/90,
+.is-windows .bg-black\/95 {
+  background-color: #0f172a !important; /* 對齊 Tailwind 的 slate-900 */
+}
+
+/* 4. 將彈窗 (Modal) 底下的半透明遮罩加深，確保在拔除 blur 後仍能聚焦內容 */
+.is-windows .bg-black\/60 {
+  background-color: rgba(0, 0, 0, 0.85) !important;
 }
