@@ -1,4 +1,65 @@
-import type { Metadata } from "next"; // ★ 移除了用不到的 Viewport 型別
+import type { Metadata } from "next"; 
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Gold Land Auto DMS", 
+  description: "Vehicle Management System for Gold Land Auto",
+  manifest: "/manifest.json", 
+  icons: {
+    icon: '/GL_APPLOGO.png',
+    apple: '/GL_APPLOGO.png',
+  },
+  appleWebApp: {
+    capable: true, 
+    title: "金田 DMS",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="zh-HK">
+      <head>
+        {/* ★★★ 終極全面屏解鎖 ★★★ */}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#f1f5f9" />
+
+        {/* ★ 智能降維探測：如果是 Windows 系統，自動加上 is-windows 類別 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (navigator.userAgent.indexOf('Windows') !== -1) {
+                document.documentElement.classList.add('is-windows');
+              }
+            `,
+          }}
+        />
+      </head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}import type { Metadata } from "next"; // ★ 移除了用不到的 Viewport 型別
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
