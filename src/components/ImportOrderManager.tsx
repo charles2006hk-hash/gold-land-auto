@@ -476,7 +476,11 @@ export default function ImportOrderManager({ db, staffId, appId, settings, updat
         }
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            return (h.details?.model || '').toLowerCase().includes(q) || (h.details?.chassisNo || '').toLowerCase().includes(q);
+            const makeStr = (h.details?.make || h.details?.manufacturer || h.carInfo?.make || '').toLowerCase();
+            const modelStr = (h.details?.model || h.carInfo?.model || '').toLowerCase();
+            const chassisStr = (h.details?.chassisNo || h.details?.chassis || h.carInfo?.chassis || '').toLowerCase();
+            
+            return makeStr.includes(q) || modelStr.includes(q) || chassisStr.includes(q);
         }
         return true;
     });
