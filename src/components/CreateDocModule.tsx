@@ -479,20 +479,51 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
             
             if (formData.customerName && formData.customerName.trim() !== '') {
                 const customerName = formData.customerName.trim();
+                const customerPhone = (formData.customerPhone || '').trim();
+                const customerId = (formData.customerId || '').trim();
                 const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
                 
-                const q = query(dbRef, where('name', '==', customerName));
-                const snap = await getDocs(q);
+                // ★ 智能比對：獲取所有資料進行無大小寫與多維度比對
+                const snap = await getDocs(dbRef);
+                
+                let matchedDoc = null;
+                let existingData: any = null;
 
-                if (!snap.empty) {
-                    const existingDoc = snap.docs[0];
-                    const existingData = existingDoc.data();
-                    
+                for (const d of snap.docs) {
+                    const data = d.data();
+                    const dbName = (data.name || '').trim().toLowerCase();
+                    const dbPhone = (data.phone || '').trim();
+                    const dbId = (data.idNumber || '').trim();
+
+                    // 判斷條件：名字完全匹配(忽略大小寫) OR 電話相同 OR 證件號碼相同
+                    const nameMatch = dbName === customerName.toLowerCase();
+                    const phoneMatch = customerPhone && dbPhone === customerPhone;
+                    const idMatch = customerId && dbId === customerId;
+
+                    if (nameMatch || phoneMatch || idMatch) {
+                        matchedDoc = d;
+                        existingData = data;
+                        break;
+                    }
+                }
+
+                if (matchedDoc && existingData) {
                     const updatedFields: any = { updatedAt: serverTimestamp() };
-                    if (!existingData.phone && formData.customerPhone) updatedFields.phone = formData.customerPhone;
-                    if (!existingData.idNumber && formData.customerId) updatedFields.idNumber = formData.customerId;
+                    
+                    // 1. 補齊缺失的基本資料
+                    if (!existingData.phone && customerPhone) updatedFields.phone = customerPhone;
+                    if (!existingData.idNumber && customerId) updatedFields.idNumber = customerId;
                     if (!existingData.address && formData.customerAddress) updatedFields.address = formData.customerAddress;
                     
+                    // 2. 智能更新名稱：如果新名字更長 (例如 "Jason" 變為 "Jason 陳大文")，或是大小寫更標準，則覆蓋更新
+                    if (customerName.length > (existingData.name || '').length) {
+                        updatedFields.name = customerName; 
+                    } else if (customerName.length === (existingData.name || '').length && existingData.name !== customerName) {
+                        // 處理純大小寫修正 (例如 HINTAT TRADING COMPANY -> HINTAT Trading Company)
+                        updatedFields.name = customerName;
+                    }
+
+                    // 3. 綁定新車牌，避免重複
                     if (formData.regMark) {
                         const currentPlates = existingData.relatedPlateNo ? existingData.relatedPlateNo.split(',').map((p:string) => p.trim()) : [];
                         if (!currentPlates.includes(formData.regMark)) {
@@ -501,20 +532,29 @@ export default function CreateDocModule({ inventory, openPrintPreview, db, staff
                         }
                     }
 
+                    // 4. 智能合併角色標籤 (如原本是「買家」，現在收車又變成「行家 / 前車主」)
+                    const newRole = (selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') ? '行家 / 前車主' : '買家';
+                    const currentRoles = existingData.roles || [];
+                    if (!currentRoles.includes(newRole)) {
+                        updatedFields.roles = [...currentRoles, newRole];
+                    }
+
                     if (!existingData.category) updatedFields.category = 'Person';
 
+                    // 執行合併更新
                     if (Object.keys(updatedFields).length > 1) {
-                        await updateDoc(doc(dbRef, existingDoc.id), updatedFields);
-                        console.log(`✅ 已智能合併更新現有客戶資料: ${customerName}`);
+                        await updateDoc(doc(dbRef, matchedDoc.id), updatedFields);
+                        console.log(`✅ 已智能合併更新現有客戶資料: ${existingData.name} -> ${updatedFields.name || existingData.name}`);
                     }
                 } else {
-                    const isCompany = selectedDocType === 'purchase_contract' && formData.customerId?.includes('BR');
+                    // 若完全無匹配，建立新客戶
+                    const isCompany = (selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') && customerId.includes('BR');
                     await addDoc(dbRef, {
                         name: customerName,
                         category: isCompany ? 'Company' : 'Person',
-                        roles: selectedDocType === 'purchase_contract' ? ['行家 / 前車主'] : ['買家'],
-                        phone: formData.customerPhone || '',
-                        idNumber: formData.customerId || '',
+                        roles: (selectedDocType === 'purchase_contract' || selectedDocType === 'consignment_contract') ? ['行家 / 前車主'] : ['買家'],
+                        phone: customerPhone,
+                        idNumber: customerId,
                         address: formData.customerAddress || '',
                         relatedPlateNo: formData.regMark || '',
                         createdAt: serverTimestamp(),
