@@ -2,38 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ★★★ 原生 App 體驗終極設定 ★★★ */
+/* ========================================================
+   ★★★ 原生 App 沉浸式全螢幕設定 (Tesla Style Edge-to-Edge) ★★★ 
+======================================================== */
 html, body {
-  /* 1. 強制鎖定 iOS 底層邊界，解除高度計算衝突 */
+  /* 1. 絕對鎖定物理邊界：消除底部與右側的白邊間隙 */
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100dvh; /* 使用動態視口高度，完美貼合 iOS 底部 */
   overflow: hidden;
 
-  /* 2. 將底色強制設為淺灰色，完美融合車子列表的背景 */
+  /* 2. 將底色強制設為淺灰色，讓背景直接穿透進系統工具列與底部安全區 */
   background-color: #f1f5f9 !important;
   
-  /* 3. 防止 iPhone Safari 向下拉出現灰色背景 (拉動更新) */
-  overscroll-behavior-y: none;
+  /* 3. 防止 iPhone Safari 橡皮筋效應與選取反白 */
+  overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
-  
-  /* 4. 禁止用戶長按選取文字 (令感覺更像 App) */
   -webkit-user-select: none;
   user-select: none;
-  
-  /* 5. 消除點擊按鈕時出現的半透明灰色閃爍 */
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
 }
 
-/* 確保 Next.js 的根節點也 100% 填滿，不留任何縫隙 */
+/* 確保 Next.js / React 根節點也 100% 絕對填滿物理螢幕 */
 #__next, body > div:first-child {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
-/* 確保輸入框依然可以正常打字同複製 (非常重要！) */
+/* 確保輸入框依然可以正常打字同複製 */
 input, textarea, [contenteditable="true"] {
   -webkit-user-select: auto;
   user-select: auto;
@@ -41,10 +42,7 @@ input, textarea, [contenteditable="true"] {
 
 /* ========================================================
    ★ Windows 系統自動降維 (Graceful Degradation) 
-   解決 Chrome 硬件加速導致的毛玻璃與半透明層破圖問題
 ======================================================== */
-
-/* 1. 強制拔除所有毛玻璃效果 */
 .is-windows .backdrop-blur-sm,
 .is-windows .backdrop-blur-md,
 .is-windows .backdrop-blur-lg,
@@ -53,17 +51,15 @@ input, textarea, [contenteditable="true"] {
   -webkit-backdrop-filter: none !important;
 }
 
-/* 2. 將上方導航列、通知卡片常用的白色半透明，強制轉為純白實色，並補上邊框維持立體感 */
 .is-windows .bg-white\/50,
 .is-windows .bg-white\/60,
 .is-windows .bg-white\/70,
 .is-windows .bg-white\/80,
 .is-windows .bg-white\/90 {
   background-color: #ffffff !important;
-  border-bottom: 1px solid #e2e8f0; /* 補上一條淡灰線條分隔，取代毛玻璃的立體感 */
+  border-bottom: 1px solid #e2e8f0;
 }
 
-/* 3. 將側邊欄、深色模式常用的半透明黑/灰，強制轉為實色深灰 */
 .is-windows .bg-slate-900\/50,
 .is-windows .bg-slate-900\/80,
 .is-windows .bg-slate-900\/90,
@@ -72,26 +68,23 @@ input, textarea, [contenteditable="true"] {
 .is-windows .bg-black\/80,
 .is-windows .bg-black\/90,
 .is-windows .bg-black\/95 {
-  background-color: #0f172a !important; /* 對齊 Tailwind 的 slate-900 */
+  background-color: #0f172a !important;
 }
 
-/* 4. 將彈窗 (Modal) 底下的半透明遮罩加深，確保在拔除 blur 後仍能聚焦內容 */
 .is-windows .bg-black\/60 {
   background-color: rgba(0, 0, 0, 0.85) !important;
 }
 
 /* ========================================================
-   ★ iPhone Duo / 摺疊屏展開模式專屬適配 
-   (僅在探測到是展開狀態時生效，完全不影響一般手機版)
+   ★ iPhone Duo / 摺疊屏展開模式專屬適配 (完美融合版)
 ======================================================== */
 
-/* 1. 調整主佈局容器，搶回右側被浪費的空間，同時避開相機模組 */
+/* 1. 釋放主佈局：讓卡片自然延展至右側，僅保留標準安全距離給內容，背景無縫穿透 */
 .is-iphone-duo main {
-    padding-right: max(0.5rem, calc(env(safe-area-inset-right) * 0.4)) !important;
+    padding-right: env(safe-area-inset-right) !important;
 }
 
-/* 2. 調整右下角的懸浮按鈕 (FAB) 位置，避免被展開時的系統工具列 / 電量遮擋 */
-.is-iphone-duo .fixed.bottom-6.right-4, 
-.is-iphone-duo .fixed.bottom-6.md\:right-6 {
+/* 2. 右下角懸浮按鈕 (FAB) 智能避讓：確保不會被系統電量圖示擋住，又不會離邊緣太遠 */
+.is-iphone-duo .fixed.bottom-6 {
     right: max(1.5rem, env(safe-area-inset-right)) !important;
 }
