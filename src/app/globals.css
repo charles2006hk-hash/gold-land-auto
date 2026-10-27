@@ -13,10 +13,11 @@ html, body {
   height: 100dvh; /* 使用動態視口高度，完美貼合 iOS 底部 */
   overflow: hidden;
 
-  /* 2. 將底色強制設為淺灰色，讓背景直接穿透進系統工具列與底部安全區 */
-  background-color: #f1f5f9 !important;
+  /* ★ 核心修改：預設改為深色(配合載入畫面)，並移除 !important 讓 JS 可以接管變色 */
+  background-color: #020617; 
+  transition: background-color 0.4s ease-in-out; /* 加入平滑漸變 */
   
-  /* 3. 防止 iPhone Safari 橡皮筋效應與選取反白 */
+  /* 防止 iPhone Safari 橡皮筋效應與選取反白 */
   overscroll-behavior: none;
   -webkit-overflow-scrolling: touch;
   -webkit-user-select: none;
@@ -34,7 +35,7 @@ html, body {
   overflow: hidden;
 }
 
-/* 確保輸入框依然可以正常打字同複製 */
+/* 確保輸入框依然可以正常打字同複製 (非常重要！) */
 input, textarea, [contenteditable="true"] {
   -webkit-user-select: auto;
   user-select: auto;
@@ -42,7 +43,10 @@ input, textarea, [contenteditable="true"] {
 
 /* ========================================================
    ★ Windows 系統自動降維 (Graceful Degradation) 
+   解決 Chrome 硬件加速導致的毛玻璃與半透明層破圖問題
 ======================================================== */
+
+/* 1. 強制拔除所有毛玻璃效果 */
 .is-windows .backdrop-blur-sm,
 .is-windows .backdrop-blur-md,
 .is-windows .backdrop-blur-lg,
@@ -51,6 +55,7 @@ input, textarea, [contenteditable="true"] {
   -webkit-backdrop-filter: none !important;
 }
 
+/* 2. 將上方導航列、通知卡片常用的白色半透明，強制轉為純白實色，並補上邊框維持立體感 */
 .is-windows .bg-white\/50,
 .is-windows .bg-white\/60,
 .is-windows .bg-white\/70,
@@ -60,6 +65,7 @@ input, textarea, [contenteditable="true"] {
   border-bottom: 1px solid #e2e8f0;
 }
 
+/* 3. 將側邊欄、深色模式常用的半透明黑/灰，強制轉為實色深灰 */
 .is-windows .bg-slate-900\/50,
 .is-windows .bg-slate-900\/80,
 .is-windows .bg-slate-900\/90,
@@ -71,6 +77,7 @@ input, textarea, [contenteditable="true"] {
   background-color: #0f172a !important;
 }
 
+/* 4. 將彈窗 (Modal) 底下的半透明遮罩加深，確保在拔除 blur 後仍能聚焦內容 */
 .is-windows .bg-black\/60 {
   background-color: rgba(0, 0, 0, 0.85) !important;
 }
