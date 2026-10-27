@@ -1,4 +1,4 @@
-import type { Metadata } from "next"; // ★ 移除了用不到的 Viewport 型別
+import type { Metadata } from "next"; 
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -43,12 +43,23 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#f1f5f9" />
 
-        {/* ★ 4. 補回：Windows 智能降維探測腳本 (解決 Chrome 破圖) */}
+        {/* ★ 4. 系統環境探測腳本 (Windows 降維 + iPhone Duo 適配) */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              // [1] Windows 破圖降維探測
               if (navigator.userAgent.indexOf('Windows') !== -1) {
                 document.documentElement.classList.add('is-windows');
+              }
+
+              // [2] iPhone Duo / 摺疊屏展開模式探測
+              // 條件：是 iPhone 且螢幕寬高異常大(展開)，或是支援雙螢幕標準 API
+              var isIphone = /iPhone/i.test(navigator.userAgent);
+              var isUnfolded = window.screen.width > 500 && window.screen.height > 500;
+              var isDualScreen = window.matchMedia && window.matchMedia('(horizontal-viewport-segments: 2)').matches;
+              
+              if ((isIphone && isUnfolded) || isDualScreen) {
+                document.documentElement.classList.add('is-iphone-duo');
               }
             `,
           }}
