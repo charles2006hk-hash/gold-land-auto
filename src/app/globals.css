@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ========================================================
-   ★★★ 原生 App 沉浸式全螢幕設定 (Tesla Style Edge-to-Edge) ★★★ 
+   ★★★ 原生 App 沉浸式全螢幕設定 (基礎共用) ★★★ 
 ======================================================== */
 html, body {
   /* 1. 絕對鎖定物理邊界：消除底部與右側的白邊間隙 */
@@ -13,9 +13,9 @@ html, body {
   height: 100dvh; /* 使用動態視口高度，完美貼合 iOS 底部 */
   overflow: hidden;
 
-  /* ★ 核心修改：預設改為深色(配合載入畫面)，並移除 !important 讓 JS 可以接管變色 */
+  /* 預設深色(配合載入畫面)，讓 JS 可以接管變色，達成平滑漸變 */
   background-color: #020617; 
-  transition: background-color 0.4s ease-in-out; /* 加入平滑漸變 */
+  transition: background-color 0.4s ease-in-out; 
   
   /* 防止 iPhone Safari 橡皮筋效應與選取反白 */
   overscroll-behavior: none;
@@ -45,8 +45,6 @@ input, textarea, [contenteditable="true"] {
    ★ Windows 系統自動降維 (Graceful Degradation) 
    解決 Chrome 硬件加速導致的毛玻璃與半透明層破圖問題
 ======================================================== */
-
-/* 1. 強制拔除所有毛玻璃效果 */
 .is-windows .backdrop-blur-sm,
 .is-windows .backdrop-blur-md,
 .is-windows .backdrop-blur-lg,
@@ -55,7 +53,6 @@ input, textarea, [contenteditable="true"] {
   -webkit-backdrop-filter: none !important;
 }
 
-/* 2. 將上方導航列、通知卡片常用的白色半透明，強制轉為純白實色，並補上邊框維持立體感 */
 .is-windows .bg-white\/50,
 .is-windows .bg-white\/60,
 .is-windows .bg-white\/70,
@@ -65,7 +62,6 @@ input, textarea, [contenteditable="true"] {
   border-bottom: 1px solid #e2e8f0;
 }
 
-/* 3. 將側邊欄、深色模式常用的半透明黑/灰，強制轉為實色深灰 */
 .is-windows .bg-slate-900\/50,
 .is-windows .bg-slate-900\/80,
 .is-windows .bg-slate-900\/90,
@@ -77,21 +73,39 @@ input, textarea, [contenteditable="true"] {
   background-color: #0f172a !important;
 }
 
-/* 4. 將彈窗 (Modal) 底下的半透明遮罩加深，確保在拔除 blur 後仍能聚焦內容 */
 .is-windows .bg-black\/60 {
   background-color: rgba(0, 0, 0, 0.85) !important;
 }
 
 /* ========================================================
-   ★ iPhone Duo / 摺疊屏展開模式專屬適配 (完美融合版)
+   ★ iPhone Duo 展開模式：Tesla 沉浸式滿版適配 (嚴格隔離)
 ======================================================== */
 
-/* 1. 釋放主佈局：讓卡片自然延展至右側，僅保留標準安全距離給內容，背景無縫穿透 */
-.is-iphone-duo main {
-    padding-right: env(safe-area-inset-right) !important;
+/* 1. 強制底層背景色為儀表板的淺灰色，徹底消滅右側黑條與底部白縫 */
+html.is-iphone-duo,
+html.is-iphone-duo body {
+    background-color: #f1f5f9 !important;
 }
 
-/* 2. 右下角懸浮按鈕 (FAB) 智能避讓：確保不會被系統電量圖示擋住，又不會離邊緣太遠 */
-.is-iphone-duo .fixed.bottom-6 {
-    right: max(1.5rem, env(safe-area-inset-right)) !important;
+/* 2. 強制 React 根節點撐破實體邊界，讓背景色無縫覆蓋整個相機與狀態列安全區 */
+html.is-iphone-duo body > div:first-child,
+html.is-iphone-duo #__next {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background-color: #f1f5f9 !important;
+}
+
+/* 3. 釋放主佈局空間：讓儀表板內容往右延伸吃掉過大的黑邊留白，同時保留一點點距離避免文字貼壁 */
+html.is-iphone-duo main {
+    padding-right: max(0.5rem, calc(env(safe-area-inset-right) * 0.2)) !important;
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
+}
+
+/* 4. 強制懸浮按鈕 (FAB) 無視安全區，直接進入右側 Tools Bar 區域！ (距離實體邊緣 24px) */
+html.is-iphone-duo .fixed.bottom-6.right-4,
+html.is-iphone-duo .fixed.bottom-6.md\:right-6 {
+    right: 24px !important;
+    bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
 }
