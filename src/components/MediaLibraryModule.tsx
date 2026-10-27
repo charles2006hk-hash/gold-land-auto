@@ -85,6 +85,20 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
     const [activePointIdx, setActivePointIdx] = useState<number | null>(null);
     const [touchPos, setTouchPos] = useState<Point | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [draggingShape, setDraggingShape] = useState(false);
+    const [lastPos, setLastPos] = useState<{ x: number; y: number } | null>(null);
+
+    // ★ 核心數學：判斷點是否在四邊形(多邊形)內部 (Ray-casting)
+    const isPointInPolygon = (x: number, y: number, corners: {x: number, y: number}[]) => {
+        let inside = false;
+        for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
+            const xi = corners[i].x, yi = corners[i].y;
+            const xj = corners[j].x, yj = corners[j].y;
+            const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    };
 
     // 1. 初始化畫布與圖片
     useEffect(() => {
@@ -237,15 +251,18 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 
     const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
         e.preventDefault();
+        // 確保只處理畫布上的點擊
+        if ((e.target as HTMLElement).tagName !== 'CANVAS') return;
+        
         const { x, y } = getCoordinates(e);
 
         if (mode === 'mask') {
-            // 尋找是否點擊在 4 個點的近郊 (容錯半徑，按比例計算)
             if (!canvasRef.current) return;
             const canvasWidth = canvasRef.current.width;
             let closestIdx = -1;
             let minDist = canvasWidth * 0.08; // 大約 8% 的畫面寬度作為容錯
 
+            // A. 先判斷是否點擊到 4 個頂點 (單點變形模式)
             points.forEach((p, idx) => {
                 const dist = Math.hypot(p.x - x, p.y - y);
                 if (dist < minDist) {
@@ -257,6 +274,11 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
             if (closestIdx !== -1) {
                 setActivePointIdx(closestIdx);
                 setTouchPos({ x: e.clientX, y: e.clientY }); // 螢幕絕對座標，用來定位放大鏡
+            } 
+            // B. 若沒點到頂點，判斷是否點擊在遮罩多邊形內部 (整體拖曳模式)
+            else if (isPointInPolygon(x, y, points)) {
+                setDraggingShape(true);
+                setLastPos({ x, y });
             }
         } else if (mode === 'crop') {
             setIsDragging(true);
@@ -267,13 +289,22 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 
     const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
         e.preventDefault();
+        const { x, y } = getCoordinates(e);
         
-        if (mode === 'mask' && activePointIdx !== null) {
-            const { x, y } = getCoordinates(e);
-            setPoints(prev => prev.map((p, idx) => idx === activePointIdx ? { x, y } : p));
-            setTouchPos({ x: e.clientX, y: e.clientY });
+        if (mode === 'mask') {
+            if (activePointIdx !== null) {
+                // 單點變形
+                setPoints(prev => prev.map((p, idx) => idx === activePointIdx ? { x, y } : p));
+                setTouchPos({ x: e.clientX, y: e.clientY });
+            } else if (draggingShape && lastPos) {
+                // 整體平移
+                const dx = x - lastPos.x;
+                const dy = y - lastPos.y;
+                setPoints(points.map(p => ({ x: p.x + dx, y: p.y + dy })));
+                setLastPos({ x, y });
+            }
         } else if (mode === 'crop' && isDragging) {
-            setCropEnd(getCoordinates(e));
+            setCropEnd({ x, y });
         }
     };
 
@@ -281,6 +312,8 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
         e.preventDefault();
         if (mode === 'mask') {
             setActivePointIdx(null);
+            setDraggingShape(false);
+            setLastPos(null);
             setTouchPos(null);
         } else if (mode === 'crop') {
             setIsDragging(false);
@@ -375,7 +408,7 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
 
     const promptText = mode === 'crop' 
         ? "🖱️ 請在圖片上拖曳框選要保留的區域"
-        : "👆 請拖曳 4 個角覆蓋車牌";
+        : "👆 拖動中心平移，或拖曳 4 角覆蓋車牌";
 
     return (
         <div className="fixed inset-0 z-[9999] bg-slate-900/95 flex flex-col items-center justify-center p-0 md:p-6 backdrop-blur-sm animate-in fade-in">
@@ -411,7 +444,12 @@ const ImageEditorModal = ({ imageUrl, onClose, onSave }: { imageUrl: string, onC
                         
                         <div className="w-px h-6 bg-slate-600 mx-1 hidden md:block"></div>
                         
-                        <button onClick={handleApplyMaskClick} className="ml-auto md:ml-0 flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition-all active:scale-95">
+                        {/* ★ iPhone 修復：加入 touch-manipulation 與 onTouchEnd 防止被底層畫布吞噬 */}
+                        <button 
+                            onClick={handleApplyMaskClick} 
+                            onTouchEnd={(e) => { e.preventDefault(); handleApplyMaskClick(); }}
+                            className="ml-auto md:ml-0 relative z-50 touch-manipulation cursor-pointer flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-black bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition-all active:scale-95"
+                        >
                             執行打碼
                         </button>
                     </div>
