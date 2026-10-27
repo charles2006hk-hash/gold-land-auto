@@ -79,3 +79,19 @@ input, textarea, [contenteditable="true"] {
 .is-windows .bg-black\/60 {
   background-color: rgba(0, 0, 0, 0.85) !important;
 }
+
+/* ========================================================
+   ★ iPhone Duo / 摺疊屏展開模式專屬適配 
+   (僅在探測到是展開狀態時生效，完全不影響一般手機版)
+======================================================== */
+
+/* 1. 調整主佈局容器，搶回右側被浪費的空間，同時避開相機模組 */
+.is-iphone-duo main {
+    padding-right: max(0.5rem, calc(env(safe-area-inset-right) * 0.4)) !important;
+}
+
+/* 2. 調整右下角的懸浮按鈕 (FAB) 位置，避免被展開時的系統工具列 / 電量遮擋 */
+.is-iphone-duo .fixed.bottom-6.right-4, 
+.is-iphone-duo .fixed.bottom-6.md\:right-6 {
+    right: max(1.5rem, env(safe-area-inset-right)) !important;
+}
