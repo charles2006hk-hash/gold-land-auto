@@ -1059,6 +1059,30 @@ export default function GoldLandAutoDMS() {
       };
   }, []);
 
+  // ==================================================================
+  // ★★★ 沉浸式全螢幕動態適配 (Tesla Edge-to-Edge Style) ★★★
+  // ==================================================================
+  useEffect(() => {
+      if (typeof window === 'undefined') return;
+
+      // 判斷當前是否處於「暗黑模式」畫面 (未登入 或 載入中)
+      const isDarkMode = !staffId || isDataSyncing;
+      
+      // 根據畫面狀態，切換底層顏色：載入/登入用深空黑，進入系統用淺灰白
+      const themeColor = isDarkMode ? '#020617' : '#f1f5f9'; 
+
+      // 1. 動態改變系統狀態列 (Status Bar / Tools Bar) 的顏色，使其與 App 融合
+      let metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (metaTheme) {
+          metaTheme.setAttribute('content', themeColor);
+      }
+
+      // 2. 動態改變底層背景色，確保物理邊緣 (Safe Area) 不會露出突兀的白邊
+      document.body.style.backgroundColor = themeColor;
+      document.documentElement.style.backgroundColor = themeColor;
+      
+  }, [staffId, isDataSyncing]);
+  
   // ★★★ 終極喚醒主畫面機制 (解決重新整理後空白問題) ★★★
   const [hasInitialized, setHasInitialized] = useState(false);
 
