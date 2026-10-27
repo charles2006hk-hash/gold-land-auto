@@ -81,29 +81,31 @@ input, textarea, [contenteditable="true"] {
    ★ iPhone Duo 展開模式：Tesla 沉浸式滿版適配 (嚴格隔離)
 ======================================================== */
 
-/* 1. 強制底層背景色為儀表板的淺灰色，徹底消滅右側黑條與底部白縫 */
+/* 1. 強制將所有底板與容器結構全部染成統一的淺灰色，徹底消滅底部白縫！ */
 html.is-iphone-duo,
-html.is-iphone-duo body {
+html.is-iphone-duo body,
+html.is-iphone-duo #__next,
+html.is-iphone-duo body > div:first-child,
+html.is-iphone-duo main {
     background-color: #f1f5f9 !important;
 }
 
-/* 2. 強制 React 根節點撐破實體邊界，讓背景色無縫覆蓋整個相機與狀態列安全區 */
+/* 2. 強制 React 根節點撐破實體邊界 */
 html.is-iphone-duo body > div:first-child,
 html.is-iphone-duo #__next {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;
-    height: 100% !important;
-    background-color: #f1f5f9 !important;
+    height: 100% !important; /* 捨棄 dvh，改用 100% 確保完全緊貼 fixed body 的最底端 */
 }
 
-/* 3. 釋放主佈局空間：讓儀表板內容往右延伸吃掉過大的黑邊留白，同時保留一點點距離避免文字貼壁 */
+/* 3. 釋放主佈局空間：吃掉右側黑邊，並利用 padding-bottom 將內容推離底部橫條 */
 html.is-iphone-duo main {
     padding-right: max(0.5rem, calc(env(safe-area-inset-right) * 0.2)) !important;
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
 }
 
-/* 4. 強制懸浮按鈕 (FAB) 無視安全區，直接進入右側 Tools Bar 區域！ (距離實體邊緣 24px) */
+/* 4. 強制懸浮按鈕 (FAB) 無視安全區，直接進入右側 Tools Bar 區域！ */
 html.is-iphone-duo .fixed.bottom-6.right-4,
 html.is-iphone-duo .fixed.bottom-6.md\:right-6 {
     right: 24px !important;
