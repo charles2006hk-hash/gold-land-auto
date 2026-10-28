@@ -112,6 +112,13 @@ const VehicleFormModal = ({
     const [transferResults, setTransferResults] = useState<any[]>([]);
     const [searchingTransfer, setSearchingTransfer] = useState(false);
 
+    // ★★★ 智能客戶配對專用狀態 ★★★
+    const [showClientDropdown, setShowClientDropdown] = useState(false);
+    const [clientInput, setClientInput] = useState(v.customerName || '');
+    const [clientPhone, setClientPhone] = useState(v.customerPhone || '');
+    const [clientID, setClientID] = useState(v.customerID || '');
+    const [clientAddress, setClientAddress] = useState(v.customerAddress || '');
+
     // ★★★ 中港指標轉移：搜尋新車 (升級版) ★★★
     const handleSearchTransfer = async () => {
         if (!transferSearch || !db) return;
@@ -2100,12 +2107,76 @@ const VehicleFormModal = ({
                     
                     {/* 客戶資料 */}
                         <div className="relative">
-                            <div className="flex justify-between items-center mb-3"><h3 className="font-bold text-slate-800 text-base md:text-sm flex items-center"><UserCircle size={18} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)</h3>{vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded border border-yellow-200">VRD 車主: {vrdOwnerRaw} (未建檔)</span>}</div>
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-bold text-slate-800 text-base md:text-sm flex items-center">
+                                    <UserCircle size={18} className="mr-2 text-blue-600"/> 
+                                    客戶資料 (Purchaser)
+                                </h3>
+                                {vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded border border-yellow-200">VRD 車主: {vrdOwnerRaw} (未建檔)</span>}
+                                <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold ml-2 shadow-sm">
+                                    ⚡ 支援智能配對
+                                </span>
+                            </div>
+                            
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 md:p-4 rounded-xl border border-slate-200">
-                                <div className="relative"><span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">NAME</span><input name="customerName" defaultValue={v.customerName} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" placeholder="輸入姓名..."/></div>
-                                <div className="relative"><span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">PHONE</span><input name="customerPhone" defaultValue={v.customerPhone} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
-                                <div className="relative"><span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ID / BR</span><input name="customerID" defaultValue={v.customerID} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/></div>
-                                <div className="relative"><span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ADDRESS</span><input name="customerAddress" defaultValue={v.customerAddress} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-100 outline-none"/></div>
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold z-10">NAME</span>
+                                    <input 
+                                        name="customerName" 
+                                        value={clientInput}
+                                        onChange={(e) => {
+                                            setClientInput(e.target.value);
+                                            setShowClientDropdown(true);
+                                        }}
+                                        onFocus={() => setShowClientDropdown(true)}
+                                        onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                                        className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
+                                        placeholder="輸入姓名自動搜尋..."
+                                        autoComplete="off"
+                                    />
+                                    {/* 智能下拉選單 */}
+                                    {showClientDropdown && clientInput && (
+                                        <div className="absolute z-[60] w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                            {clients
+                                                .filter((c: any) => (c.name || '').toLowerCase().includes(clientInput.toLowerCase()) || (c.phone || '').includes(clientInput))
+                                                .map((client: any) => (
+                                                    <div 
+                                                        key={client.id}
+                                                        className="p-3 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
+                                                        onClick={() => {
+                                                            setClientInput(client.name || '');
+                                                            setClientPhone(client.phone || '');
+                                                            setClientID(client.idNumber || '');
+                                                            setClientAddress(client.address || '');
+                                                            setShowClientDropdown(false);
+                                                        }}
+                                                    >
+                                                        <div className="font-bold text-sm text-slate-800">
+                                                            {client.name} 
+                                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-2">
+                                                                {client.category === 'Company' ? '🏢 公司' : '👤 個人'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-slate-500 mt-1 font-mono">{client.phone} | {client.idNumber}</div>
+                                                    </div>
+                                            ))}
+                                            <div className="p-2 text-[10px] text-slate-400 text-center bg-slate-50">若無匹配紀錄，儲存時將自動建檔</div>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">PHONE</span>
+                                    <input name="customerPhone" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/>
+                                </div>
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ID / BR</span>
+                                    <input name="customerID" value={clientID} onChange={e => setClientID(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/>
+                                </div>
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ADDRESS</span>
+                                    <input name="customerAddress" value={clientAddress} onChange={e => setClientAddress(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-100 outline-none"/>
+                                </div>
                             </div>
                         </div>
 
