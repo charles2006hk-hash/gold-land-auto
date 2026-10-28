@@ -607,7 +607,11 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
                                 title={isSidebarCollapsed ? item.label : ''}
                             >
                                 <IconComponent size={18} className={`flex-shrink-0 ${isSidebarCollapsed ? 'mx-auto' : 'mr-3'} ${activeTab === item.id ? 'text-black' : 'text-slate-400 group-hover:text-white'}`} />
-                                {!isSidebarCollapsed && <span className="whitespace-nowrap text-sm font-medium tracking-wide animate-fade-in">{item.label}</span>}
+                                {!isSidebarCollapsed && (
+                                    <span className="whitespace-nowrap text-sm font-medium tracking-wide opacity-100 transition-opacity duration-300">
+                                        {item.label}
+                                    </span>
+                                )}
                                 
                                 {isSidebarCollapsed && <div className="absolute left-full top-1/2 -translate-y-1/2 ml-4 bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-2xl border border-white/10 transition-opacity font-bold">{item.label}</div>}
                             </button>
