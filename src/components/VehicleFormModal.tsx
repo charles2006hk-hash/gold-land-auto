@@ -129,7 +129,7 @@ const VehicleFormModal = ({
         setClonedFromId(v.id || null); // 記下舊車 ID，供稍後複製圖庫指標使用
 
         const newLifecycleVehicle: Partial<Vehicle> = {
-            category: 'Vehicle',
+           
             status: 'Pending', 
             sourceType: type,
             purchaseType: type === 'consignment' ? 'Consignment' : 'Used',
