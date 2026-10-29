@@ -140,7 +140,7 @@ const VehicleFormModal = ({
             seating: v.seating, fuelType: v.fuelType, transmission: v.transmission,
             colorExt: v.colorExt, colorInt: v.colorInt,
             priceA1: v.priceA1, priceTax: v.priceTax,
-            previousOwners: (Number(v.previousOwners) || 0) + 1, // 手數自動 +1
+            previousOwners: String((Number(v.previousOwners) || 0) + 1),
             
             // 轉移角色：原本的買家變成新週期的「進貨對象 (Vendor)」
             acquisition: {
