@@ -6,7 +6,7 @@ import {
     Database, Plus, Search, Trash2, Edit, Save, 
     FileText, File, AlertTriangle, X, Loader2, Zap, DownloadCloud,
     User as UserIcon, Bell, Printer, ImageIcon,
-    ArrowLeft, Upload, RefreshCw, ShieldCheck, ChevronDown, Maximize
+    ArrowLeft, Upload, RefreshCw, ShieldCheck, ChevronDown, Maximize, GitMerge
 } from 'lucide-react';
 import { 
     collection, addDoc, deleteDoc, doc, onSnapshot, query, 
@@ -63,6 +63,182 @@ const DateStatusBadge = ({ date, label }: { date?: string, label: string }) => {
         </div>
     );
 };
+
+// ★★★ 2. 新增：同類資料智能合併彈窗組件 (Smart Merge Modal) ★★★
+const SmartMergeModal = ({ db, appId, currentEntry, onClose, onSuccess }: any) => {
+    const [candidates, setCandidates] = useState<any[]>([]);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [search, setSearch] = useState(currentEntry?.name || '');
+
+    useEffect(() => {
+        // 載入同類別的候選名單 (嚴格限制 category 必須相同)
+        const fetchCandidates = async () => {
+            if (!db || !appId || !currentEntry) return;
+            const { collection, query, where, getDocs } = await import('firebase/firestore');
+            
+            const q = query(
+                collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database'), 
+                where('category', '==', currentEntry.category) // ★ 核心限制：同類別才能合併
+            );
+            const snap = await getDocs(q);
+            const list = snap.docs
+                .map(d => ({ id: d.id, ...d.data() }))
+                .filter(d => d.id !== currentEntry.id); // 排除自己
+            
+            setCandidates(list);
+        };
+        fetchCandidates();
+    }, [db, appId, currentEntry]);
+
+    const executeMerge = async () => {
+        if (selectedIds.length === 0) return;
+        const confirmMerge = confirm(`確定要將選中的 ${selectedIds.length} 筆資料合併到當前檔案嗎？\n\n系統將自動整合所有標籤、車牌與備註，並【永久刪除】來源空殼資料。此操作無法復原！`);
+        if (!confirmMerge) return;
+        
+        setLoading(true);
+        try {
+            const { writeBatch, doc, serverTimestamp } = await import('firebase/firestore');
+            const batch = writeBatch(db);
+            const mainRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', currentEntry.id);
+            
+            let mergedRoles = [...(currentEntry.roles || [])];
+            let mergedTags = [...(currentEntry.tags || [])];
+            let mergedPlates = currentEntry.relatedPlateNo ? currentEntry.relatedPlateNo.split(',').map((s:string)=>s.trim()) : [];
+            let mergedAttachments = [...(currentEntry.attachments || [])];
+            let newPhone = currentEntry.phone || '';
+            let newId = currentEntry.idNumber || '';
+            let newAddress = currentEntry.address || '';
+            let newRemarks = currentEntry.remarks || '';
+
+            const selectedDocs = candidates.filter(c => selectedIds.includes(c.id));
+
+            selectedDocs.forEach(c => {
+                // 陣列數據疊加
+                if (c.roles) mergedRoles.push(...c.roles);
+                if (c.tags) mergedTags.push(...c.tags);
+                if (c.attachments) mergedAttachments.push(...c.attachments);
+                if (c.relatedPlateNo) mergedPlates.push(...c.relatedPlateNo.split(',').map((s:string)=>s.trim()));
+                
+                // 字串數據互補 (保留有值的)
+                if (!newPhone && c.phone) newPhone = c.phone;
+                if (!newId && c.idNumber) newId = c.idNumber;
+                if (!newAddress && c.address) newAddress = c.address;
+                if (c.remarks) newRemarks = newRemarks ? `${newRemarks}\n[合併自舊檔]: ${c.remarks}` : c.remarks;
+
+                // 刪除被合併的殘留資料
+                batch.delete(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database', c.id));
+            });
+
+            // 陣列去重複
+            const finalRoles = Array.from(new Set(mergedRoles.filter(Boolean)));
+            const finalTags = Array.from(new Set(mergedTags.filter(Boolean)));
+            const finalPlates = Array.from(new Set(mergedPlates.filter(Boolean))).join(', ');
+            
+            // 附件去重複 (以 URL 為基準)
+            const uniqueAttachments = Array.from(new Map(mergedAttachments.map(item => [item.url || item.data, item])).values());
+
+            const finalUpdate = {
+                roles: finalRoles,
+                tags: finalTags,
+                attachments: uniqueAttachments,
+                relatedPlateNo: finalPlates,
+                phone: newPhone,
+                idNumber: newId,
+                address: newAddress,
+                remarks: newRemarks,
+                updatedAt: serverTimestamp()
+            };
+
+            batch.update(mainRef, finalUpdate);
+            await batch.commit();
+            
+            alert('✅ 數據已成功整合並清理完成！');
+            onSuccess(finalUpdate);
+        } catch (err) {
+            console.error("合併失敗", err);
+            alert("合併失敗，請檢查網路連線。");
+        }
+        setLoading(false);
+    };
+
+    const filteredCandidates = candidates.filter(c => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.plateNoHK || '').toLowerCase().includes(q);
+    });
+
+    return (
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh] overflow-hidden border border-slate-200">
+                <div className="p-4 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center flex-none">
+                    <h3 className="font-bold text-indigo-900 flex items-center">
+                        <GitMerge size={18} className="mr-2 text-indigo-600"/> 
+                        尋找並合併重複資料
+                    </h3>
+                    <button onClick={onClose} className="p-1 hover:bg-indigo-100 rounded-full text-indigo-400 hover:text-indigo-600 transition-colors"><X size={20}/></button>
+                </div>
+                
+                <div className="p-4 border-b bg-white flex-none">
+                    <div className="text-xs font-bold text-slate-500 mb-2">請勾選要合併進【{currentEntry.name}】的同類別資料：</div>
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+                        <input 
+                            value={search} 
+                            onChange={e => setSearch(e.target.value)} 
+                            placeholder="搜尋名稱、電話、車牌..." 
+                            className="w-full pl-9 p-2 border rounded-lg text-sm bg-slate-50 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-2 bg-slate-50 space-y-2">
+                    {filteredCandidates.map(c => (
+                        <label key={c.id} className={`flex items-start p-3 rounded-lg border cursor-pointer transition-all ${selectedIds.includes(c.id) ? 'bg-indigo-50 border-indigo-300 shadow-sm' : 'bg-white border-slate-200 hover:border-indigo-200'}`}>
+                            <input 
+                                type="checkbox" 
+                                checked={selectedIds.includes(c.id)}
+                                onChange={e => {
+                                    if (e.target.checked) setSelectedIds([...selectedIds, c.id]);
+                                    else setSelectedIds(selectedIds.filter(id => id !== c.id));
+                                }}
+                                className="mt-1 mr-3 w-4 h-4 accent-indigo-600 cursor-pointer"
+                            />
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-slate-800 text-sm">{c.name || '(未命名)'}</div>
+                                <div className="text-xs text-slate-500 mt-1 flex flex-wrap gap-1">
+                                    {c.phone && <span>📞 {c.phone}</span>}
+                                    {c.plateNoHK && <span>🚗 {c.plateNoHK}</span>}
+                                </div>
+                                {(c.roles?.length > 0 || c.tags?.length > 0) && (
+                                    <div className="mt-1.5 flex flex-wrap gap-1">
+                                        {[...new Set([...(c.roles||[]), ...(c.tags||[])])].map((t:any, idx) => (
+                                            <span key={idx} className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[9px] border font-bold">{t}</span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </label>
+                    ))}
+                    {filteredCandidates.length === 0 && <div className="text-center py-8 text-xs text-slate-400">找不到同類別的相符資料</div>}
+                </div>
+
+                <div className="p-4 border-t bg-white flex justify-end gap-3 flex-none">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">取消</button>
+                    <button 
+                        onClick={executeMerge} 
+                        disabled={selectedIds.length === 0 || loading}
+                        className="px-6 py-2 rounded-lg text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center"
+                    >
+                        {loading ? <Loader2 size={16} className="animate-spin mr-2"/> : <GitMerge size={16} className="mr-2"/>}
+                        合併 {selectedIds.length} 筆資料
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // --- A4 智能證件排版與列印組件 (內嵌) ---
 const A4DocumentPrinter = ({ selectedItems, onClose }: any) => {
@@ -230,6 +406,9 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
     const [tagInput, setTagInput] = useState('');
     const [showMediaPicker, setShowMediaPicker] = useState(false);
     const [availableDocs, setAvailableDocs] = useState<any[]>([]);
+
+    // ★ 3. 加入合併彈窗控制狀態
+    const [showMergeModal, setShowMergeModal] = useState(false);
     
     // 重複資料處理狀態
     const [dupeGroups, setDupeGroups] = useState<DatabaseEntry[][]>([]);
@@ -1025,6 +1204,15 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                                     </>
                                 ) : (
                                     <>
+                                        {/* ★ 4. 新增：智能合併按鈕 */}
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setShowMergeModal(true)} 
+                                            className="flex items-center justify-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors shadow-sm"
+                                        >
+                                            <GitMerge size={14} /> <span className="hidden sm:inline">合併重複</span>
+                                        </button>
+                                        
                                         <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(editingEntry.id); }} className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors" title="刪除"><Trash2 size={18}/></button>
                                         <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsDbEditing(true); }} className="px-4 py-2 text-sm bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center transition-colors"><Edit size={16} className="mr-1"/> 編輯</button>
                                     </>
@@ -1724,6 +1912,21 @@ export default function DatabaseModule({ db, staffId, appId, settings, editingEn
                         } finally {
                             setScannerData(null);
                         }
+                    }}
+                />
+            )}
+
+            {/* ★ 5. 掛載智能掃描器 Modal 下方 */}
+            {showMergeModal && editingEntry && (
+                <SmartMergeModal 
+                    db={db}
+                    appId={appId}
+                    currentEntry={editingEntry}
+                    onClose={() => setShowMergeModal(false)}
+                    onSuccess={(updatedData: any) => {
+                        // 合併成功後更新當前預覽畫面，並關閉彈窗
+                        setEditingEntry({ ...editingEntry, ...updatedData });
+                        setShowMergeModal(false);
                     }}
                 />
             )}
