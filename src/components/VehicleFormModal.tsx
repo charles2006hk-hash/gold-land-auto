@@ -119,6 +119,7 @@ const VehicleFormModal = ({
     const [clientID, setClientID] = useState(v.customerID || '');
     const [clientAddress, setClientAddress] = useState(v.customerAddress || '');
 
+    // 👇---------- 插入這段代碼 ----------👇
     // ★ 一鍵回購/寄賣專用狀態
     const [clonedFromId, setClonedFromId] = useState<string | null>(null);
 
@@ -165,6 +166,7 @@ const VehicleFormModal = ({
         setRightTab('cost'); // 自動跳轉到進貨成本頁面
         alert('✨ 已成功建立全新生命週期！請填寫新的收車成本與進貨細節。');
     };
+    // 👆---------- 插入結束 ----------👆
 
     // ★★★ 中港指標轉移：搜尋新車 (升級版) ★★★
     const handleSearchTransfer = async () => {
@@ -1547,7 +1549,8 @@ const VehicleFormModal = ({
         try { 
             // 1. 先執行原本的車輛儲存動作
             await saveVehicle(e); 
- 
+            
+            // 👇---------- 插入這段代碼 ----------👇
             // ★★★ 智能圖庫指標轉移 (Pointer Duplication) ★★★
             if (clonedFromId && db && appId) {
                 const { collection, query, where, getDocs, writeBatch, doc, serverTimestamp } = await import('firebase/firestore');
@@ -1578,6 +1581,8 @@ const VehicleFormModal = ({
                     }
                 }
                 setClonedFromId(null);
+            }
+            // 👆---------- 插入結束 ----------👆
             
             // ★★★ 自動學習引擎：擷取手動輸入的新設備標籤，寫入系統庫 ★★★
             const currentRemarks = formData.get('salesRemarks') as string;
@@ -1758,6 +1763,7 @@ const VehicleFormModal = ({
                     </div>
                 )}
             </div>
+
             {/* 👇---------- 替換右側按鈕區塊 ----------👇 */}
             <div className="flex items-center gap-2 md:gap-4">
                 {/* ★ 只有已售/已訂的車輛才會出現回購按鈕 */}
