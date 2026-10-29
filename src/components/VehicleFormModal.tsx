@@ -159,7 +159,7 @@ const VehicleFormModal = ({
                 
                 // 繼承相片網址
                 photos: v.photos || [],
-                crossBorder: v.crossBorder?.isEnabled ? { ...v.crossBorder, tasks: [] } : undefined,
+                ...(v.crossBorder?.isEnabled ? { crossBorder: { ...v.crossBorder, tasks: [] } } : {}), // ✅ 修正：安全的動態屬性
                 
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
