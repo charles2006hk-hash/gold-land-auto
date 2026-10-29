@@ -119,6 +119,53 @@ const VehicleFormModal = ({
     const [clientID, setClientID] = useState(v.customerID || '');
     const [clientAddress, setClientAddress] = useState(v.customerAddress || '');
 
+    // ★ 一鍵回購/寄賣專用狀態
+    const [clonedFromId, setClonedFromId] = useState<string | null>(null);
+
+    const handleRepurchase = async (type: 'own' | 'consignment') => {
+        if (!confirm(`確定要以「${type === 'own' ? '收回收購' : '客人寄賣'}」方式重新入庫嗎？\n\n系統將保留當前的歷史銷售紀錄，並為這台車建立一個【全新】的進銷存檔案，圖片庫將自動無縫連動！`)) return;
+
+        setClonedFromId(v.id || null); // 記下舊車 ID，供稍後複製圖庫指標使用
+
+        const newLifecycleVehicle: Partial<Vehicle> = {
+            category: 'Vehicle',
+            status: 'Pending', 
+            sourceType: type,
+            purchaseType: type === 'consignment' ? 'Consignment' : 'Used',
+            
+            // 複製車輛硬體資料
+            regMark: v.regMark, make: v.make, model: v.model, year: v.year,
+            chassisNo: v.chassisNo, engineNo: v.engineNo, engineSize: v.engineSize,
+            seating: v.seating, fuelType: v.fuelType, transmission: v.transmission,
+            colorExt: v.colorExt, colorInt: v.colorInt,
+            priceA1: v.priceA1, priceTax: v.priceTax,
+            previousOwners: (Number(v.previousOwners) || 0) + 1, // 手數自動 +1
+            
+            // 轉移角色：原本的買家變成新週期的「進貨對象 (Vendor)」
+            acquisition: {
+                type: 'Local',
+                vendor: v.customerName || '',
+                vendorPhone: v.customerPhone || '',
+                vendorID: v.customerID || '',
+                paymentStatus: 'Unpaid'
+            },
+            
+            // 清空所有新週期的銷售與財務資料
+            customerName: '', customerPhone: '', customerID: '', customerAddress: '',
+            price: 0, costPrice: 0,
+            payments: [], expenses: [], salesAddons: [], maintenanceRecords: [],
+            
+            // ★ 直接繼承 Firebase Storage 的圖片網址 (零成本連動)
+            photos: v.photos || [],
+            crossBorder: v.crossBorder?.isEnabled ? { ...v.crossBorder, tasks: [] } : undefined
+        };
+
+        setEditingVehicle(newLifecycleVehicle as any);
+        setActiveTab('inventory_add'); // 切換到新增模式
+        setRightTab('cost'); // 自動跳轉到進貨成本頁面
+        alert('✨ 已成功建立全新生命週期！請填寫新的收車成本與進貨細節。');
+    };
+
     // ★★★ 中港指標轉移：搜尋新車 (升級版) ★★★
     const handleSearchTransfer = async () => {
         if (!transferSearch || !db) return;
@@ -1500,6 +1547,37 @@ const VehicleFormModal = ({
         try { 
             // 1. 先執行原本的車輛儲存動作
             await saveVehicle(e); 
+ 
+            // ★★★ 智能圖庫指標轉移 (Pointer Duplication) ★★★
+            if (clonedFromId && db && appId) {
+                const { collection, query, where, getDocs, writeBatch, doc, serverTimestamp } = await import('firebase/firestore');
+                
+                // 利用底盤號與剛剛新增的狀態，精準找出這台「新車」的 ID
+                const invQ = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), where('chassisNo', '==', v.chassisNo));
+                const invSnap = await getDocs(invQ);
+                const newCarDoc = invSnap.docs.find(d => d.id !== clonedFromId);
+                
+                if (newCarDoc) {
+                    // 找出舊車在智能圖庫中的所有照片指標
+                    const mediaQ = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), where('relatedVehicleId', '==', clonedFromId));
+                    const mediaSnap = await getDocs(mediaQ);
+                    
+                    if (!mediaSnap.empty) {
+                        const batch = writeBatch(db);
+                        mediaSnap.forEach(mDoc => {
+                            const newMediaRef = doc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'));
+                            batch.set(newMediaRef, {
+                                ...mDoc.data(),
+                                relatedVehicleId: newCarDoc.id, // 指向新車
+                                createdAt: serverTimestamp(),
+                                updatedAt: serverTimestamp()
+                            });
+                        });
+                        await batch.commit();
+                        console.log('✅ 已成功將圖庫指標無縫連動至新車！');
+                    }
+                }
+                setClonedFromId(null);
             
             // ★★★ 自動學習引擎：擷取手動輸入的新設備標籤，寫入系統庫 ★★★
             const currentRemarks = formData.get('salesRemarks') as string;
@@ -1680,7 +1758,23 @@ const VehicleFormModal = ({
                     </div>
                 )}
             </div>
-            <button type="button" onClick={handleClose} className="hidden md:block p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
+            {/* 👇---------- 替換右側按鈕區塊 ----------👇 */}
+            <div className="flex items-center gap-2 md:gap-4">
+                {/* ★ 只有已售/已訂的車輛才會出現回購按鈕 */}
+                {!isNew && (currentStatus === 'Sold' || currentStatus === 'Reserved') && (
+                    <div className="hidden md:flex bg-slate-800 rounded-lg p-1 border border-slate-700 shadow-inner">
+                        <button type="button" onClick={() => handleRepurchase('own')} className="px-3 py-1.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center">
+                            ♻️ 收回 (Trade-in)
+                        </button>
+                        <div className="w-px bg-slate-700 mx-1"></div>
+                        <button type="button" onClick={() => handleRepurchase('consignment')} className="px-3 py-1.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center">
+                            🤝 舊客寄賣
+                        </button>
+                    </div>
+                )}
+                <button type="button" onClick={handleClose} className="hidden md:block p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
+            </div>
+            {/* 👆---------- 替換結束 ----------👆 */}
           </div>
 
           <form 
