@@ -233,82 +233,85 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         );
     };
 
-    // ★ 引擎 3：高精度 SVG 橢圓章 (無縫彎曲排版)
+    // ★ 引擎 3：高精度 SVG 橢圓章 (完美復刻 1:1 實體質感)
     const renderOvalStamp = (activeLines: string[], maxLen: number) => {
-        // 設定 viewBox，乘以 10 以獲得高解析度的畫布比例
         const vBoxW = ovalWidth * 10;
         const vBoxH = ovalHeight * 10;
         
         const cx = vBoxW / 2;
         const cy = vBoxH / 2;
         
-        // 外部邊界 (減去少許 padding 確保不被裁切)
-        const rxOuter = vBoxW / 2 - 4;
-        const ryOuter = vBoxH / 2 - 4;
+        // 1. 調整邊界 (預留 padding 避免邊緣被裁切)
+        const padding = 6;
         
-        // 根據標準雙圈印章比例，文字環的厚度約為短半徑的 35%~40%
-        const ringThickness = Math.min(rxOuter, ryOuter) * 0.38; 
+        // 2. ★ 修正外框：加入「子母線」(一粗一細緊貼的外圈)
+        const rxOuterThick = vBoxW / 2 - padding;
+        const ryOuterThick = vBoxH / 2 - padding;
         
-        // 內圈半徑
-        const rxInner = rxOuter - ringThickness;
-        const ryInner = ryOuter - ringThickness;
+        const rxOuterThin = rxOuterThick - 3.5; // 緊貼在粗線內側的細線
+        const ryOuterThin = ryOuterThick - 3.5;
+
+        // 3. 內圈半徑 (與細外線保持一定距離，形成文字環)
+        const ringThickness = Math.min(rxOuterThick, ryOuterThick) * 0.45; 
+        const rxInner = rxOuterThin - ringThickness;
+        const ryInner = ryOuterThin - ringThickness;
         
-        // 字體大小：根據環的厚度自動調整
-        const fontSizeRing = ringThickness * 0.60;
+        // 4. 文字軌道計算
+        const fontSizeRing = ringThickness * 0.65;
         
-        // ★ 核心魔法：為 textPath 建立「完美的隱形軌道」
-        // 上半部軌道：貼近內圈 (由左至右上彎)
-        const rxTextTop = rxInner + ringThickness * 0.2;
-        const ryTextTop = ryInner + ringThickness * 0.2;
+        // 上半部英文軌道 (稍微上推，避免與內圈黏在一起)
+        const rxTextTop = rxInner + ringThickness * 0.28;
+        const ryTextTop = ryInner + ringThickness * 0.28;
         
-        // 下半部軌道：貼近外圈 (由左至右下彎)
-        const rxTextBottom = rxOuter - ringThickness * 0.25;
-        const ryTextBottom = ryOuter - ringThickness * 0.25;
+        // 下半部數字軌道
+        const rxTextBottom = rxOuterThin - ringThickness * 0.25;
+        const ryTextBottom = ryOuterThin - ringThickness * 0.25;
 
         return (
             <svg id="stamp-svg" viewBox={`0 0 ${vBoxW} ${vBoxH}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
                 <defs>
-                    {/* SVG 橢圓弧線指令: A rx,ry xAxisRotate LargeArcFlag SweepFlag x,y */}
-                    {/* 上弧線: 從左極點到右極點，順時針 (Sweep=1) */}
-                    <path id="oval-top-path" d={`M ${cx - rxTextTop},${cy} A ${rxTextTop},${ryTextTop} 0 0,1 ${cx + rxTextTop},${cy}`} fill="none" />
-                    {/* 下弧線: 從左極點到右極點，逆時針 (Sweep=0) */}
-                    <path id="oval-bottom-path" d={`M ${cx - rxTextBottom},${cy} A ${rxTextBottom},${ryTextBottom} 0 0,0 ${cx + rxTextBottom},${cy}`} fill="none" />
+                    {/* ★ 修正重疊：縮短弧線長度，避免文字與星號重疊。從左極點向上彎到右極點 (175度到5度) */}
+                    <path id="oval-top-path" d={`M ${cx - rxTextTop * 0.98},${cy - ryTextTop * 0.15} A ${rxTextTop},${ryTextTop} 0 0,1 ${cx + rxTextTop * 0.98},${cy - ryTextTop * 0.15}`} fill="none" />
+                    
+                    {/* 下半部數字弧線 (170度到10度向下彎) */}
+                    <path id="oval-bottom-path" d={`M ${cx - rxTextBottom * 0.95},${cy + ryTextBottom * 0.1} A ${rxTextBottom},${ryTextBottom} 0 0,0 ${cx + rxTextBottom * 0.95},${cy + ryTextBottom * 0.1}`} fill="none" />
                 </defs>
 
-                {/* 外圈實線 */}
-                <ellipse cx={cx} cy={cy} rx={rxOuter} ry={ryOuter} fill="none" stroke="black" strokeWidth="4" />
+                {/* ★ 修正外框：子母雙線設計 */}
+                <ellipse cx={cx} cy={cy} rx={rxOuterThick} ry={ryOuterThick} fill="none" stroke="black" strokeWidth="4.5" />
+                <ellipse cx={cx} cy={cy} rx={rxOuterThin} ry={ryOuterThin} fill="none" stroke="black" strokeWidth="1" />
+                
                 {/* 內圈實線 */}
                 <ellipse cx={cx} cy={cy} rx={rxInner} ry={ryInner} fill="none" stroke="black" strokeWidth="1.5" />
                 
-                {/* 頂部外環英文 */}
+                {/* 頂部外環英文 (★ 修正字體：改為標準 Arial，不使用窄體) */}
                 {companyEn && (
-                    <text fill="black" fontSize={fontSizeRing} fontWeight="bold" fontFamily="'Times New Roman Condensed', 'Arial Narrow', 'Helvetica Condensed', 'Times New Roman', Times, serif" fontStretch="condensed">
-                        {/* startOffset="50%" 與 textAnchor="middle" 確保文字絕對置中於弧線 */}
-                        <textPath href="#oval-top-path" startOffset="50%" textAnchor="middle" lengthAdjust={companyEn.length > 20 ? "spacingAndGlyphs" : "spacing"} textLength={companyEn.length > 20 ? (rxTextTop * Math.PI * 0.9) : undefined}>
+                    <text fill="black" fontSize={fontSizeRing * 0.9} fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif">
+                        <textPath href="#oval-top-path" startOffset="50%" textAnchor="middle" lengthAdjust={companyEn.length > 22 ? "spacingAndGlyphs" : "spacing"} textLength={companyEn.length > 22 ? (rxTextTop * Math.PI * 0.9) : undefined}>
                             {companyEn.toUpperCase()}
                         </textPath>
                     </text>
                 )}
 
-                {/* 底部外環文字/數字 */}
+                {/* 底部外環文字/數字 (★ 稍微壓扁，符合實體印章質感) */}
                 {ovalBottomText && (
-                    <text fill="black" fontSize={fontSizeRing * 0.9} fontWeight="bold" fontFamily="Arial, sans-serif">
-                        <textPath href="#oval-bottom-path" startOffset="50%" textAnchor="middle" lengthAdjust="spacing">
+                    <text fill="black" fontSize={fontSizeRing * 0.9} fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif" fontStretch="condensed">
+                        <textPath href="#oval-bottom-path" startOffset="50%" textAnchor="middle" lengthAdjust="spacing" letterSpacing="1">
                             {ovalBottomText}
                         </textPath>
                     </text>
                 )}
 
-                {/* 左右護法星號 (*) */}
-                <text x={cx - (rxOuter + rxInner)/2} y={cy + (fontSizeRing * 0.1)} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
+                {/* ★ 左右護法星號 (*) 完美置中於內外圈之間 */}
+                <text x={cx - rxOuterThin + ringThickness / 2} y={cy} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
                     *
                 </text>
-                <text x={cx + (rxOuter + rxInner)/2} y={cy + (fontSizeRing * 0.1)} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
+                <text x={cx + rxOuterThin - ringThickness / 2} y={cy} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
                     *
                 </text>
 
-                {/* 內環中央中文排版 */}
-                <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="2">
+                {/* 內環中央中文排版 (保持原有 Kaiti 設定) */}
+                <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="3">
                     {activeLines.length === 1 && (() => {
                         const fSize = Math.min((rxInner * 1.5) / maxLen, ryInner * 0.6);
                         return <text x={cx} y={cy + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>;
@@ -323,12 +326,12 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         );
                     })()}
                     {activeLines.length === 3 && (() => {
-                        const fSize = Math.min((rxInner * 1.3) / maxLen, ryInner * 0.35);
+                        const fSize = Math.min((rxInner * 1.25) / maxLen, ryInner * 0.35);
                         return (
                             <>
-                                <text x={cx} y={cy - fSize * 1.2 + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>
+                                <text x={cx} y={cy - fSize * 1.1 + fSize * 0.35} fontSize={fSize}>{activeLines[0]}</text>
                                 <text x={cx} y={cy + fSize * 0.35} fontSize={fSize}>{activeLines[1]}</text>
-                                <text x={cx} y={cy + fSize * 1.2 + fSize * 0.35} fontSize={fSize}>{activeLines[2]}</text>
+                                <text x={cx} y={cy + fSize * 1.1 + fSize * 0.35} fontSize={fSize}>{activeLines[2]}</text>
                             </>
                         );
                     })()}
