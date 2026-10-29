@@ -19,6 +19,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
     const [ovalWidth, setOvalWidth] = useState(33); // 預設 33mm
     const [ovalHeight, setOvalHeight] = useState(22); // 預設 22mm
     const [ovalBottomText, setOvalBottomText] = useState('24746847'); // 底部數字或文字
+    const [ovalSideSymbol, setOvalSideSymbol] = useState('*'); // ★ 新增：自訂兩側符號
 
     // 監聽歷史紀錄
     useEffect(() => {
@@ -51,6 +52,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         }
     };
 
+    // 在 loadHistory 函數中加入讀取：
     const loadHistory = (item: any) => {
         setCompanyEn(item.companyEn || '');
         if (item.chLine1 !== undefined) {
@@ -65,6 +67,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         if (item.ovalWidth) setOvalWidth(item.ovalWidth);
         if (item.ovalHeight) setOvalHeight(item.ovalHeight);
         if (item.ovalBottomText !== undefined) setOvalBottomText(item.ovalBottomText);
+        if (item.ovalSideSymbol !== undefined) setOvalSideSymbol(item.ovalSideSymbol); // ★ 加入讀取
     };
 
     const handlePrint = () => {
@@ -233,58 +236,60 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
         );
     };
 
-    // ★ 引擎 3：高精度 SVG 橢圓章 (完美復刻 1:1 實體質感)
+   // ★ 引擎 3：高精度 SVG 橢圓章 (無縫彎曲排版 + 完美幾何置中)
     const renderOvalStamp = (activeLines: string[], maxLen: number) => {
         const vBoxW = ovalWidth * 10;
         const vBoxH = ovalHeight * 10;
-        
         const cx = vBoxW / 2;
         const cy = vBoxH / 2;
         
-        // 1. 調整邊界 (預留 padding 避免邊緣被裁切)
         const padding = 6;
         
-        // 2. ★ 修正外框：加入「子母線」(一粗一細緊貼的外圈)
+        // 1. 調整外框距離：擴大「子母線」的間距 (從原本 -3.5 改為 -6)
         const rxOuterThick = vBoxW / 2 - padding;
         const ryOuterThick = vBoxH / 2 - padding;
-        
-        const rxOuterThin = rxOuterThick - 3.5; // 緊貼在粗線內側的細線
-        const ryOuterThin = ryOuterThick - 3.5;
+        const rxOuterThin = rxOuterThick - 6; 
+        const ryOuterThin = ryOuterThick - 6;
 
-        // 3. 內圈半徑 (與細外線保持一定距離，形成文字環)
+        // 內圈半徑
         const ringThickness = Math.min(rxOuterThick, ryOuterThick) * 0.45; 
         const rxInner = rxOuterThin - ringThickness;
         const ryInner = ryOuterThin - ringThickness;
         
-        // 4. 文字軌道計算
         const fontSizeRing = ringThickness * 0.65;
         
-        // 上半部英文軌道 (稍微上推，避免與內圈黏在一起)
+        // 2. 文字軌道半徑計算
         const rxTextTop = rxInner + ringThickness * 0.28;
         const ryTextTop = ryInner + ringThickness * 0.28;
         
-        // 下半部數字軌道
-        const rxTextBottom = rxOuterThin - ringThickness * 0.25;
-        const ryTextBottom = ryOuterThin - ringThickness * 0.25;
+        // ★ 修正底部文字貼住內圈：把底部軌道下推至貼近「外圈」，讓文字往上生長時剛好置中
+        const rxTextBottom = rxOuterThin - ringThickness * 0.15;
+        const ryTextBottom = ryOuterThin - ringThickness * 0.15;
+
+        // 3. ★ 幾何切角計算：避免英文/數字與兩側星號重疊
+        // topSpread = 0.88 代表弧線只畫到 X軸 88% 的位置，強制留空兩側
+        const topSpread = 0.88; 
+        const topYOffset = ryTextTop * Math.sqrt(1 - topSpread * topSpread); // 橢圓方程式求 Y
+        
+        const bottomSpread = 0.85;
+        const bottomYOffset = ryTextBottom * Math.sqrt(1 - bottomSpread * bottomSpread);
 
         return (
             <svg id="stamp-svg" viewBox={`0 0 ${vBoxW} ${vBoxH}`} xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-black">
                 <defs>
-                    {/* ★ 修正重疊：縮短弧線長度，避免文字與星號重疊。從左極點向上彎到右極點 (175度到5度) */}
-                    <path id="oval-top-path" d={`M ${cx - rxTextTop * 0.98},${cy - ryTextTop * 0.15} A ${rxTextTop},${ryTextTop} 0 0,1 ${cx + rxTextTop * 0.98},${cy - ryTextTop * 0.15}`} fill="none" />
-                    
-                    {/* 下半部數字弧線 (170度到10度向下彎) */}
-                    <path id="oval-bottom-path" d={`M ${cx - rxTextBottom * 0.95},${cy + ryTextBottom * 0.1} A ${rxTextBottom},${ryTextBottom} 0 0,0 ${cx + rxTextBottom * 0.95},${cy + ryTextBottom * 0.1}`} fill="none" />
+                    {/* ★ 使用精確的 Y 偏移量，保證文字軌道是絕對的橢圓形，且左右留白 */}
+                    <path id="oval-top-path" d={`M ${cx - rxTextTop * topSpread},${cy - topYOffset} A ${rxTextTop},${ryTextTop} 0 0,1 ${cx + rxTextTop * topSpread},${cy - topYOffset}`} fill="none" />
+                    <path id="oval-bottom-path" d={`M ${cx - rxTextBottom * bottomSpread},${cy + bottomYOffset} A ${rxTextBottom},${ryTextBottom} 0 0,0 ${cx + rxTextBottom * bottomSpread},${cy + bottomYOffset}`} fill="none" />
                 </defs>
 
-                {/* ★ 修正外框：子母雙線設計 */}
+                {/* 外框雙線 (子母線) */}
                 <ellipse cx={cx} cy={cy} rx={rxOuterThick} ry={ryOuterThick} fill="none" stroke="black" strokeWidth="4.5" />
                 <ellipse cx={cx} cy={cy} rx={rxOuterThin} ry={ryOuterThin} fill="none" stroke="black" strokeWidth="1" />
                 
                 {/* 內圈實線 */}
                 <ellipse cx={cx} cy={cy} rx={rxInner} ry={ryInner} fill="none" stroke="black" strokeWidth="1.5" />
                 
-                {/* 頂部外環英文 (★ 修正字體：改為標準 Arial，不使用窄體) */}
+                {/* 頂部英文 (字體修復為標準字體) */}
                 {companyEn && (
                     <text fill="black" fontSize={fontSizeRing * 0.9} fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif">
                         <textPath href="#oval-top-path" startOffset="50%" textAnchor="middle" lengthAdjust={companyEn.length > 22 ? "spacingAndGlyphs" : "spacing"} textLength={companyEn.length > 22 ? (rxTextTop * Math.PI * 0.9) : undefined}>
@@ -293,7 +298,7 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     </text>
                 )}
 
-                {/* 底部外環文字/數字 (★ 稍微壓扁，符合實體印章質感) */}
+                {/* 底部電話/數字 */}
                 {ovalBottomText && (
                     <text fill="black" fontSize={fontSizeRing * 0.9} fontWeight="bold" fontFamily="Arial, Helvetica, sans-serif" fontStretch="condensed">
                         <textPath href="#oval-bottom-path" startOffset="50%" textAnchor="middle" lengthAdjust="spacing" letterSpacing="1">
@@ -302,15 +307,19 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                     </text>
                 )}
 
-                {/* ★ 左右護法星號 (*) 完美置中於內外圈之間 */}
-                <text x={cx - rxOuterThin + ringThickness / 2} y={cy} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
-                    *
-                </text>
-                <text x={cx + rxOuterThin - ringThickness / 2} y={cy} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
-                    *
-                </text>
+                {/* ★ 左右兩側符號 (自訂化) */}
+                {ovalSideSymbol && (
+                    <>
+                        <text x={cx - rxOuterThin + ringThickness / 2} y={cy} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
+                            {ovalSideSymbol}
+                        </text>
+                        <text x={cx + rxOuterThin - ringThickness / 2} y={cy} fill="black" fontSize={fontSizeRing * 1.5} textAnchor="middle" dominantBaseline="central" fontWeight="bold">
+                            {ovalSideSymbol}
+                        </text>
+                    </>
+                )}
 
-                {/* 內環中央中文排版 (保持原有 Kaiti 設定) */}
+                {/* 內環中央中文 */}
                 <g fill="black" fontWeight="900" fontFamily="'Kaiti', 'STKaiti', 'KaiTi_GB2312', 'BiauKai', serif" textAnchor="middle" letterSpacing="3">
                     {activeLines.length === 1 && (() => {
                         const fSize = Math.min((rxInner * 1.5) / maxLen, ryInner * 0.6);
@@ -339,7 +348,6 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
             </svg>
         );
     };
-
     const isRect = stampType === 'rect_24x66';
     const isOval = stampType === 'oval';
 
@@ -368,11 +376,17 @@ export default function StampMakerModule({ db, appId, staffId }: any) {
                         <input value={companyEn} onChange={e => setCompanyEn(e.target.value)} className="w-full border-2 border-slate-200 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-blue-500 uppercase" />
                     </div>
 
-                    {/* ★ 新增：橢圓底部的文字/數字 */}
+                   {/* ★ 新增：橢圓底部的文字與兩側符號 */}
                     {isOval && (
-                        <div className="animate-fade-in">
-                            <label className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1 block">底部文字 (編號/電話)</label>
-                            <input value={ovalBottomText} onChange={e => setOvalBottomText(e.target.value)} className="w-full border-2 border-orange-200 bg-orange-50 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-orange-500" placeholder="例如: 24746847" />
+                        <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                            <div>
+                                <label className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1 block">底部文字 (編號/電話)</label>
+                                <input value={ovalBottomText} onChange={e => setOvalBottomText(e.target.value)} className="w-full border-2 border-orange-200 bg-orange-50 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-orange-500" placeholder="例如: 24746847" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1 block">兩側符號 (預設 *)</label>
+                                <input value={ovalSideSymbol} onChange={e => setOvalSideSymbol(e.target.value)} className="w-full border-2 border-orange-200 bg-orange-50 rounded-lg p-2 font-bold text-slate-800 outline-none focus:border-orange-500 text-center" placeholder="*" />
+                            </div>
                         </div>
                     )}
                     
