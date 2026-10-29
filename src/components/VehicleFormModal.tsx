@@ -1522,30 +1522,60 @@ const VehicleFormModal = ({
                 }
             }
             
-            // 2. ★★★ 核心升級：智能同步收車/售車客戶至資料庫中心 (Upsert 防重複引擎) ★★★
+            // 2. ★★★ 核心升級：智能同步收車/售車/司機客戶至資料庫中心 (Upsert 防重複引擎) ★★★
             if (db && staffId) {
                 // 動態載入 Firebase 方法避免依賴衝突
-                const { collection, query, where, getDocs, updateDoc, addDoc, serverTimestamp, doc } = await import('firebase/firestore');
+                const { collection, getDocs, updateDoc, addDoc, serverTimestamp, doc } = await import('firebase/firestore');
                 const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
                 const regMark = formData.get('regMark') as string || '';
 
-                // 通用同步函數
-                const syncPerson = async (name: string, phone: string, idNum: string, address: string, role: string) => {
+                // 通用同步函數 (終極防重複版：前端讀取全表模糊比對，並同步標籤)
+                const syncPerson = async (name: string, phone: string, idNum: string, address: string, role: string, extraData?: any) => {
                     if (!name || name.trim() === '') return;
-                    const cleanName = name.trim();
-                    const q = query(dbRef, where('name', '==', cleanName));
-                    const snap = await getDocs(q);
+                    // 清理多餘空白 (將多個連續空白轉為單一空白)
+                    const cleanName = name.replace(/\s+/g, ' ').trim();
+                    const cleanPhone = (phone || '').trim();
+                    const cleanId = (idNum || '').trim();
 
-                    if (!snap.empty) {
+                    // 為了避免大小寫與空格造成的重複，抓取所有相關資料在前端做智能過濾
+                    const snap = await getDocs(dbRef);
+
+                    let matchedDoc: any = null;
+                    let existingData: any = null;
+
+                    for (const d of snap.docs) {
+                        const data = d.data();
+                        if (data.category !== 'Person' && data.category !== 'Company') continue;
+
+                        const dbName = (data.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
+                        const dbPhone = (data.phone || '').trim();
+                        const dbId = (data.idNumber || '').trim();
+
+                        const nameMatch = dbName === cleanName.toLowerCase();
+                        const phoneMatch = cleanPhone && dbPhone === cleanPhone;
+                        const idMatch = cleanId && dbId === cleanId;
+
+                        // 只要名字(無視大小寫)、電話或證件號碼其中一個符合，就視為同一實體
+                        if (nameMatch || phoneMatch || idMatch) {
+                            matchedDoc = d;
+                            existingData = data;
+                            break;
+                        }
+                    }
+
+                    if (matchedDoc && existingData) {
                         // 💡 發現重複資料 -> 執行「智能合併更新 (Merge Update)」
-                        const existingDoc = snap.docs[0];
-                        const existingData = existingDoc.data();
                         const updatedFields: any = { updatedAt: serverTimestamp() };
                         
                         // 只填補空缺，不覆蓋舊有珍貴資料
-                        if (!existingData.phone && phone) updatedFields.phone = phone;
-                        if (!existingData.idNumber && idNum) updatedFields.idNumber = idNum;
+                        if (!existingData.phone && cleanPhone) updatedFields.phone = cleanPhone;
+                        if (!existingData.idNumber && cleanId) updatedFields.idNumber = cleanId;
                         if (!existingData.address && address) updatedFields.address = address;
+                        
+                        // 名稱優化 (保留較長或大小寫較為標準的名稱)
+                        if (cleanName.length > (existingData.name || '').length || (cleanName.toLowerCase() === existingData.name.toLowerCase() && cleanName !== existingData.name)) {
+                            updatedFields.name = cleanName;
+                        }
                         
                         // 自動補上關聯車牌 (去重複合併)
                         if (regMark) {
@@ -1555,30 +1585,41 @@ const VehicleFormModal = ({
                                 updatedFields.relatedPlateNo = currentPlates.join(', ');
                             }
                         }
-                        
-                        if (!existingData.category) updatedFields.category = 'Person';
-                        
-                        // 智能疊加角色標籤 (Role)
-                        const currentRoles = existingData.roles || [];
-                        if (!currentRoles.includes(role)) {
-                            updatedFields.roles = [...currentRoles, role];
+
+                        // 合併額外標籤資料 (例如內地車牌)
+                        if (extraData?.mainlandPlate) {
+                            const cnPlates = existingData.plateNoCN ? existingData.plateNoCN.split(',').map((p:string)=>p.trim()) : [];
+                            if (!cnPlates.includes(extraData.mainlandPlate)) {
+                                cnPlates.push(extraData.mainlandPlate);
+                                updatedFields.plateNoCN = cnPlates.join(', ');
+                            }
                         }
+                        
+                        // 智能疊加角色標籤 (Role & Tags)
+                        const currentRoles = existingData.roles || [];
+                        if (!currentRoles.includes(role)) updatedFields.roles = [...currentRoles, role];
+                        
+                        const currentTags = existingData.tags || [];
+                        if (!currentTags.includes(role)) updatedFields.tags = [...currentTags, role];
 
                         if (Object.keys(updatedFields).length > 1) {
-                            await updateDoc(doc(dbRef, existingDoc.id), updatedFields);
+                            await updateDoc(doc(dbRef, matchedDoc.id), updatedFields);
                             console.log(`✅ 已智能合併更新現有資料庫檔案: ${cleanName}`);
                         }
                     } else {
                         // 💡 完全沒找到 -> 執行「全新建立 (Insert)」
-                        const isCompany = idNum && idNum.toUpperCase().includes('BR');
+                        // 智能判斷是否為公司
+                        const isCompany = cleanId.toUpperCase().includes('BR') || cleanName.toUpperCase().includes('LIMITED') || cleanName.includes('公司');
                         await addDoc(dbRef, {
                             name: cleanName,
                             category: isCompany ? 'Company' : 'Person',
                             roles: [role],
-                            phone: phone || '',
-                            idNumber: idNum || '',
+                            tags: [role], // 同步寫入 tag 方便過濾
+                            phone: cleanPhone,
+                            idNumber: cleanId,
                             address: address || '',
                             relatedPlateNo: regMark || '',
+                            plateNoCN: extraData?.mainlandPlate || '',
                             createdAt: serverTimestamp(),
                             updatedAt: serverTimestamp(),
                             managedBy: staffId
@@ -1599,6 +1640,18 @@ const VehicleFormModal = ({
                 const formCustID = formData.get('customerID') as string;
                 const formCustAddress = formData.get('customerAddress') as string;
                 await syncPerson(formCustName, formCustPhone, formCustID, formCustAddress, '買家');
+
+                // C. 執行同步「中港司機」 (防止遺漏與重複)
+                const isCbActive = formData.get('cb_isEnabled_hidden') === 'true'; 
+                if (isCbActive) {
+                    const mPlate = formData.get('cb_mainlandPlate') as string;
+                    const d1 = formData.get('cb_driver1') as string;
+                    const d2 = formData.get('cb_driver2') as string;
+                    const d3 = formData.get('cb_driver3') as string;
+                    if (d1) await syncPerson(d1, '', '', '', '司機', { mainlandPlate: mPlate });
+                    if (d2) await syncPerson(d2, '', '', '', '司機', { mainlandPlate: mPlate });
+                    if (d3) await syncPerson(d3, '', '', '', '司機', { mainlandPlate: mPlate });
+                }
             }
         } catch (err) { alert(`儲存失敗: ${err}`); }
     };
