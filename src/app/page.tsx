@@ -2998,9 +2998,9 @@ const DatabaseSelector = ({
 
 
 
-  return (
-      // ★ 核心修復 1：移除 position fixed 與 100vw，改用標準 w-full h-full，完美填滿雙螢幕不留白邊
-      <div className="flex w-full h-full text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+ return (
+      // ★ 終極修復：移除所有寬度與高度的強勢定義 (w-full, h-full, 100vw, 100dvh)，完全依賴 absolute inset-0 讓瀏覽器自然計算物理邊界
+      <div className="absolute inset-0 flex flex-col md:flex-row text-slate-900 font-sans bg-slate-50 z-0 overflow-hidden pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
@@ -3008,16 +3008,18 @@ const DatabaseSelector = ({
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
        
         <style>{`
-            /* ★ 徹底接管系統底色與高度，恢復原生滾動安全機制 */
+            /* ★ 徹底放權給瀏覽器：不再硬性規定 100% 或 100vw */
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                width: 100% !important; 
-                height: 100% !important; 
-                overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
+                /* 防止 iOS 彈性回彈 */
                 overscroll-behavior: none !important;
                 -webkit-overflow-scrolling: touch;
+                /* 確保 body 也是填滿整個視窗，作為 absolute inset-0 的基準 */
+                width: 100%;
+                height: 100%;
+                position: fixed;
             }
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
