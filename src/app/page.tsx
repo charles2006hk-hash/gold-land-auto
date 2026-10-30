@@ -2999,10 +2999,10 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 核心修復 3：將 w-screen 改為 w-full，徹底解決折疊屏/雙螢幕右側出現「整條黑邊(Scrollbar Track)」的溢出問題
-      <div className="flex w-full h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">
+      // ★ 核心修復：改回 w-screen (100vw) 強制填滿雙螢幕，並加上 max-w-[100vw] 與 overflow-x-hidden 徹底消除桌面版捲軸黑邊
+      <div className="flex w-screen max-w-[100vw] h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden overflow-x-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">
           
-          {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
+          {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
@@ -3012,10 +3012,14 @@ const DatabaseSelector = ({
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                width: 100% !important; /* ★ 修正：絕對不能用 100vw，這會導致右側出現黑色邊框 */
+                /* ★ 恢復 100vw 來強迫跨越折疊屏/雙螢幕 */
+                width: 100vw !important; 
+                max-width: 100vw !important;
+                /* ★ 徹底隱藏桌面版的橫向捲軸黑邊 */
+                overflow-x: hidden !important; 
                 height: 100dvh !important; 
                 min-height: 100dvh !important; 
-                overflow: hidden !important; 
+                overflow-y: hidden !important; 
                 background-color: #f1f5f9 !important; 
                 overscroll-behavior-y: none !important;
                 overscroll-behavior-x: none !important;
@@ -3024,7 +3028,7 @@ const DatabaseSelector = ({
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
-            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制 */
+            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
             @media print {
                 html, body {
                     position: static !important;
