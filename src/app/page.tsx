@@ -3598,7 +3598,7 @@ const DatabaseSelector = ({
               {/* ★ 核心修復 4：單獨為工具列加上 right 邊距的安全探測，防止橫向模式陷入瀏海 */}
               
               <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
-              <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
+              
                   
                   {/* 選項 2: T牌打卡 */}
                   <div className="flex items-center gap-3 group">
