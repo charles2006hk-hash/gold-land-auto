@@ -2999,8 +2999,8 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 核心修復：改回 w-screen (100vw) 強制填滿雙螢幕，並加上 max-w-[100vw] 與 overflow-x-hidden 徹底消除桌面版捲軸黑邊
-      <div className="flex w-screen max-w-[100vw] h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden overflow-x-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">
+      // ★ 核心修復 1：移除硬編碼的 w-screen 與 max-w-[100vw]，改用 w-full 配合 absolute inset-0，讓 Flexbox 自然填滿整個視窗包含副螢幕
+      <div className="absolute inset-0 flex flex-col md:flex-row text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
@@ -3012,23 +3012,27 @@ const DatabaseSelector = ({
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                /* ★ 恢復 100vw 來強迫跨越折疊屏/雙螢幕 */
-                width: 100vw !important; 
-                max-width: 100vw !important;
-                /* ★ 徹底隱藏桌面版的橫向捲軸黑邊 */
-                overflow-x: hidden !important; 
-                height: 100dvh !important; 
-                min-height: 100dvh !important; 
-                overflow-y: hidden !important; 
+                /* ★ 讓 html/body 成為絕對的定位基準，不再受制於 100vw 的鉸鏈誤差 */
+                width: 100% !important; 
+                height: 100% !important; 
+                position: fixed !important;
+                top: 0; left: 0; right: 0; bottom: 0;
+                overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
-                overscroll-behavior-y: none !important;
-                overscroll-behavior-x: none !important;
+                overscroll-behavior: none !important;
                 -webkit-overflow-scrolling: touch;
             }
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
-            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
+            
+            /* ★ 專門針對雙螢幕 (Duo) 的修復：強制撐滿並消除白邊 */
+            html.is-iphone-duo body {
+                width: 100vw !important;
+                height: 100vh !important;
+            }
+
+            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制 */
             @media print {
                 html, body {
                     position: static !important;
@@ -3068,8 +3072,9 @@ const DatabaseSelector = ({
            
 
       {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
-      <main className="flex-1 w-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
-
+      {/* ★ 核心修復 2：加入 h-full，確保 main 區域在雙螢幕下不會出現底部白邊 */}
+      <main className="flex-1 w-full h-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
+        
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
             <VehicleShareModal 
@@ -3234,6 +3239,7 @@ const DatabaseSelector = ({
           {/* Dashboard Tab (v16.3: 修復橫屏滾動穿透與卡片擠壓問題) */}
           {/* Dashboard Tab (以獨立解耦模組運行，版面高度與警報已重構優化) */}
             {activeTab === 'dashboard' && (
+              <div className="flex-1 h-full w-full min-h-0 flex flex-col">
             <DashboardModule
                 inventory={visibleInventory}
                 dbEntries={dbEntries}
@@ -3257,6 +3263,7 @@ const DatabaseSelector = ({
                 appId={appId}
                 triggerSmartPrint={triggerSmartPrint}
             />
+                </div>
             )}
          {/* Inventory Tab (v15.3: 擬真車牌 + 粵港澳標籤 + 智能縮圖 + 排序優化) */}
           {activeTab === 'inventory' && (
