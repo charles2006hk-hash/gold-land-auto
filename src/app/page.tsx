@@ -2998,9 +2998,9 @@ const DatabaseSelector = ({
 
 
 
- return (
-      // ★ 終極修復：移除所有寬度與高度的強勢定義 (w-full, h-full, 100vw, 100dvh)，完全依賴 absolute inset-0 讓瀏覽器自然計算物理邊界
-      <div className="absolute inset-0 flex flex-col md:flex-row text-slate-900 font-sans bg-slate-50 z-0 overflow-hidden pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+return (
+      // ★ 核心修復 1：拔除最外層的 safe-area padding 與多餘的定位，回歸最純粹的 w-full h-full
+      <div className="flex w-full h-full text-slate-900 font-sans overflow-hidden bg-slate-50 relative z-0">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
@@ -3008,18 +3008,16 @@ const DatabaseSelector = ({
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
        
         <style>{`
-            /* ★ 徹底放權給瀏覽器：不再硬性規定 100% 或 100vw */
+            /* ★ 讓 html/body 成為 100% 的死硬底板，不被任何虛擬鍵盤、鉸鏈或安全邊界壓縮 */
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
+                width: 100% !important; 
+                height: 100% !important; 
+                overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
-                /* 防止 iOS 彈性回彈 */
                 overscroll-behavior: none !important;
                 -webkit-overflow-scrolling: touch;
-                /* 確保 body 也是填滿整個視窗，作為 absolute inset-0 的基準 */
-                width: 100%;
-                height: 100%;
-                position: fixed;
             }
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
@@ -3060,9 +3058,9 @@ const DatabaseSelector = ({
       />
            
 
-      {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
-      {/* ★ 核心修復 2：加入 h-full，確保 main 區域在雙螢幕下不會出現底部白邊 */}
-      <main className="flex-1 w-full h-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
+      {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸 */}
+      {/* ★ 核心修復 2：將 safe-area padding 移交給 main 處理，保護手機底部的 Home Bar，同時不影響桌面版背景 */}
+      <main className="flex-1 w-full h-full min-w-0 pt-0 px-2 pb-[env(safe-area-inset-bottom)] md:p-8 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
         
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
