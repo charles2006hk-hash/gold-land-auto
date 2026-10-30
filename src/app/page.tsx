@@ -546,10 +546,10 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
 
     return (
         <>
-          {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
+          {isMobileMenuOpen && <div className="fixed inset-0 bg-black/60 z-[100] md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />}
       
           {/* 🍏 True Gemini Style：完美修正行動端定位，移除非法 relative，改用 md:relative 順應桌面排版 */}
-           <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
+          <div className={`fixed inset-y-0 left-0 z-[110] md:z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
                 ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
                 ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
             >
@@ -3000,9 +3000,8 @@ const DatabaseSelector = ({
 
   return (
       // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      // ★ 新增：加入 safe-area padding 確保全螢幕適配，並設定 overscroll-none 防止 iOS 彈性滾動
-      <div className="flex w-screen h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] overscroll-none">
-          
+      // ★ 核心修復 3：改用 w-full 並移除 pl/pr 的 safe-area，徹底消滅右側黑色空隙
+      <div className="flex w-full h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">   
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
@@ -3595,7 +3594,8 @@ const DatabaseSelector = ({
       {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
       {/* ========================================================= */}
       {staffId && !editingVehicle && activeTab !== 'inventory_add' && !isPreviewMode && activeTab !== 'cross_border' && (
-          <div className="fixed bottom-6 right-4 md:right-6 z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
+          {/* ★ 核心修復 4：單獨為工具列加上 right 邊距的安全探測，防止橫向模式陷入瀏海 */}
+          <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] md:right-[max(1.5rem,env(safe-area-inset-right))] z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
               
               <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
                   
