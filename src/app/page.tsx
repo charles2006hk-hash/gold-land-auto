@@ -3594,9 +3594,10 @@ const DatabaseSelector = ({
       {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
       {/* ========================================================= */}
       {staffId && !editingVehicle && activeTab !== 'inventory_add' && !isPreviewMode && activeTab !== 'cross_border' && (
-          {/* ★ 核心修復 4：單獨為工具列加上 right 邊距的安全探測，防止橫向模式陷入瀏海 */}
           <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] md:right-[max(1.5rem,env(safe-area-inset-right))] z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
+              {/* ★ 核心修復 4：單獨為工具列加上 right 邊距的安全探測，防止橫向模式陷入瀏海 */}
               
+              <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
               <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
                   
                   {/* 選項 2: T牌打卡 */}
