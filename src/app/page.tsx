@@ -2999,9 +2999,9 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      // ★ 核心修復 3：改用 w-full 並移除 pl/pr 的 safe-area，徹底消滅右側黑色空隙
-      <div className="flex w-full h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">   
+      // ★ 核心修復 3：將 w-screen 改為 w-full，徹底解決折疊屏/雙螢幕右側出現「整條黑邊(Scrollbar Track)」的溢出問題
+      <div className="flex w-full h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">
+          
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
@@ -3012,21 +3012,19 @@ const DatabaseSelector = ({
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                width: 100vw !important; 
+                width: 100% !important; /* ★ 修正：絕對不能用 100vw，這會導致右側出現黑色邊框 */
                 height: 100dvh !important; 
-                min-height: 100dvh !important;
+                min-height: 100dvh !important; 
                 overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
-                /* ★ 終極防止 iOS Safari 回彈特效與下拉更新 */
                 overscroll-behavior-y: none !important;
                 overscroll-behavior-x: none !important;
                 -webkit-overflow-scrolling: touch;
             }
-            /* ★ 確保所有可滾動區域在 iOS 上順滑 */
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
-            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
+            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制 */
             @media print {
                 html, body {
                     position: static !important;
