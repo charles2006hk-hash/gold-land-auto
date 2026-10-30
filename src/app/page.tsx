@@ -3000,7 +3000,8 @@ const DatabaseSelector = ({
 
   return (
       // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      <div className="flex w-screen h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0">
+      // ★ 新增：加入 safe-area padding 確保全螢幕適配，並設定 overscroll-none 防止 iOS 彈性滾動
+      <div className="flex w-screen h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] overscroll-none">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
@@ -3014,9 +3015,16 @@ const DatabaseSelector = ({
                 padding: 0 !important;
                 width: 100vw !important; 
                 height: 100dvh !important; 
+                min-height: 100dvh !important;
                 overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
-                overscroll-behavior-y: none;
+                /* ★ 終極防止 iOS Safari 回彈特效與下拉更新 */
+                overscroll-behavior-y: none !important;
+                overscroll-behavior-x: none !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            /* ★ 確保所有可滾動區域在 iOS 上順滑 */
+            .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
             /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
@@ -3025,6 +3033,7 @@ const DatabaseSelector = ({
                     position: static !important;
                     width: auto !important;
                     height: auto !important;
+                    min-height: auto !important;
                     overflow: visible !important;
                     background-color: #ffffff !important;
                     display: block !important;
@@ -3037,14 +3046,14 @@ const DatabaseSelector = ({
 
       {/* ★★★ 全域 Toast 提示框 UI ★★★ */}
       {globalToast && (
-          <div className={`fixed top-10 left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${globalToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+          <div className={`fixed top-[max(2.5rem,env(safe-area-inset-top))] left-1/2 transform -translate-x-1/2 z-[99999] px-6 py-3 rounded-full shadow-2xl text-sm font-bold flex items-center transition-all animate-fade-in ${globalToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
               {globalToast.text}
           </div>
       )}
 
       {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
       <Sidebar 
-      activeTab={activeTab}
+          activeTab={activeTab}
           setActiveTab={setActiveTab}
           isMobileMenuOpen={isMobileMenuOpen}
           setIsMobileMenuOpen={setIsMobileMenuOpen}
@@ -3053,7 +3062,8 @@ const DatabaseSelector = ({
           staffId={staffId}
           setStaffId={setStaffId}
           currentUser={currentUser}
-          onOpenChangePwd={() => setIsChangePwdOpen(true)} />
+          onOpenChangePwd={() => setIsChangePwdOpen(true)} 
+      />
            
 
       {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
@@ -3072,7 +3082,7 @@ const DatabaseSelector = ({
         )}
         
        {/* ★ 手機版頂部 Header (完美適配動態島，擴大左右屏佔比) */}
-          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
+          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
               <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
               <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
               <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
