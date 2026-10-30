@@ -2999,8 +2999,8 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 核心修復 1：移除硬編碼的 w-screen 與 max-w-[100vw]，改用 w-full 配合 absolute inset-0，讓 Flexbox 自然填滿整個視窗包含副螢幕
-      <div className="absolute inset-0 flex flex-col md:flex-row text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] overscroll-none">
+      // ★ 核心修復 1：移除 position fixed 與 100vw，改用標準 w-full h-full，完美填滿雙螢幕不留白邊
+      <div className="flex w-full h-full text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
@@ -3008,15 +3008,12 @@ const DatabaseSelector = ({
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
        
         <style>{`
-            /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
+            /* ★ 徹底接管系統底色與高度，恢復原生滾動安全機制 */
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                /* ★ 讓 html/body 成為絕對的定位基準，不再受制於 100vw 的鉸鏈誤差 */
                 width: 100% !important; 
                 height: 100% !important; 
-                position: fixed !important;
-                top: 0; left: 0; right: 0; bottom: 0;
                 overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
                 overscroll-behavior: none !important;
@@ -3025,27 +3022,17 @@ const DatabaseSelector = ({
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
-            
-            /* ★ 專門針對雙螢幕 (Duo) 的修復：強制撐滿並消除白邊 */
-            html.is-iphone-duo body {
-                width: 100vw !important;
-                height: 100vh !important;
-            }
-
-            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制 */
             @media print {
                 html, body {
                     position: static !important;
                     width: auto !important;
                     height: auto !important;
-                    min-height: auto !important;
                     overflow: visible !important;
                     background-color: #ffffff !important;
                     display: block !important;
                 }
             }
         `}</style>
-
       {/* 全域資料載入畫面 */}
       {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
 
@@ -3236,35 +3223,35 @@ const DatabaseSelector = ({
           )}
 
           
-          {/* Dashboard Tab (v16.3: 修復橫屏滾動穿透與卡片擠壓問題) */}
-          {/* Dashboard Tab (以獨立解耦模組運行，版面高度與警報已重構優化) */}
-            {activeTab === 'dashboard' && (
-              <div className="flex-1 h-full w-full min-h-0 flex flex-col">
-            <DashboardModule
-                inventory={visibleInventory}
-                dbEntries={dbEntries}
-                settings={settings}
-                staffId={staffId!}
-                currentUser={currentUser}
-                stats={stats}
-                primaryImages={primaryImages}
-                unpaidCompanyExpenses={unpaidCompanyExpenses}
-                loopReminders={loopReminders}
-                databaseReminders={databaseReminders} /* ★ 新增傳入資料庫提醒 */
-                setActiveTab={setActiveTab}
-                setEditingVehicle={setEditingVehicle}
-                setActiveCbVehicleId={setActiveCbVehicleId}
-                setEditingEntry={setEditingEntry}
-                setIsDbEditing={setIsDbEditing}
-                setShareVehicle={setShareVehicle}
-                setShareCleanMode={setShareCleanMode}
-                deleteVehicle={deleteVehicle}
-                db={db}
-                appId={appId}
-                triggerSmartPrint={triggerSmartPrint}
-            />
-                </div>
-            )}
+          {/* Dashboard Tab */}
+          {activeTab === 'dashboard' && (
+            // ★ 核心修復 2：加上 overflow-y-auto 與 pb-24，徹底解鎖主畫面滑動，並預留底部空間給懸浮按鈕
+            <div className="flex-1 w-full h-full min-h-0 flex flex-col overflow-y-auto scrollbar-thin pb-24">
+                <DashboardModule
+                    inventory={visibleInventory}
+                    dbEntries={dbEntries}
+                    settings={settings}
+                    staffId={staffId!}
+                    currentUser={currentUser}
+                    stats={stats}
+                    primaryImages={primaryImages}
+                    unpaidCompanyExpenses={unpaidCompanyExpenses}
+                    loopReminders={loopReminders}
+                    databaseReminders={databaseReminders}
+                    setActiveTab={setActiveTab}
+                    setEditingVehicle={setEditingVehicle}
+                    setActiveCbVehicleId={setActiveCbVehicleId}
+                    setEditingEntry={setEditingEntry}
+                    setIsDbEditing={setIsDbEditing}
+                    setShareVehicle={setShareVehicle}
+                    setShareCleanMode={setShareCleanMode}
+                    deleteVehicle={deleteVehicle}
+                    db={db}
+                    appId={appId}
+                    triggerSmartPrint={triggerSmartPrint}
+                />
+            </div>
+          )}
          {/* Inventory Tab (v15.3: 擬真車牌 + 粵港澳標籤 + 智能縮圖 + 排序優化) */}
           {activeTab === 'inventory' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
