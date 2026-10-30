@@ -2999,8 +2999,8 @@ const DatabaseSelector = ({
 
 
 return (
-      // ★ 核心修復 1：拔除最外層的 safe-area padding 與多餘的定位，回歸最純粹的 w-full h-full
-      <div className="flex w-full h-full text-slate-900 font-sans overflow-hidden bg-slate-50 relative z-0">
+      // ★ 終極邊界修復：使用 absolute inset-0 (脫離 DOM 限制) 強制貼齊瀏覽器真實四邊，徹底消滅底部白邊與右側縫隙
+      <div className="absolute inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
@@ -3008,7 +3008,7 @@ return (
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
        
         <style>{`
-            /* ★ 讓 html/body 成為 100% 的死硬底板，不被任何虛擬鍵盤、鉸鏈或安全邊界壓縮 */
+            /* ★ 徹底接管系統底色與高度 */
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
@@ -3059,7 +3059,7 @@ return (
            
 
       {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸 */}
-      {/* ★ 核心修復 2：將 safe-area padding 移交給 main 處理，保護手機底部的 Home Bar，同時不影響桌面版背景 */}
+      {/* ★ safe-area padding 移交給 main 處理，保護手機底部的 Home Bar，不影響桌面版的貼齊效果 */}
       <main className="flex-1 w-full h-full min-w-0 pt-0 px-2 pb-[env(safe-area-inset-bottom)] md:p-8 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
         
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
