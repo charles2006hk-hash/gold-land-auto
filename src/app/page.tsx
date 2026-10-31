@@ -546,10 +546,10 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpe
 
     return (
         <>
-          {isMobileMenuOpen && <div className="fixed inset-0 bg-black/60 z-[100] md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />}
+          {isMobileMenuOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />}
       
           {/* 🍏 True Gemini Style：完美修正行動端定位，移除非法 relative，改用 md:relative 順應桌面排版 */}
-          <div className={`fixed inset-y-0 left-0 z-[110] md:z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
+           <div className={`fixed inset-y-0 left-0 z-40 bg-[#090E17]/95 backdrop-blur-3xl text-white transition-all duration-300 ease-in-out flex flex-col print:hidden shadow-[4px_0_24px_rgba(0,0,0,0.15)] border-r border-white/5 overflow-hidden flex-none md:h-full md:relative 
                 ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'} 
                 ${isSidebarCollapsed ? 'md:w-16' : 'md:w-64'}`}
             >
@@ -2998,41 +2998,49 @@ const DatabaseSelector = ({
 
 
 
-return (
-      // ★ 終極邊界修復：使用 absolute inset-0 (脫離 DOM 限制) 強制貼齊瀏覽器真實四邊，徹底消滅底部白邊與右側縫隙
-      <div className="absolute inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0">
+  return (
+      // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
+      // ★ 新增：加入 safe-area padding 確保全螢幕適配，並設定 overscroll-none 防止 iOS 彈性滾動
+      <div className="flex w-screen h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] overscroll-none">
           
-          {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
+          {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
        
         <style>{`
-            /* ★ 徹底接管系統底色與高度 */
+            /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
             html, body { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                width: 100% !important; 
-                height: 100% !important; 
+                width: 100vw !important; 
+                height: 100dvh !important; 
+                min-height: 100dvh !important;
                 overflow: hidden !important; 
                 background-color: #f1f5f9 !important; 
-                overscroll-behavior: none !important;
+                /* ★ 終極防止 iOS Safari 回彈特效與下拉更新 */
+                overscroll-behavior-y: none !important;
+                overscroll-behavior-x: none !important;
                 -webkit-overflow-scrolling: touch;
             }
+            /* ★ 確保所有可滾動區域在 iOS 上順滑 */
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
+            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
             @media print {
                 html, body {
                     position: static !important;
                     width: auto !important;
                     height: auto !important;
+                    min-height: auto !important;
                     overflow: visible !important;
                     background-color: #ffffff !important;
                     display: block !important;
                 }
             }
         `}</style>
+
       {/* 全域資料載入畫面 */}
       {staffId && isDataSyncing && <GlobalDataLoadingScreen />}
 
@@ -3058,10 +3066,9 @@ return (
       />
            
 
-      {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸 */}
-      {/* ★ safe-area padding 移交給 main 處理，保護手機底部的 Home Bar，不影響桌面版的貼齊效果 */}
-      <main className="flex-1 w-full h-full min-w-0 pt-0 px-2 pb-[env(safe-area-inset-bottom)] md:p-8 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
-        
+      {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
+      <main className="flex-1 w-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
+
         {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
         {shareVehicle && (
             <VehicleShareModal 
@@ -3223,35 +3230,33 @@ return (
           )}
 
           
-          {/* Dashboard Tab */}
-          {activeTab === 'dashboard' && (
-            // ★ 核心修復 2：加上 overflow-y-auto 與 pb-24，徹底解鎖主畫面滑動，並預留底部空間給懸浮按鈕
-            <div className="flex-1 w-full h-full min-h-0 flex flex-col overflow-y-auto scrollbar-thin pb-24">
-                <DashboardModule
-                    inventory={visibleInventory}
-                    dbEntries={dbEntries}
-                    settings={settings}
-                    staffId={staffId!}
-                    currentUser={currentUser}
-                    stats={stats}
-                    primaryImages={primaryImages}
-                    unpaidCompanyExpenses={unpaidCompanyExpenses}
-                    loopReminders={loopReminders}
-                    databaseReminders={databaseReminders}
-                    setActiveTab={setActiveTab}
-                    setEditingVehicle={setEditingVehicle}
-                    setActiveCbVehicleId={setActiveCbVehicleId}
-                    setEditingEntry={setEditingEntry}
-                    setIsDbEditing={setIsDbEditing}
-                    setShareVehicle={setShareVehicle}
-                    setShareCleanMode={setShareCleanMode}
-                    deleteVehicle={deleteVehicle}
-                    db={db}
-                    appId={appId}
-                    triggerSmartPrint={triggerSmartPrint}
-                />
-            </div>
-          )}
+          {/* Dashboard Tab (v16.3: 修復橫屏滾動穿透與卡片擠壓問題) */}
+          {/* Dashboard Tab (以獨立解耦模組運行，版面高度與警報已重構優化) */}
+            {activeTab === 'dashboard' && (
+            <DashboardModule
+                inventory={visibleInventory}
+                dbEntries={dbEntries}
+                settings={settings}
+                staffId={staffId!}
+                currentUser={currentUser}
+                stats={stats}
+                primaryImages={primaryImages}
+                unpaidCompanyExpenses={unpaidCompanyExpenses}
+                loopReminders={loopReminders}
+                databaseReminders={databaseReminders} /* ★ 新增傳入資料庫提醒 */
+                setActiveTab={setActiveTab}
+                setEditingVehicle={setEditingVehicle}
+                setActiveCbVehicleId={setActiveCbVehicleId}
+                setEditingEntry={setEditingEntry}
+                setIsDbEditing={setIsDbEditing}
+                setShareVehicle={setShareVehicle}
+                setShareCleanMode={setShareCleanMode}
+                deleteVehicle={deleteVehicle}
+                db={db}
+                appId={appId}
+                triggerSmartPrint={triggerSmartPrint}
+            />
+            )}
          {/* Inventory Tab (v15.3: 擬真車牌 + 粵港澳標籤 + 智能縮圖 + 排序優化) */}
           {activeTab === 'inventory' && (
             <div className="flex flex-col h-full overflow-hidden space-y-4 animate-fade-in">
@@ -3590,11 +3595,9 @@ return (
       {/* ★★★ 升級版：右下角全域懸浮菜單 (Speed Dial) ★★★ */}
       {/* ========================================================= */}
       {staffId && !editingVehicle && activeTab !== 'inventory_add' && !isPreviewMode && activeTab !== 'cross_border' && (
-          <div className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] md:right-[max(1.5rem,env(safe-area-inset-right))] z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
-              {/* ★ 核心修復 4：單獨為工具列加上 right 邊距的安全探測，防止橫向模式陷入瀏海 */}
+          <div className="fixed bottom-6 right-4 md:right-6 z-[45] flex flex-col items-end gap-3 print:hidden pointer-events-none">
               
               <div className={`flex flex-col gap-3 items-end transition-all duration-300 origin-bottom ${isFabMenuOpen ? 'scale-y-100 opacity-100 mb-2 pointer-events-auto' : 'scale-y-0 opacity-0 pointer-events-none'}`}>
-              
                   
                   {/* 選項 2: T牌打卡 */}
                   <div className="flex items-center gap-3 group">
