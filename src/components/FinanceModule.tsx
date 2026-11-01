@@ -259,25 +259,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     const totalReportAmount = reportData.reduce((sum, item) => sum + (item.amount || 0), 0);
     const totalReportProfit = reportType === 'sales' ? reportData.reduce((sum, item) => sum + (item.profit || 0), 0) : 0;
   
-    // ============================================================================
-    // ★ 股東往來 邏輯 (Shareholder Ledger - 純讀取)
-    // ============================================================================
-    const shareholderRecords = companyExpenses.filter(c => c.category?.includes('股東'));
-    const getCleanShareholderName = (title: string) => {
-        if (!title) return '未命名股東';
-        return title.split(/[-()]/)[0].trim();
-    };
-    const allShareholders = Array.from(new Set(shareholderRecords.map(c => getCleanShareholderName(c.title)))).filter(Boolean).sort();
-    const filteredShareholders = allShareholders.filter(s => typeof s === 'string' && s.toLowerCase().includes(shareholderSearch.toLowerCase()));
-
-    const currentShareholderHistory = shareholderRecords
-        .filter(c => getCleanShareholderName(c.title) === selectedShareholder)
-        .sort((a,b) => new Date(b.paymentDate || b.date).getTime() - new Date(a.paymentDate || a.date).getTime());
-        
-    const currentShareholderBalance = currentShareholderHistory.reduce((sum, c) => {
-        const isDeposit = c.flow === 'IN' || c.category?.includes('入數');
-        return sum + (isDeposit ? Number(c.amount) : -Number(c.amount));
-    }, 0);
 
     // ============================================================================
     // ★ 會計流水帳生成 (Unified Cash Ledger)
