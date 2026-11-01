@@ -28,7 +28,9 @@ const formatNumberInput = (value: string) => {
 export default function FinanceModule({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) {
     
     const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
-    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital' | 'staff'>(() => {
+    
+    // ★ 1. 加入 'shareholder' 到 Tab 的型別中
+    const [financeTab, setFinanceTab] = useState<'dashboard' | 'reports' | 'partner' | 'lender' | 'accounting' | 'capital' | 'staff' | 'shareholder'>(() => {
         if (typeof window !== 'undefined') {
             const saved = sessionStorage.getItem('gla_fin_tab') as any;
             if (saved && (isFullAccess || saved === 'staff')) return saved;
@@ -95,9 +97,20 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     });
 
     const [staffLedgers, setStaffLedgers] = useState<any[]>([]);
-    // ★ 新增：公司雜費監聽
     const [companyExpenses, setCompanyExpenses] = useState<any[]>([]);
     const [selectedStaff, setSelectedStaff] = useState<string>(staffId); 
+    // ★ 2. 新增股東資料的 State
+    const [shareholderLedgers, setShareholderLedgers] = useState<any[]>([]);
+    const [selectedShareholder, setSelectedShareholder] = useState<string>('');
+    const [newShareholderLedger, setNewShareholderLedger] = useState({
+        date: new Date().toISOString().split('T')[0],
+        type: 'deposit', // deposit: 注資, withdrawal: 抽資
+        amount: '',
+        note: '',
+        method: 'Transfer'
+    });
+    // 從系統設定或現有紀錄中萃取股東名單 (可根據您的實際需求調整，這裡先簡單開放自訂)
+    const [shareholderSearch, setShareholderSearch] = useState(''); 
     const [staffExpForm, setStaffExpForm] = useState({
         date: new Date().toISOString().split('T')[0],
         fundSource: 'personal', 
@@ -143,6 +156,25 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         const unsubC = onSnapshot(qCompExp, (snap: any) => { setCompanyExpenses(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
 
         return () => { unsubP(); unsubS(); unsubC(); };
+    }, [db, appId]);
+
+    // ★ 升級：同時載入 4 個關聯數據庫
+    useEffect(() => {
+        if (!db || !appId) return;
+        const qPartner = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), orderBy('createdAt', 'desc'));
+        const unsubP = onSnapshot(qPartner, (snap: any) => { setLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        const qStaff = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), orderBy('createdAt', 'desc'));
+        const unsubS = onSnapshot(qStaff, (snap: any) => { setStaffLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        const qCompExp = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses'), orderBy('createdAt', 'desc'));
+        const unsubC = onSnapshot(qCompExp, (snap: any) => { setCompanyExpenses(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        // ★ 新增：監聽股東往來帳
+        const qShareholder = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'shareholder_ledgers'), orderBy('createdAt', 'desc'));
+        const unsubSH = onSnapshot(qShareholder, (snap: any) => { setShareholderLedgers(snap.docs.map((d:any) => ({ id: d.id, ...d.data() }))); });
+
+        return () => { unsubP(); unsubS(); unsubC(); unsubSH(); };
     }, [db, appId]);
 
     const handleReportItemClick = (vehicleId: string) => {
@@ -721,6 +753,50 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         }
     };
 
+    // ============================================================================
+    // ★ 股東往來 邏輯 (Shareholder Ledger)
+    // ============================================================================
+    const allShareholders = Array.from(new Set(shareholderLedgers.map(l => l.shareholder))).filter(Boolean).sort();
+    const filteredShareholders = allShareholders.filter(s => typeof s === 'string' && s.toLowerCase().includes(shareholderSearch.toLowerCase()));
+
+    const handleAddShareholderLedger = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const amt = Number(newShareholderLedger.amount.replace(/,/g, ''));
+        if (!amt || !selectedShareholder || !db) return alert('請填寫完整資訊');
+        
+        try {
+            const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+            await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'shareholder_ledgers'), {
+                shareholder: selectedShareholder,
+                date: newShareholderLedger.date,
+                type: newShareholderLedger.type, // 'deposit' = 注資 (公司欠股東), 'withdrawal' = 抽資 (減少公司欠款)
+                amount: amt,
+                note: newShareholderLedger.note || (newShareholderLedger.type === 'deposit' ? '股東注資' : '股東抽資/還款'),
+                method: newShareholderLedger.method,
+                createdAt: serverTimestamp(),
+                createdBy: staffId
+            });
+            alert('✅ 股東帳目已成功紀錄！');
+            setNewShareholderLedger({ ...newShareholderLedger, amount: '', note: '' });
+        } catch (err) {
+            console.error(err);
+            alert('❌ 紀錄失敗');
+        }
+    };
+
+    const handleDeleteShareholderLedger = async (id: string) => {
+        if (!db || !confirm("確定刪除此筆股東紀錄？")) return;
+        try {
+            const { deleteDoc, doc } = await import('firebase/firestore');
+            await deleteDoc(doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'shareholder_ledgers', id));
+        } catch (e) { console.error(e); alert('刪除失敗'); }
+    };
+
+    // 取得當前選定股東的歷史與結餘
+    const currentShareholderHistory = shareholderLedgers.filter(l => l.shareholder === selectedShareholder);
+    // 結餘計算：注資 (deposit) 增加公司對股東的欠款 (正數)，抽資 (withdrawal) 減少欠款 (負數)
+    const currentShareholderBalance = currentShareholderHistory.reduce((sum, l) => sum + (l.type === 'deposit' ? Number(l.amount) : -Number(l.amount)), 0);
+
     const myLedgers = staffLedgers.filter(l => l.staffId === (isFullAccess ? selectedStaff : staffId));
     const myBalance = myLedgers.reduce((sum, l) => sum + (l.type === 'receivable' ? -Number(l.amount) : Number(l.amount)), 0);
 
@@ -828,6 +904,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         <>
                             <button onClick={() => setFinanceTab('dashboard')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><LayoutDashboard size={16} className="mr-1.5"/> 財務數據</button>
                             <button onClick={() => setFinanceTab('reports')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'reports' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><FileBarChart size={16} className="mr-1.5"/> 統計報表</button>
+                            <button onClick={() => setFinanceTab('shareholder')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'shareholder' ? 'bg-teal-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Building2 size={16} className="mr-1.5"/> 股東往來</button>
                             <button onClick={() => setFinanceTab('partner')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'partner' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Users size={16} className="mr-1.5"/> 行家來往</button>
                             <button onClick={() => setFinanceTab('lender')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'lender' ? 'bg-pink-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><DollarSign size={16} className="mr-1.5"/> 資金池結算</button>
                             <button onClick={() => setFinanceTab('accounting')} className={`flex-1 md:flex-none px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center whitespace-nowrap ${financeTab === 'accounting' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}><Receipt size={16} className="mr-1.5"/> 會計帳目</button>
@@ -1706,6 +1783,129 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                             </div>
                         </div>
 
+                    </div>
+                </div>
+            )}
+
+            {/* ========================================== */}
+            {/* Tab 7: 股東往來 (Shareholder Ledger) */}
+            {/* ========================================== */}
+            {financeTab === 'shareholder' && isFullAccess && (
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+                    
+                    {/* 左側：股東名單 */}
+                    <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
+                        <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
+                            <h3 className="font-bold text-slate-700 flex items-center mb-3"><Building2 size={18} className="mr-2 text-teal-600"/> 股東資本帳戶</h3>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"/>
+                                    <input value={shareholderSearch} onChange={e => setShareholderSearch(e.target.value)} placeholder="搜尋股東..." className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 ring-teal-200"/>
+                                </div>
+                                <button onClick={() => {
+                                    const name = prompt('請輸入新股東名稱：');
+                                    if (name && name.trim()) setSelectedShareholder(name.trim());
+                                }} className="bg-teal-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-teal-700 whitespace-nowrap">
+                                    + 新增
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex overflow-x-auto md:flex-col md:overflow-y-auto p-2 gap-2 md:gap-0 md:space-y-1 scrollbar-hide flex-none md:flex-1">
+                            {/* 如果沒有資料但有 selectedShareholder (剛新增)，先把它顯示出來 */}
+                            {selectedShareholder && !filteredShareholders.includes(selectedShareholder) && (
+                                <div onClick={() => setSelectedShareholder(selectedShareholder)} className="p-2 md:p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 bg-teal-100 border border-teal-300 shadow-sm">
+                                    <span className="font-bold text-sm text-teal-900 truncate">{selectedShareholder}</span>
+                                    <span className="text-[10px] w-fit font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">結餘 $0</span>
+                                </div>
+                            )}
+
+                            {filteredShareholders.map((sh, idx) => {
+                                const shLedgers = shareholderLedgers.filter(l => l.shareholder === sh);
+                                const shBal = shLedgers.reduce((sum, l) => sum + (l.type === 'deposit' ? Number(l.amount) : -Number(l.amount)), 0);
+                                return (
+                                    <div key={idx} onClick={() => setSelectedShareholder(sh)} className={`p-2 md:p-3 rounded-xl cursor-pointer transition-all flex flex-col gap-1 flex-shrink-0 min-w-[160px] md:min-w-0 ${selectedShareholder === sh ? 'bg-teal-100 border border-teal-300 shadow-sm' : 'bg-white md:bg-transparent hover:bg-white border border-slate-200 md:border-transparent hover:border-slate-200'}`}>
+                                        <div className="flex justify-between items-center w-full">
+                                            <span className={`font-bold text-sm truncate ${selectedShareholder === sh ? 'text-teal-900' : 'text-slate-700'}`}>{sh}</span>
+                                        </div>
+                                        <span className={`text-[10px] w-fit font-mono font-bold px-1.5 py-0.5 rounded ${shBal > 0 ? 'bg-teal-600 text-white' : (shBal < 0 ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-600')}`}>
+                                            {shBal > 0 ? '資本 ' : (shBal < 0 ? '透支 ' : '結餘 ')}${Math.abs(shBal).toLocaleString()}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {filteredShareholders.length === 0 && !selectedShareholder && <div className="text-center p-4 text-xs text-slate-400">點擊上方「+ 新增」建立股東</div>}
+                        </div>
+                    </div>
+
+                    {/* 右側：明細與入帳 */}
+                    <div className="flex-1 flex flex-col relative bg-white overflow-hidden">
+                        {!selectedShareholder ? (
+                            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-10 hidden md:flex">
+                                <Building2 size={48} className="mb-4 opacity-30 text-teal-500"/>
+                                <h3 className="text-lg font-bold text-slate-600 mb-1">請選擇左/上方股東</h3>
+                                <p className="text-xs">檢視該股東的注資與抽資紀錄</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="p-4 md:p-6 bg-slate-900 text-white flex justify-between items-center flex-none shadow-md z-10">
+                                    <div>
+                                        <h3 className="text-xl md:text-2xl font-black tracking-wide mb-1 flex items-center">{selectedShareholder}</h3>
+                                        <p className="text-xs text-slate-400">股東往來帳戶明細</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">當前資本結餘 (Equity)</p>
+                                        <span className={`text-2xl md:text-3xl font-black font-mono ${currentShareholderBalance > 0 ? 'text-teal-400' : (currentShareholderBalance < 0 ? 'text-red-400' : 'text-slate-300')}`}>
+                                            {currentShareholderBalance === 0 ? '$0' : `${currentShareholderBalance > 0 ? '+' : '-'}$${Math.abs(currentShareholderBalance).toLocaleString()}`}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto p-3 md:p-6 bg-slate-50">
+                                    <div className="space-y-3">
+                                        {currentShareholderHistory.map(l => (
+                                            <div key={l.id} className="flex justify-between items-center p-4 bg-white rounded-xl border border-slate-200 shadow-sm transition-colors hover:border-teal-300 group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black flex-shrink-0 ${l.type === 'deposit' ? 'bg-teal-100 text-teal-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                        {l.type === 'deposit' ? '注' : '抽'}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-bold text-slate-800">{l.note || '-'}</div>
+                                                        <div className="text-xs text-slate-400 mt-1 font-mono">
+                                                            {l.date} • {l.method} • {l.createdBy} 記錄
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right flex items-center gap-4">
+                                                    <span className={`text-lg font-black font-mono ${l.type === 'deposit' ? 'text-teal-600' : 'text-orange-600'}`}>
+                                                        {l.type === 'deposit' ? '+' : '-'}${Number(l.amount).toLocaleString()}
+                                                    </span>
+                                                    <button onClick={() => handleDeleteShareholderLedger(l.id)} className="opacity-100 md:opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {currentShareholderHistory.length === 0 && (
+                                            <div className="text-center p-10 text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">目前無往來紀錄</div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <form onSubmit={handleAddShareholderLedger} className="p-4 bg-white border-t border-slate-200 flex-none shadow-[0_-5px_15px_rgba(0,0,0,0.03)] z-10">
+                                    <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                        <input type="date" value={newShareholderLedger.date} onChange={e => setNewShareholderLedger({...newShareholderLedger, date: e.target.value})} className="w-full sm:w-36 p-2.5 border rounded-lg text-sm font-bold text-slate-700 outline-none" required />
+                                        <select value={newShareholderLedger.type} onChange={e => setNewShareholderLedger({...newShareholderLedger, type: e.target.value})} className="w-full sm:w-40 p-2.5 border rounded-lg text-sm font-bold outline-none bg-slate-50 cursor-pointer">
+                                            <option value="deposit" className="text-teal-700">➕ 股東注資</option>
+                                            <option value="withdrawal" className="text-orange-700">➖ 股東抽資</option>
+                                        </select>
+                                        <div className="flex items-center bg-white border rounded-lg overflow-hidden w-full sm:w-48 focus-within:ring-2 ring-teal-200">
+                                            <span className="pl-3 text-slate-400 font-bold">$</span>
+                                            <input type="text" placeholder="金額" value={newShareholderLedger.amount} onChange={e => setNewShareholderLedger({...newShareholderLedger, amount: formatNumberInput(e.target.value)})} className="w-full p-2.5 outline-none text-right font-mono font-black text-slate-800" required />
+                                        </div>
+                                        <input type="text" placeholder="備註 (選填)..." value={newShareholderLedger.note} onChange={e => setNewShareholderLedger({...newShareholderLedger, note: e.target.value})} className="flex-1 w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 ring-teal-200" />
+                                        <button type="submit" className="w-full sm:w-28 bg-teal-600 text-white font-bold px-4 py-2.5 rounded-lg shadow-md hover:bg-teal-700 active:scale-95 transition-all">入帳</button>
+                                    </div>
+                                </form>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
