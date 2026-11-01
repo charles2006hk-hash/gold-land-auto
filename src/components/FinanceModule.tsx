@@ -25,6 +25,12 @@ const formatNumberInput = (value: string) => {
     return isNegative ? '-' + (decimal !== undefined ? formattedInteger + '.' + decimal : formattedInteger) : (decimal !== undefined ? formattedInteger + '.' + decimal : formattedInteger);
 };
 
+// ★ 核心修復：移至全域範圍，保證所有內部邏輯呼叫時都已初始化完成
+const getCleanShareholderName = (title: string) => {
+    if (!title) return '未命名股東';
+    return title.split(/[-()]/)[0].trim();
+};
+
 export default function FinanceModule({ inventory, settings, setEditingVehicle, setActiveTab, db, staffId, appId, currentUser }: any) {
     
     const isFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
@@ -375,10 +381,6 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // 1. 確保 companyExpenses 有值再做 filter
     const shareholderRecords = (companyExpenses || []).filter(c => c.category?.includes('股東'));
     
-    const getCleanShareholderName = (title: string) => {
-        if (!title) return '未命名股東';
-        return title.split(/[-()]/)[0].trim();
-    };
     
     // 2. 萃取唯一的股東名單
     const allShareholders = Array.from(new Set(shareholderRecords.map(c => getCleanShareholderName(c.title)))).filter(Boolean).sort();
