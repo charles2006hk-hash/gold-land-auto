@@ -388,6 +388,33 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
 
     const dashStats = calculateDashboardStats();
 
+    // ============================================================================
+    // ★ 股東往來 邏輯 (Shareholder Ledger - 純讀取)
+    // ============================================================================
+    // 1. 確保 companyExpenses 有值再做 filter
+    const shareholderRecords = (companyExpenses || []).filter(c => c.category?.includes('股東'));
+    
+    const getCleanShareholderName = (title: string) => {
+        if (!title) return '未命名股東';
+        return title.split(/[-()]/)[0].trim();
+    };
+    
+    // 2. 萃取唯一的股東名單
+    const allShareholders = Array.from(new Set(shareholderRecords.map(c => getCleanShareholderName(c.title)))).filter(Boolean).sort();
+    
+    // 3. 搜尋過濾
+    const filteredShareholders = allShareholders.filter(s => typeof s === 'string' && s.toLowerCase().includes(shareholderSearch.toLowerCase()));
+
+    // 4. 當前選定股東的歷史與結餘
+    const currentShareholderHistory = shareholderRecords
+        .filter(c => getCleanShareholderName(c.title) === selectedShareholder)
+        .sort((a,b) => new Date(b.paymentDate || b.date).getTime() - new Date(a.paymentDate || a.date).getTime());
+        
+    const currentShareholderBalance = currentShareholderHistory.reduce((sum, c) => {
+        const isDeposit = c.flow === 'IN' || c.category?.includes('入數');
+        return sum + (isDeposit ? Number(c.amount) : -Number(c.amount));
+    }, 0);
+
 
     // ============================================================================
     // ★ 行家來往 邏輯 (淨化版：切斷與 settings.expenseCompanies 的關聯)
@@ -1006,23 +1033,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
             {/* ========================================== */}
             {/* Tab 3: 股東往來 (Shareholder Ledger - 唯讀視圖) */}
             {/* ========================================== */}
-            {financeTab === 'shareholder' && isFullAccess && (() => {
-                const shareholderRecords = companyExpenses.filter(c => c.category?.includes('股東'));
-                const getCleanShareholderName = (title: string) => title ? title.split(/[-()]/)[0].trim() : '未命名股東';
-                
-                const allShareholders = Array.from(new Set(shareholderRecords.map(c => getCleanShareholderName(c.title)))).filter(Boolean).sort();
-                const filteredShareholders = allShareholders.filter(s => typeof s === 'string' && s.toLowerCase().includes(shareholderSearch.toLowerCase()));
-
-                const currentShareholderHistory = shareholderRecords
-                    .filter(c => getCleanShareholderName(c.title) === selectedShareholder)
-                    .sort((a,b) => new Date(b.paymentDate || b.date).getTime() - new Date(a.paymentDate || a.date).getTime());
-                    
-                const currentShareholderBalance = currentShareholderHistory.reduce((sum, c) => {
-                    const isDeposit = c.flow === 'IN' || c.category?.includes('入數');
-                    return sum + (isDeposit ? Number(c.amount) : -Number(c.amount));
-                }, 0);
-
-                return (
+            {financeTab === 'shareholder' && isFullAccess && (
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
                     <div className="w-full md:w-80 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col flex-none">
                         <div className="p-3 md:p-4 border-b border-slate-200 bg-white">
@@ -1117,7 +1128,7 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                         )}
                     </div>
                 </div>
-            )})}
+            )}
 
             {/* ========================================== */}
             {/* Tab 4: 行家來往 (Partner Ledger) 淨化版 */}
