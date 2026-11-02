@@ -145,14 +145,16 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
         if (!startDate || !endDate) return ledgerItems;
         
         const filtered = ledgerItems.filter(item => {
-            const itemDate = item.paymentDate || item.dueDate || item.date;
+            // ★ 統一日期優先級：1. 使用者輸入的 dueDate 2. 舊資料的 date 3. 系統生成的 paymentDate
+            const itemDate = item.dueDate || item.date || item.paymentDate || '';
             return itemDate >= startDate && itemDate <= endDate;
         });
 
         return filtered.sort((a, b) => {
-            const dateA = new Date(a.paymentDate || a.dueDate || a.date || 0).getTime();
-            const dateB = new Date(b.paymentDate || b.dueDate || b.date || 0).getTime();
-            return dateB - dateA;
+            // ★ 統一排序基準，確保「由後到前 (最新到最舊)」絕對精準
+            const dateA = new Date(a.dueDate || a.date || a.paymentDate || 0).getTime();
+            const dateB = new Date(b.dueDate || b.date || b.paymentDate || 0).getTime();
+            return dateB - dateA; 
         });
     }, [ledgerItems, startDate, endDate]);
 
