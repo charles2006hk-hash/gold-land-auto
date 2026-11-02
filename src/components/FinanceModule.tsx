@@ -285,11 +285,15 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
         // 公司雜費 (非代墊)
         companyExpenses.forEach((c: any) => {
             if (c.paymentMethod !== 'Staff_Advance') {
+                // ★ 核心修復 2：流水帳的日期提取統一標準
+                const safeDate = c.dueDate || c.date || c.paymentDate || new Date().toISOString().split('T')[0];
+                const rawTimestamp = new Date(c.dueDate || c.date || c.paymentDate || c.createdAt?.seconds * 1000 || Date.now()).getTime();
+                
                 ledger.push({ 
-                    id: `comp_${c.id}`, date: c.paymentDate || c.date || new Date().toISOString().split('T')[0], 
+                    id: `comp_${c.id}`, date: safeDate, 
                     type: c.flow || 'OUT', amount: Number(c.amount), category: c.category?.includes('股東') ? '資本帳戶 (Capital)' : '營運開支 (Company)', 
                     desc: `[公司雜費] ${c.category} - ${c.title}`, ref: c.category?.includes('股東') ? getCleanShareholderName(c.title) : '內部', method: c.paymentMethod || '', 
-                    remark: '', rawDate: new Date(c.paymentDate || c.createdAt?.seconds * 1000 || Date.now()).getTime() 
+                    remark: '', rawDate: rawTimestamp 
                 });
             }
         });
@@ -391,7 +395,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
     // 4. 當前選定股東的歷史與結餘
     const currentShareholderHistory = shareholderRecords
         .filter(c => getCleanShareholderName(c.title) === selectedShareholder)
-        .sort((a,b) => new Date(b.paymentDate || b.date).getTime() - new Date(a.paymentDate || a.date).getTime());
+        // ★ 核心修復 1：股東往來排序統一使用 dueDate 優先級
+        .sort((a,b) => new Date(b.dueDate || b.date || b.paymentDate || 0).getTime() - new Date(a.dueDate || a.date || a.paymentDate || 0).getTime());
         
     const currentShareholderBalance = currentShareholderHistory.reduce((sum, c) => {
         const isDeposit = c.flow === 'IN' || c.category?.includes('入數');
@@ -1090,7 +1095,8 @@ export default function FinanceModule({ inventory, settings, setEditingVehicle, 
                                                                 <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 whitespace-nowrap">來自總帳</span>
                                                             </div>
                                                             <div className="text-xs text-slate-400 mt-1 font-mono">
-                                                                {c.paymentDate || c.date} • {c.paymentMethod || 'Transfer'} 
+                                                                {/* ★ 核心修復 3：畫面渲染顯示統一標準 */}
+                                                                {c.dueDate || c.date || c.paymentDate} • {c.paymentMethod || 'Transfer'} 
                                                             </div>
                                                         </div>
                                                     </div>
