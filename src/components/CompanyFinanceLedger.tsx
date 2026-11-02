@@ -207,14 +207,15 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
             const id = editingExpenseId || Date.now().toString();
             const docRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'company_expenses', id);
             
-            const finalPaymentDate = newExpense.status === 'Paid' 
-                ? (newExpense.paymentDate || new Date().toISOString().split('T')[0]) 
-                : '';
+            // ★ 核心修復 1：完全尊重使用者在表單選擇的 dueDate (到期/發生日)
+            // 如果狀態是已結清，paymentDate 也強制同步為使用者選擇的 dueDate，而非亂抓 new Date()
+            const finalPaymentDate = newExpense.status === 'Paid' ? newExpense.dueDate : '';
 
             await setDoc(docRef, {
                 ...newExpense,
                 amount: Number(newExpense.amount.replace(/,/g, '')),
                 paymentDate: finalPaymentDate,
+                date: newExpense.dueDate, // 強制寫入統一的 date 欄位，確保向下相容
                 updatedAt: new Date().toISOString(),
                 updatedBy: currentUser?.email || staffId,
                 ...(!editingExpenseId && { createdAt: new Date().toISOString() })
@@ -580,8 +581,10 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                             <tbody className="divide-y divide-slate-100">
                                 {filteredItems.map(item => {
                                     const flow = item.flow || item.type; 
-                                    const itemDate = item.paymentDate || item.dueDate || item.date;
                                     const isFromSystem = !!item.sourceModule; // 判斷是否為車輛庫存自動同步過來的
+                                    
+                                    // ★ 核心修復 2：優先讀取 dueDate(發生日/到期日)，若無才讀 date，避免被 paymentDate 覆蓋
+                                    const itemDate = item.dueDate || item.date || item.paymentDate;
 
                                     return (
                                         <tr key={item.id} className={`border-b transition-colors font-medium text-slate-700 ${editingExpenseId === item.id ? 'bg-amber-50/50 border-amber-200' : (item.isReconciled ? 'bg-emerald-50/20' : 'hover:bg-slate-50/80')}`}>
