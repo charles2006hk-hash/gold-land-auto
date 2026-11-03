@@ -2453,7 +2453,7 @@ const deleteVehicle = async (id: string) => {
     }
   };
 
-  // --- Sub-Item Management (完美防清洗版：只更新陣列，絕對保留其他未 Save 的輸入資料) ---
+  // --- Sub-Item Management (完美防清洗版：確保所有增刪改都觸發財務總帳同步) ---
   const updateSubItem = async (vehicleId: string, field: 'expenses'|'payments'|'crossBorder'|'salesAddons', newItems: any) => {
     if (!db || !staffId) return;
     const currentDb = db;
@@ -2483,14 +2483,16 @@ const deleteVehicle = async (id: string) => {
 
     await updateDoc(doc(currentDb, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', vehicleId), updateData);
 
-    // ★★★ 核心修復：無論是新增/刪除收款或維修，強制觸發財務總帳同步引擎 ★★★
+    // ★★★ 核心修復：強制觸發財務總帳同步引擎 ★★★
+    // 建立一份最新的車輛資料拷貝，將剛才刪除/新增的結果合併進去
     const updatedVehicleData = { ...v };
     if (field === 'crossBorder') {
         updatedVehicleData.crossBorder = { ...(v.crossBorder || {} as any), tasks: newItems };
     } else {
         (updatedVehicleData as any)[field] = newItems;
     }
-    // 執行同步，確保總帳與車輛內部資料絕對一致
+    
+    // 執行同步：財務引擎內部的 batch.delete 會自動把總帳裡多餘的紀錄清掉
     await syncVehicleFinanceToLedger(updatedVehicleData);
   };
 
