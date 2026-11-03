@@ -638,9 +638,21 @@ export default function CompanyFinanceLedger({ db, appId, staffId, currentUser, 
                                             </td>
                                             <td className="p-3 text-center">
                                                 {isFromSystem ? (
-                                                    // ★ 系統保護鎖：不可直接在總帳刪除車輛紀錄
-                                                    <div className="flex items-center justify-center text-slate-300 cursor-help" title="此為系統自動同步帳目。如需修改，請至【車輛庫存管理】編輯源頭數據。">
-                                                        <Lock size={16} />
+                                                    // ★ 核心修復：為管理員 (BOSS) 解鎖「強制刪除」特權，用來清理源頭已刪除的幽靈紀錄
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <div className="p-1.5 text-slate-300 cursor-help" title="此為系統自動同步帳目。正常請至源頭修改。">
+                                                            <Lock size={14} />
+                                                        </div>
+                                                        {isManager && (
+                                                            <button 
+                                                                type="button" 
+                                                                onClick={() => handleDeleteItem(item.id)} 
+                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" 
+                                                                title="[管理員特權] 強制清理殘留紀錄"
+                                                            >
+                                                                <Trash2 size={14}/>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center justify-center gap-1">
