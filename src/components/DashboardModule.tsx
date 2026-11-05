@@ -642,33 +642,53 @@ export default function DashboardModule({
         </div>
       )}
 
-      {/* 4 格扁平 KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 flex-none">
-        <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
+      {/* 4 格扁平 KPI Cards (🍏 響應式優化版：手機與折疊屏緊湊顯示) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 flex-none">
+        
+        {/* 卡片 1: 庫存總值 */}
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">庫存總值</span>
-          <span className="text-lg lg:text-xl font-black text-slate-800 font-mono mt-0.5 truncate">
+          <div className="flex items-center justify-between mb-0.5 md:mb-1">
+             <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">庫存總值</span>
+             <Car size={12} className="text-yellow-500/50 hidden sm:block" />
+          </div>
+          <span className="text-sm sm:text-base md:text-lg lg:text-xl font-black text-slate-800 font-mono truncate tracking-tight">
             {formatCurrency(stats.totalStockValue)}
           </span>
         </div>
-        <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
+        
+        {/* 卡片 2: 未付費用 */}
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">未付費用</span>
-          <span className="text-lg lg:text-xl font-black text-red-600 font-mono mt-0.5 truncate">
+          <div className="flex items-center justify-between mb-0.5 md:mb-1">
+             <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">未付費用</span>
+             <FileCheck size={12} className="text-red-500/50 hidden sm:block" />
+          </div>
+          <span className="text-sm sm:text-base md:text-lg lg:text-xl font-black text-red-600 font-mono truncate tracking-tight">
             {formatCurrency(stats.totalPayable)}
           </span>
         </div>
-        <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
+        
+        {/* 卡片 3: 應收尾數 */}
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">應收尾數</span>
-          <span className="text-lg lg:text-xl font-black text-blue-600 font-mono mt-0.5 truncate">
+          <div className="flex items-center justify-between mb-0.5 md:mb-1">
+             <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">應收尾數</span>
+             <Building2 size={12} className="text-blue-500/50 hidden sm:block" />
+          </div>
+          <span className="text-sm sm:text-base md:text-lg lg:text-xl font-black text-blue-600 font-mono truncate tracking-tight">
             {formatCurrency(stats.totalReceivable)}
           </span>
         </div>
-        <div className="bg-white/70 backdrop-blur-md p-3 rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center">
+        
+        {/* 卡片 4: 本月銷售額 */}
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">本月銷售額</span>
-          <span className="text-lg lg:text-xl font-black text-emerald-600 font-mono mt-0.5 truncate">
+          <div className="flex items-center justify-between mb-0.5 md:mb-1">
+             <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">本月銷售額</span>
+             <Calendar size={12} className="text-emerald-500/50 hidden sm:block" />
+          </div>
+          <span className="text-sm sm:text-base md:text-lg lg:text-xl font-black text-emerald-600 font-mono truncate tracking-tight">
             {formatCurrency(stats.totalSoldThisMonth)}
           </span>
         </div>
