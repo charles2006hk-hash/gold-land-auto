@@ -455,9 +455,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    {/* ★ 核心修復 1：加入 overflow-x-hidden 與 max-w-[100vw]，徹底鎖死左右滑動，防止橫向內容撐爆導致右側列表消失 */}
     <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden lg:overflow-hidden space-y-3 animate-fade-in relative pb-24 lg:pb-0 scrollbar-thin w-full max-w-[100vw]">
-    
+      {/* ★ 核心修復 1：加入 overflow-x-hidden 與 max-w-[100vw]，徹底鎖死左右滑動，防止橫向內容撐爆導致右側列表消失 */}
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
