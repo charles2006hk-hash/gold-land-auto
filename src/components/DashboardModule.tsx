@@ -455,8 +455,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    {/* ★ 核心修復 1：將高度鎖定延遲到 lg (1024px+)。折疊屏將全頁整體滾動，卡片自然跟隨往上移。 */}     
     <div className="flex flex-col h-full overflow-y-auto lg:overflow-hidden space-y-3 animate-fade-in relative pb-24 lg:pb-0 scrollbar-thin">
+      {/* ★ 核心修復 1：將高度鎖定延遲到 lg (1024px+)。折疊屏將全頁整體滾動，卡片自然跟隨往上移。 */}
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
