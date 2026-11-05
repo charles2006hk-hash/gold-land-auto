@@ -455,8 +455,9 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    <div className="flex flex-col h-full overflow-y-auto lg:overflow-hidden space-y-3 animate-fade-in relative pb-24 lg:pb-0 scrollbar-thin">
-      {/* ★ 核心修復 1：將高度鎖定延遲到 lg (1024px+)。折疊屏將全頁整體滾動，卡片自然跟隨往上移。 */}
+    {/* ★ 核心修復 1：加入 overflow-x-hidden 與 max-w-[100vw]，徹底鎖死左右滑動，防止橫向內容撐爆導致右側列表消失 */}
+    <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden lg:overflow-hidden space-y-3 animate-fade-in relative pb-24 lg:pb-0 scrollbar-thin w-full max-w-[100vw]">
+    
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -713,26 +714,27 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ 核心修復 2：雙軌看板維持 md 並排，但滾動鎖定交給 lg */}       
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible lg:overflow-hidden min-h-0 mt-1 pb-1">
+      {/* ★ 核心修復 2：雙軌看板容器加入 w-full min-w-0 防止內容撐開父容器 */}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible lg:overflow-hidden min-h-0 mt-1 pb-1 w-full max-w-full">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        {/* ★ 核心修復 3：折疊屏不鎖定高度 (overflow-visible)，桌面版才內部滾動 (lg:overflow-y-auto) */}
-        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+        {/* ★ 核心修復 3：加入 min-w-0 與 md:w-1/2，強制平分畫面，確保右側列表不會被擠到畫面外 */}
+        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
           <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
             
-            {/* ★ 核心修復 4：第二層瀑布疊加 Sticky Header (手機版接在上方 Tab 底下) */}
+            {/* 瀑布疊加 Sticky Header */}
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center">
-                  <Layout className="w-4 h-4 mr-1.5 text-green-600" /> 在庫待售
+                <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
+                  <Layout className="w-4 h-4 mr-1.5 text-green-600 shrink-0" /> 在庫待售
                 </h3>
                 <span className="bg-green-100 text-green-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
                   {filteredInStockCars.length}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 flex-1 max-w-[180px] sm:max-w-[240px]">
-                <div className="relative w-full">
+              {/* ★ 確保搜尋框與按鈕在小尺寸下自動壓縮，不撐爆寬度 */}
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
+                <div className="relative w-full max-w-[200px]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input type="text" placeholder="搜尋庫存車..." value={dashSearchInStock} onChange={(e) => setDashSearchInStock(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all"/>
                   {dashSearchInStock && <button onClick={() => setDashSearchInStock('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
@@ -754,20 +756,21 @@ export default function DashboardModule({
         </div>
 
         {/* ==================== 已訂與待結清看板 ==================== */}
-        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 min-h-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
+        {/* ★ 核心修復 4：同樣加入 min-w-0 與 md:w-1/2，強制平分畫面 */}
+        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
             
-            {/* ★ 第二層瀑布疊加 Sticky Header */}
+            {/* 瀑布疊加 Sticky Header */}
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center">
-                  <FileCheck className="w-4 h-4 mr-1.5 text-amber-600" /> 已訂 / 待結清
+                <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
+                  <FileCheck className="w-4 h-4 mr-1.5 text-amber-600 shrink-0" /> 已訂 / 待結清
                 </h3>
                 <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
                   {filteredActionCars.length}
                 </span>
               </div>
-              <div className="relative flex-1 max-w-[180px] sm:max-w-[240px]">
+              <div className="relative flex-1 min-w-0 max-w-[200px] ml-auto">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input type="text" placeholder="搜尋交易車..." value={dashSearchAction} onChange={(e) => setDashSearchAction(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all" />
                 {dashSearchAction && <button onClick={() => setDashSearchAction('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
@@ -792,6 +795,8 @@ export default function DashboardModule({
             </div>
           </div>
         </div>
+
+      </div>
 
       </div>
     </div>
