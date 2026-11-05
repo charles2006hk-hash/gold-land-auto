@@ -3001,37 +3001,38 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 加入 print:h-auto 與 print:overflow-visible，讓列印時解除高度鎖定
-      // ★ 新增：加入 safe-area padding 確保全螢幕適配，並設定 overscroll-none 防止 iOS 彈性滾動
-      <div className="flex w-screen h-[100dvh] min-h-[100dvh] print:h-auto print:w-auto print:block text-slate-900 font-sans overflow-hidden print:overflow-visible print:bg-white bg-slate-50 relative z-0 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] overscroll-none">
+      // ★ 終極邊界修復：fixed inset-0 鎖死物理視窗，同時保留 Tailwind 的 print 屬性
+      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-[#020617] md:bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
           
-          {/* 🍏 Apple Style: 強化版底層環境氛圍光 (去除 multiply，加強亮度) */}
-          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10"></div>
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
-          <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+          {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
+          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10 print:hidden"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
+          <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
        
         <style>{`
-            /* ★ 徹底接管系統底色與高度，逼迫純白色消失 */
-            html, body { 
+            /* ★ 徹底鎖死 html 與 body，消滅 2-3mm 白邊，融合 iPhone Duo 系統黑條 */
+            html, body, #__next { 
                 margin: 0 !important; 
                 padding: 0 !important;
-                width: 100vw !important; 
-                height: 100dvh !important; 
-                min-height: 100dvh !important;
+                width: 100% !important; 
+                height: 100% !important; 
+                position: fixed !important; /* 鎖死底板座標系 */
                 overflow: hidden !important; 
-                background-color: #f1f5f9 !important; 
-                /* ★ 終極防止 iOS Safari 回彈特效與下拉更新 */
-                overscroll-behavior-y: none !important;
-                overscroll-behavior-x: none !important;
+                background-color: #020617 !important; /* 手機深空黑，融合黑條 */
+                overscroll-behavior: none !important;
+                -webkit-tap-highlight-color: transparent;
                 -webkit-overflow-scrolling: touch;
             }
-            /* ★ 確保所有可滾動區域在 iOS 上順滑 */
+            @media (min-width: 768px) {
+                html, body, #__next { background-color: #f1f5f9 !important; }
+            }
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
-            /* ★ 解放列印引擎：在列印時強行解除所有高度與隱藏限制，讓紙張可以無限往下長 */
+            
+            /* ★ 必須保留：解放列印引擎，在列印時強行解除所有高度與隱藏限制，允許分頁 */
             @media print {
-                html, body {
+                html, body, #__next {
                     position: static !important;
                     width: auto !important;
                     height: auto !important;
@@ -3068,35 +3069,26 @@ const DatabaseSelector = ({
       />
            
 
-      {/* 🍏 Gemini Style: 側邊欄縮放時，主畫面會極其自然地隨之橫向平滑拉伸，保持全螢幕完美行高 */}
-      <main className="flex-1 w-full min-w-0 pt-0 px-2 pb-0 md:p-8 print:m-0 print:p-0 transition-all duration-300 flex flex-col overflow-hidden print:overflow-visible print:block relative">
+      {/* 🍏 Gemini Style: 完美融合系統黑條與避開鏡頭 */}
+      {/* ★ 核心修復：使用 margin (mt/mb/ml/mr) 處理 safe-area。
+          這會讓白色區塊往內縮，把邊緣的危險空間「讓給」最外層的深空黑底色 (bg-[#020617])。
+          這樣一來，右上角的鏡頭跟底部的黑條，就會完美隱身在黑色邊框裡，看起來就像系統一體成型！ */}
+      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 mt-[env(safe-area-inset-top)] mb-[env(safe-area-inset-bottom)] ml-[env(safe-area-inset-left)] mr-[env(safe-area-inset-right)] md:m-0 md:p-8 md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
 
-        {/* ★★★ 全域掛載修復：確保任何 Tab 點擊分享都能立刻正常彈出，並支援純淨版切換 ★★★ */}
+        {/* VehicleShareModal 等保持不變 */}
         {shareVehicle && (
-            <VehicleShareModal 
-                vehicle={shareVehicle} 
-                db={db} 
-                staffId={staffId} 
-                appId={appId} 
-                cleanMode={shareCleanMode} 
-                onClose={() => setShareVehicle(null)} 
-            />
+            <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
         )}
         
-       {/* ★ 手機版頂部 Header (完美適配動態島，擴大左右屏佔比) */}
-          <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
-              <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
-              <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
-              <div className="flex-shrink-0 scale-110 mr-1"> {/* 讓鈴鐺按鈕在手機上稍微放大更易點擊 */}
-                  <SmartNotificationCenter 
-                      inventory={visibleInventory} 
-                      settings={settings} 
-                      triggerSmartPrint={triggerSmartPrint} 
-                      currentUser={currentUser} 
-                      databaseReminders={databaseReminders} /* ★ 補上這行 */
-                  />
-              </div>
-          </div>
+        {/* 手機版頂部 Header */}
+        {/* ★ 因為外層 margin 已經完美避開了鏡頭跟瀏海，這裡只需保留固定的 pt-3 防止文字太貼邊即可 */}
+        <div className="md:hidden flex items-center justify-between bg-white/60 backdrop-blur-xl border-b border-white/50 px-3 pb-2 pt-3 shadow-[0_4px_20px_rgba(0,0,0,0.03)] print:hidden flex-none -mx-2 mb-3 z-20">
+            <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-700 hover:bg-slate-100 p-1.5 rounded-lg transition-colors"><Menu size={28} /></button>
+            <span className="font-bold text-lg text-slate-800 tracking-tight">Gold Land Auto</span>
+            <div className="flex-shrink-0 scale-110 mr-1">
+                <SmartNotificationCenter inventory={visibleInventory} settings={settings} triggerSmartPrint={triggerSmartPrint} currentUser={currentUser} databaseReminders={databaseReminders} />
+            </div>
+        </div>
 
         {isPreviewMode && (
           <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-3 md:p-4 flex flex-col md:flex-row justify-between items-center z-50 shadow-xl print:hidden gap-3">
