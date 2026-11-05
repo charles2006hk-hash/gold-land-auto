@@ -455,7 +455,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    <div className="flex flex-col h-full overflow-y-auto md:overflow-hidden space-y-3 animate-fade-in relative pb-24 md:pb-0 scrollbar-thin">
+    {/* ★ 核心修復 1：將高度鎖定延遲到 lg (1024px+)。折疊屏將全頁整體滾動，卡片自然跟隨往上移。 */}     
+    <div className="flex flex-col h-full overflow-y-auto lg:overflow-hidden space-y-3 animate-fade-in relative pb-24 lg:pb-0 scrollbar-thin">
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -712,12 +713,13 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ 核心修復 3：左右雙軌看板，手機版改為 overflow-visible (跟隨外部全頁滾動)，電腦版維持 md:overflow-hidden 內部滾動 */}
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1">
+      {/* ★ 核心修復 2：雙軌看板維持 md 並排，但滾動鎖定交給 lg */}       
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible lg:overflow-hidden min-h-0 mt-1 pb-1">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
+        {/* ★ 核心修復 3：折疊屏不鎖定高度 (overflow-visible)，桌面版才內部滾動 (lg:overflow-y-auto) */}
+        <div className={`flex-1 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 min-h-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
             
             {/* ★ 核心修復 4：第二層瀑布疊加 Sticky Header (手機版接在上方 Tab 底下) */}
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
