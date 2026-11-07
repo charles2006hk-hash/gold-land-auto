@@ -3069,12 +3069,9 @@ const DatabaseSelector = ({
       />
            
 
-      {/* 🍏 Gemini Style: 完美融合系統黑條與避開鏡頭 */}
-      {/* ★ 核心修復：使用 margin (mt/mb/ml/mr) 處理 safe-area。
-          這會讓白色區塊往內縮，把邊緣的危險空間「讓給」最外層的深空黑底色 (bg-[#020617])。
-          這樣一來，右上角的鏡頭跟底部的黑條，就會完美隱身在黑色邊框裡，看起來就像系統一體成型！ */}
-      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 mt-[env(safe-area-inset-top)] mb-[env(safe-area-inset-bottom)] ml-[env(safe-area-inset-left)] mr-[env(safe-area-inset-right)] md:m-0 md:p-8 md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
-
+     {/* 🍏 Gemini Style: 完美融合系統黑條與避開鏡頭 */}
+      {/* ★ 核心修復：使用 padding (pt/pb/pl/pr) 處理 safe-area，讓白色背景 bg-slate-50 撐滿整個螢幕邊緣，消除浪費的黑邊 */}
+      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:p-8 md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
         {/* VehicleShareModal 等保持不變 */}
         {shareVehicle && (
             <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
