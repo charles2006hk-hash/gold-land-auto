@@ -643,8 +643,8 @@ export default function DashboardModule({
         </div>
       )}
 
-      {/* 4 格扁平 KPI Cards (🍏 響應式優化版：手機與折疊屏緊湊顯示) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 flex-none">
+      {/* 4 格扁平 KPI Cards (🍏 響應式優化版：折疊屏展開時強制單列，極大化節省垂直空間) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 flex-none">
         
         {/* 卡片 1: 庫存總值 */}
         <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
@@ -695,8 +695,8 @@ export default function DashboardModule({
         </div>
       </div>
 
-      {/* ★ 核心修復 2：手機版專屬 Tab 設為 sticky 且加上毛玻璃背景，隨頁面滾動置頂 */}
-      <div className="md:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
+      {/* ★ 核心修復 1：將 Tab 隱藏斷點改為 lg，讓折疊屏保持單欄切換，避免畫面被過度切割 */}
+      <div className="lg:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
         <button 
           onClick={() => setDashMobileTab('instock')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'instock' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
@@ -713,16 +713,16 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ 核心修復 2：雙軌看板容器加入 w-full min-w-0 防止內容撐開父容器 */}
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible lg:overflow-hidden min-h-0 mt-1 pb-1 w-full max-w-full">
+      {/* ★ 核心修復 2：雙軌看板改為 lg:flex-row，在折疊屏上維持單欄，保留完整寬度給車輛卡片 */}
+      <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1 shrink-0 overflow-visible lg:overflow-hidden min-h-0 mt-1 pb-1 w-full max-w-full">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        {/* ★ 核心修復 3：加入 min-w-0 與 md:w-1/2，強制平分畫面，確保右側列表不會被擠到畫面外 */}
-        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
+        {/* ★ 核心修復 3：將 md:w-1/2 與 hidden md:flex 改為 lg，確保在折疊屏上佔滿可用寬度 */}
+        <div className={`flex-1 min-w-0 w-full lg:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden lg:flex'}`}>
+          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 lg:pb-6">
             
-            {/* 瀑布疊加 Sticky Header */}
-            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+            {/* 瀑布疊加 Sticky Header (同樣將 md:top-0 改為 lg:top-0) */}
+            <div className="sticky top-[52px] lg:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
                   <Layout className="w-4 h-4 mr-1.5 text-green-600 shrink-0" /> 在庫待售
@@ -755,12 +755,12 @@ export default function DashboardModule({
         </div>
 
         {/* ==================== 已訂與待結清看板 ==================== */}
-        {/* ★ 核心修復 4：同樣加入 min-w-0 與 md:w-1/2，強制平分畫面 */}
-        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6">
+        {/* ★ 核心修復 4：同步改為 lg 斷點 */}
+        <div className={`flex-1 min-w-0 w-full lg:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden lg:flex'}`}>
+          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 lg:pb-6">
             
             {/* 瀑布疊加 Sticky Header */}
-            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+            <div className="sticky top-[52px] lg:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
                   <FileCheck className="w-4 h-4 mr-1.5 text-amber-600 shrink-0" /> 已訂 / 待結清
