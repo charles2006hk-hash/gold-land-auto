@@ -85,14 +85,13 @@ export default function DashboardModule({
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock');
   const [dashSearchInStock, setDashSearchInStock] = useState('');
   const [dashSearchAction, setDashSearchAction] = useState('');
-  const [alertSearchTerm, setAlertSearchTerm] = useState(''); // ★ 大卡片專用搜尋
+  const [alertSearchTerm, setAlertSearchTerm] = useState('');
 
   // ============================================================================
   // 1. 戰情警報數據過濾 (Alerts Filtering)
   // ============================================================================
   const docAlerts: any[] = [];
   
-  // ★ 移除重複的 dbEntries 掃描，直接處理庫存車輛的牌費/保險/驗車
   inventory.forEach(v => {
     const anyV = v as any;
     if (anyV.licenseExpiry && anyV.licenseReminderEnabled !== false) {
@@ -154,16 +153,13 @@ export default function DashboardModule({
   });
   cbAlerts.sort((a, b) => a.days - b.days);
 
-  // ★ 智能解析資料庫項目的標題與描述，徹底解決 () 的問題
   const formatDbAlert = (i: any, status: string) => {
     const raw = dbEntries.find(e => e.id === i.vid) || {} as any;
     const plate = raw.plateNoHK || raw.plateNoCN || '';
     const name = raw.name || raw.hkCompany || raw.mainlandCompany || '未命名紀錄';
     const docType = i.item.includes('-') ? i.item.split('-').pop().trim() : (raw.docType || '文件');
     
-    // 如果有車牌就用車牌當大標題，否則用名字
     const title = plate ? plate : name;
-    // 如果標題是車牌，副標題就顯示名字跟類型；如果標題是名字，副標題就顯示類型
     const desc = plate ? `${name} (${docType})` : docType;
 
     return { id: i.id, title, desc, date: i.date, days: i.days, status, source: 'database', raw };
@@ -183,7 +179,6 @@ export default function DashboardModule({
   const totalUrgentAlerts = cbExpiredCount + docExpiredCount + loopReminders.length;
   const totalSoonAlerts = cbSoonCount + docSoonCount;
 
-  // ★ 警報區域搜尋過濾邏輯
   const alertSearchLower = alertSearchTerm.toLowerCase();
   const filteredLoop = loopReminders.filter((car: any) => !alertSearchLower || (car.regMark || '').toLowerCase().includes(alertSearchLower));
   const filteredCb = cbAlerts.filter((item: any) => !alertSearchLower || (item.title || '').toLowerCase().includes(alertSearchLower) || (item.desc || '').toLowerCase().includes(alertSearchLower));
@@ -254,26 +249,16 @@ export default function DashboardModule({
   };
 
   const renderDashboardCard = (car: any) => {
-    // ★ 智能計算牌費剩餘月份 (多出 1 天無條件進位為 1 個月)
     const getLicenseFeeText = (expiryDateStr: string | null | undefined) => {
         if (!expiryDateStr) return '無牌費';
-        
         const today = new Date();
         today.setHours(0, 0, 0, 0); 
         const expDate = new Date(expiryDateStr);
         expDate.setHours(0, 0, 0, 0);
-
         const diffTime = expDate.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays < 0) {
-            return '無牌費'; // 過期顯示無牌費
-        }
-        if (diffDays === 0) {
-            return '今日到期';
-        }
-
-        // 以 30 天為一期，只要 > 0 就無條件進位
+        if (diffDays < 0) return '無牌費';
+        if (diffDays === 0) return '今日到期';
         const months = Math.ceil(diffDays / 30);
         return `牌費 ${months} 個月`;
     };
@@ -345,8 +330,6 @@ export default function DashboardModule({
     if (car.engineSize) specs.push(`${car.engineSize}${car.fuelType === 'Electric' ? 'Kw' : 'cc'}`);
     if (car.colorExt) specs.push(car.colorExt.split(' ')[0].replace(/[()]/g, ''));
     if (car.mileage) specs.push(`${Number(car.mileage).toLocaleString()}km`);
-    
-    // ★ 將牌費到期狀態加入屬性列中
     specs.push(getLicenseFeeText(car.licenseExpiry));
 
     return (
@@ -455,8 +438,7 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden lg:overflow-hidden space-y-3 animate-fade-in relative pb-24 lg:pb-0 scrollbar-thin w-full max-w-[100vw]">
-      {/* ★ 核心修復 1：加入 overflow-x-hidden 與 max-w-[100vw]，徹底鎖死左右滑動，防止橫向內容撐爆導致右側列表消失 */}
+    <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-24 md:pb-0 scrollbar-thin w-full max-w-[100vw]">
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -525,7 +507,6 @@ export default function DashboardModule({
 
           {isAlertExpanded && (
             <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex flex-col gap-4">
-              {/* ★ 新增：大卡片專用搜尋框 */}
               <div className="relative w-full md:w-[350px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input 
@@ -643,10 +624,9 @@ export default function DashboardModule({
         </div>
       )}
 
-      {/* 4 格扁平 KPI Cards (🍏 響應式優化版：折疊屏展開時強制單列，極大化節省垂直空間) */}
+      {/* 4 格扁平 KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 flex-none">
         
-        {/* 卡片 1: 庫存總值 */}
         <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
@@ -658,7 +638,6 @@ export default function DashboardModule({
           </span>
         </div>
         
-        {/* 卡片 2: 未付費用 */}
         <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
@@ -670,7 +649,6 @@ export default function DashboardModule({
           </span>
         </div>
         
-        {/* 卡片 3: 應收尾數 */}
         <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
@@ -682,7 +660,6 @@ export default function DashboardModule({
           </span>
         </div>
         
-        {/* 卡片 4: 本月銷售額 */}
         <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
@@ -695,8 +672,7 @@ export default function DashboardModule({
         </div>
       </div>
 
-      {/* ★ 核心修復 1：將 Tab 隱藏斷點改為 lg，讓折疊屏保持單欄切換，避免畫面被過度切割 */}
-      <div className="lg:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
+      <div className="md:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
         <button 
           onClick={() => setDashMobileTab('instock')}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex justify-center items-center gap-1.5 ${dashMobileTab === 'instock' ? 'bg-white text-green-700 shadow-sm' : 'text-slate-500'}`}
@@ -713,16 +689,13 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ 核心修復 2：雙軌看板改為 lg:flex-row，在折疊屏上維持單欄，保留完整寬度給車輛卡片 */}
-      <div className="flex flex-col lg:flex-row gap-3 lg:gap-4 flex-1 shrink-0 overflow-visible lg:overflow-hidden min-h-0 mt-1 pb-1 w-full max-w-full">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1 w-full max-w-full">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        {/* ★ 核心修復 3：將 md:w-1/2 與 hidden md:flex 改為 lg，確保在折疊屏上佔滿可用寬度 */}
-        <div className={`flex-1 min-w-0 w-full lg:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden lg:flex'}`}>
-          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 lg:pb-6">
+        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6 h-full min-h-[50vh]">
             
-            {/* 瀑布疊加 Sticky Header (同樣將 md:top-0 改為 lg:top-0) */}
-            <div className="sticky top-[52px] lg:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
                   <Layout className="w-4 h-4 mr-1.5 text-green-600 shrink-0" /> 在庫待售
@@ -731,7 +704,6 @@ export default function DashboardModule({
                   {filteredInStockCars.length}
                 </span>
               </div>
-              {/* ★ 確保搜尋框與按鈕在小尺寸下自動壓縮，不撐爆寬度 */}
               <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
                 <div className="relative w-full max-w-[200px]">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -742,7 +714,6 @@ export default function DashboardModule({
               </div>
             </div>
 
-            {/* 列表內容 */}
             <div className="p-2.5 space-y-2.5">
               {filteredInStockCars.map(car => renderDashboardCard(car))}
               {filteredInStockCars.length === 0 && (
@@ -755,12 +726,10 @@ export default function DashboardModule({
         </div>
 
         {/* ==================== 已訂與待結清看板 ==================== */}
-        {/* ★ 核心修復 4：同步改為 lg 斷點 */}
-        <div className={`flex-1 min-w-0 w-full lg:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible lg:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden lg:flex'}`}>
-          <div className="flex-1 overflow-visible lg:overflow-y-auto scrollbar-thin relative pb-4 lg:pb-6">
+        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6 h-full min-h-[50vh]">
             
-            {/* 瀑布疊加 Sticky Header */}
-            <div className="sticky top-[52px] lg:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
+            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
                   <FileCheck className="w-4 h-4 mr-1.5 text-amber-600 shrink-0" /> 已訂 / 待結清
@@ -776,7 +745,6 @@ export default function DashboardModule({
               </div>
             </div>
 
-            {/* 列表內容 */}
             <div className="p-2.5 space-y-2.5">
               {filteredActionCars.map(car => renderDashboardCard(car))}
               {filteredActionCars.length === 0 && (
@@ -794,8 +762,6 @@ export default function DashboardModule({
             </div>
           </div>
         </div>
-
-   
 
       </div>
     </div>
