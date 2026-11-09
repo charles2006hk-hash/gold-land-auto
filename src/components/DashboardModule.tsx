@@ -1,7 +1,7 @@
 // src/components/DashboardModule.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Layout, FileCheck, Plus, Search, X, ChevronDown, 
   CheckCircle, Car, Share2, Check, Calendar, Building2
@@ -26,6 +26,30 @@ const getDaysRemaining = (targetDate?: string) => {
   const diffTime = target.getTime() - today.getTime();
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
+
+// ★ 核心修復 0：自定義 Hook，監聽視窗尺寸變化，解決 iOS/折疊屏旋轉時的 Viewport 高度更新延遲
+function useViewportHeight() {
+  useEffect(() => {
+    const setVh = () => {
+      // 取得實際視窗高度，乘以 0.01 得到 1vh 的實際像素值
+      const vh = window.innerHeight * 0.01;
+      // 將計算出的值設定為 CSS 變數 --vh
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+
+    setVh();
+    window.addEventListener('resize', setVh);
+    window.addEventListener('orientationchange', () => {
+      // 旋轉時延遲執行，確保取得正確的高度
+      setTimeout(setVh, 100); 
+    });
+
+    return () => {
+      window.removeEventListener('resize', setVh);
+      window.removeEventListener('orientationchange', setVh);
+    };
+  }, []);
+}
 
 export interface DashboardModuleProps {
   inventory: Vehicle[];
@@ -79,6 +103,8 @@ export default function DashboardModule({
   appId,
   triggerSmartPrint,
 }: DashboardModuleProps) {
+  useViewportHeight(); // ★ 啟用視窗高度監聽
+
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock');
   const [dashSearchInStock, setDashSearchInStock] = useState('');
@@ -434,8 +460,12 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-20 md:pb-0 scrollbar-thin w-full">
-      {/* ★ 核心修復：使用 flex-1 填滿高度，並移除無意義的 max-w限制，恢復 md 雙欄鎖定邏輯 */}
+    // ★ 核心修復 1：高度改用 CSS 變數 calc(var(--vh, 1vh) * 100)，配合 useViewportHeight 動態計算，徹底解決高度塌陷
+    // ★ 核心修復 2：w-full 確保寬度自適應
+    <div 
+      className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-20 md:pb-0 scrollbar-thin w-full"
+      style={{ height: 'calc(var(--vh, 1vh) * 100)' }}
+    >
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -668,7 +698,6 @@ export default function DashboardModule({
         </div>
       </div>
 
-      {/* ★ 核心修復：恢復 md:hidden 斷點，讓折疊屏直接展現左右雙軌，不再顯示 Tab */}
       <div className="md:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
         <button 
           onClick={() => setDashMobileTab('instock')}
@@ -686,12 +715,11 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ 核心修復：恢復 md:flex-row 與 md:overflow-hidden，保證完美雙軌填滿高度 */}
+      {/* ★ 核心修復 3：w-full 確保在旋轉時佔據全部可用寬度 */}
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1 w-full">
         
         {/* ==================== 在庫待售看板 ==================== */}
         <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-          {/* ★ 核心修復：移除強制高度鎖 min-h-[50vh]，讓 flex-1 真正發生作用 */}
           <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-2">
             
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
@@ -726,7 +754,6 @@ export default function DashboardModule({
 
         {/* ==================== 已訂與待結清看板 ==================== */}
         <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-          {/* ★ 核心修復：移除強制高度鎖 min-h-[50vh]，讓 flex-1 真正發生作用 */}
           <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-2">
             
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
