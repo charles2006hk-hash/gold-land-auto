@@ -467,8 +467,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    {/* ★ 核心修復 2：移除所有強硬的高度限制與寫死的 pb-20，改為依賴環境變數與 flex-1，確保容器在任意旋轉下都能 100% 填滿且不溢出 */}
     <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-[calc(env(safe-area-inset-bottom)+12px)] md:pb-0 scrollbar-thin min-w-0 w-full">
+      {/* ★ 核心修復 2：移除所有強硬的高度限制與寫死的 pb-20，改為依賴環境變數與 flex-1，確保容器在任意旋轉下都能 100% 填滿且不溢出 */}
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
