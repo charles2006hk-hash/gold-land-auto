@@ -3010,7 +3010,7 @@ return (
                 padding: 0 !important;
                 width: 100% !important; 
                 height: 100% !important; 
-                position: fixed !important; 
+                
                 overflow: hidden !important; 
                 background-color: #f8fafc !important; 
                 overscroll-behavior: none !important;
@@ -3243,7 +3243,7 @@ return (
                   </div>
               </div>
 
-              {/* Grid Container (v18.0: 現代化 4:3 滿版垂直卡片 + 原有邏輯保留) */}
+             {/* Grid Container (加入 GPU 加速與 overscroll 控制，防止 Chrome 渲染崩潰) */}
               <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-[calc(2rem+env(safe-area-inset-bottom))] scrollbar-thin transform-gpu will-change-scroll overscroll-contain">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {getSortedInventory()
@@ -3338,10 +3338,10 @@ return (
                         // ★ 新增：判斷是否為行家盤
                         const isPartner = car.sourceType === 'partner';
 
-                        return (
-                        // 🍏 Apple Style 大卡片：3XL 超大圓角 + 精密高光邊框 + 彌散陰影
+                       return (
+                        // 🍏 效能極致版：拔除 transition-all，開啟硬體加速與 GPU 圖層隔離 (contain-paint)
                         <div key={car.id} className={`bg-white/60 backdrop-blur-xl rounded-3xl border transition-transform transition-shadow duration-300 transform-gpu translate-z-0 backface-hidden contain-paint group flex flex-col overflow-hidden cursor-pointer relative active:scale-[0.99] ${isPartner ? 'border-orange-200/80 hover:border-orange-300 shadow-[0_4px_20px_rgba(249,115,22,0.03)] hover:shadow-[0_12px_30px_rgba(249,115,22,0.1)]' : 'border-white/80 hover:border-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]'}`} onClick={() => setEditingVehicle(car)}>
-                         
+                          
                             {/* 上半部：4:3 滿版圖片 */}
                             <div className="w-full aspect-[4/3] bg-slate-900 relative overflow-hidden flex-none flex items-center justify-center">
                                 {thumbUrl ? (
