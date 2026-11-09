@@ -434,8 +434,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    {/* ★ 核心修復：使用 flex-1 填滿高度，並移除無意義的 max-w限制，恢復 md 雙欄鎖定邏輯 */}
     <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-20 md:pb-0 scrollbar-thin w-full">
+      {/* ★ 核心修復：使用 flex-1 填滿高度，並移除無意義的 max-w限制，恢復 md 雙欄鎖定邏輯 */}
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
