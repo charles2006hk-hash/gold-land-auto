@@ -3001,9 +3001,9 @@ const DatabaseSelector = ({
 
 
   return (
-      {/* ★ 核心修復 1：將最外層底色統一改為 bg-slate-50，徹底消滅所有因為 Safe Area 或 Padding 露出的黑邊 */}
+      
       <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
-    
+    {/* ★ 核心修復 1：將最外層底色統一改為 bg-slate-50，徹底消滅所有因為 Safe Area 或 Padding 露出的黑邊 */}
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10 print:hidden"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
