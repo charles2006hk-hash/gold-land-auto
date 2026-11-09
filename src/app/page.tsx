@@ -2994,9 +2994,9 @@ const DatabaseSelector = ({
 // ★★★ 1. Vehicle Form Modal (v21.4: 智能雙軌收支 + Trade-in 對數 + Kw 單位) ★★★
 // ------------------------------------------------------------------
 
- return (
-      // ★ 核心修復 1：拔除 fixed inset-0，改用 flex w-full h-[100dvh] 讓瀏覽器在旋轉時自動重算長寬
-      <div className="flex w-full h-[100dvh] text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
+return (
+      // ★ 核心修復 2：改回 fixed inset-0，這是 PWA 鎖死物理視窗最穩定的寫法，能無視設備旋轉延遲
+      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10 print:hidden"></div>
@@ -3004,25 +3004,23 @@ const DatabaseSelector = ({
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
        
         <style>{`
-            /* ★ 核心修復 2：移除 position: fixed，強制使用 100dvh，並將全局底色統一為明亮色 (slate-50)，徹底消滅黑邊 */
+            /* ★ 核心修復 3：全域背景統一為 #f8fafc (slate-50)，徹底消滅旋轉時露出的任何黑色/白色異色斷層 */
             html, body, #__next { 
                 margin: 0 !important; 
                 padding: 0 !important;
                 width: 100% !important; 
-                height: 100dvh !important; 
+                height: 100% !important; 
+                position: fixed !important; 
                 overflow: hidden !important; 
-                background-color: #f8fafc !important; /* slate-50，與主體內容無縫融合 */
+                background-color: #f8fafc !important; 
                 overscroll-behavior: none !important;
                 -webkit-tap-highlight-color: transparent;
-                -webkit-overflow-scrolling: touch;
+                -webkit-text-size-adjust: 100%;
             }
-            .overflow-y-auto {
-                -webkit-overflow-scrolling: touch;
-            }
-            
-            /* 解放列印引擎 */
             @media print {
                 html, body, #__next {
+                    position: static !important;
+                    width: auto !important;
                     height: auto !important;
                     min-height: auto !important;
                     overflow: visible !important;
@@ -3058,7 +3056,7 @@ const DatabaseSelector = ({
            
 
      {/* ★ 核心修復 3：確保 main 容器 100% 填滿 h-full，並只使用 padding 避開 Safe Area */}
-        <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+        <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
         
           {/* VehicleShareModal 等保持不變 */}
         {shareVehicle && (
