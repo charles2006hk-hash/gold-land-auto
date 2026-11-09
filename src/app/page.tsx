@@ -2994,9 +2994,15 @@ const DatabaseSelector = ({
 // ★★★ 1. Vehicle Form Modal (v21.4: 智能雙軌收支 + Trade-in 對數 + Kw 單位) ★★★
 // ------------------------------------------------------------------
 
-return (
-      // ★ 核心修復 2：改回 fixed inset-0，這是 PWA 鎖死物理視窗最穩定的寫法，能無視設備旋轉延遲
-      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
+
+  
+
+
+
+
+  return (
+      // ★ 終極邊界修復：fixed inset-0 鎖死物理視窗，同時保留 Tailwind 的 print 屬性
+      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-[#020617] md:bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
           
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10 print:hidden"></div>
@@ -3004,19 +3010,27 @@ return (
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
        
         <style>{`
-            /* ★ 核心修復 3：全域背景統一為 #f8fafc (slate-50)，徹底消滅旋轉時露出的任何黑色/白色異色斷層 */
+            /* ★ 徹底鎖死 html 與 body，消滅 2-3mm 白邊，融合 iPhone Duo 系統黑條 */
             html, body, #__next { 
                 margin: 0 !important; 
                 padding: 0 !important;
                 width: 100% !important; 
                 height: 100% !important; 
-                
+                position: fixed !important; /* 鎖死底板座標系 */
                 overflow: hidden !important; 
-                background-color: #f8fafc !important; 
+                background-color: #020617 !important; /* 手機深空黑，融合黑條 */
                 overscroll-behavior: none !important;
                 -webkit-tap-highlight-color: transparent;
-                -webkit-text-size-adjust: 100%;
+                -webkit-overflow-scrolling: touch;
             }
+            @media (min-width: 768px) {
+                html, body, #__next { background-color: #f1f5f9 !important; }
+            }
+            .overflow-y-auto {
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* ★ 必須保留：解放列印引擎，在列印時強行解除所有高度與隱藏限制，允許分頁 */
             @media print {
                 html, body, #__next {
                     position: static !important;
@@ -3055,11 +3069,13 @@ return (
       />
            
 
-     {/* ★ 核心修復 3：確保 main 容器 100% 填滿 h-full，並只使用 padding 避開 Safe Area */}
-        <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
-        
-          {/* VehicleShareModal 等保持不變 */}
-        
+     {/* 🍏 Gemini Style: 完美融合系統黑條與避開鏡頭 */}
+      {/* ★ 核心修復：使用 padding (pt/pb/pl/pr) 處理 safe-area，讓白色背景 bg-slate-50 撐滿整個螢幕邊緣，消除浪費的黑邊 */}
+      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:p-8 md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+        {/* VehicleShareModal 等保持不變 */}
+        {shareVehicle && (
+            <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
+        )}
         
         {/* 手機版頂部 Header */}
         {/* ★ 因為外層 margin 已經完美避開了鏡頭跟瀏海，這裡只需保留固定的 pt-3 防止文字太貼邊即可 */}
@@ -3092,7 +3108,36 @@ return (
         {/* 修正：如果是報表模式 (reports)，則在打印時允許顯示主要內容區 */}
         <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} flex flex-col h-full overflow-hidden`}>
           
-          
+          {/* Modal for Add/Edit Vehicle (完整參數版) */}
+          {(activeTab === 'inventory_add' || editingVehicle) && (
+              <VehicleFormModal 
+                  db={db}
+                  staffId={staffId}
+                  appId={appId}
+                  clients={clients}              
+                  settings={settings}
+                  editingVehicle={editingVehicle} 
+                  setEditingVehicle={setEditingVehicle}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  saveVehicle={saveVehicle}
+                  addPayment={addPayment}
+                  deletePayment={deletePayment}
+                  addExpense={addExpense}
+                  deleteExpense={deleteExpense}
+                  updateExpenseStatus={updateExpenseStatus}
+                  addSystemLog={addSystemLog}
+                  allSalesDocs={allSalesDocs} 
+                  onJumpToDoc={handleJumpToDoc}
+                  addSalesAddon={addSalesAddon}
+                  deleteSalesAddon={deleteSalesAddon}
+                  updateSettings={updateSettings}
+                  systemUsers={systemUsers}
+                  currentUser={currentUser}
+                  updateSubItem={updateSubItem}
+                  inventory={visibleInventory}
+              />
+          )}
           
           {/* Report Tab - 讓它內部也可以滾動 */}
                 {activeTab === 'reports' && (
@@ -3243,8 +3288,8 @@ return (
                   </div>
               </div>
 
-             {/* Grid Container (加入 GPU 加速與 overscroll 控制，防止 Chrome 渲染崩潰) */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-[calc(2rem+env(safe-area-inset-bottom))] scrollbar-thin transform-gpu will-change-scroll overscroll-contain">
+              {/* Grid Container (v18.0: 現代化 4:3 滿版垂直卡片 + 原有邏輯保留) */}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 pb-[calc(2rem+env(safe-area-inset-bottom))] scrollbar-thin">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {getSortedInventory()
                         .sort((a, b) => {
@@ -3338,10 +3383,10 @@ return (
                         // ★ 新增：判斷是否為行家盤
                         const isPartner = car.sourceType === 'partner';
 
-                       return (
-                        // 🍏 效能極致版：拔除 transition-all，開啟硬體加速與 GPU 圖層隔離 (contain-paint)
-                        <div key={car.id} className={`bg-white/60 backdrop-blur-xl rounded-3xl border transition-transform transition-shadow duration-300 transform-gpu translate-z-0 backface-hidden contain-paint group flex flex-col overflow-hidden cursor-pointer relative active:scale-[0.99] ${isPartner ? 'border-orange-200/80 hover:border-orange-300 shadow-[0_4px_20px_rgba(249,115,22,0.03)] hover:shadow-[0_12px_30px_rgba(249,115,22,0.1)]' : 'border-white/80 hover:border-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]'}`} onClick={() => setEditingVehicle(car)}>
-                          
+                        return (
+                        // 🍏 Apple Style 大卡片：3XL 超大圓角 + 精密高光邊框 + 彌散陰影
+                        <div key={car.id} className={`bg-white/60 backdrop-blur-xl rounded-3xl border transition-all duration-300 group flex flex-col overflow-hidden cursor-pointer relative active:scale-[0.99] ${isPartner ? 'border-orange-200/80 hover:border-orange-300 shadow-[0_4px_20px_rgba(249,115,22,0.03)] hover:shadow-[0_12px_30px_rgba(249,115,22,0.1)]' : 'border-white/80 hover:border-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]'}`} onClick={() => setEditingVehicle(car)}>
+                         
                             {/* 上半部：4:3 滿版圖片 */}
                             <div className="w-full aspect-[4/3] bg-slate-900 relative overflow-hidden flex-none flex items-center justify-center">
                                 {thumbUrl ? (
@@ -3631,45 +3676,6 @@ return (
           sendPushNotification={sendPushNotification}
       />
 
-      {/* Modal for Add/Edit Vehicle (完整參數版) */}
-          {(activeTab === 'inventory_add' || editingVehicle) && (
-              <VehicleFormModal 
-                  db={db}
-                  staffId={staffId}
-                  appId={appId}
-                  clients={clients}              
-                  settings={settings}
-                  editingVehicle={editingVehicle} 
-                  setEditingVehicle={setEditingVehicle}
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                  saveVehicle={saveVehicle}
-                  addPayment={addPayment}
-                  deletePayment={deletePayment}
-                  addExpense={addExpense}
-                  deleteExpense={deleteExpense}
-                  updateExpenseStatus={updateExpenseStatus}
-                  addSystemLog={addSystemLog}
-                  allSalesDocs={allSalesDocs} 
-                  onJumpToDoc={handleJumpToDoc}
-                  addSalesAddon={addSalesAddon}
-                  deleteSalesAddon={deleteSalesAddon}
-                  updateSettings={updateSettings}
-                  systemUsers={systemUsers}
-                  currentUser={currentUser}
-                  updateSubItem={updateSubItem}
-                  inventory={visibleInventory}
-              />
-          )}
-        
-      {shareVehicle && (
-            <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
-        )}
-
-     
-
-
-        
     </div>
   );
 }
