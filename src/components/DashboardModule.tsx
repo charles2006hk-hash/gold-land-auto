@@ -27,26 +27,31 @@ const getDaysRemaining = (targetDate?: string) => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-// ★ 核心修復 0：自定義 Hook，監聽視窗尺寸變化，解決 iOS/折疊屏旋轉時的 Viewport 高度更新延遲
-function useViewportHeight() {
+// ★ 核心修復 1：iOS/折疊屏終極防塌陷 Hook
+// 旋轉螢幕時，瀏覽器的動畫會有 200-300ms 的過渡期。
+// 我們透過連續的三次觸發，強制瀏覽器在動畫結束後，重新計算正確的 100% 寬高與 Safe Area。
+function useViewportSync() {
   useEffect(() => {
-    const setVh = () => {
-      // 取得實際視窗高度，乘以 0.01 得到 1vh 的實際像素值
+    const syncViewport = () => {
+      // 透過設置微小的自定義變數強迫 DOM Reflow (重繪)
       const vh = window.innerHeight * 0.01;
-      // 將計算出的值設定為 CSS 變數 --vh
       document.documentElement.style.setProperty('--vh', `${vh}px`);
+      // 強制喚醒 body 寬高重算
+      document.body.style.minHeight = '100.01%';
+      setTimeout(() => { document.body.style.minHeight = '100%'; }, 50);
     };
 
-    setVh();
-    window.addEventListener('resize', setVh);
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
     window.addEventListener('orientationchange', () => {
-      // 旋轉時延遲執行，確保取得正確的高度
-      setTimeout(setVh, 100); 
+      setTimeout(syncViewport, 10);
+      setTimeout(syncViewport, 150);
+      setTimeout(syncViewport, 350); // 確保在 iOS 旋轉動畫完全結束後再算一次
     });
 
     return () => {
-      window.removeEventListener('resize', setVh);
-      window.removeEventListener('orientationchange', setVh);
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
     };
   }, []);
 }
@@ -103,7 +108,9 @@ export default function DashboardModule({
   appId,
   triggerSmartPrint,
 }: DashboardModuleProps) {
-  useViewportHeight(); // ★ 啟用視窗高度監聽
+  
+  // ★ 啟動防塌陷同步
+  useViewportSync();
 
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock');
@@ -460,12 +467,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    // ★ 核心修復 1：高度改用 CSS 變數 calc(var(--vh, 1vh) * 100)，配合 useViewportHeight 動態計算，徹底解決高度塌陷
-    // ★ 核心修復 2：w-full 確保寬度自適應
-    <div 
-      className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-20 md:pb-0 scrollbar-thin w-full"
-      style={{ height: 'calc(var(--vh, 1vh) * 100)' }}
-    >
+    {/* ★ 核心修復 2：移除所有強硬的高度限制與寫死的 pb-20，改為依賴環境變數與 flex-1，確保容器在任意旋轉下都能 100% 填滿且不溢出 */}
+    <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-[calc(env(safe-area-inset-bottom)+12px)] md:pb-0 scrollbar-thin min-w-0 w-full">
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -715,33 +718,33 @@ export default function DashboardModule({
         </button>
       </div>
 
-      {/* ★ 核心修復 3：w-full 確保在旋轉時佔據全部可用寬度 */}
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1 w-full">
+      {/* ★ 核心修復 3：w-full 與 min-w-0 是確保 Flex 子元素不會因為內容過長撐爆父容器的鐵律 */}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1 w-full min-w-0 max-w-full">
         
         {/* ==================== 在庫待售看板 ==================== */}
         <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
           <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-2">
             
-            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
+            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap shrink-0">
                   <Layout className="w-4 h-4 mr-1.5 text-green-600 shrink-0" /> 在庫待售
                 </h3>
-                <span className="bg-green-100 text-green-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
+                <span className="bg-green-100 text-green-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold shrink-0">
                   {filteredInStockCars.length}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-                <div className="relative w-full max-w-[200px]">
+                <div className="relative w-full max-w-[200px] min-w-0">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input type="text" placeholder="搜尋庫存車..." value={dashSearchInStock} onChange={(e) => setDashSearchInStock(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all"/>
+                  <input type="text" placeholder="搜尋庫存車..." value={dashSearchInStock} onChange={(e) => setDashSearchInStock(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-green-500 focus:bg-white transition-all min-w-0"/>
                   {dashSearchInStock && <button onClick={() => setDashSearchInStock('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
                 </div>
                 <button onClick={() => { setEditingVehicle({} as any); setActiveTab('inventory_add'); }} className="bg-slate-900 hover:bg-slate-800 text-white p-1 rounded-lg shrink-0 transition-colors" title="新增入庫"><Plus className="w-4 h-4" /></button>
               </div>
             </div>
 
-            <div className="p-2.5 space-y-2.5">
+            <div className="p-2.5 space-y-2.5 w-full min-w-0">
               {filteredInStockCars.map(car => renderDashboardCard(car))}
               {filteredInStockCars.length === 0 && (
                 <div className="text-center py-10 text-slate-400 text-xs">
@@ -756,23 +759,23 @@ export default function DashboardModule({
         <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
           <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-2">
             
-            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap">
+            <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <h3 className="font-bold text-slate-800 text-sm flex items-center whitespace-nowrap shrink-0">
                   <FileCheck className="w-4 h-4 mr-1.5 text-amber-600 shrink-0" /> 已訂 / 待結清
                 </h3>
-                <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold">
+                <span className="bg-amber-100 text-amber-800 font-mono text-xs px-2 py-0.5 rounded-full font-bold shrink-0">
                   {filteredActionCars.length}
                 </span>
               </div>
               <div className="relative flex-1 min-w-0 max-w-[200px] ml-auto">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input type="text" placeholder="搜尋交易車..." value={dashSearchAction} onChange={(e) => setDashSearchAction(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all" />
+                <input type="text" placeholder="搜尋交易車..." value={dashSearchAction} onChange={(e) => setDashSearchAction(e.target.value)} className="w-full bg-white/80 border border-slate-200/80 rounded-lg pl-8 pr-6 py-1 text-xs font-medium outline-none focus:border-amber-500 focus:bg-white transition-all min-w-0" />
                 {dashSearchAction && <button onClick={() => setDashSearchAction('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
               </div>
             </div>
 
-            <div className="p-2.5 space-y-2.5">
+            <div className="p-2.5 space-y-2.5 w-full min-w-0">
               {filteredActionCars.map(car => renderDashboardCard(car))}
               {filteredActionCars.length === 0 && (
                 <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center">
