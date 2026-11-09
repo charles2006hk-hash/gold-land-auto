@@ -18,7 +18,6 @@ import SmartNotificationCenter from '@/components/SmartNotificationCenter';
 const formatCurrency = (amount: number) => 
   new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
-// 計算日期剩餘天數
 const getDaysRemaining = (targetDate?: string) => {
   if (!targetDate) return null;
   const today = new Date();
@@ -80,7 +79,6 @@ export default function DashboardModule({
   appId,
   triggerSmartPrint,
 }: DashboardModuleProps) {
-  // --- 內部狀態 ---
   const [isAlertExpanded, setIsAlertExpanded] = useState(false);
   const [dashMobileTab, setDashMobileTab] = useState<'instock' | 'action'>('instock');
   const [dashSearchInStock, setDashSearchInStock] = useState('');
@@ -88,7 +86,7 @@ export default function DashboardModule({
   const [alertSearchTerm, setAlertSearchTerm] = useState('');
 
   // ============================================================================
-  // 1. 戰情警報數據過濾 (Alerts Filtering)
+  // 1. 戰情警報數據過濾
   // ============================================================================
   const docAlerts: any[] = [];
   
@@ -161,7 +159,6 @@ export default function DashboardModule({
     
     const title = plate ? plate : name;
     const desc = plate ? `${name} (${docType})` : docType;
-
     return { id: i.id, title, desc, date: i.date, days: i.days, status, source: 'database', raw };
   };
 
@@ -183,7 +180,6 @@ export default function DashboardModule({
   const filteredLoop = loopReminders.filter((car: any) => !alertSearchLower || (car.regMark || '').toLowerCase().includes(alertSearchLower));
   const filteredCb = cbAlerts.filter((item: any) => !alertSearchLower || (item.title || '').toLowerCase().includes(alertSearchLower) || (item.desc || '').toLowerCase().includes(alertSearchLower));
   const filteredDoc = combinedDocAlerts.filter((item: any) => !alertSearchLower || (item.title || '').toLowerCase().includes(alertSearchLower) || (item.desc || '').toLowerCase().includes(alertSearchLower));
-
 
   // ============================================================================
   // 2. 雙欄車輛列表篩選與過濾
@@ -227,7 +223,7 @@ export default function DashboardModule({
   );
 
   // ============================================================================
-  // 3. 卡片渲染邏輯 (Card Render Helper)
+  // 3. 卡片渲染邏輯 
   // ============================================================================
   const getInventoryAging = (car: any) => {
     if (!car.stockInDate) return null;
@@ -438,7 +434,8 @@ export default function DashboardModule({
   // 4. 主渲染 (Render Module Layout)
   // ============================================================================
   return (
-    <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-24 md:pb-0 scrollbar-thin w-full max-w-[100vw]">
+    {/* ★ 核心修復：使用 flex-1 填滿高度，並移除無意義的 max-w限制，恢復 md 雙欄鎖定邏輯 */}
+    <div className="flex flex-col flex-1 h-full overflow-y-auto overflow-x-hidden md:overflow-hidden space-y-3 animate-fade-in relative pb-20 md:pb-0 scrollbar-thin w-full">
       
       {/* 頂部 Header 與最新通告 / 通知鈴鐺 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 md:gap-4 flex-none">
@@ -626,8 +623,7 @@ export default function DashboardModule({
 
       {/* 4 格扁平 KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 flex-none">
-        
-        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
              <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">庫存總值</span>
@@ -638,7 +634,7 @@ export default function DashboardModule({
           </span>
         </div>
         
-        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
              <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">未付費用</span>
@@ -649,7 +645,7 @@ export default function DashboardModule({
           </span>
         </div>
         
-        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
              <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">應收尾數</span>
@@ -660,7 +656,7 @@ export default function DashboardModule({
           </span>
         </div>
         
-        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
+        <div className="bg-white/70 backdrop-blur-md p-2 md:p-3 rounded-lg md:rounded-xl border border-white/80 shadow-sm relative overflow-hidden flex flex-col justify-center transition-all hover:bg-white/90">
           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
           <div className="flex items-center justify-between mb-0.5 md:mb-1">
              <span className="text-[9px] md:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">本月銷售額</span>
@@ -672,6 +668,7 @@ export default function DashboardModule({
         </div>
       </div>
 
+      {/* ★ 核心修復：恢復 md:hidden 斷點，讓折疊屏直接展現左右雙軌，不再顯示 Tab */}
       <div className="md:hidden sticky top-0 z-40 flex p-1.5 bg-slate-200/90 backdrop-blur-xl rounded-xl mx-1 mt-1 mb-2 shrink-0 shadow-sm border border-white/50">
         <button 
           onClick={() => setDashMobileTab('instock')}
@@ -689,11 +686,13 @@ export default function DashboardModule({
         </button>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1 w-full max-w-full">
+      {/* ★ 核心修復：恢復 md:flex-row 與 md:overflow-hidden，保證完美雙軌填滿高度 */}
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-1 shrink-0 overflow-visible md:overflow-hidden min-h-0 mt-1 pb-1 w-full">
         
         {/* ==================== 在庫待售看板 ==================== */}
-        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6 h-full min-h-[50vh]">
+        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'instock' ? 'flex' : 'hidden md:flex'}`}>
+          {/* ★ 核心修復：移除強制高度鎖 min-h-[50vh]，讓 flex-1 真正發生作用 */}
+          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-2">
             
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
@@ -726,8 +725,9 @@ export default function DashboardModule({
         </div>
 
         {/* ==================== 已訂與待結清看板 ==================== */}
-        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
-          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-6 h-full min-h-[50vh]">
+        <div className={`flex-1 min-w-0 w-full md:w-1/2 flex flex-col bg-white/40 backdrop-blur-xl rounded-2xl border border-white/60 shadow-sm overflow-visible md:overflow-hidden shrink-0 ${dashMobileTab === 'action' ? 'flex' : 'hidden md:flex'}`}>
+          {/* ★ 核心修復：移除強制高度鎖 min-h-[50vh]，讓 flex-1 真正發生作用 */}
+          <div className="flex-1 overflow-visible md:overflow-y-auto scrollbar-thin relative pb-4 md:pb-2">
             
             <div className="sticky top-[52px] md:top-0 z-30 flex items-center justify-between p-3 border-b border-slate-200/50 bg-white/60 backdrop-blur-xl shadow-sm gap-2">
               <div className="flex items-center gap-2">
