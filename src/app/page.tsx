@@ -3056,7 +3056,7 @@ return (
            
 
      {/* ★ 核心修復 3：確保 main 容器 100% 填滿 h-full，並只使用 padding 避開 Safe Area */}
-        <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+        <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
         
           {/* VehicleShareModal 等保持不變 */}
         {shareVehicle && (
