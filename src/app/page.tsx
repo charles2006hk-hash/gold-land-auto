@@ -3059,9 +3059,7 @@ return (
         <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden bg-transparent pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
         
           {/* VehicleShareModal 等保持不變 */}
-        {shareVehicle && (
-            <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
-        )}
+        
         
         {/* 手機版頂部 Header */}
         {/* ★ 因為外層 margin 已經完美避開了鏡頭跟瀏海，這裡只需保留固定的 pt-3 防止文字太貼邊即可 */}
@@ -3094,36 +3092,7 @@ return (
         {/* 修正：如果是報表模式 (reports)，則在打印時允許顯示主要內容區 */}
         <div className={`${isPreviewMode ? 'hidden' : 'block'} ${activeTab === 'reports' ? 'print:block' : 'print:hidden'} flex flex-col h-full overflow-hidden`}>
           
-          {/* Modal for Add/Edit Vehicle (完整參數版) */}
-          {(activeTab === 'inventory_add' || editingVehicle) && (
-              <VehicleFormModal 
-                  db={db}
-                  staffId={staffId}
-                  appId={appId}
-                  clients={clients}              
-                  settings={settings}
-                  editingVehicle={editingVehicle} 
-                  setEditingVehicle={setEditingVehicle}
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                  saveVehicle={saveVehicle}
-                  addPayment={addPayment}
-                  deletePayment={deletePayment}
-                  addExpense={addExpense}
-                  deleteExpense={deleteExpense}
-                  updateExpenseStatus={updateExpenseStatus}
-                  addSystemLog={addSystemLog}
-                  allSalesDocs={allSalesDocs} 
-                  onJumpToDoc={handleJumpToDoc}
-                  addSalesAddon={addSalesAddon}
-                  deleteSalesAddon={deleteSalesAddon}
-                  updateSettings={updateSettings}
-                  systemUsers={systemUsers}
-                  currentUser={currentUser}
-                  updateSubItem={updateSubItem}
-                  inventory={visibleInventory}
-              />
-          )}
+          
           
           {/* Report Tab - 讓它內部也可以滾動 */}
                 {activeTab === 'reports' && (
@@ -3662,6 +3631,45 @@ return (
           sendPushNotification={sendPushNotification}
       />
 
+      {/* Modal for Add/Edit Vehicle (完整參數版) */}
+          {(activeTab === 'inventory_add' || editingVehicle) && (
+              <VehicleFormModal 
+                  db={db}
+                  staffId={staffId}
+                  appId={appId}
+                  clients={clients}              
+                  settings={settings}
+                  editingVehicle={editingVehicle} 
+                  setEditingVehicle={setEditingVehicle}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  saveVehicle={saveVehicle}
+                  addPayment={addPayment}
+                  deletePayment={deletePayment}
+                  addExpense={addExpense}
+                  deleteExpense={deleteExpense}
+                  updateExpenseStatus={updateExpenseStatus}
+                  addSystemLog={addSystemLog}
+                  allSalesDocs={allSalesDocs} 
+                  onJumpToDoc={handleJumpToDoc}
+                  addSalesAddon={addSalesAddon}
+                  deleteSalesAddon={deleteSalesAddon}
+                  updateSettings={updateSettings}
+                  systemUsers={systemUsers}
+                  currentUser={currentUser}
+                  updateSubItem={updateSubItem}
+                  inventory={visibleInventory}
+              />
+          )}
+        
+      {shareVehicle && (
+            <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
+        )}
+
+     
+
+
+        
     </div>
   );
 }
