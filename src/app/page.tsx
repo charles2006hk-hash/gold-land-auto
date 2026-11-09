@@ -3001,9 +3001,9 @@ const DatabaseSelector = ({
 
 
   return (
-      // ★ 終極邊界修復：fixed inset-0 鎖死物理視窗，同時保留 Tailwind 的 print 屬性
-      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-[#020617] md:bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
-          
+      {/* ★ 核心修復 1：將最外層底色統一改為 bg-slate-50，徹底消滅所有因為 Safe Area 或 Padding 露出的黑邊 */}
+      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
+    
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10 print:hidden"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
@@ -3070,8 +3070,8 @@ const DatabaseSelector = ({
            
 
      {/* 🍏 Gemini Style: 完美融合系統黑條與避開鏡頭 */}
-      {/* ★ 核心修復：使用 padding (pt/pb/pl/pr) 處理 safe-area，讓白色背景 bg-slate-50 撐滿整個螢幕邊緣，消除浪費的黑邊 */}
-      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:p-8 md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:p-4 lg:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+        
         {/* VehicleShareModal 等保持不變 */}
         {shareVehicle && (
             <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
