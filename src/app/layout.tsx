@@ -12,15 +12,14 @@ const fontMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// ★ 核心修復 1：viewport-fit=cover 允許背景穿透到相機/狀態列區域，吃掉 Tools bar
-// ★ 修正 themeColor 為 #f8fafc (slate-50) 消滅旋轉時的黑色斷層
+// ★ 核心修復 1：使用 Next.js 官方 Viewport API 強制允許背景穿透到相機/狀態列區域
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover", 
-  themeColor: "#f8fafc", 
+  themeColor: "#f1f5f9",
 };
 
 export const metadata: Metadata = {
@@ -34,7 +33,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true, 
     title: "金田 DMS",
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "black-translucent", // 維持原樣，保護一般 iPhone 體驗
   },
 };
 
@@ -46,6 +45,7 @@ export default function RootLayout({
   return (
     <html lang="zh-HK">
       <head>
+        {/* ★ 核心修復 2：智能環境探測腳本 (嚴格隔離 iPhone Duo) */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
