@@ -2994,46 +2994,35 @@ const DatabaseSelector = ({
 // ★★★ 1. Vehicle Form Modal (v21.4: 智能雙軌收支 + Trade-in 對數 + Kw 單位) ★★★
 // ------------------------------------------------------------------
 
-
-  
-
-
-
-
  return (
-      <div className="fixed inset-0 flex text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
-          {/* ★ 核心修復 1：將最外層底色統一改為 bg-slate-50，徹底消滅所有因為 Safe Area 或 Padding 露出的黑邊 */}
+      // ★ 核心修復 1：拔除 fixed inset-0，改用 flex w-full h-[100dvh] 讓瀏覽器在旋轉時自動重算長寬
+      <div className="flex w-full h-[100dvh] text-slate-900 font-sans overflow-hidden bg-slate-50 z-0 print:static print:h-auto print:w-auto print:block print:overflow-visible print:bg-white">
+          
           {/* 🍏 Apple Style: 強化版底層環境氛圍光 */}
           <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-400/40 rounded-full blur-[140px] pointer-events-none -z-10 print:hidden"></div>
           <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-400/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
           <div className="absolute top-[20%] right-[20%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[120px] pointer-events-none -z-10 print:hidden"></div>
        
         <style>{`
-            /* ★ 徹底鎖死 html 與 body，消滅 2-3mm 白邊，融合 iPhone Duo 系統黑條 */
+            /* ★ 核心修復 2：移除 position: fixed，強制使用 100dvh，並將全局底色統一為明亮色 (slate-50)，徹底消滅黑邊 */
             html, body, #__next { 
                 margin: 0 !important; 
                 padding: 0 !important;
                 width: 100% !important; 
-                height: 100% !important; 
-                position: fixed !important; /* 鎖死底板座標系 */
+                height: 100dvh !important; 
                 overflow: hidden !important; 
-                background-color: #020617 !important; /* 手機深空黑，融合黑條 */
+                background-color: #f8fafc !important; /* slate-50，與主體內容無縫融合 */
                 overscroll-behavior: none !important;
                 -webkit-tap-highlight-color: transparent;
                 -webkit-overflow-scrolling: touch;
-            }
-            @media (min-width: 768px) {
-                html, body, #__next { background-color: #f1f5f9 !important; }
             }
             .overflow-y-auto {
                 -webkit-overflow-scrolling: touch;
             }
             
-            /* ★ 必須保留：解放列印引擎，在列印時強行解除所有高度與隱藏限制，允許分頁 */
+            /* 解放列印引擎 */
             @media print {
                 html, body, #__next {
-                    position: static !important;
-                    width: auto !important;
                     height: auto !important;
                     min-height: auto !important;
                     overflow: visible !important;
@@ -3068,10 +3057,10 @@ const DatabaseSelector = ({
       />
            
 
-     {/* 🍏 Gemini Style: 完美融合系統黑條與避開鏡頭 */}
-      <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:p-4 lg:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
+     {/* ★ 核心修復 3：確保 main 容器 100% 填滿 h-full，並只使用 padding 避開 Safe Area */}
+        <main className="flex-1 w-full h-full min-w-0 min-h-0 flex flex-col relative overflow-hidden transition-all duration-300 bg-slate-50 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:rounded-l-2xl print:m-0 print:p-0 print:overflow-visible print:block">
         
-        {/* VehicleShareModal 等保持不變 */}
+          {/* VehicleShareModal 等保持不變 */}
         {shareVehicle && (
             <VehicleShareModal vehicle={shareVehicle} db={db} staffId={staffId} appId={appId} cleanMode={shareCleanMode} onClose={() => setShareVehicle(null)} />
         )}
