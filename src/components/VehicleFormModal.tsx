@@ -1400,8 +1400,8 @@ const VehicleFormModal = ({
             const targetChassis = (v.chassisNo || '').toUpperCase().trim();
             
             currentDbItems = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .filter(data => {
+                .map(doc => ({ id: doc.id, ...doc.data() } as any))
+                .filter((data: any) => {
                     const dbPlate = (data.plateNoHK || '').toUpperCase().trim();
                     const dbChassis = (data.chassisNo || '').toUpperCase().trim();
                     // 只要車牌相符，或是底盤號碼相符，就將其文件匯入這台車的相簿中
