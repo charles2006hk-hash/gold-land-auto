@@ -1340,75 +1340,49 @@ const VehicleFormModal = ({
     useEffect(() => { const size = Number(engineSizeStr.replace(/,/g, '')); setAutoLicenseFee(calculateLicenseFee(fuelType, size)); }, [fuelType, engineSizeStr]);
     const calcRegisteredPrice = () => { const a1 = Number(priceA1Str.replace(/,/g, '')) || 0; const tax = Number(priceTaxStr.replace(/,/g, '')) || 0; return formatNumberInput(String(a1 + tax)); };
 
-    // ★ 智能圖片聚合引擎：自動合併「智能圖庫」與「資料庫中心」的文件
+   // ✅ 替換為 (雙重監聽：圖庫 + 資料庫中心，並確保 TS 型別正確)：
     useEffect(() => {
         if (!v.id || !db || !staffId) return;
-        
         let currentMediaItems: any[] = [];
         let currentDbItems: any[] = [];
         
         const updateMergedPhotos = () => {
             const fullItems: any[] = [];
             let primaryItem: any = null;
-            
-            // 1. 處理媒體庫的相片與文件
-            currentMediaItems.forEach(data => {
-                if (data.isPrimary) primaryItem = data; 
-                else fullItems.push(data);
-            });
-            
-            // 2. 處理資料庫中心的文件 (轉化為相片物件，自動併入圖庫展示)
+            currentMediaItems.forEach(data => { if (data.isPrimary) primaryItem = data; else fullItems.push(data); });
             currentDbItems.forEach(data => {
                 if (data.attachments && Array.isArray(data.attachments)) {
                     data.attachments.forEach((url: string) => {
-                        fullItems.push({
-                            url,
-                            mediaType: 'document',
-                            tags: ['文件', data.docType || '資料庫文件'],
-                            source: 'database', // 標記來源為資料庫
-                            dbEntryId: data.id
-                        });
+                        fullItems.push({ url, mediaType: 'document', tags: ['文件', data.docType || '資料庫文件'], source: 'database', dbEntryId: data.id });
                     });
                 }
             });
-            
             if (primaryItem) fullItems.unshift(primaryItem);
             
-            // 3. 去除重複的 URL (兼容新舊資料結構)
             const uniqueUrls = new Set();
             const uniqueItems = fullItems.filter(item => {
                 const url = typeof item === 'string' ? item : item.url;
                 if (uniqueUrls.has(url)) return false;
-                uniqueUrls.add(url);
-                return true;
+                uniqueUrls.add(url); return true;
             });
-            
             setCarPhotos(uniqueItems);
         };
 
-        // 監聽 1：車輛專屬媒體庫
-        const qMedia = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), where('status', '==', 'linked'), where('relatedVehicleId', '==', v.id));
-        const unsubMedia = onSnapshot(qMedia, (snapshot) => {
+        const unsubMedia = onSnapshot(query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), where('status', '==', 'linked'), where('relatedVehicleId', '==', v.id)), (snapshot) => {
             currentMediaItems = snapshot.docs.map(doc => doc.data());
             updateMergedPhotos();
         });
 
-        // 監聽 2：資料庫中心 (智能比對車牌與底盤號)
-        const qDb = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database'), where('category', '==', 'Vehicle'));
-        const unsubDb = onSnapshot(qDb, (snapshot) => {
+        const unsubDb = onSnapshot(query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database'), where('category', '==', 'Vehicle')), (snapshot) => {
             const targetPlate = (v.regMark || '').toUpperCase().trim();
             const targetChassis = (v.chassisNo || '').toUpperCase().trim();
-            
-            currentDbItems = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as any))
-                .filter((data: any) => {
-                    const dbPlate = (data.plateNoHK || '').toUpperCase().trim();
-                    const dbChassis = (data.chassisNo || '').toUpperCase().trim();
-                    // 只要車牌相符，或是底盤號碼相符，就將其文件匯入這台車的相簿中
-                    const isPlateMatch = targetPlate && targetPlate !== '未出牌' && (dbPlate === targetPlate || (data.relatedPlateNo && data.relatedPlateNo.toUpperCase().includes(targetPlate)));
-                    const isChassisMatch = targetChassis && dbChassis === targetChassis;
-                    return isPlateMatch || isChassisMatch;
-                });
+            currentDbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)).filter((data: any) => {
+                const dbPlate = (data.plateNoHK || '').toUpperCase().trim();
+                const dbChassis = (data.chassisNo || '').toUpperCase().trim();
+                const isPlateMatch = targetPlate && targetPlate !== '未出牌' && (dbPlate === targetPlate || (data.relatedPlateNo && data.relatedPlateNo.toUpperCase().includes(targetPlate)));
+                const isChassisMatch = targetChassis && dbChassis === targetChassis;
+                return isPlateMatch || isChassisMatch;
+            });
             updateMergedPhotos();
         });
 
@@ -1854,7 +1828,7 @@ const VehicleFormModal = ({
                     e.preventDefault();
                 }
             }}
-            className="flex-1 flex flex-col lg:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full"
+            className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full"
           >
            
             <div className="md:hidden flex border-b border-slate-200 px-2 gap-1 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide sticky top-0 z-40 w-full shadow-sm">
@@ -1871,8 +1845,8 @@ const VehicleFormModal = ({
 
             
             {/* ================= 左側欄 (VRD & Photos) ================= */}
-            <div className={`w-full lg:w-[30%] lg:min-w-[320px] min-w-0 bg-slate-200/50 lg:border-r border-slate-300 flex-col flex-none md:h-full md:overflow-hidden relative order-1 lg:order-1 ${rightTab === 'vrd' ? 'flex' : 'hidden lg:flex'}`}>
-             
+            <div className={`w-full md:w-1/3 lg:w-[30%] min-w-[300px] max-w-[400px] bg-slate-200/50 md:border-r border-slate-300 flex-col flex-none md:h-full md:overflow-hidden relative order-1 ${rightTab === 'vrd' ? 'flex' : 'hidden md:flex'}`}>
+
                  {/* VRD 搜尋遮罩 */}
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-4 md:p-6 animate-in fade-in duration-200">
@@ -2133,20 +2107,18 @@ const VehicleFormModal = ({
                             <button type="button" onClick={handleGoToMediaLibrary} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button>
                         </div>
                         {/* 兩列式縮圖，減少浪費的高度 */}
+                        // ✅ 替換為 (解析物件，加入文件標籤，並修復 TS 報錯)：
                         <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
-                            {displayPhotos.map((item, idx) => {
-                                // 兼容處理：判斷是完整的媒體物件還是舊的字串網址 (加入 as any 解決 TS 報錯)
-                                const safeItem = item as any;
-                                const isObj = typeof safeItem === 'object' && safeItem !== null;
-                                const imgUrl = isObj ? safeItem.url : safeItem;
-                                const isDocument = isObj && (safeItem.mediaType === 'document' || (safeItem.tags && safeItem.tags.includes('文件')));
-                                const isFromDatabase = isObj && safeItem.source === 'database';
-                                const docTitle = isFromDatabase && safeItem.tags ? safeItem.tags[1] : '文件';
+                            {displayPhotos.map((item: any, idx: number) => {
+                                const isObj = typeof item === 'object' && item !== null;
+                                const imgUrl = isObj ? item.url : item;
+                                const isDocument = isObj && (item.mediaType === 'document' || (item.tags && item.tags.includes('文件')));
+                                const isFromDatabase = isObj && item.source === 'database';
+                                const docTitle = isFromDatabase && item.tags ? item.tags[1] : '文件';
                                 
                                 return (
                                 <div 
                                     key={idx} 
-                                    // ★ 資料庫的文件不允許在圖庫中進行拖曳排序
                                     draggable={!isOneForOne && !isFromDatabase} 
                                     onDragStart={() => setDragPhotoIdx(idx)}
                                     onDragOver={(e) => e.preventDefault()}
@@ -2162,28 +2134,18 @@ const VehicleFormModal = ({
                                     className={`relative aspect-video rounded border overflow-hidden shadow-sm transition-transform ${(!isOneForOne && !isFromDatabase) ? 'cursor-move hover:scale-[1.02]' : ''} ${dragPhotoIdx === idx ? 'opacity-50 ring-2 ring-blue-500' : ''}`}
                                     onClick={() => setPreviewImage(imgUrl)}
                                 >
-                                    {/* 📝 智能文件標籤：區分本地上傳 vs 資料庫連動 */}
                                     {isDocument && (
                                         <div className={`absolute top-1 left-1 ${isFromDatabase ? 'bg-indigo-600/95 border-indigo-400' : 'bg-blue-600/90 border-blue-400'} text-white text-[9px] px-1.5 py-0.5 rounded shadow flex items-center z-10 font-bold border`}>
-                                            {isFromDatabase ? <Database size={10} className="mr-0.5" /> : <FileText size={10} className="mr-0.5" />}
-                                            {isFromDatabase ? `庫: ${docTitle}` : '文件'}
+                                            {isFromDatabase ? <Database size={10} className="mr-0.5" /> : <FileText size={10} className="mr-0.5" />} {isFromDatabase ? `庫: ${docTitle}` : '文件'}
                                         </div>
                                     )}
-
-                                    {/* 加入 pointer-events-none 確保拖曳順暢不被圖片干擾 */}
                                     <img src={imgUrl} className="w-full h-full object-cover pointer-events-none"/>
-                                    
-                                    {!isOneForOne && (
-                                        <div className="absolute top-0.5 right-0.5 bg-black/50 text-white p-0.5 rounded backdrop-blur-sm z-10">
-                                            <Eye size={10}/>
-                                        </div>
-                                    )}
+                                    {!isOneForOne && (<div className="absolute top-0.5 right-0.5 bg-black/50 text-white p-0.5 rounded backdrop-blur-sm z-10"><Eye size={10}/></div>)}
                                 </div>
                                 );
                             })}
                             {displayPhotos.length === 0 && (<div className="col-span-full py-4 text-center text-slate-400 text-[10px] border border-dashed rounded bg-slate-50">暫無照片</div>)}
                         </div>
-                    </div>
 
                           {/* ★★★ 升級版：車輛專屬賣點與智能設備標籤 ★★★ */}
                           <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-4 mt-4 relative group hover:border-amber-300 transition-colors w-full">
@@ -2233,7 +2195,7 @@ const VehicleFormModal = ({
                  </div>
             </div>
             {/* ================= 右側欄 (Tabs System) ================= */}
-            <div className={`w-full lg:flex-1 flex-col md:h-full bg-white md:overflow-hidden order-2 lg:order-2 min-w-0 ${rightTab !== 'vrd' ? 'flex' : 'hidden lg:flex'}`}>
+            <div className={`w-full flex-1 flex-col md:h-full bg-slate-50 md:overflow-hidden order-2 min-w-0 ${rightTab !== 'vrd' ? 'flex' : 'hidden md:flex'}`}>
 
  
                 {/* 頂部全域狀態列 */}
@@ -2357,64 +2319,37 @@ const VehicleFormModal = ({
                                 </span>
                             </div>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 md:p-4 rounded-xl border border-slate-200">
-                                <div className="relative">
-                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold z-10">NAME</span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0 border-y border-slate-200 bg-white -mx-4 md:-mx-6 px-4 md:px-6">
+                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors relative">
+                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">NAME</label>
                                     <input 
-                                        name="customerName" 
-                                        value={clientInput}
-                                        onChange={(e) => {
-                                            setClientInput(e.target.value);
-                                            setShowClientDropdown(true);
-                                        }}
-                                        onFocus={() => setShowClientDropdown(true)}
-                                        onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
-                                        className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
-                                        placeholder="輸入姓名自動搜尋..."
-                                        autoComplete="off"
+                                        name="customerName" value={clientInput}
+                                        onChange={(e) => { setClientInput(e.target.value); setShowClientDropdown(true); }}
+                                        onFocus={() => setShowClientDropdown(true)} onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                                        className="w-full py-1.5 px-2 bg-transparent text-sm font-bold text-slate-800 outline-none" placeholder="輸入姓名搜尋..." autoComplete="off"
                                     />
-                                    {/* 智能下拉選單 */}
                                     {showClientDropdown && clientInput && (
-                                        <div className="absolute z-[60] w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                                            {clients
-                                                .filter((c: any) => (c.name || '').toLowerCase().includes(clientInput.toLowerCase()) || (c.phone || '').includes(clientInput))
-                                                .map((client: any) => (
-                                                    <div 
-                                                        key={client.id}
-                                                        className="p-3 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
-                                                        onClick={() => {
-                                                            setClientInput(client.name || '');
-                                                            setClientPhone(client.phone || '');
-                                                            setClientID(client.idNumber || '');
-                                                            setClientAddress(client.address || '');
-                                                            setShowClientDropdown(false);
-                                                        }}
-                                                    >
-                                                        <div className="font-bold text-sm text-slate-800">
-                                                            {client.name} 
-                                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-2">
-                                                                {client.category === 'Company' ? '🏢 公司' : '👤 個人'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-xs text-slate-500 mt-1 font-mono">{client.phone} | {client.idNumber}</div>
-                                                    </div>
+                                        <div className="absolute top-full left-0 z-[60] w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                            {clients.filter((c: any) => (c.name || '').toLowerCase().includes(clientInput.toLowerCase()) || (c.phone || '').includes(clientInput)).map((client: any) => (
+                                                <div key={client.id} className="p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100" onClick={() => { setClientInput(client.name || ''); setClientPhone(client.phone || ''); setClientID(client.idNumber || ''); setClientAddress(client.address || ''); setShowClientDropdown(false); }}>
+                                                    <div className="font-bold text-sm text-slate-800">{client.name}</div>
+                                                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">{client.phone} | {client.idNumber}</div>
+                                                </div>
                                             ))}
-                                            <div className="p-2 text-[10px] text-slate-400 text-center bg-slate-50">若無匹配紀錄，儲存時將自動建檔</div>
                                         </div>
                                     )}
                                 </div>
-                                
-                                <div className="relative">
-                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">PHONE</span>
-                                    <input name="customerPhone" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/>
+                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors">
+                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">PHONE</label>
+                                    <input name="customerPhone" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-sm font-mono font-medium outline-none"/>
                                 </div>
-                                <div className="relative">
-                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ID / BR</span>
-                                    <input name="customerID" value={clientID} onChange={e => setClientID(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/>
+                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors">
+                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">ID / BR</label>
+                                    <input name="customerID" value={clientID} onChange={e => setClientID(e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-sm font-mono font-medium outline-none"/>
                                 </div>
-                                <div className="relative">
-                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ADDRESS</span>
-                                    <input name="customerAddress" value={clientAddress} onChange={e => setClientAddress(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-100 outline-none"/>
+                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors">
+                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">ADDRESS</label>
+                                    <input name="customerAddress" value={clientAddress} onChange={e => setClientAddress(e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-sm font-medium outline-none"/>
                                 </div>
                             </div>
                         </div>
