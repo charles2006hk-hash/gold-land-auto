@@ -4240,7 +4240,8 @@ const VehicleFormModal = ({
                     </div>
                 </div>
             )}
-           
+           </div> 
+        </div>
 </form>
         </div>
 
