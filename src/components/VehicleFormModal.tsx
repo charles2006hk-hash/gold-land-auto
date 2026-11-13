@@ -11,14 +11,10 @@ import {
 } from 'lucide-react';
 import { query, collection, where, onSnapshot, getDocs, updateDoc, doc } from "firebase/firestore";
 
-// 匯入您的常數與型別
 import { COMPANY_INFO, ALL_CB_PORTS, PORTS_HK_GD, PORTS_MO_GD } from '@/config/constants';
 import { Vehicle, CrossBorderData, Payment, Expense } from '@/types';
-import { compressImage } from '@/utils/imageHelpers';
-import { CompanyStamp, SignatureImg } from './DocumentTemplate';
 import { calculateAutoLoan, calculateRuleOf78Settlement } from '@/utils/LoanCalculator';
 
-// --- 車輛專屬賣點與設備種子數據庫 ---
 const EQUIPMENT_DB: Record<string, string[]> = {
     'Toyota': ['行貨', '雙側電門', '雙天窗', '中排大班椅', '360泊車鏡頭', 'JBL高級音響', 'HUD投射錶板', '電尾門', '防撞系統', '原廠大包圍', '七座有通道'],
     'Honda': ['行貨', '雙側電門', 'Honda Sensing', 'WakuWaku尾門', '七座', '八座', '後排冷氣'],
@@ -26,11 +22,9 @@ const EQUIPMENT_DB: Record<string, string[]> = {
     'Mercedes-Benz': ['AMG包圍', 'Burmester柏林之聲', '全景天窗', '64色氣氛燈', '360鏡頭', '氣壓避震', 'Keyless-Go'],
     'Porsche': ['PDLS+矩陣大燈', 'Sport Chrono組件', '跑車排氣系統', 'BOSE音響', '全景天窗', 'PASM懸掛', '14向電動記憶座椅', '全真皮內飾'],
     'Tesla': ['EAP增強版自動輔助駕駛', 'FSD全自動駕駛', '白內飾', '20吋輪圈', '全景玻璃車頂', 'AMD Ryzen處理器'],
-    // 如果找不到對應品牌，就會顯示通用標籤
     'General': ['0手', '1手', '行貨', '水貨', '原廠保養', '牌費長', '直版任驗', '剛做大保養', '新車一樣', '無中港紀錄', '全原裝', '家庭車']
 };
 
-// --- 輔助工具函數 ---
 const formatCurrency = (amount: number) => new Intl.NumberFormat('zh-HK', { style: 'currency', currency: 'HKD', maximumFractionDigits: 0 }).format(amount || 0);
 
 const formatNumberInput = (value: string) => {
@@ -73,7 +67,6 @@ const calculateFRT = (prpPrice: number) => {
     return Math.round(frt);
 };
 
-
 const getColorHex = (colorName: string) => {
     if (!colorName) return '#e2e8f0'; 
     const lower = colorName.toLowerCase();
@@ -88,9 +81,6 @@ const getColorHex = (colorName: string) => {
     return '#94a3b8'; 
 };
 
-// ============================================================================
-// 👇👇👇 第二步：請把 page.tsx 裡面的 const VehicleFormModal = ... 剪下貼在下面 👇👇👇
-// ============================================================================
 const VehicleFormModal = ({ 
     db, staffId, appId, clients, settings, editingVehicle, setEditingVehicle, activeTab, setActiveTab, saveVehicle, addPayment, deletePayment, addExpense, deleteExpense,
     updateExpenseStatus, addSystemLog, allSalesDocs, onJumpToDoc,
@@ -106,24 +96,17 @@ const VehicleFormModal = ({
     const [currentStatus, setCurrentStatus] = useState<'Pending' | 'In Stock' | 'Reserved' | 'Sold' | 'Withdrawn'>(v.status || 'In Stock');
     const [showVrdOverlay, setShowVrdOverlay] = useState(false);
 
-    // ★ 中港指標轉移 (套牌) 專用狀態
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [transferSearch, setTransferSearch] = useState('');
     const [transferResults, setTransferResults] = useState<any[]>([]);
     const [searchingTransfer, setSearchingTransfer] = useState(false);
 
-    // ★★★ 智能客戶配對專用狀態 ★★★
     const [showClientDropdown, setShowClientDropdown] = useState(false);
     const [clientInput, setClientInput] = useState(v.customerName || '');
     const [clientPhone, setClientPhone] = useState(v.customerPhone || '');
     const [clientID, setClientID] = useState(v.customerID || '');
     const [clientAddress, setClientAddress] = useState(v.customerAddress || '');
 
-    // 👇---------- 插入這段代碼 ----------👇
-    // ★ 一鍵回購/寄賣專用狀態
-    const [clonedFromId, setClonedFromId] = useState<string | null>(null);
-
-    // ★ 真正的「一鍵自動建檔」回購/寄賣引擎
     const handleRepurchase = async (type: 'own' | 'consignment') => {
         if (!confirm(`確定要以「${type === 'own' ? '收回收購' : '客人寄賣'}」方式重新入庫嗎？\n\n系統將保留當前的歷史銷售紀錄，並為這台車建立一個【全新】的進銷存檔案，圖片庫將自動無縫連動！`)) return;
 
@@ -134,16 +117,12 @@ const VehicleFormModal = ({
                 status: 'Pending', 
                 sourceType: type,
                 purchaseType: type === 'consignment' ? 'Consignment' : 'Used',
-                
-                // 複製車輛硬體資料
                 regMark: v.regMark || '', make: v.make || '', model: v.model || '', year: v.year || '',
                 chassisNo: v.chassisNo || '', engineNo: v.engineNo || '', engineSize: v.engineSize || 0,
                 seating: v.seating || 0, fuelType: v.fuelType || 'Petrol', transmission: v.transmission || 'Automatic',
                 colorExt: v.colorExt || '', colorInt: v.colorInt || '',
                 priceA1: v.priceA1 || 0, priceTax: v.priceTax || 0,
-                previousOwners: String((Number(v.previousOwners) || 0) + 1), // 手數自動 +1
-                
-                // 轉移角色：原本的買家變成新週期的「進貨對象 (Vendor)」
+                previousOwners: String((Number(v.previousOwners) || 0) + 1),
                 acquisition: {
                     type: 'Local',
                     vendor: v.customerName || '',
@@ -151,25 +130,18 @@ const VehicleFormModal = ({
                     vendorID: v.customerID || '',
                     paymentStatus: 'Unpaid'
                 },
-                
-                // 清空所有新週期的銷售與財務資料
                 customerName: '', customerPhone: '', customerID: '', customerAddress: '',
                 price: 0, costPrice: 0,
                 payments: [], expenses: [], salesAddons: [], maintenanceRecords: [],
-                
-                // 繼承相片網址
                 photos: v.photos || [],
-                ...(v.crossBorder?.isEnabled ? { crossBorder: { ...v.crossBorder, tasks: [] } } : {}), // ✅ 修正：安全的動態屬性
-                
+                ...(v.crossBorder?.isEnabled ? { crossBorder: { ...v.crossBorder, tasks: [] } } : {}), 
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
                 managedBy: staffId
             };
 
-            // 1. ★ 立即寫入資料庫 (真・一鍵建檔)
             const newDocRef = await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'), newLifecycleVehicle);
 
-            // 2. ★ 立即無縫連動圖片庫 (Pointer Duplication)
             if (v.id) {
                 const mediaQ = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'), where('relatedVehicleId', '==', v.id));
                 const mediaSnap = await getDocs(mediaQ);
@@ -180,7 +152,7 @@ const VehicleFormModal = ({
                         const newMediaRef = firestoreDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'media_library'));
                         batch.set(newMediaRef, {
                             ...mDoc.data(),
-                            relatedVehicleId: newDocRef.id, // 指向這台剛建立的新車
+                            relatedVehicleId: newDocRef.id, 
                             createdAt: serverTimestamp(),
                             updatedAt: serverTimestamp()
                         });
@@ -189,7 +161,6 @@ const VehicleFormModal = ({
                 }
             }
 
-            // 3. 把剛建好的新車載入畫面，並切換到進貨成本頁
             setEditingVehicle({ ...newLifecycleVehicle, id: newDocRef.id });
             setRightTab('cost');
             alert('✨ 已成功建立全新生命週期並自動建檔！\n\n新車已出現在庫存清單中。請繼續填寫「收車成本與進貨細節」，完成後點擊右下角儲存。');
@@ -200,19 +171,17 @@ const VehicleFormModal = ({
         }
     };
 
-    // ★★★ 中港指標轉移：搜尋新車 (升級版) ★★★
     const handleSearchTransfer = async () => {
         if (!transferSearch || !db) return;
         setSearchingTransfer(true);
         try {
             const q = query(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory'));
             const snap = await getDocs(q);
-            // ★ 升級：加上 replace 去除空格與橫線防呆
             const term = transferSearch.toLowerCase().replace(/[\s-]/g, ''); 
             
             const res = snap.docs.map(d => ({id: d.id, ...d.data()}))
                 .filter((c: any) => 
-                    c.id !== v.id && // 排除自己
+                    c.id !== v.id && 
                     (c.status === 'In Stock' || c.status === 'Reserved' || c.status === 'Sold') && 
                     (
                         (c.regMark || '').toLowerCase().replace(/[\s-]/g, '').includes(term) || 
@@ -226,31 +195,21 @@ const VehicleFormModal = ({
         setSearchingTransfer(false);
     };
 
-    // ★★★ 中港指標轉移：一鍵轉移執行 (允許覆蓋版) ★★★
     const executeTransfer = async (targetVehicle: any) => {
-        // ★ 升級：防呆保護鎖改為「警告並允許覆蓋」
         const hasExistingQuota = targetVehicle.crossBorder?.quotaNumber || targetVehicle.crossBorder?.mainlandPlate;
-        
         if (hasExistingQuota) {
-            const confirmOverride = confirm(`⚠️ 警告：目標車輛 [${targetVehicle.regMark || '未出牌'}] 目前已經綁定了其他中港指標 (${targetVehicle.crossBorder.quotaNumber || targetVehicle.crossBorder.mainlandPlate})！\n\n如果繼續轉移，該新車原本的指標資料將會被【直接覆蓋遺失】。\n\n您確定要強制轉移並覆蓋嗎？`);
-            if (!confirmOverride) return;
+            if (!confirm(`⚠️ 警告：目標車輛 [${targetVehicle.regMark || '未出牌'}] 目前已經綁定了其他中港指標 (${targetVehicle.crossBorder.quotaNumber || targetVehicle.crossBorder.mainlandPlate})！\n\n如果繼續轉移，該新車原本的指標資料將會被【直接覆蓋遺失】。\n\n您確定要強制轉移並覆蓋嗎？`)) return;
         } else {
-            const confirmNormal = confirm(`確定要將中港指標轉移給 [${targetVehicle.regMark || '未出牌'}] 嗎？\n\n⚠️ 舊車的中港「財務及收費紀錄」將會保留，但「所有提醒日期、指標號、內地車牌、司機及公司資料」都會轉移至新車並從舊車中清空。`);
-            if (!confirmNormal) return;
+            if (!confirm(`確定要將中港指標轉移給 [${targetVehicle.regMark || '未出牌'}] 嗎？\n\n⚠️ 舊車的中港「財務及收費紀錄」將會保留，但「所有提醒日期、指標號、內地車牌、司機及公司資料」都會轉移至新車並從舊車中清空。`)) return;
         }
 
         try {
             const getVal = (name: string) => (document.querySelector(`[name="${name}"]`) as HTMLInputElement)?.value || '';
-
-            // 中港提醒日期的所有 Key (對齊系統設定)
             const cbDateKeys = ['HkInsurance', 'ReservedPlate', 'Br', 'LicenseFee', 'MainlandJqx', 'MainlandSyx', 'ClosedRoad', 'Approval', 'MainlandLicense', 'HkInspection'];
-            
-            // ★ 核心 1：將舊車的 crossBorder 拆分，tasks (財務) 留給舊車，其餘 (基本資料與日期) 給新車
             const { tasks: oldTasks, ...oldCbData } = (v.crossBorder || {}) as any;
 
-            // 打包當前車輛的指標核心資料與「所有提醒日期」
             const cbDataToTransfer: any = {
-                ...oldCbData, // 繼承原本所有的日期跟資料
+                ...oldCbData, 
                 isEnabled: true,
                 mainlandPlate: getVal('cb_mainlandPlate') || oldCbData.mainlandPlate || '',
                 quotaNumber: getVal('cb_quotaNumber') || oldCbData.quotaNumber || '',
@@ -266,28 +225,21 @@ const VehicleFormModal = ({
                 })
             };
 
-            // 確保畫面上如果剛剛有修改日期，也能抓到最新版一起轉移過去
             cbDateKeys.forEach(key => {
                 const dateVal = getVal(`cb_${key}`);
                 if (dateVal) cbDataToTransfer[key] = dateVal;
             });
 
-            // ★ 核心 2：將打包好的指標資料與日期，覆寫到目標新車 (Target Vehicle)
             const targetDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', targetVehicle.id);
             await updateDoc(targetDocRef, {
-                crossBorder: {
-                    ...(targetVehicle.crossBorder || {}), // 保留目標車輛可能有的其他非衝突資料
-                    ...cbDataToTransfer // 強制覆寫指標資料與日期
-                }
+                crossBorder: { ...(targetVehicle.crossBorder || {}), ...cbDataToTransfer }
             });
 
-            // ★ 核心 3：徹底清空當前這台舊車的畫面欄位 (包含日期)
             const fieldsToClear = [
                 'cb_mainlandPlate', 'cb_quotaNumber', 'cb_hkCompany', 'cb_mainlandCompany', 
                 'cb_driver1', 'cb_driver2', 'cb_driver3', 'cb_insuranceAgent', 
                 ...cbDateKeys.map(k => `cb_${k}`)
             ];
-            
             fieldsToClear.forEach(name => {
                 const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement;
                 if (el) {
@@ -301,65 +253,43 @@ const VehicleFormModal = ({
                 if (el) el.checked = false;
             });
 
-            // ★ 核心 4：立即更新舊車的資料庫：只保留 tasks (財務紀錄)，其餘完全清空
             if (v.id) {
                 const currentDocRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'inventory', v.id);
-                await updateDoc(currentDocRef, {
-                    crossBorder: {
-                        isEnabled: false,
-                        tasks: oldTasks || [] // 👈 完美：只留下財務紀錄
-                    }
-                });
+                await updateDoc(currentDocRef, { crossBorder: { isEnabled: false, tasks: oldTasks || [] } });
             }
 
-            // 更新當前 React State，讓畫面立刻反應，不需要重整
-            setEditingVehicle((prev: any) => {
-                if (!prev) return prev;
-                return {
-                    ...prev,
-                    crossBorder: {
-                        isEnabled: false,
-                        tasks: oldTasks || []
-                    }
-                };
-            });
-
-            setCbEnabled(false); // 關閉中港模組 UI
+            setEditingVehicle((prev: any) => prev ? { ...prev, crossBorder: { isEnabled: false, tasks: oldTasks || [] } } : prev);
+            setCbEnabled(false);
             setShowTransferModal(false);
 
             if (addSystemLog) {
                 addSystemLog('Quota Transfer', `Transferred Quota ${cbDataToTransfer.quotaNumber} & all reminder dates from ${v.regMark} to ${targetVehicle.regMark} (Overwrite: ${hasExistingQuota ? 'Yes' : 'No'})`);
             }
-
             alert('✅ 指標及所有提醒日期轉移成功！\n\n新車已完整繼承中港牌與到期日。\n舊車的指標資料已清空，但【財務及收費紀錄】已為您完美保留！');
         } catch(e) {
             alert('轉移失敗: ' + e);
         }
     };
  
-    // ★★★ 升級：智能狀態日期追蹤 ★★★
     const [statusDates, setStatusDates] = useState({
-        'Pending': (v as any).pendingDate || new Date().toISOString().split('T')[0], // ★ 新增：報價錄入日
+        'Pending': (v as any).pendingDate || new Date().toISOString().split('T')[0], 
         'In Stock': v.stockInDate || '',
         'Reserved': (v as any).reservedDate || '',
         'Sold': v.stockOutDate || '',
         'Withdrawn': (v as any).withdrawnDate || ''
     });
 
-    // 當載入車輛，如果沒有設定已訂/已售日期，智能根據收款記錄推算
     useEffect(() => {
         if (v.id && v.payments && v.payments.length > 0) {
             const sorted = [...v.payments].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
             setStatusDates(prev => ({
                 ...prev,
-                'Reserved': prev['Reserved'] || sorted[0].date, // 第一筆錢 = 落訂
-                'Sold': prev['Sold'] || sorted[sorted.length - 1].date // 最後一筆錢 = 結清/售出
+                'Reserved': prev['Reserved'] || sorted[0].date, 
+                'Sold': prev['Sold'] || sorted[sorted.length - 1].date 
             }));
         }
     }, [v.id, v.payments]);
 
-
-    // ★ 擴充 rightTab，加入 'finance'
     const [rightTab, setRightTab] = useState<'vrd' | 'sales' | 'cost' | 'cb' | 'service' | 'finance'>(() => {
         if (typeof window !== 'undefined') return (sessionStorage.getItem('gla_veh_tab') as any) || 'vrd';
         return 'vrd';
@@ -369,11 +299,9 @@ const VehicleFormModal = ({
         if (typeof window !== 'undefined') sessionStorage.setItem('gla_veh_tab', rightTab);
     }, [rightTab]);
     
-    // ★★★ 新增：計數機的狀態參數 ★★★
     const [financeMonths, setFinanceMonths] = useState(48);
-    const [financeRate, setFinanceRate] = useState(3.5); // ★★★ 就是漏了這一行！ ★★★
-    const [financeType, setFinanceType] = useState<'HP' | 'Lease'>('HP'); // ★ 新增上會類別
-    // ✅ 在這下方補上缺失的這一行：
+    const [financeRate, setFinanceRate] = useState(3.5); 
+    const [financeType, setFinanceType] = useState<'HP' | 'Lease'>('HP'); 
     const [financeAdvanceMonths, setFinanceAdvanceMonths] = useState((v as any).financeAdvanceMonths || 6);
     const [financeStatus, setFinanceStatus] = useState<'Pending' | 'Confirmed'>((v as any).financeStatus || 'Pending');
     const [financeStartDate, setFinanceStartDate] = useState((v as any).financeStartDate || new Date().toISOString().split('T')[0]);
@@ -383,12 +311,8 @@ const VehicleFormModal = ({
     const [financePriceInput, setFinancePriceInput] = useState((v as any).financePrice ? formatNumberInput(String((v as any).financePrice)) : '');
     const [financeDepositInput, setFinanceDepositInput] = useState((v as any).financeDeposit ? formatNumberInput(String((v as any).financeDeposit)) : '');
     const [financeCommOverride, setFinanceCommOverride] = useState((v as any).financeCommOverride ? String((v as any).financeCommOverride) : '');
-
     const [settleMonthsPaid, setSettledMonthsPaid] = useState(12);
-
  
-    // ★★★ 新增：行政與出牌進度追蹤器狀態 ★★★
-    // 預設展開條件：如果是進口車，或者已經有填過任何進度資料，就自動展開
     const [showLogisticsTracker, setShowLogisticsTracker] = useState((v as any).acquisition?.type === 'Import' || !!v.logistics?.arrivalDate || !!v.logistics?.inspectionPassedDate);
     const [logistics, setLogistics] = useState({
         arrivalDate: v.logistics?.arrivalDate || '',
@@ -399,11 +323,8 @@ const VehicleFormModal = ({
         registeredDate: v.logistics?.registeredDate || ''
     });
 
-    const updateLogistics = (field: string, value: string) => {
-        setLogistics(prev => ({ ...prev, [field]: value }));
-    };
+    const updateLogistics = (field: string, value: string) => { setLogistics(prev => ({ ...prev, [field]: value })); };
 
-    // 計算驗車合格後的 4 個月死線
     const getInspectionExpiry = (dateStr: string) => {
         if (!dateStr) return '';
         const d = new Date(dateStr);
@@ -440,7 +361,7 @@ const VehicleFormModal = ({
     const [transmission, setTransmission] = useState<'Automatic'|'Manual'>(v.transmission || 'Automatic');
     const [autoLicenseFee, setAutoLicenseFee] = useState(v.licenseFee || 0);
 
-    const [carPhotos, setCarPhotos] = useState<string[]>(v.photos || []);
+    const [carPhotos, setCarPhotos] = useState<any[]>(v.photos || []);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [dragPhotoIdx, setDragPhotoIdx] = useState<number | null>(null);
 
@@ -461,14 +382,12 @@ const VehicleFormModal = ({
     const totalRevenue = currentRealTimePrice + salesAddonsTotal;
     const balance = totalRevenue - totalReceived;
 
-
     const pendingCbTasks = (v.crossBorder?.tasks || []).filter((t: any) => (t.fee !== 0) && !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], type: '', company: '', amount: '', status: 'Unpaid', paymentMethod: 'Cash', invoiceNo: '' });
     const [newPayment, setNewPayment] = useState({ date: new Date().toISOString().split('T')[0], type: settings.paymentTypes?.[0] || 'Deposit', amount: '', method: 'Cash', note: '', relatedTaskId: '' , tradeInVehicleId: ''});
     const [newAddon, setNewAddon] = useState({ name: '文件費', amount: '' });
 
-    // ★★★ 新增：中港業務支出專用狀態與函數 ★★★
     const [newCbExpense, setNewCbExpense] = useState({ 
         date: new Date().toISOString().split('T')[0], 
         type: '指標租金', 
@@ -476,7 +395,7 @@ const VehicleFormModal = ({
         amount: '', 
         status: 'Unpaid', 
         paymentMethod: 'Transfer', 
-        isCrossBorder: true // 核心標記：區分中港支出
+        isCrossBorder: true 
     });
     
     const [showCbPartnerSearch, setShowCbPartnerSearch] = useState(false);
@@ -504,12 +423,10 @@ const VehicleFormModal = ({
             let finalStatus = 'Unpaid';
             let finalMethod = newCbExpense.paymentMethod;
 
-            // ★ 核心連動 1：員工代墊邏輯
             if (finalMethod === 'Staff_Advance') {
                 finalStatus = 'Paid';
                 if (db && appId && staffId) {
-                    const confirmAdvance = confirm(`確定要以「員工代墊」記錄這筆 ${newCbExpense.type} $${amt} 嗎？\n\n系統將自動標記此單為已付，並將款項加入您的「員工往來帳」中。`);
-                    if (!confirmAdvance) return;
+                    if (!confirm(`確定要以「員工代墊」記錄這筆 ${newCbExpense.type} $${amt} 嗎？\n\n系統將自動標記此單為已付，並將款項加入您的「員工往來帳」中。`)) return;
 
                     try {
                         const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
@@ -523,19 +440,15 @@ const VehicleFormModal = ({
                             createdAt: serverTimestamp()
                         });
                         alert('✅ 代墊紀錄已成功拋轉至【財務總覽 -> 員工報銷】！');
-                    } catch (err) {
-                        console.error("寫入員工帳戶失敗", err);
-                    }
+                    } catch (err) { console.error("寫入員工帳戶失敗", err); }
                 }
             } else {
-                // ★ 核心連動 2：公司應付轉總帳邏輯
                 const isPaid = finalMethod && finalMethod !== 'Unpaid';
                 finalStatus = isPaid ? 'Paid' : 'Unpaid';
                 finalMethod = isPaid ? finalMethod : '';
 
                 if (finalStatus === 'Unpaid' && newCbExpense.company && db && appId && staffId) {
-                    const transfer = confirm(`是否將此筆中港費用 [${newCbExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newCbExpense.company}」統一對數結算？`);
-                    if (transfer) {
+                    if (confirm(`是否將此筆中港費用 [${newCbExpense.type} $${amt}] 轉入【行家來往】總帳，與「${newCbExpense.company}」統一對數結算？`)) {
                         try {
                             const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
                             await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
@@ -551,9 +464,7 @@ const VehicleFormModal = ({
                             });
                             finalStatus = 'Transferred'; 
                             alert(`✅ 已成功轉入【財務總覽 -> 行家來往】！`);
-                        } catch (err) {
-                            console.error("轉帳失敗", err);
-                        }
+                        } catch (err) { console.error("轉帳失敗", err); }
                     }
                 }
             }
@@ -570,13 +481,9 @@ const VehicleFormModal = ({
         }
     };
 
-   // ★ 新增：維修保養狀態與函數
     const [newMaintenance, setNewMaintenance] = useState({ date: new Date().toISOString().split('T')[0], item: '', vendor: '', cost: '', costStatus: 'Unpaid', charge: '', chargeStatus: 'Unpaid', note: '' });
-
-   // 👇 新增這個 State，用來控制手風琴展開 👇
     const [expandedMaintId, setExpandedMaintId] = useState<string | null>(null);
  
-    // ★ 新增：車輛墊資/貸款狀態與函數
     const [newFinancing, setNewFinancing] = useState({ 
         startDate: new Date().toISOString().split('T')[0], 
         lenderName: '', 
@@ -620,7 +527,6 @@ const VehicleFormModal = ({
     };
 
     const handleSettleFinancing = async (f: any) => {
-        // ★ 核心結息邏輯升級：3 個月為一期，不足 3 個月按 3 個月計
         const endDate = new Date().toISOString().split('T')[0]; 
         const start = new Date(f.startDate);
         const end = new Date(endDate);
@@ -647,35 +553,20 @@ const VehicleFormModal = ({
         };
         safeUpdateFinancing((v.financingRecords || []).map((x: any) => x.id === f.id ? updated : x));
         
-        // ★ 核心連動：自動在「行家來往」總帳中產生一筆應付帳款 (利息+本金)
         if (db && appId && staffId) {
             try {
                 const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-                // 產生利息應付
                 if (calculatedInterest > 0) {
                     await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
-                        partner: f.lenderName, 
-                        date: endDate, 
-                        type: 'payable', 
-                        amount: calculatedInterest, 
-                        note: `[系統結算] ${v.regMark || '未出牌'} 融資利息 (${billedMonths}個月)`,
-                        sourceModule: 'vehicle_finance',
-                        vehicleId: v.id,
-                        createdAt: serverTimestamp(), 
-                        createdBy: staffId 
+                        partner: f.lenderName, date: endDate, type: 'payable', amount: calculatedInterest, 
+                        note: `[系統結算] ${v.regMark || '未出牌'} 融資利息 (${billedMonths}個月)`, sourceModule: 'vehicle_finance',
+                        vehicleId: v.id, createdAt: serverTimestamp(), createdBy: staffId 
                     });
                 }
-                // 產生本金應還
                 await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), { 
-                    partner: f.lenderName, 
-                    date: endDate, 
-                    type: 'payable', 
-                    amount: f.principal, 
-                    note: `[系統結算] ${v.regMark || '未出牌'} 融資本金歸還`,
-                    sourceModule: 'vehicle_finance',
-                    vehicleId: v.id,
-                    createdAt: serverTimestamp(), 
-                    createdBy: staffId 
+                    partner: f.lenderName, date: endDate, type: 'payable', amount: f.principal, 
+                    note: `[系統結算] ${v.regMark || '未出牌'} 融資本金歸還`, sourceModule: 'vehicle_finance',
+                    vehicleId: v.id, createdAt: serverTimestamp(), createdBy: staffId 
                 });
                 alert(`✅ 結息完成！\n\n實際經過: ${actualDays} 天\n計費週期: ${billedPeriods} 期\n產生利息: $${calculatedInterest.toLocaleString()}\n\n系統已自動將本金與利息轉入【財務總覽 -> 行家來往】的應付帳款中！`);
             } catch (err) {
@@ -687,7 +578,6 @@ const VehicleFormModal = ({
         }
     };
 
-    // ★★★ 新增：輸出墊資借貸協議 PDF ★★★
     const executeLoanAgreementPrint = (e: React.MouseEvent, f: any) => {
         e.preventDefault();
         
@@ -774,16 +664,12 @@ const VehicleFormModal = ({
         }
     };
  
-    // ★ 新增：維修保養的修改(Edit)狀態與函數
     const [editingMaintenanceId, setEditingMaintenanceId] = useState<string | null>(null);
     const [editMaintenanceForm, setEditMaintenanceForm] = useState<any>({});
 
-    // ★ 終極防跳走機制：自給自足嘅安全更新函數，唔依賴外部 props！
     const safeUpdateMaintenance = async (newRecords: any[]) => {
-        // 1. 即時更新畫面 (絕對唔會觸發成個組件重新載入)
         setEditingVehicle((prev: any) => prev ? { ...prev, maintenanceRecords: newRecords } : null);
         
-        // 2. 靜靜雞寫入資料庫
         if (v.id && db) {
             try {
                 const { updateDoc, doc } = await import('firebase/firestore');
@@ -800,10 +686,8 @@ const VehicleFormModal = ({
         if (newMaintenance.item) {
             const obj = { id: Date.now().toString(), ...newMaintenance, cost: cst, charge: chg };
             
-            // 呼叫安全更新函數
             safeUpdateMaintenance([...(v.maintenanceRecords || []), obj]);
             
-            // ★ 智能記憶：如果輸入了新的維修項目或車房，自動存入系統資料庫下次用！
             if (newMaintenance.item && !settings.expenseTypes.some((t:any) => typeof t === 'string' ? t === newMaintenance.item : t.name === newMaintenance.item)) {
                 updateSettings('expenseTypes', [...settings.expenseTypes, newMaintenance.item]);
             }
@@ -819,7 +703,6 @@ const VehicleFormModal = ({
         safeUpdateMaintenance((v.maintenanceRecords || []).filter((m: any) => m.id !== id));
     };
     
-    // ★ 痛點修復：升級狀態切換邏輯，自動填入日期與方式
     const toggleMaintenanceStatus = (m: any, type: 'costStatus' | 'chargeStatus') => {
         const isCurrentlyPaid = m[type] === 'Paid';
         const newStatus = isCurrentlyPaid ? 'Unpaid' : 'Paid';
@@ -827,11 +710,9 @@ const VehicleFormModal = ({
 
         const updated = { ...m, [type]: newStatus };
         if (!isCurrentlyPaid) {
-            // 變成已付，自動填入當前日期與預設支付方式
             updated[`${prefix}Method`] = 'Transfer';
             updated[`${prefix}Date`] = new Date().toISOString().split('T')[0];
         } else {
-            // 退回未付，清空這些財務細節
             updated[`${prefix}Method`] = '';
             updated[`${prefix}Date`] = '';
             updated[`${prefix}Remark`] = '';
@@ -840,7 +721,6 @@ const VehicleFormModal = ({
         safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === m.id ? updated : x));
     };
 
-    // ★ 新增：處理財務細節欄位更新的專用函數
     const updateMaintDetail = (id: string, field: string, value: string) => {
         safeUpdateMaintenance((v.maintenanceRecords || []).map((x: any) => x.id === id ? { ...x, [field]: value } : x));
     };
@@ -857,8 +737,6 @@ const VehicleFormModal = ({
         setEditingMaintenanceId(null);
     };
 
-    // 👇---------- 從這裡開始複製插入 ----------👇
-    // ★★★ 行內修改 Helper Functions ★★★
     const handleUpdateAddon = (id: string, field: string, value: any) => {
         const newAddons = ((v as any).salesAddons || []).map((a: any) => a.id === id ? { ...a, [field]: value } : a);
         if (v.id) updateSubItem(v.id, 'salesAddons', newAddons);
@@ -875,62 +753,51 @@ const VehicleFormModal = ({
         const newAcqPayments = acqPayments.map(p => p.id === id ? { ...p, [field]: value } : p);
         setAcqPayments(newAcqPayments);
     };
-    // 👆---------- 到這裡結束 ----------👆
+    
     const handleAddPaymentClick = () => {
         const amt = Number(newPayment.amount.replace(/,/g, ''));
         if (amt > 0) {
             const obj = { id: Date.now().toString(), ...newPayment, amount: amt };
             if (v.id) { addPayment(v.id, obj as any); } 
             else { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] })); }
-            // ✅ 新增後重置 tradeInVehicleId
             setNewPayment({ ...newPayment, amount: '', note: '', relatedTaskId: '', method: 'Cash', tradeInVehicleId: '' }); 
         }
     };
 
-    // ★ 處理標籤點擊：自動附加到 textarea 尾端
     const handleTagClick = (tag: string) => {
         const textarea = document.querySelector('textarea[name="salesRemarks"]') as HTMLTextAreaElement;
         if (textarea) {
             let currentVal = textarea.value.trim();
-            // 智能判斷：如果已經有文字，自動加上逗號分隔
             if (currentVal && !currentVal.endsWith(',')) {
                 currentVal += ', ';
             } else if (currentVal && currentVal.endsWith(',')) {
                 currentVal += ' ';
             }
             
-            // 如果這個標籤已經存在，就不重複加入
             if (!textarea.value.includes(tag)) {
                 textarea.value = currentVal + tag;
-                // 觸發 React 的 onChange 偵測
                 textarea.dispatchEvent(new Event('change', { bubbles: true }));
             }
         }
     };
 
-    // ★ 智能標籤推薦引擎：結合「庫存歷史大數據」與「系統預設字庫」
     const recommendedTags = useMemo(() => {
-        // 1. 從歷史庫存中尋找同廠牌、同型號的車，並統計最高頻率的賣點
         const similarCars = inventory?.filter((c: any) => c.make === selectedMake && c.model === v.model) || [];
         const wordsFreq: Record<string, number> = {};
         
         similarCars.forEach((c: any) => {
             if (c.salesRemarks) {
-                // 拆解逗號、移除前綴的減號或空白，進行頻率統計
                 c.salesRemarks.split(',').map((s: string) => s.replace(/^[-\s]+/, '').trim()).filter(Boolean).forEach((w: string) => {
                     wordsFreq[w] = (wordsFreq[w] || 0) + 1;
                 });
             }
         });
         
-        // 排序出同型號最常用的前 6 個標籤 (大數據自動學習)
         const topUsedByModel = Object.entries(wordsFreq).sort((a, b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);
 
-        // 2. 抓取 Firebase Settings 裡的自訂字庫，沒有則退回靜態種子庫 EQUIPMENT_DB
         const dbTags = settings?.equipmentTags?.[selectedMake] || EQUIPMENT_DB[selectedMake] || [];
         const generalTags = settings?.equipmentTags?.['General'] || EQUIPMENT_DB['General'] || [];
 
-        // 3. 去重複合併 (最常用的排前面，接著是品牌專屬)
         return {
             smart: Array.from(new Set([...topUsedByModel, ...dbTags])),
             general: generalTags
@@ -949,13 +816,12 @@ const VehicleFormModal = ({
             if (v.id) addSalesAddon(v.id, obj);
             else setEditingVehicle((prev: any) => ({ ...prev, salesAddons: [...(prev.salesAddons || []), obj] }));
             
-            // ★ 智能記憶：如果輸入了全新的附加費名稱，自動寫入系統資料庫下次用！
             const currentAddons = settings.salesAddonItems || [];
             if (newAddon.name && !currentAddons.includes(newAddon.name)) {
                 updateSettings('salesAddonItems', [...currentAddons, newAddon.name]);
             }
 
-            setNewAddon({ name: '', amount: '' }); // 重置為空，方便連續輸入
+            setNewAddon({ name: '', amount: '' }); 
         }
     };
 
@@ -970,9 +836,8 @@ const VehicleFormModal = ({
             let finalStatus = 'Unpaid';
             let finalMethod = newExpense.paymentMethod;
 
-            // ★ 核心連動 1：員工代墊邏輯
             if (finalMethod === 'Staff_Advance') {
-                finalStatus = 'Paid'; // 對外已付
+                finalStatus = 'Paid'; 
                 if (db && appId && staffId) {
                     const confirmAdvance = confirm(`確定要以「員工代墊」記錄這筆 ${newExpense.type} $${amt} 嗎？\n\n系統將自動標記此單為已付，並將款項加入您的「員工往來帳」中。`);
                     if (!confirmAdvance) return;
@@ -982,7 +847,7 @@ const VehicleFormModal = ({
                         await addDoc(collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'staff_ledgers'), {
                             staffId: staffId,
                             date: newExpense.date || new Date().toISOString().split('T')[0],
-                            type: 'payable', // 公司應付給員工
+                            type: 'payable', 
                             amount: amt,
                             note: `[車輛代墊] ${v.regMark || '未出牌'} - ${newExpense.type} ${newExpense.company ? `(${newExpense.company})` : ''}`,
                             relatedEntryId: `entry_${Date.now()}`,
@@ -994,7 +859,6 @@ const VehicleFormModal = ({
                     }
                 }
             } else {
-                // ★ 核心連動 2：公司應付轉總帳邏輯
                 const isPaid = finalMethod && finalMethod !== 'Unpaid';
                 finalStatus = isPaid ? 'Paid' : 'Unpaid';
                 finalMethod = isPaid ? finalMethod : '';
@@ -1045,14 +909,12 @@ const VehicleFormModal = ({
     };
 
    const handleToggleExpenseStatus = async (exp: any) => {
-        // ★ 升級 1：允許「已轉總帳」解除鎖定，並自動從總帳中刪除連動紀錄
         if (exp.status === 'Transferred') {
             const revert = confirm('確定要解除鎖定，退回「未付」狀態嗎？\n\n⚠️ 系統將會【自動刪除】總帳中對應的應付紀錄！');
             if (revert) {
                 if (v.id && db && appId) {
                     try {
                         const { collection, query, where, getDocs, deleteDoc, doc } = await import('firebase/firestore');
-                        // 精準找出總帳中對應的連動紀錄
                         const q = query(
                             collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'partner_ledgers'), 
                             where('vehicleId', '==', v.id),
@@ -1068,7 +930,6 @@ const VehicleFormModal = ({
                         console.error("刪除總帳連動紀錄失敗", err);
                     }
                 }
-                // 更新車輛面板狀態
                 if (v.id) updateExpenseStatus(v.id, exp.id, 'Unpaid');
                 else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: 'Unpaid' } : e) }));
             }
@@ -1077,7 +938,6 @@ const VehicleFormModal = ({
 
         const newStatus = exp.status === 'Paid' ? 'Unpaid' : 'Paid';
         
-        // 如果原本是已付，退回未付時觸發詢問是否轉總帳
         if (newStatus === 'Unpaid' && db && appId && staffId && exp.company) {
              const transfer = confirm(`是否將此筆費用 [${exp.type} $${exp.amount}] 轉入【行家來往】總帳，與「${exp.company}」統一對數結算？`);
              if (transfer) {
@@ -1109,9 +969,6 @@ const VehicleFormModal = ({
         else setEditingVehicle((prev: any) => ({ ...prev, expenses: (prev.expenses || []).map((e: any) => e.id === exp.id ? { ...e, status: newStatus } : e) }));
     };
 
-
-    // ★★★ 結束：智能雙軌管理器 ★★★
-
     useEffect(() => {
         if (acqType === 'Import') {
             const fp = Number(acqForeignPrice.replace(/,/g, ''));
@@ -1135,42 +992,32 @@ const VehicleFormModal = ({
         }
     }, [acqForeignPrice, acqLocalChargesForeign, acqExchangeRate, acqPortFee, acqA1Price, acqType]);
 
-    // ★★★ 即時響應：扣減對數尾款 (已升級為包含所有維修成本的總收支計算) ★★★
     const totalAcqPaid = acqPayments.reduce((sum, p) => sum + Number(p.amount), 0);
     const acqOffsetAmount = acqType === 'Local' ? Number(acqOffsetStr.replace(/,/g, '')) : 0;
     
-    // 1. 計算買車本金與已找數的維修雜費
     const baseCost = Number(costStr.replace(/,/g, '')) || 0;
     const totalExpensesPaid = (v.expenses || []).filter((e:any) => e.status === 'Paid' && e.paymentMethod !== 'Included').reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
     
-    // 2. 總成本 = 買車本金 + 維修雜費
     const totalCostAll = baseCost + totalExpenses;
 
-    // ★ 智能計算：預估/實際淨利潤 (只有全權限者可見)
     const hasFullAccess = staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all';
-    // 計算所有中港支出成本 (包含在 totalExpenses 內，但中港任務的收費會算在 totalRevenue 內)
     const netProfit = totalRevenue - totalCostAll;
  
-    // 3. 總已付 = 買車已付 + 對數抵銷 + 維修雜費已付
     const totalPaidAll = totalAcqPaid + acqOffsetAmount + totalExpensesPaid;
-    // 4. 總欠款
     const acqBalance = totalCostAll - totalPaidAll;
+    
     const handleAddAcqPayment = () => {
         const amt = Number(newAcqPayment.amount.replace(/,/g, ''));
         if (amt > 0) {
             setAcqPayments([...acqPayments, { id: Date.now().toString(), ...newAcqPayment, amount: amt }]);
-            
-            // ★ 智能記憶：如果輸入了新的收款人/備註，自動存入系統費用公司名單 (下次就能選)
             if (newAcqPayment.note && !(settings.expenseCompanies || []).includes(newAcqPayment.note)) {
                 updateSettings('expenseCompanies', [...(settings.expenseCompanies || []), newAcqPayment.note]);
             }
-
             setNewAcqPayment({ ...newAcqPayment, amount: '', note: '' });
         }
     };
     const handleDeleteAcqPayment = (id: string) => { setAcqPayments(acqPayments.filter(p => p.id !== id)); };
 
-    // ★★★ 升級：對數單動態編輯與匯出 (B2B Reconciliation) ★★★
     const [showReconModal, setShowReconModal] = useState(false);
     const [reconVendor, setReconVendor] = useState('');
     const [reconItems, setReconItems] = useState<any[]>([]);
@@ -1182,12 +1029,10 @@ const VehicleFormModal = ({
         
         const items = [];
 
-        // 1. 動態拆分應付項目 (Payables) - ★ 移除了 A1 費用
         if (acqType === 'Import') {
             const fp = Number(acqForeignPrice.replace(/,/g, '')) || 0;
             const localCharges = Number(acqLocalChargesForeign.replace(/,/g, '')) || 0;
             const er = Number(acqExchangeRate) || 1;
-            // 解決浮點數誤差
             const arrivalPrice = Math.round((fp + localCharges) * er * 100) / 100;
             const port = Number(acqPortFee.replace(/,/g, '')) || 0;
             const frt = Number(acqFrtTax.replace(/,/g, '')) || 0;
@@ -1200,15 +1045,12 @@ const VehicleFormModal = ({
             if (baseCost > 0) items.push({ id: 'base', desc: '進貨本金 (Purchase Price)', amount: baseCost, type: 'payable' });
         }
 
-        // 加入維修與雜費成本
         if (totalExpenses > 0) {
             items.push({ id: 'exp', desc: '車輛維修與其他雜費 (Maintenance & Expenses)', amount: totalExpenses, type: 'payable' });
         }
 
-        // 加入代支費用
         if (advAmt > 0) items.push({ id: 'adv', desc: '代支費用 (Advance Fee)', amount: advAmt, type: 'payable' });
         
-        // 2. 載入已付與抵銷紀錄 (Paid)
         acqPayments.forEach(p => {
             items.push({ id: p.id, desc: `[付款] ${p.date} - ${p.method} ${p.note ? `(${p.note})` : ''}`, amount: Number(p.amount) || 0, type: 'paid' });
         });
@@ -1227,10 +1069,8 @@ const VehicleFormModal = ({
         const isReceivable = netBalance < 0;
         const absBalance = Math.abs(netBalance);
 
-        // ★ 先關閉彈窗再列印，避免主線程凍結
         setShowReconModal(false);
 
-        // ★ 智能生成報表檔名：Year Make Model (例如: Reconciliation_2023 Porsche 991)
         const reportTitle = `Reconciliation_${v.year || ''} ${v.make || ''} ${v.model || ''}`.replace(/\s+/g, ' ').trim() || `Reconciliation_${v.regMark || 'Vehicle'}`;
 
         setTimeout(() => {
@@ -1244,7 +1084,6 @@ const VehicleFormModal = ({
 
                     <div style="display: flex; justify-content: space-between; margin-bottom: 30px; font-size: 12px;">
                         <table style="width: 48%; border-collapse: collapse;">
-                            <!-- ★ 修復：加入 white-space: nowrap 防止中文字被強行換行 -->
                             <tr><td style="font-weight: bold; color: #64748b; padding-bottom: 5px; white-space: nowrap; width: 100px;">代訂方/行家:</td><td style="font-weight: bold; font-size: 14px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px;">${reconVendor}</td></tr>
                             <tr><td style="font-weight: bold; color: #64748b; padding-top: 5px; white-space: nowrap;">結算日期:</td><td style="padding-top: 5px; font-family: monospace;">${new Date().toLocaleDateString('zh-HK')}</td></tr>
                         </table>
@@ -1321,13 +1160,9 @@ const VehicleFormModal = ({
                     printWin.document.write(`<html><head><title>${reportTitle}</title><style>@page { size: A4; margin: 10mm; } body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }</style></head><body>${htmlContent}</body></html>`);
                     printWin.document.close();
                     printWin.focus();
-                    
-                    // ★ 確保列印完成後或取消後自動銷毀視窗
                     printWin.onafterprint = () => printWin.close();
-                    
                     setTimeout(() => {
                         printWin.print();
-                        // 防呆機制：若 onafterprint 未觸發，此處確保視窗關閉 (在 Chrome 中 print() 會阻塞直到對話框關閉)
                         printWin.close();
                     }, 250);
                 } else {
@@ -1340,7 +1175,6 @@ const VehicleFormModal = ({
     useEffect(() => { const size = Number(engineSizeStr.replace(/,/g, '')); setAutoLicenseFee(calculateLicenseFee(fuelType, size)); }, [fuelType, engineSizeStr]);
     const calcRegisteredPrice = () => { const a1 = Number(priceA1Str.replace(/,/g, '')) || 0; const tax = Number(priceTaxStr.replace(/,/g, '')) || 0; return formatNumberInput(String(a1 + tax)); };
 
-   // ✅ 替換為 (雙重監聽：圖庫 + 資料庫中心，並確保 TS 型別正確)：
     useEffect(() => {
         if (!v.id || !db || !staffId) return;
         let currentMediaItems: any[] = [];
@@ -1414,18 +1248,15 @@ const VehicleFormModal = ({
             const snapshot = await getDocs(q);
             const searchKey = vrdSearch.toUpperCase().trim();
             
-            // ★ 智能去重複引擎 (Deduplication)
             const uniqueMap = new Map();
             let duplicateCount = 0;
 
             snapshot.forEach(doc => { 
                 const data = doc.data(); 
                 if ((data.plateNoHK||'').toUpperCase().includes(searchKey) || (data.chassisNo||'').toUpperCase().includes(searchKey)) {
-                    // 使用車牌或底盤號作為去重 Key
                     const key = data.plateNoHK || data.chassisNo || doc.id;
                     if (uniqueMap.has(key)) {
                         duplicateCount++;
-                        // 如果有重複，保留時間戳最新的一筆 (過濾掉不完整的舊資料)
                         const existing = uniqueMap.get(key);
                         const existingTime = existing.updatedAt?.seconds || 0;
                         const newTime = data.updatedAt?.seconds || 0;
@@ -1475,25 +1306,18 @@ const VehicleFormModal = ({
         
         let alertMessage = "✅ VRD 基礎車輛數據導入成功";
         
-        // -------------------------------------------------------------
-        // ★★★ 核心優化：進銷分流智能車主連動 (防垃圾數據) ★★★
-        // -------------------------------------------------------------
         const ownerName = vrdData.registeredOwnerName || vrdData.owner || '';
-        
-        // 嘗試在全公司客戶資料庫中比對這個人
         const matchedClient = ownerName ? clients.find((c: any) => c.name === ownerName) : null;
         const cName = ownerName;
         const cPhone = matchedClient ? (matchedClient.phone || '') : '';
         const cID = matchedClient ? (matchedClient.idNumber || matchedClient.hkid || '') : (vrdData.registeredOwnerId || '');
         const cAddress = matchedClient ? (matchedClient.address || '') : '';
 
-        // 判斷當前是「收車舊牌簿」還是「過戶新牌簿」
         const isCarSold = currentStatus === 'Sold' || currentStatus === 'Reserved';
 
         if (ownerName) {
             if (!isCarSold) {
-                // 💡 情況 A: 車輛還在庫 (In Stock)，此 VRD 車主為【舊車主/前手】 -> 連動到進貨資料
-                setAcqVendor(ownerName); // 實時更新進貨分頁的 Vendor 輸入框狀態
+                setAcqVendor(ownerName);
                 
                 setEditingVehicle((prev: any) => {
                     if (!prev) return prev;
@@ -1510,7 +1334,6 @@ const VehicleFormModal = ({
                 });
                 alertMessage = `📥 【收車進貨連動】已將 VRD 登記車主 [${ownerName}] 載入為「前手/舊車主」資料。`;
             } else {
-                // 💡 情況 B: 車輛已售出 (Sold/Reserved)，此 VRD 車主為【新車主/買家】 -> 連動到銷售資料
                 setEditingVehicle((prev: any) => {
                     if (!prev) return prev;
                     return {
@@ -1525,7 +1348,6 @@ const VehicleFormModal = ({
             }
         }
 
-        // 更新其餘 VRD 欄位
         setEditingVehicle((prev: any) => {
             if (!prev) return prev;
             return {
@@ -1555,7 +1377,6 @@ const VehicleFormModal = ({
     const handleSaveWrapper = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         
-        // 建立隱藏欄位 Helper 函數，保持代碼乾淨
         const appendHidden = (name: string, value: string) => {
             if (!e.currentTarget.querySelector(`[name="${name}"]`)) {
                 const hidden = document.createElement('input');
@@ -1566,12 +1387,9 @@ const VehicleFormModal = ({
             }
         };
 
-        // 原本的隱藏欄位
         appendHidden('isPublic_hidden', isPublic ? 'true' : 'false');
         appendHidden('cb_isEnabled_hidden', cbEnabled ? 'true' : 'false');
         appendHidden('logistics_hidden', JSON.stringify(logistics));
-
-        // ★★★ 新增：將上會計數機的狀態打包傳遞給 GL.page.tsx ★★★
         appendHidden('financePrice', (financePriceInput || '').replace(/,/g, ''));
         appendHidden('financeDeposit', (financeDepositInput || '').replace(/,/g, ''));
         appendHidden('financeMonths', String(financeMonths));
@@ -1592,7 +1410,6 @@ const VehicleFormModal = ({
             (editingVehicle as any).acqPayments = acqPayments; 
         }
         
-        // ★★★ 修正 1：智能學習行家名字庫邏輯 (加強防錯機制) ★★★
         const st = formData.get('sourceType') as string;
         const vendorName = formData.get('acq_vendor') as string;
         if (st === 'partner' && vendorName && db) {
@@ -1601,13 +1418,9 @@ const VehicleFormModal = ({
                 try {
                     const { doc, updateDoc, setDoc, arrayUnion } = await import('firebase/firestore');
                     const settingsRef = doc(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'system', 'settings');
-                    
-                    // 嘗試更新，如果失敗 (例如欄位未初始化) 則改用 setDoc 合併，徹底解決紅字 Error！
                     await updateDoc(settingsRef, { partners: arrayUnion(vendorName) }).catch(async () => {
                         await setDoc(settingsRef, { partners: arrayUnion(vendorName) }, { merge: true });
                     });
-                    
-                    console.log(`✅ 已自動將新行家 [${vendorName}] 加入字庫`);
                     if (settings.partners) settings.partners.push(vendorName); else settings.partners = [vendorName];
                 } catch (err) {
                     console.warn('更新行家字典失敗 (但不影響車輛儲存):', err);
@@ -1616,48 +1429,33 @@ const VehicleFormModal = ({
         }
 
         try { 
-            // 1. 先執行原本的車輛儲存動作
             await saveVehicle(e); 
             
-            
-            
-            // ★★★ 自動學習引擎：擷取手動輸入的新設備標籤，寫入系統庫 ★★★
             const currentRemarks = formData.get('salesRemarks') as string;
             const currentMake = formData.get('make') as string;
             if (currentRemarks && currentMake && db) {
-                // 將輸入框的內容用逗號切開，清理多餘符號
                 const newTags = currentRemarks.split(',').map(s => s.replace(/^[-\s]+/, '').trim()).filter(Boolean);
                 const currentEquipDB = settings?.equipmentTags || EQUIPMENT_DB;
                 const existingBrandTags = currentEquipDB[currentMake] || [];
                 const existingGeneralTags = currentEquipDB['General'] || [];
-                
-                // 找出系統字庫中「還沒有」的新詞
                 const tagsToLearn = newTags.filter(t => !existingBrandTags.includes(t) && !existingGeneralTags.includes(t));
 
                 if (tagsToLearn.length > 0) {
-                    // 自動擴充該品牌的標籤庫
                     const updatedMakeTags = [...existingBrandTags, ...tagsToLearn];
                     updateSettings('equipmentTags', { ...currentEquipDB, [currentMake]: updatedMakeTags });
-                    console.log(`✅ 系統已自動學習 ${currentMake} 的新標籤:`, tagsToLearn);
                 }
             }
             
-            // 2. ★★★ 核心升級：智能同步收車/售車/司機客戶至資料庫中心 (Upsert 防重複引擎) ★★★
             if (db && staffId) {
-                // 動態載入 Firebase 方法避免依賴衝突
                 const { collection, getDocs, updateDoc, addDoc, serverTimestamp, doc } = await import('firebase/firestore');
                 const dbRef = collection(db, 'artifacts', appId, 'staff', 'CHARLES_data', 'database');
                 const regMark = formData.get('regMark') as string || '';
 
-                // 通用同步函數 (終極防重複版：前端讀取全表模糊比對，並同步標籤)
                 const syncPerson = async (name: string, phone: string, idNum: string, address: string, role: string, extraData?: any) => {
                     if (!name || name.trim() === '') return;
-                    // 清理多餘空白 (將多個連續空白轉為單一空白)
                     const cleanName = name.replace(/\s+/g, ' ').trim();
                     const cleanPhone = (phone || '').trim();
                     const cleanId = (idNum || '').trim();
-
-                    // 為了避免大小寫與空格造成的重複，抓取所有相關資料在前端做智能過濾
                     const snap = await getDocs(dbRef);
 
                     let matchedDoc: any = null;
@@ -1666,7 +1464,6 @@ const VehicleFormModal = ({
                     for (const d of snap.docs) {
                         const data = d.data();
                         if (data.category !== 'Person' && data.category !== 'Company') continue;
-
                         const dbName = (data.name || '').replace(/\s+/g, ' ').trim().toLowerCase();
                         const dbPhone = (data.phone || '').trim();
                         const dbId = (data.idNumber || '').trim();
@@ -1674,30 +1471,17 @@ const VehicleFormModal = ({
                         const nameMatch = dbName === cleanName.toLowerCase();
                         const phoneMatch = cleanPhone && dbPhone === cleanPhone;
                         const idMatch = cleanId && dbId === cleanId;
-
-                        // 只要名字(無視大小寫)、電話或證件號碼其中一個符合，就視為同一實體
-                        if (nameMatch || phoneMatch || idMatch) {
-                            matchedDoc = d;
-                            existingData = data;
-                            break;
-                        }
+                        if (nameMatch || phoneMatch || idMatch) { matchedDoc = d; existingData = data; break; }
                     }
 
                     if (matchedDoc && existingData) {
-                        // 💡 發現重複資料 -> 執行「智能合併更新 (Merge Update)」
                         const updatedFields: any = { updatedAt: serverTimestamp() };
-                        
-                        // 只填補空缺，不覆蓋舊有珍貴資料
                         if (!existingData.phone && cleanPhone) updatedFields.phone = cleanPhone;
                         if (!existingData.idNumber && cleanId) updatedFields.idNumber = cleanId;
                         if (!existingData.address && address) updatedFields.address = address;
-                        
-                        // 名稱優化 (保留較長或大小寫較為標準的名稱)
                         if (cleanName.length > (existingData.name || '').length || (cleanName.toLowerCase() === existingData.name.toLowerCase() && cleanName !== existingData.name)) {
                             updatedFields.name = cleanName;
                         }
-                        
-                        // 自動補上關聯車牌 (去重複合併)
                         if (regMark) {
                             const currentPlates = existingData.relatedPlateNo ? existingData.relatedPlateNo.split(',').map((p:string)=>p.trim()) : [];
                             if (!currentPlates.includes(regMark)) {
@@ -1705,8 +1489,6 @@ const VehicleFormModal = ({
                                 updatedFields.relatedPlateNo = currentPlates.join(', ');
                             }
                         }
-
-                        // 合併額外標籤資料 (例如內地車牌)
                         if (extraData?.mainlandPlate) {
                             const cnPlates = existingData.plateNoCN ? existingData.plateNoCN.split(',').map((p:string)=>p.trim()) : [];
                             if (!cnPlates.includes(extraData.mainlandPlate)) {
@@ -1714,54 +1496,33 @@ const VehicleFormModal = ({
                                 updatedFields.plateNoCN = cnPlates.join(', ');
                             }
                         }
-                        
-                        // 智能疊加角色標籤 (Role & Tags)
                         const currentRoles = existingData.roles || [];
                         if (!currentRoles.includes(role)) updatedFields.roles = [...currentRoles, role];
-                        
                         const currentTags = existingData.tags || [];
                         if (!currentTags.includes(role)) updatedFields.tags = [...currentTags, role];
 
-                        if (Object.keys(updatedFields).length > 1) {
-                            await updateDoc(doc(dbRef, matchedDoc.id), updatedFields);
-                            console.log(`✅ 已智能合併更新現有資料庫檔案: ${cleanName}`);
-                        }
+                        if (Object.keys(updatedFields).length > 1) await updateDoc(doc(dbRef, matchedDoc.id), updatedFields);
                     } else {
-                        // 💡 完全沒找到 -> 執行「全新建立 (Insert)」
-                        // 智能判斷是否為公司
                         const isCompany = cleanId.toUpperCase().includes('BR') || cleanName.toUpperCase().includes('LIMITED') || cleanName.includes('公司');
                         await addDoc(dbRef, {
-                            name: cleanName,
-                            category: isCompany ? 'Company' : 'Person',
-                            roles: [role],
-                            tags: [role], // 同步寫入 tag 方便過濾
-                            phone: cleanPhone,
-                            idNumber: cleanId,
-                            address: address || '',
-                            relatedPlateNo: regMark || '',
-                            plateNoCN: extraData?.mainlandPlate || '',
-                            createdAt: serverTimestamp(),
-                            updatedAt: serverTimestamp(),
-                            managedBy: staffId
+                            name: cleanName, category: isCompany ? 'Company' : 'Person', roles: [role], tags: [role], 
+                            phone: cleanPhone, idNumber: cleanId, address: address || '', relatedPlateNo: regMark || '',
+                            plateNoCN: extraData?.mainlandPlate || '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), managedBy: staffId
                         });
-                        console.log(`✅ 已在資料庫中心自動建立新檔案: ${cleanName}`);
                     }
                 };
 
-                // A. 執行同步「前手/收車對象 (Vendor)」
                 const formVendorName = formData.get('acq_vendor') as string;
                 const formVendorPhone = formData.get('acq_vendorPhone') as string;
                 const formVendorID = formData.get('acq_vendorID') as string;
                 await syncPerson(formVendorName, formVendorPhone, formVendorID, '', '前車主/行家');
 
-                // B. 執行同步「買家 (Purchaser)」
                 const formCustName = formData.get('customerName') as string;
                 const formCustPhone = formData.get('customerPhone') as string;
                 const formCustID = formData.get('customerID') as string;
                 const formCustAddress = formData.get('customerAddress') as string;
                 await syncPerson(formCustName, formCustPhone, formCustID, formCustAddress, '買家');
 
-                // C. 執行同步「中港司機」 (防止遺漏與重複)
                 const isCbActive = formData.get('cb_isEnabled_hidden') === 'true'; 
                 if (isCbActive) {
                     const mPlate = formData.get('cb_mainlandPlate') as string;
@@ -1787,7 +1548,6 @@ const VehicleFormModal = ({
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4 overflow-hidden w-full">
         <div className="bg-slate-100 md:rounded-2xl shadow-2xl w-full max-w-[100vw] overflow-hidden md:max-w-[98vw] xl:max-w-[1500px] h-full md:h-[92vh] flex flex-col border-0 md:border border-slate-600 relative">
           
-            {/* Header */}
           <div className="bg-slate-900 text-white px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] flex justify-between items-center flex-none shadow-md z-20 w-full">
             <div className="flex items-center gap-3">
                 <button type="button" onClick={handleClose} className="md:hidden p-2 -ml-2 mr-1 text-slate-300 hover:text-white"><ChevronLeft size={28} /></button>
@@ -1801,9 +1561,7 @@ const VehicleFormModal = ({
                 )}
             </div>
 
-            {/* 👇---------- 替換右側按鈕區塊 ----------👇 */}
             <div className="flex items-center gap-2 md:gap-4">
-                {/* ★ 只有已售/已訂的車輛才會出現回購按鈕 */}
                 {!isNew && (currentStatus === 'Sold' || currentStatus === 'Reserved') && (
                     <div className="hidden md:flex bg-slate-800 rounded-lg p-1 border border-slate-700 shadow-inner">
                         <button type="button" onClick={() => handleRepurchase('own')} className="px-3 py-1.5 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors flex items-center">
@@ -1817,10 +1575,8 @@ const VehicleFormModal = ({
                 )}
                 <button type="button" onClick={handleClose} className="hidden md:block p-2 hover:bg-slate-700 rounded-full transition-colors"><X size={24} /></button>
             </div>
-            {/* 👆---------- 替換結束 ----------👆 */}
           </div>
 
-        
           <form 
             onSubmit={handleSaveWrapper} 
             onKeyDown={(e) => {
@@ -1835,19 +1591,12 @@ const VehicleFormModal = ({
                 <button type="button" onClick={() => setRightTab('vrd')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'vrd' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500'}`}><FileText size={16} className="inline mr-1 mb-0.5"/>基本/VRD</button>
                 <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'sales' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售/收款</button>
                 <button type="button" onClick={() => setRightTab('cost')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'cost' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500'}`}><DownloadCloud size={16} className="inline mr-1 mb-0.5"/>進貨/成本</button>
-                {/* ★ 新增：手機版維修保養按鈕 */}
                 <button type="button" onClick={() => setRightTab('service')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'service' ? 'border-orange-600 text-orange-700' : 'border-transparent text-slate-500'}`}><Wrench size={16} className="inline mr-1 mb-0.5"/>維修/保養</button>
                 <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
-                {/* ★★★ 加在這裡 (手機版) ★★★ */}
                 <button type="button" onClick={() => setRightTab('finance')} className={`pb-3 px-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${rightTab === 'finance' ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-slate-500'}`}><Calculator size={16} className="inline mr-1 mb-0.5"/>💰上會計數</button>
-            
             </div>
 
-            
-            {/* ================= 左側欄 (VRD & Photos) ================= */}
-            <div className={`w-full md:w-1/3 lg:w-[30%] min-w-[300px] max-w-[400px] bg-slate-200/50 md:border-r border-slate-300 flex-col flex-none md:h-full md:overflow-hidden relative order-1 ${rightTab === 'vrd' ? 'flex' : 'hidden md:flex'}`}>
-
-                 {/* VRD 搜尋遮罩 */}
+            <div className={`w-full md:w-1/3 lg:w-[30%] min-w-[300px] max-w-[400px] bg-slate-200/50 border-r border-slate-300 flex-col flex-none md:h-full md:overflow-hidden relative order-1 ${rightTab === 'vrd' ? 'flex' : 'hidden md:flex'}`}>
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-4 md:p-6 animate-in fade-in duration-200">
                         <div className="flex justify-between items-center mb-6 border-b pb-2"><h3 className="font-bold text-lg text-blue-800 flex items-center"><Database size={20} className="mr-2"/> 連動資料庫</h3><button type="button" onClick={() => setShowVrdOverlay(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20}/></button></div>
@@ -1878,7 +1627,6 @@ const VehicleFormModal = ({
 
                  <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-4 scrollbar-thin">
 
-                  {/* ★★★ 新增：所有車輛皆可用的進度追蹤器 ★★★ */}
                     <div className="bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden mb-4">
                         <div 
                             className="p-3 bg-blue-50/80 border-b border-blue-100 flex justify-between items-center cursor-pointer hover:bg-blue-100 transition-colors"
@@ -1906,7 +1654,6 @@ const VehicleFormModal = ({
                                 <div>
                                     <label className="text-[10px] font-bold text-amber-600 mb-1 block">3. 驗車合格日</label>
                                     <input type="date" value={logistics.inspectionPassedDate} onChange={(e) => updateLogistics('inspectionPassedDate', e.target.value)} className="w-full text-xs p-1.5 border border-amber-200 rounded outline-none font-mono bg-amber-50 focus:bg-white focus:border-amber-400 text-slate-700 font-bold tracking-tighter"/>
-                                    {/* 智能提示 4 個月有效期 */}
                                     {logistics.inspectionPassedDate && !logistics.registeredDate && (
                                         <div className="mt-1 text-[9px] font-bold text-red-500 tracking-tight leading-tight">
                                             期限: {getInspectionExpiry(logistics.inspectionPassedDate)}
@@ -1925,10 +1672,8 @@ const VehicleFormModal = ({
                         )}
                     </div>
                   
-                    {/* ★ 終極牌簿化 (VRD) 擬真介面 ★ */}
                     <div className="bg-[#fff9f0] rounded-xl shadow-md border border-slate-300 overflow-hidden relative group">
                         
-                        {/* 牌簿頂部紅線與浮水印質感 */}
                         <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600"></div>
                         <div className="absolute top-4 left-4 text-4xl opacity-[0.03] text-red-900 pointer-events-none select-none -rotate-12 font-serif font-black">VRD</div>
                         
@@ -1972,7 +1717,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
-                            {/* 車牌 - 視覺焦點 */}
                             <div className="mb-4">
                                 <label className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-0.5 block ml-1">Registration Mark (車牌)</label>
                                 <input 
@@ -1983,7 +1727,6 @@ const VehicleFormModal = ({
                                 />
                             </div>
                             
-                            {/* 廠牌與型號 */}
                             <div className="grid grid-cols-2 gap-0 border-t border-l border-slate-300 bg-white">
                                 <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Make (廠名)</label>
@@ -1997,7 +1740,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
-                            {/* 年份與里數 */}
                             <div className="grid grid-cols-2 gap-0 border-l border-slate-300 bg-white">
                                 <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Year of Mfg (製造年份)</label>
@@ -2009,7 +1751,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
                             
-                            {/* 車主登記日與牌費 */}
                             <div className="grid grid-cols-2 gap-0 border-l border-slate-300 bg-white">
                                 <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Reg. Date (登記日)</label>
@@ -2031,7 +1772,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
                             
-                            {/* 底盤與引擎 (跨欄顯示，增強長度) */}
                             <div className="grid grid-cols-1 gap-0 border-l border-r border-slate-300 bg-white">
                                 <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Chassis No. (底盤號碼)</label>
@@ -2045,11 +1785,9 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
-                            {/* 顏色與首數 */}
                             <div className="grid grid-cols-3 gap-0 border-l border-slate-300 bg-white">
                                 <div className="border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Prev. (首數)</label>
-                                    {/* ★ 修正：強制處理空值，預設顯示 '0'，並加上 type="number" */}
                                     <input 
                                         name="previousOwners" 
                                         type="number" 
@@ -2069,7 +1807,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
                             
-                            {/* CC數、座位與排檔 */}
                             <div className="grid grid-cols-4 gap-0 border-l border-slate-300 bg-white">
                                 <div className="col-span-2 border-r border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">{fuelType === 'Electric' ? 'Power(KW)' : 'Cyl. Cap.(cc)'}</label>
@@ -2087,7 +1824,6 @@ const VehicleFormModal = ({
                                 </div>
                             </div>
 
-                            {/* Fuel Type */}
                             <div className="grid grid-cols-1 gap-0 border-l border-r border-slate-300 bg-white rounded-b">
                                 <div className="border-b border-slate-300 p-1.5 focus-within:bg-blue-50/50">
                                     <label className="text-[8px] text-slate-500 font-bold uppercase tracking-wider block mb-0.5">Propulsion (能源)</label>
@@ -2096,25 +1832,22 @@ const VehicleFormModal = ({
                                     </select>
                                 </div>
                             </div>
-
                         </div>
                     </div>
 
-                     {/* Photos Card (優化下方空間利用率) */}
                      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mt-4">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="font-bold text-slate-700 text-sm flex items-center"><ImageIcon size={14} className="mr-1 text-blue-500"/> 車輛相片</h3>
                             <button type="button" onClick={handleGoToMediaLibrary} className="text-[9px] bg-blue-50 text-blue-600 px-2 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 font-bold shadow-sm">整理圖庫 <ArrowRight size={10} className="inline"/></button>
                         </div>
-                        {/* 兩列式縮圖，減少浪費的高度 */}
-                        // ✅ 替換為 (解析物件，加入文件標籤，並修復 TS 報錯)：
                         <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
-                            {displayPhotos.map((item: any, idx: number) => {
-                                const isObj = typeof item === 'object' && item !== null;
-                                const imgUrl = isObj ? item.url : item;
-                                const isDocument = isObj && (item.mediaType === 'document' || (item.tags && item.tags.includes('文件')));
-                                const isFromDatabase = isObj && item.source === 'database';
-                                const docTitle = isFromDatabase && item.tags ? item.tags[1] : '文件';
+                            {displayPhotos.map((item, idx) => {
+                                const safeItem = item as any;
+                                const isObj = typeof safeItem === 'object' && safeItem !== null;
+                                const imgUrl = isObj ? safeItem.url : safeItem;
+                                const isDocument = isObj && (safeItem.mediaType === 'document' || (safeItem.tags && safeItem.tags.includes('文件')));
+                                const isFromDatabase = isObj && safeItem.source === 'database';
+                                const docTitle = isFromDatabase && safeItem.tags ? safeItem.tags[1] : '文件';
                                 
                                 return (
                                 <div 
@@ -2136,7 +1869,8 @@ const VehicleFormModal = ({
                                 >
                                     {isDocument && (
                                         <div className={`absolute top-1 left-1 ${isFromDatabase ? 'bg-indigo-600/95 border-indigo-400' : 'bg-blue-600/90 border-blue-400'} text-white text-[9px] px-1.5 py-0.5 rounded shadow flex items-center z-10 font-bold border`}>
-                                            {isFromDatabase ? <Database size={10} className="mr-0.5" /> : <FileText size={10} className="mr-0.5" />} {isFromDatabase ? `庫: ${docTitle}` : '文件'}
+                                            {isFromDatabase ? <Database size={10} className="mr-0.5" /> : <FileText size={10} className="mr-0.5" />}
+                                            {isFromDatabase ? `庫: ${docTitle}` : '文件'}
                                         </div>
                                     )}
                                     <img src={imgUrl} className="w-full h-full object-cover pointer-events-none"/>
@@ -2146,62 +1880,43 @@ const VehicleFormModal = ({
                             })}
                             {displayPhotos.length === 0 && (<div className="col-span-full py-4 text-center text-slate-400 text-[10px] border border-dashed rounded bg-slate-50">暫無照片</div>)}
                         </div>
+                    </div>
 
-                          {/* ★★★ 升級版：車輛專屬賣點與智能設備標籤 ★★★ */}
-                          <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-4 mt-4 relative group hover:border-amber-300 transition-colors w-full">
-                                <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-3 gap-2 border-b border-amber-200/50 pb-2">
-                                    <h3 className="font-bold text-amber-800 text-[12px] flex items-center uppercase tracking-wider">
-                                        <Star size={14} className="mr-1 text-amber-500"/> 車輛專屬賣點與設備 (Selling Points)
-                                    </h3>
-                                    <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-bold">點擊下方標籤快速輸入 👇</span>
-                                </div>
-                                
-                                {/* 智能推薦標籤列 */}
-                                <div className="flex flex-wrap gap-1.5 mb-3">
-                                    {/* 1. 智能推薦：包含該車型的歷史高頻詞彙 + 品牌庫 */}
-                                    {recommendedTags.smart.map((tag: string, idx: number) => (
-                                        <button 
-                                            key={`make_${idx}`} 
-                                            type="button" 
-                                            onClick={(e) => { e.preventDefault(); handleTagClick(tag); }}
-                                            className="text-[10px] bg-white text-blue-700 border border-blue-200 px-2 py-1 rounded-md hover:bg-blue-50 hover:border-blue-300 shadow-sm transition-all active:scale-95 font-bold"
-                                        >
-                                            + {tag}
-                                        </button>
-                                    ))}
-                                    
-                                    {/* 2. 顯示通用狀態 (General) */}
-                                    {recommendedTags.general.map((tag: string, idx: number) => (
-                                        <button 
-                                            key={`gen_${idx}`} 
-                                            type="button" 
-                                            onClick={(e) => { e.preventDefault(); handleTagClick(tag); }}
-                                            className="text-[10px] bg-white text-amber-700 border border-amber-200 px-2 py-1 rounded-md hover:bg-amber-50 hover:border-amber-300 shadow-sm transition-all active:scale-95 font-bold"
-                                        >
-                                            + {tag}
-                                        </button>
-                                    ))}
-                                </div>
+                    <div className="bg-amber-50/50 rounded-xl shadow-sm border border-amber-200 p-4 mt-4 relative group hover:border-amber-300 transition-colors w-full">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-3 gap-2 border-b border-amber-200/50 pb-2">
+                            <h3 className="font-bold text-amber-800 text-[12px] flex items-center uppercase tracking-wider">
+                                <Star size={14} className="mr-1 text-amber-500"/> 車輛專屬賣點與設備 (Selling Points)
+                            </h3>
+                            <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-bold">點擊下方標籤快速輸入 👇</span>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                            {recommendedTags.smart.map((tag: string, idx: number) => (
+                                <button key={`make_${idx}`} type="button" onClick={(e) => { e.preventDefault(); handleTagClick(tag); }} className="text-[10px] bg-white text-blue-700 border border-blue-200 px-2 py-1 rounded-md hover:bg-blue-50 hover:border-blue-300 shadow-sm transition-all active:scale-95 font-bold">
+                                    + {tag}
+                                </button>
+                            ))}
+                            {recommendedTags.general.map((tag: string, idx: number) => (
+                                <button key={`gen_${idx}`} type="button" onClick={(e) => { e.preventDefault(); handleTagClick(tag); }} className="text-[10px] bg-white text-amber-700 border border-amber-200 px-2 py-1 rounded-md hover:bg-amber-50 hover:border-amber-300 shadow-sm transition-all active:scale-95 font-bold">
+                                    + {tag}
+                                </button>
+                            ))}
+                        </div>
 
-                                {/* 文字輸入區 */}
-                                <textarea 
-                                    name="salesRemarks"
-                                    defaultValue={v.salesRemarks}
-                                    placeholder="可點擊上方標籤快速組合，或在此手動輸入其他亮點 (例如：直版任驗、送一年牌費)..."
-                                    className="w-full min-h-[80px] p-3 bg-white border border-amber-200 rounded-lg text-sm text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-y shadow-inner font-medium transition-all leading-relaxed"
-                                />
-                            </div>
-                  
+                        <textarea 
+                            name="salesRemarks"
+                            defaultValue={v.salesRemarks}
+                            placeholder="可點擊上方標籤快速組合，或在此手動輸入其他亮點 (例如：直版任驗、送一年牌費)..."
+                            className="w-full min-h-[80px] p-3 bg-white border border-amber-200 rounded-lg text-sm text-slate-700 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-y shadow-inner font-medium transition-all leading-relaxed"
+                        />
+                    </div>
                  </div>
             </div>
+
             {/* ================= 右側欄 (Tabs System) ================= */}
             <div className={`w-full flex-1 flex-col md:h-full bg-slate-50 md:overflow-hidden order-2 min-w-0 ${rightTab !== 'vrd' ? 'flex' : 'hidden md:flex'}`}>
-
  
-                {/* 頂部全域狀態列 */}
                 <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:px-6 md:pt-6 bg-white flex-none border-t md:border-t-0 border-slate-200 w-full">
-                    
-                    {/* ★★★ 升級版：動態變形狀態按鈕 (整合專屬日期) ★★★ */}
                     <div className="flex flex-wrap bg-slate-100 rounded-lg p-1 border border-slate-200 shadow-inner w-full md:w-auto min-h-[44px]">
                         <input type="hidden" name="status" value={currentStatus} />
                         <input type="hidden" name="pendingDate" value={statusDates['Pending'] || ''} />
@@ -2216,7 +1931,6 @@ const VehicleFormModal = ({
                                 type="button" 
                                 onClick={() => {
                                     setCurrentStatus(status as any);
-                                    
                                     if (!statusDates[status]) {
                                         let autoDate = new Date().toISOString().split('T')[0];
                                         if (status === 'Pending' && (v as any).pendingDate) autoDate = (v as any).pendingDate;
@@ -2239,12 +1953,8 @@ const VehicleFormModal = ({
                                 </span>
                                 {currentStatus === status && (
                                     <input 
-                                        type="date"
-                                        value={statusDates[status] || ''}
-                                        onChange={(e) => setStatusDates({...statusDates, [status]: e.target.value})}
-                                        onClick={(e) => e.stopPropagation()} 
+                                        type="date" value={statusDates[status] || ''} onChange={(e) => setStatusDates({...statusDates, [status]: e.target.value})} onClick={(e) => e.stopPropagation()} 
                                         className="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.5 rounded outline-none font-mono font-bold cursor-pointer border border-blue-200 shadow-inner w-full text-center"
-                                        title={`${status === 'Pending' ? '報價' : (status === 'In Stock' ? '入庫' : (status === 'Reserved' ? '落訂' : (status === 'Sold' ? '售出' : '撤回')))}日期`}
                                     />
                                 )}
                             </button>
@@ -2268,14 +1978,11 @@ const VehicleFormModal = ({
                     </div>
                 </div>
 
-                {/* 桌面版專屬的分頁導航 (Tabs) */}
                 <div className="hidden md:flex border-b border-slate-200 px-6 gap-6 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide w-full">
                     <button type="button" onClick={() => setRightTab('sales')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${(rightTab === 'sales' || rightTab === 'vrd') ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><DollarSign size={16} className="inline mr-1 mb-0.5"/>銷售與收款</button>
                     <button type="button" onClick={() => setRightTab('cost')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cost' ? 'border-red-600 text-red-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><DownloadCloud size={16} className="inline mr-1 mb-0.5"/>進貨與成本</button>
-                    {/* ★ 新增：桌面版維修保養按鈕 */}
                     <button type="button" onClick={() => setRightTab('service')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'service' ? 'border-orange-600 text-orange-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Wrench size={16} className="inline mr-1 mb-0.5"/>維修與保養</button>
                     <button type="button" onClick={() => setRightTab('cb')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'cb' ? 'border-purple-600 text-purple-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Globe size={16} className="inline mr-1 mb-0.5"/>中港車管家</button>
-                    {/* ★★★ 加在這裡 (桌面版) ★★★ */}
                     <button type="button" onClick={() => setRightTab('finance')} className={`pb-3 px-2 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${rightTab === 'finance' ? 'border-cyan-600 text-cyan-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Calculator size={16} className="inline mr-1 mb-0.5"/>💰上會計數</button>
                 </div>
 
@@ -2284,39 +1991,35 @@ const VehicleFormModal = ({
                     
                     {/* ===== Tab 1: 銷售與收款 (Sales) ===== */}
                     <div className={`${rightTab === 'sales' ? 'block' : 'hidden'} md:${rightTab === 'vrd' || rightTab === 'sales' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
-                      <div className="sticky top-0 z-[40] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-2 mt-[-10px] mx-[-10px] mb-4 animate-in slide-in-from-top-4">
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold text-slate-700">
-                                <span>車價: <span className="font-mono">{formatCurrency(currentRealTimePrice)}</span></span>
+                        <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-4 mt-[-1rem] md:mt-[-1.5rem]">
+                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
+                                <span>車價 <span className="font-bold text-slate-800">{formatCurrency(currentRealTimePrice)}</span></span>
                                 <span className="text-slate-300">+</span>
-                                <span>附加收費: <span className="font-mono text-indigo-600">{formatCurrency(salesAddonsTotal)}</span></span>
+                                <span>附加費 <span className="font-bold text-indigo-600">{formatCurrency(salesAddonsTotal)}</span></span>
                                 <span className="text-slate-300">=</span>
-                                <span className="text-blue-700 font-black text-base bg-blue-50 px-2 py-0.5 rounded">總應收: {formatCurrency(totalRevenue)}</span>
+                                <span className="text-blue-700 font-black text-sm md:text-base ml-1">總應收: {formatCurrency(totalRevenue)}</span>
                             </div>
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold">
-                                {/* ★ 新增：機密淨利潤顯示 */}
+                            
+                            <div className="flex items-center gap-3 text-xs md:text-sm font-medium">
                                 {hasFullAccess && (
-                                    <span className={`font-black ${netProfit > 0 ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : 'text-red-700 bg-red-100 border-red-300'} px-2 py-0.5 rounded border shadow-sm flex items-center`}>
-                                        💰 利潤: {formatCurrency(netProfit)}
+                                    <span className={`font-bold ${netProfit > 0 ? 'text-emerald-600' : 'text-red-600'} flex items-center pr-3 border-r border-slate-200`}>
+                                        利潤: {formatCurrency(netProfit)}
                                     </span>
                                 )}
-                                <span className="text-green-600 border-l pl-3 ml-1">已收: <span className="font-mono">{formatCurrency(totalReceived)}</span></span>
-                                <span className={`font-black ${balance > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'} px-2 py-0.5 rounded border shadow-sm`}>
+                                <span className="text-emerald-700 font-bold">已收: {formatCurrency(totalReceived)}</span>
+                                <span className={`font-black ml-1 ${balance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                                     尾數: {formatCurrency(balance)}
                                 </span>
                             </div>
                         </div>
                     
-                    {/* 客戶資料 */}
                         <div className="relative">
                             <div className="flex justify-between items-center mb-3">
                                 <h3 className="font-bold text-slate-800 text-base md:text-sm flex items-center">
-                                    <UserCircle size={18} className="mr-2 text-blue-600"/> 
-                                    客戶資料 (Purchaser)
+                                    <UserCircle size={18} className="mr-2 text-blue-600"/> 客戶資料 (Purchaser)
                                 </h3>
                                 {vrdOwnerRaw && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-1 rounded border border-yellow-200">VRD 車主: {vrdOwnerRaw} (未建檔)</span>}
-                                <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold ml-2 shadow-sm">
-                                    ⚡ 支援智能配對
-                                </span>
+                                <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold ml-2 shadow-sm">⚡ 支援智能配對</span>
                             </div>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0 border-y border-slate-200 bg-white -mx-4 md:-mx-6 px-4 md:px-6">
@@ -2370,13 +2073,9 @@ const VehicleFormModal = ({
                                         onChange={e => {
                                             const val = formatNumberInput(e.target.value);
                                             setPriceA1Str(val);
-                                            // ★ 智能聯動：輸入 A1 價格時，自動按香港標準稅率計算 FRT 並帶入「已繳稅款」
                                             const numVal = Number(val.replace(/,/g, '')) || 0;
-                                            if (numVal > 0) {
-                                                setPriceTaxStr(formatNumberInput(String(calculateFRT(numVal))));
-                                            } else {
-                                                setPriceTaxStr('');
-                                            }
+                                            if (numVal > 0) setPriceTaxStr(formatNumberInput(String(calculateFRT(numVal))));
+                                            else setPriceTaxStr('');
                                         }} 
                                         className="w-full bg-slate-50 border border-slate-200 p-2 md:p-1 text-base md:text-sm font-mono outline-none rounded"
                                     />
@@ -2616,23 +2315,23 @@ const VehicleFormModal = ({
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
 
-                        <div className="sticky top-0 z-[40] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-red-200 shadow-sm flex flex-wrap justify-between items-center gap-2 mt-[-10px] mx-[-10px] mb-4 animate-in slide-in-from-top-4">
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold text-slate-700">
-                                <span>買車本金: <span className="font-mono text-red-700">{formatCurrency(baseCost)}</span></span>
+                        <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-4 mt-[-1rem] md:mt-[-1.5rem]">
+                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
+                                <span>買車本金 <span className="font-bold text-red-600">{formatCurrency(baseCost)}</span></span>
                                 <span className="text-slate-300">+</span>
-                                <span>維修雜費: <span className="font-mono text-red-500">{formatCurrency(totalExpenses)}</span></span>
+                                <span>維修雜費 <span className="font-bold text-red-500">{formatCurrency(totalExpenses)}</span></span>
                                 <span className="text-slate-300">=</span>
-                                <span className="text-red-800 font-black text-base bg-red-100 px-2 py-0.5 rounded border border-red-300 shadow-sm">總成本: {formatCurrency(totalCostAll)}</span>
+                                <span className="text-red-800 font-black text-sm md:text-base ml-1">總成本: {formatCurrency(totalCostAll)}</span>
                             </div>
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold">
-                                {/* ★ 新增：機密淨利潤顯示 */}
+                            
+                            <div className="flex items-center gap-3 text-xs md:text-sm font-medium">
                                 {hasFullAccess && (
-                                    <span className={`font-black ${netProfit > 0 ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : 'text-red-700 bg-red-100 border-red-300'} px-2 py-0.5 rounded border shadow-sm flex items-center`}>
-                                        💰 利潤: {formatCurrency(netProfit)}
+                                    <span className={`font-bold ${netProfit > 0 ? 'text-emerald-600' : 'text-red-600'} flex items-center pr-3 border-r border-slate-200`}>
+                                        利潤: {formatCurrency(netProfit)}
                                     </span>
                                 )}
-                                <span className="text-green-600 border-l pl-3 ml-1">總已付: <span className="font-mono">{formatCurrency(totalPaidAll)}</span></span>
-                                <span className={`font-black ${acqBalance > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'} px-2 py-0.5 rounded border shadow-sm`}>
+                                <span className="text-emerald-700 font-bold">總已付: {formatCurrency(totalPaidAll)}</span>
+                                <span className={`font-black ml-1 ${acqBalance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
                                     總欠款: {formatCurrency(acqBalance)}
                                 </span>
                             </div>
@@ -4240,8 +3939,7 @@ const VehicleFormModal = ({
                     </div>
                 </div>
             )}
-           </div> 
-        </div>
+           
 </form>
         </div>
 
