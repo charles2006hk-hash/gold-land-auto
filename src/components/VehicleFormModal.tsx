@@ -2135,12 +2135,13 @@ const VehicleFormModal = ({
                         {/* 兩列式縮圖，減少浪費的高度 */}
                         <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
                             {displayPhotos.map((item, idx) => {
-                                // 兼容處理：判斷是完整的媒體物件還是舊的字串網址
-                                const isObj = typeof item === 'object' && item !== null;
-                                const imgUrl = isObj ? item.url : item;
-                                const isDocument = isObj && (item.mediaType === 'document' || (item.tags && item.tags.includes('文件')));
-                                const isFromDatabase = isObj && item.source === 'database';
-                                const docTitle = isFromDatabase && item.tags ? item.tags[1] : '文件';
+                                // 兼容處理：判斷是完整的媒體物件還是舊的字串網址 (加入 as any 解決 TS 報錯)
+                                const safeItem = item as any;
+                                const isObj = typeof safeItem === 'object' && safeItem !== null;
+                                const imgUrl = isObj ? safeItem.url : safeItem;
+                                const isDocument = isObj && (safeItem.mediaType === 'document' || (safeItem.tags && safeItem.tags.includes('文件')));
+                                const isFromDatabase = isObj && safeItem.source === 'database';
+                                const docTitle = isFromDatabase && safeItem.tags ? safeItem.tags[1] : '文件';
                                 
                                 return (
                                 <div 
