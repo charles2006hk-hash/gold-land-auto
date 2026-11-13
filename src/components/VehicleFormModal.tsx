@@ -1854,7 +1854,7 @@ const VehicleFormModal = ({
                     e.preventDefault();
                 }
             }}
-            className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full"
+            className="flex-1 flex flex-col lg:flex-row overflow-y-auto md:overflow-hidden relative pb-[80px] md:pb-0 overflow-x-hidden w-full"
           >
            
             <div className="md:hidden flex border-b border-slate-200 px-2 gap-1 flex-none bg-slate-50 pt-2 overflow-x-auto scrollbar-hide sticky top-0 z-40 w-full shadow-sm">
@@ -1871,8 +1871,8 @@ const VehicleFormModal = ({
 
             
             {/* ================= 左側欄 (VRD & Photos) ================= */}
-            <div className={`w-full md:w-1/3 min-w-[300px] max-w-[400px] bg-slate-200/50 border-r border-slate-300 flex-col flex-none md:h-full md:overflow-hidden relative order-1 ${rightTab === 'vrd' ? 'flex' : 'hidden md:flex'}`}>
-
+            <div className={`w-full lg:w-[30%] lg:min-w-[320px] min-w-0 bg-slate-200/50 lg:border-r border-slate-300 flex-col flex-none md:h-full md:overflow-hidden relative order-1 lg:order-1 ${rightTab === 'vrd' ? 'flex' : 'hidden lg:flex'}`}>
+             
                  {/* VRD 搜尋遮罩 */}
                  {showVrdOverlay && (
                     <div className="absolute inset-0 z-30 bg-white/95 backdrop-blur-sm flex flex-col p-4 md:p-6 animate-in fade-in duration-200">
@@ -2233,7 +2233,7 @@ const VehicleFormModal = ({
                  </div>
             </div>
             {/* ================= 右側欄 (Tabs System) ================= */}
-            <div className={`w-full flex-1 flex-col md:h-full bg-slate-50 md:overflow-hidden order-2 min-w-0 ${rightTab !== 'vrd' ? 'flex' : 'hidden md:flex'}`}>
+            <div className={`w-full lg:flex-1 flex-col md:h-full bg-white md:overflow-hidden order-2 lg:order-2 min-w-0 ${rightTab !== 'vrd' ? 'flex' : 'hidden lg:flex'}`}>
 
  
                 {/* 頂部全域狀態列 */}
@@ -2321,24 +2321,24 @@ const VehicleFormModal = ({
                 <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 bg-white scrollbar-thin relative w-full overflow-x-hidden">
                     
                     {/* ===== Tab 1: 銷售與收款 (Sales) ===== */}
-                    {/* ★ 修復 2：極簡精緻化總結條，減少高度浪費，提升字體對比與清晰度 */}
-                      <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-4 mt-[-1rem] md:mt-[-1.5rem]">
-                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
-                                <span>車價 <span className="font-bold text-slate-800">{formatCurrency(currentRealTimePrice)}</span></span>
+                    <div className={`${rightTab === 'sales' ? 'block' : 'hidden'} md:${rightTab === 'vrd' || rightTab === 'sales' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
+                      <div className="sticky top-0 z-[40] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-2 mt-[-10px] mx-[-10px] mb-4 animate-in slide-in-from-top-4">
+                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold text-slate-700">
+                                <span>車價: <span className="font-mono">{formatCurrency(currentRealTimePrice)}</span></span>
                                 <span className="text-slate-300">+</span>
-                                <span>附加費 <span className="font-bold text-indigo-600">{formatCurrency(salesAddonsTotal)}</span></span>
+                                <span>附加收費: <span className="font-mono text-indigo-600">{formatCurrency(salesAddonsTotal)}</span></span>
                                 <span className="text-slate-300">=</span>
-                                <span className="text-blue-700 font-black text-sm md:text-base ml-1">總應收: {formatCurrency(totalRevenue)}</span>
+                                <span className="text-blue-700 font-black text-base bg-blue-50 px-2 py-0.5 rounded">總應收: {formatCurrency(totalRevenue)}</span>
                             </div>
-                            
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-medium">
+                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold">
+                                {/* ★ 新增：機密淨利潤顯示 */}
                                 {hasFullAccess && (
-                                    <span className={`font-bold ${netProfit > 0 ? 'text-emerald-600' : 'text-red-600'} flex items-center pr-3 border-r border-slate-200`}>
-                                        利潤: {formatCurrency(netProfit)}
+                                    <span className={`font-black ${netProfit > 0 ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : 'text-red-700 bg-red-100 border-red-300'} px-2 py-0.5 rounded border shadow-sm flex items-center`}>
+                                        💰 利潤: {formatCurrency(netProfit)}
                                     </span>
                                 )}
-                                <span className="text-emerald-700 font-bold">已收: {formatCurrency(totalReceived)}</span>
-                                <span className={`font-black ml-1 ${balance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                <span className="text-green-600 border-l pl-3 ml-1">已收: <span className="font-mono">{formatCurrency(totalReceived)}</span></span>
+                                <span className={`font-black ${balance > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'} px-2 py-0.5 rounded border shadow-sm`}>
                                     尾數: {formatCurrency(balance)}
                                 </span>
                             </div>
@@ -2357,11 +2357,9 @@ const VehicleFormModal = ({
                                 </span>
                             </div>
                             
-                            {/* ★ 修復 3：現代化表單設計，減少高度，提升資料密度 */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0 border-y border-slate-200 bg-white -mx-4 md:-mx-6 px-4 md:px-6">
-                                
-                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors relative">
-                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">NAME</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 md:p-4 rounded-xl border border-slate-200">
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold z-10">NAME</span>
                                     <input 
                                         name="customerName" 
                                         value={clientInput}
@@ -2371,19 +2369,19 @@ const VehicleFormModal = ({
                                         }}
                                         onFocus={() => setShowClientDropdown(true)}
                                         onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
-                                        className="w-full py-1.5 px-2 bg-transparent text-sm font-bold text-slate-800 outline-none" 
-                                        placeholder="輸入姓名搜尋..."
+                                        className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-bold focus:ring-2 focus:ring-blue-100 outline-none" 
+                                        placeholder="輸入姓名自動搜尋..."
                                         autoComplete="off"
                                     />
-                                    {/* 智能下拉選單 (位置微調) */}
+                                    {/* 智能下拉選單 */}
                                     {showClientDropdown && clientInput && (
-                                        <div className="absolute top-full left-0 z-[60] w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                                        <div className="absolute z-[60] w-full mt-1 bg-white border border-blue-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
                                             {clients
                                                 .filter((c: any) => (c.name || '').toLowerCase().includes(clientInput.toLowerCase()) || (c.phone || '').includes(clientInput))
                                                 .map((client: any) => (
                                                     <div 
                                                         key={client.id}
-                                                        className="p-2 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
+                                                        className="p-3 hover:bg-blue-50 cursor-pointer border-b border-slate-100 last:border-0"
                                                         onClick={() => {
                                                             setClientInput(client.name || '');
                                                             setClientPhone(client.phone || '');
@@ -2394,27 +2392,29 @@ const VehicleFormModal = ({
                                                     >
                                                         <div className="font-bold text-sm text-slate-800">
                                                             {client.name} 
+                                                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded ml-2">
+                                                                {client.category === 'Company' ? '🏢 公司' : '👤 個人'}
+                                                            </span>
                                                         </div>
-                                                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{client.phone} | {client.idNumber}</div>
+                                                        <div className="text-xs text-slate-500 mt-1 font-mono">{client.phone} | {client.idNumber}</div>
                                                     </div>
                                             ))}
+                                            <div className="p-2 text-[10px] text-slate-400 text-center bg-slate-50">若無匹配紀錄，儲存時將自動建檔</div>
                                         </div>
                                     )}
                                 </div>
                                 
-                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors">
-                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">PHONE</label>
-                                    <input name="customerPhone" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-sm font-mono font-medium outline-none"/>
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">PHONE</span>
+                                    <input name="customerPhone" value={clientPhone} onChange={e => setClientPhone(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/>
                                 </div>
-                                
-                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors">
-                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">ID / BR</label>
-                                    <input name="customerID" value={clientID} onChange={e => setClientID(e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-sm font-mono font-medium outline-none"/>
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ID / BR</span>
+                                    <input name="customerID" value={clientID} onChange={e => setClientID(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm font-mono focus:ring-2 focus:ring-blue-100 outline-none"/>
                                 </div>
-                                
-                                <div className="flex items-center border-b border-slate-100 py-1 focus-within:bg-blue-50/30 transition-colors">
-                                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider w-16 shrink-0">ADDRESS</label>
-                                    <input name="customerAddress" value={clientAddress} onChange={e => setClientAddress(e.target.value)} className="w-full py-1.5 px-2 bg-transparent text-sm font-medium outline-none"/>
+                                <div className="relative">
+                                    <span className="absolute top-2.5 left-3 text-[10px] text-gray-400 font-bold">ADDRESS</span>
+                                    <input name="customerAddress" value={clientAddress} onChange={e => setClientAddress(e.target.value)} className="w-full pt-6 pb-2 px-3 bg-white border border-slate-200 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-100 outline-none"/>
                                 </div>
                             </div>
                         </div>
@@ -2681,24 +2681,23 @@ const VehicleFormModal = ({
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
 
-                        {/* ★ 修復 2：極簡精緻化進貨總結條 */}
-                        <div className="sticky top-0 z-[40] bg-white border-b border-slate-200 py-2 px-4 shadow-sm flex flex-wrap justify-between items-center gap-x-4 gap-y-2 -mx-4 md:-mx-6 mb-4 mt-[-1rem] md:mt-[-1.5rem]">
-                            <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-slate-600 tracking-tight">
-                                <span>買車本金 <span className="font-bold text-red-600">{formatCurrency(baseCost)}</span></span>
+                        <div className="sticky top-0 z-[40] bg-white/95 backdrop-blur-md p-3 rounded-xl border border-red-200 shadow-sm flex flex-wrap justify-between items-center gap-2 mt-[-10px] mx-[-10px] mb-4 animate-in slide-in-from-top-4">
+                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold text-slate-700">
+                                <span>買車本金: <span className="font-mono text-red-700">{formatCurrency(baseCost)}</span></span>
                                 <span className="text-slate-300">+</span>
-                                <span>維修雜費 <span className="font-bold text-red-500">{formatCurrency(totalExpenses)}</span></span>
+                                <span>維修雜費: <span className="font-mono text-red-500">{formatCurrency(totalExpenses)}</span></span>
                                 <span className="text-slate-300">=</span>
-                                <span className="text-red-800 font-black text-sm md:text-base ml-1">總成本: {formatCurrency(totalCostAll)}</span>
+                                <span className="text-red-800 font-black text-base bg-red-100 px-2 py-0.5 rounded border border-red-300 shadow-sm">總成本: {formatCurrency(totalCostAll)}</span>
                             </div>
-                            
-                            <div className="flex items-center gap-3 text-xs md:text-sm font-medium">
+                            <div className="flex items-center gap-3 text-xs md:text-sm font-bold">
+                                {/* ★ 新增：機密淨利潤顯示 */}
                                 {hasFullAccess && (
-                                    <span className={`font-bold ${netProfit > 0 ? 'text-emerald-600' : 'text-red-600'} flex items-center pr-3 border-r border-slate-200`}>
-                                        利潤: {formatCurrency(netProfit)}
+                                    <span className={`font-black ${netProfit > 0 ? 'text-emerald-700 bg-emerald-100 border-emerald-300' : 'text-red-700 bg-red-100 border-red-300'} px-2 py-0.5 rounded border shadow-sm flex items-center`}>
+                                        💰 利潤: {formatCurrency(netProfit)}
                                     </span>
                                 )}
-                                <span className="text-emerald-700 font-bold">總已付: {formatCurrency(totalPaidAll)}</span>
-                                <span className={`font-black ml-1 ${acqBalance > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                <span className="text-green-600 border-l pl-3 ml-1">總已付: <span className="font-mono">{formatCurrency(totalPaidAll)}</span></span>
+                                <span className={`font-black ${acqBalance > 0 ? 'text-red-600 bg-red-50 border-red-200' : 'text-slate-500 bg-slate-50 border-slate-200'} px-2 py-0.5 rounded border shadow-sm`}>
                                     總欠款: {formatCurrency(acqBalance)}
                                 </span>
                             </div>
@@ -4255,9 +4254,8 @@ const VehicleFormModal = ({
                             </button>
                         </div>
                     </div>
-                 </div>
+                </div>
             )}
-
             
             {/* ★ 中港指標轉移彈出視窗 */}
             {showTransferModal && (
