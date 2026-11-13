@@ -4255,9 +4255,8 @@ const VehicleFormModal = ({
                             </button>
                         </div>
                     </div>
-                </div>
+                 </div>
             )}
-            </div>
 
             
             {/* ★ 中港指標轉移彈出視窗 */}
