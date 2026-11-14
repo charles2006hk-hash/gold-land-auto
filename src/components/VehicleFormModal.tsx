@@ -2707,76 +2707,96 @@ const VehicleFormModal = ({
                     
                     {/* ===== Tab 3: 中港車管家 (Cross-Border) ===== */}
                     <div className={`${rightTab === 'cb' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
-                        <div className="border-2 border-blue-200 rounded-2xl overflow-hidden bg-white shadow-md w-full">
-                            <div className="bg-blue-50/80 p-4 md:p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center border-b border-blue-200 gap-3">
+                        <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden mb-5">
+                            <div className="px-4 py-3 bg-blue-50/80 border-b border-blue-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                                 <div className="flex items-center gap-2">
-                                    <Globe size={24} className="text-blue-600"/>
-                                    <span className="font-black text-lg text-blue-900">中港車管家 (Cross-Border)</span>
-                                    {/* 👇 新增：轉移按鈕 👇 */}
+                                    <Globe size={18} className="text-blue-600"/>
+                                    <span className="font-bold text-sm text-blue-900">中港車管家 (Cross-Border)</span>
                                     {cbEnabled && (
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowTransferModal(true)}
-                                            className="ml-2 text-[10px] bg-purple-100 text-purple-700 border border-purple-300 px-2 py-1 rounded shadow-sm hover:bg-purple-200 flex items-center font-bold transition-colors"
-                                        >
-                                            <ArrowRightLeft size={12} className="mr-1"/> 一鍵轉移指標
+                                        <button type="button" onClick={() => setShowTransferModal(true)} className="ml-2 text-[10px] bg-white text-purple-700 border border-purple-200 px-2 py-0.5 rounded shadow-sm hover:bg-purple-50 flex items-center font-bold transition-colors">
+                                            <ArrowRightLeft size={10} className="mr-1"/> 轉移指標
                                         </button>
                                     )}
                                 </div>
-                                <label className="flex items-center justify-center text-sm font-bold text-blue-700 cursor-pointer bg-white px-4 py-2.5 md:py-1.5 rounded-xl md:rounded-lg border-2 border-blue-300 shadow-sm hover:bg-blue-50 active:scale-95 transition-transform w-full sm:w-auto">
-                                    <input type="checkbox" name="cb_isEnabled" checked={cbEnabled} onChange={e => setCbEnabled(e.target.checked)} className="mr-2 accent-blue-600 w-5 h-5 md:w-4 md:h-4"/> 
-                                    啟用中港資料模組
+                                <label className="flex items-center justify-center text-[11px] font-bold text-blue-700 cursor-pointer bg-white px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm hover:bg-blue-50 active:scale-95 transition-transform w-full sm:w-auto">
+                                    <input type="checkbox" name="cb_isEnabled" checked={cbEnabled} onChange={e => setCbEnabled(e.target.checked)} className="mr-1.5 accent-blue-600 w-3.5 h-3.5"/> 
+                                    啟用中港模組
                                 </label>
                             </div>
                             
                             {cbEnabled ? (
-                                <div className="p-4 md:p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-5 animate-fade-in bg-slate-50/30 w-full">
-                                    <div className="col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-blue-800 font-black uppercase tracking-wider mb-1 block">Mainland Plate</label><input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} className="w-full bg-white border border-blue-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold font-mono focus:ring-2 focus:ring-blue-300 outline-none shadow-sm" placeholder="粵Z..."/></div>
-                                    <div className="col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-blue-800 font-black uppercase tracking-wider mb-1 block">Quota No. (指標號)</label><input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className="w-full bg-white border border-blue-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold font-mono focus:ring-2 focus:ring-blue-300 outline-none shadow-sm"/></div>
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-blue-800 font-black uppercase tracking-wider mb-1 block">HK Company</label><input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className="w-full bg-white border border-blue-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold focus:ring-2 focus:ring-blue-300 outline-none shadow-sm"/></div>
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-blue-800 font-black uppercase tracking-wider mb-1 block">Mainland Company</label><input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className="w-full bg-white border border-blue-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold focus:ring-2 focus:ring-blue-300 outline-none shadow-sm"/></div>
+                                <div className="animate-fade-in">
+                                    {/* 📌 核心基本資料 (緊湊網格) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-px gap-y-px bg-slate-100 p-px">
+                                        <div className="bg-white p-2 focus-within:bg-blue-50/20">
+                                            <label className={COMPACT_LABEL}>Mainland Plate</label>
+                                            <input name="cb_mainlandPlate" defaultValue={v.crossBorder?.mainlandPlate} className={COMPACT_INPUT + " font-mono"} placeholder="粵Z..."/>
+                                        </div>
+                                        <div className="bg-white p-2 focus-within:bg-blue-50/20">
+                                            <label className={COMPACT_LABEL}>Quota No. (指標號)</label>
+                                            <input name="cb_quotaNumber" defaultValue={v.crossBorder?.quotaNumber} className={COMPACT_INPUT + " font-mono"}/>
+                                        </div>
+                                        <div className="bg-white p-2 focus-within:bg-blue-50/20">
+                                            <label className={COMPACT_LABEL}>HK Company</label>
+                                            <input name="cb_hkCompany" defaultValue={v.crossBorder?.hkCompany} className={COMPACT_INPUT}/>
+                                        </div>
+                                        <div className="bg-white p-2 focus-within:bg-blue-50/20">
+                                            <label className={COMPACT_LABEL}>Mainland Company</label>
+                                            <input name="cb_mainlandCompany" defaultValue={v.crossBorder?.mainlandCompany} className={COMPACT_INPUT}/>
+                                        </div>
+                                        
+                                        <div className="bg-indigo-50/30 p-2 focus-within:bg-indigo-50">
+                                            <label className={COMPACT_LABEL + " text-indigo-400"}>Driver 1 (主司機)</label>
+                                            <input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className={COMPACT_INPUT}/>
+                                        </div>
+                                        <div className="bg-indigo-50/30 p-2 focus-within:bg-indigo-50">
+                                            <label className={COMPACT_LABEL + " text-indigo-400"}>Driver 2</label>
+                                            <input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className={COMPACT_INPUT}/>
+                                        </div>
+                                        <div className="bg-indigo-50/30 p-2 focus-within:bg-indigo-50">
+                                            <label className={COMPACT_LABEL + " text-indigo-400"}>Driver 3</label>
+                                            <input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className={COMPACT_INPUT}/>
+                                        </div>
+                                        <div className="bg-emerald-50/30 p-2 focus-within:bg-emerald-50">
+                                            <label className={COMPACT_LABEL + " text-emerald-500"}>Insurance Agent</label>
+                                            <input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className={COMPACT_INPUT}/>
+                                        </div>
+                                    </div>
                                     
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-1 mt-2 md:mt-0 w-full min-w-0"><label className="text-xs md:text-[10px] text-indigo-700 font-black uppercase tracking-wider mb-1 block">Driver 1 (主司機)</label><input name="cb_driver1" defaultValue={v.crossBorder?.driver1} className="w-full bg-indigo-50 border border-indigo-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold focus:ring-2 focus:ring-indigo-300 outline-none shadow-sm"/></div>
-                                    <div className="col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-indigo-700 font-black uppercase tracking-wider mb-1 block">Driver 2</label><input name="cb_driver2" defaultValue={v.crossBorder?.driver2} className="w-full bg-indigo-50 border border-indigo-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold focus:ring-2 focus:ring-indigo-300 outline-none shadow-sm"/></div>
-                                    <div className="col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-indigo-700 font-black uppercase tracking-wider mb-1 block">Driver 3</label><input name="cb_driver3" defaultValue={v.crossBorder?.driver3} className="w-full bg-indigo-50 border border-indigo-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold focus:ring-2 focus:ring-indigo-300 outline-none shadow-sm"/></div>
-                                    <div className="col-span-1 w-full min-w-0"><label className="text-xs md:text-[10px] text-emerald-700 font-black uppercase tracking-wider mb-1 block">Insurance Agent</label><input name="cb_insuranceAgent" defaultValue={v.crossBorder?.insuranceAgent} className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-3 md:p-2 text-base md:text-sm font-bold focus:ring-2 focus:ring-emerald-300 outline-none shadow-sm"/></div>
-                                    
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-blue-200 w-full min-w-0">
-                                        <label className="text-sm md:text-xs text-blue-900 font-black mb-3 block flex items-center bg-blue-100 w-fit px-3 py-1 rounded-full"><MapPin size={16} className="mr-1.5"/> 通行口岸 (Ports)</label>
-                                        <div className="flex flex-wrap gap-x-4 gap-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full">
+                                    {/* 📌 通行口岸 (Ports) */}
+                                    <div className="p-4 border-t border-slate-200">
+                                        <label className="text-[10px] text-blue-800 font-bold mb-2 flex items-center"><MapPin size={12} className="mr-1"/> 通行口岸 (Ports)</label>
+                                        <div className="flex flex-wrap gap-2">
                                             {[...HK_PORTS, ...MO_PORTS].map(port => (
-                                                <label key={port} className="flex items-center text-sm md:text-xs font-bold text-slate-700 cursor-pointer hover:bg-blue-50 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 shadow-sm transition-colors">
-                                                    <input type="checkbox" name={`cb_port_${port}`} defaultChecked={v.crossBorder?.ports?.includes(port)} className="mr-2 w-4 h-4 md:w-3.5 md:h-3.5 accent-blue-600"/> 
+                                                <label key={port} className="flex items-center text-[10px] font-bold text-slate-600 cursor-pointer hover:bg-slate-100 bg-slate-50 px-2 py-1 rounded border border-slate-200 shadow-sm transition-colors select-none">
+                                                    <input type="checkbox" name={`cb_port_${port}`} defaultChecked={v.crossBorder?.ports?.includes(port)} className="mr-1.5 w-3 h-3 accent-blue-600"/> 
                                                     {port}
                                                 </label>
                                             ))}
                                         </div>
                                     </div>
 
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-blue-200 w-full min-w-0">
-                                        <label className="text-sm md:text-xs text-red-700 font-black mb-3 block flex items-center bg-red-100 w-fit px-3 py-1 rounded-full"><CalendarDays size={16} className="mr-1.5"/> 證件到期日追蹤 (Expiry Dates)</label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 md:gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full">
+                                    {/* 📌 證件到期日追蹤 (Expiry Dates) */}
+                                    <div className="p-4 border-t border-slate-200 bg-slate-50/50">
+                                        <label className="text-[10px] text-red-600 font-bold mb-3 flex items-center"><CalendarDays size={12} className="mr-1"/> 證件到期日追蹤 (Expiry Dates)</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                                             {Object.entries(cbDateMap).map(([key, label]) => {
-                                                // ★ 動態判斷每個項目的提醒開關狀態 (預設為 true)
                                                 const reminderKey = `cb_remind_${key}`;
                                                 const isRemind = (v.crossBorder as any)?.[reminderKey] !== false;
 
                                                 return (
-                                                    <div key={key} className="bg-slate-50 p-3 md:p-2 rounded-xl md:rounded-lg border border-slate-200 hover:border-red-300 transition-colors focus-within:ring-2 ring-red-100 shadow-inner w-full min-w-0 group relative">
+                                                    <div key={key} className="bg-white p-2 rounded-lg border border-slate-200 hover:border-red-200 transition-colors focus-within:ring-1 ring-red-100 shadow-sm group">
                                                         <div className="flex justify-between items-center mb-1.5">
-                                                            <label className="flex items-center text-xs md:text-[10px] text-slate-500 font-bold truncate">
+                                                            <label className="flex items-center text-[9px] text-slate-500 font-bold truncate">
                                                                 {label}
                                                                 <Bell size={10} className={`ml-1 flex-shrink-0 ${isRemind ? 'text-red-500 animate-pulse' : 'text-gray-300'}`} />
                                                             </label>
                                                             
-                                                            {/* 小巧的開關 Toggle */}
                                                             <label className="flex items-center cursor-pointer relative z-10" title={isRemind ? "提醒已開啟" : "不作提醒"}>
                                                                 <div className="relative">
                                                                     <input type="hidden" name={reminderKey} value={isRemind ? 'true' : 'false'} />
                                                                     <input 
-                                                                        type="checkbox" 
-                                                                        className="sr-only peer"
-                                                                        defaultChecked={isRemind} 
+                                                                        type="checkbox" className="sr-only peer" defaultChecked={isRemind} 
                                                                         onChange={(e) => {
                                                                             const hiddenInput = e.target.previousElementSibling as HTMLInputElement;
                                                                             if (hiddenInput) hiddenInput.value = e.target.checked ? 'true' : 'false';
@@ -2796,307 +2816,222 @@ const VehicleFormModal = ({
                                                                 </div>
                                                             </label>
                                                         </div>
-                                                        <input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-sm md:text-xs font-mono outline-none font-bold text-slate-800"/>
+                                                        <input type="date" name={`cb_date${key}`} defaultValue={(v.crossBorder as any)?.[`date${key}`]} className="w-full bg-transparent text-[10px] font-mono outline-none font-bold text-slate-700"/>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     </div>
-                                 {/* ★★★ 新增：中港業務專屬收費與開單區塊 ★★★ */}
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-blue-200 w-full min-w-0">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <label className="text-sm md:text-xs text-blue-900 font-black flex items-center bg-blue-100 w-fit px-3 py-1 rounded-full shadow-sm">
-                                                <DollarSign size={16} className="mr-1.5"/> 中港業務收費 (Cross-Border Fees)
-                                            </label>
-                                            
-                                            {/* ★ 升級：全能單據同步選單 (支援合約、銷售發票、服務發票、收據) */}
-                                            {pendingCbTasks.length > 0 && (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-[10px] text-indigo-800 font-bold hidden sm:inline">合併未繳費至：</span>
-                                                    <select
-                                                        onChange={(e) => {
-                                                            e.preventDefault();
-                                                            if (!e.target.value) return;
-                                                            if (!onJumpToDoc) return alert("開單系統連動未就緒");
-                                                            
-                                                            const targetDocType = e.target.value;
-                                                            // ✅ 修復：將備註 (remark / note) 完美拼接到發票的描述中
-                                                            const docItems = pendingCbTasks.map((t: any) => ({
-                                                                id: t.id,
-                                                                desc: `[中港代辦] ${t.item} ${(t.remark || t.note) ? `(${t.remark || t.note})` : ''}`.trim(),
-                                                                amount: Number(t.fee) || 0,
-                                                                isSelected: true
-                                                            }));
-                                                            
-                                                            // 智能判斷：如果是買賣合約或銷售發票，自動帶入車價；如果是服務發票或收據，車價設為 0
-                                                            const includeCarPrice = targetDocType === 'sales_contract' || targetDocType === 'invoice';
+                                </div>
+                            ) : (
+                                <div className="p-8 text-center text-blue-400/60 bg-slate-50 flex flex-col items-center">
+                                    <Globe size={48} className="mb-3 opacity-50"/>
+                                    <p className="text-sm font-black text-blue-900/50 mb-1">中港車管家目前處於停用狀態</p>
+                                    <p className="text-[10px] text-blue-800/40">如需管理兩地牌、司機及通關口岸，請勾選上方的「啟用」按鈕</p>
+                                </div>
+                            )}
+                        </div>
 
-                                                            onJumpToDoc({
-                                                                id: null,
-                                                                type: targetDocType,
-                                                                vehicleId: v.id,
-                                                                formData: {
-                                                                    companyNameEn: COMPANY_INFO?.name_en || '', companyNameCh: COMPANY_INFO?.name_ch || '',
-                                                                    companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
-                                                                    customerName: v.crossBorder?.hkCompany || v.customerName || '',
-                                                                    customerPhone: v.customerPhone || '',
-                                                                    regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '',
-                                                                    price: includeCarPrice ? (v.price?.toString() || '0') : '0', 
-                                                                    docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
-                                                                },
-                                                                docItems: docItems,
-                                                                depositItems: [], 
-                                                                showTerms: targetDocType === 'sales_contract' // 合約自動展開條款
-                                                            });
-                                                            
-                                                            e.target.value = ''; // 執行後重置選單
-                                                        }}
-                                                        className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm font-bold hover:bg-indigo-700 outline-none cursor-pointer transition-colors"
-                                                    >
-                                                        <option value="">🧾 選擇同步單據類型...</option>
-                                                        <option value="sales_contract">📝 汽車買賣合約 (帶車價)</option>
-                                                        <option value="invoice">📑 銷售發票 (帶車價)</option>
-                                                        <option value="service_invoice">🛠️ 服務發票 (僅服務費)</option>
-                                                        <option value="receipt">💰 正式收據 (Receipt)</option>
-                                                    </select>
-                                                </div>
-                                            )}
+                        {/* 📌 中港業務收費 (Cross-Border Fees) */}
+                        {cbEnabled && (
+                            <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden mb-5">
+                                <div className="px-3.5 py-2 bg-blue-50/50 border-b border-blue-100 flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className="font-bold text-blue-800 text-xs flex items-center"><DollarSign size={14} className="mr-1"/> 中港業務收費 (Fees)</h3>
+                                    {pendingCbTasks.length > 0 && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[9px] text-blue-700 font-bold hidden sm:inline">合併未繳費至：</span>
+                                            <select
+                                                onChange={(e) => {
+                                                    e.preventDefault();
+                                                    if (!e.target.value) return;
+                                                    if (!onJumpToDoc) return alert("開單系統連動未就緒");
+                                                    
+                                                    const targetDocType = e.target.value;
+                                                    const docItems = pendingCbTasks.map((t: any) => ({
+                                                        id: t.id, desc: `[中港代辦] ${t.item} ${(t.remark || t.note) ? `(${t.remark || t.note})` : ''}`.trim(), amount: Number(t.fee) || 0, isSelected: true
+                                                    }));
+                                                    
+                                                    const includeCarPrice = targetDocType === 'sales_contract' || targetDocType === 'invoice';
+
+                                                    onJumpToDoc({
+                                                        id: null, type: targetDocType, vehicleId: v.id,
+                                                        formData: {
+                                                            companyNameEn: COMPANY_INFO?.name_en || '', companyNameCh: COMPANY_INFO?.name_ch || '',
+                                                            companyAddress: COMPANY_INFO?.address_ch || '', companyPhone: COMPANY_INFO?.phone || '', companyEmail: COMPANY_INFO?.email || '',
+                                                            customerName: v.crossBorder?.hkCompany || v.customerName || '', customerPhone: v.customerPhone || '',
+                                                            regMark: v.regMark || '', make: v.make || '', model: v.model || '', chassisNo: v.chassisNo || '',
+                                                            price: includeCarPrice ? (v.price?.toString() || '0') : '0', 
+                                                            docDate: new Date().toISOString().split('T')[0], deliveryDate: new Date().toISOString().split('T')[0]
+                                                        },
+                                                        docItems: docItems, depositItems: [], showTerms: targetDocType === 'sales_contract' 
+                                                    });
+                                                    e.target.value = ''; 
+                                                }}
+                                                className="text-[10px] bg-white border border-blue-200 text-blue-700 px-2 py-1 rounded shadow-sm font-bold hover:bg-blue-50 outline-none cursor-pointer transition-colors"
+                                            >
+                                                <option value="">選擇同步單據...</option>
+                                                <option value="sales_contract">買賣合約 (帶車價)</option>
+                                                <option value="invoice">銷售發票 (帶車價)</option>
+                                                <option value="service_invoice">服務發票 (僅服務)</option>
+                                                <option value="receipt">正式收據</option>
+                                            </select>
                                         </div>
-                                        
-                                        {(() => {
-                                            const cbTasks = v.crossBorder?.tasks || [];
-                                            const pendingTasks = cbTasks.filter((t: any) => !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
-                                            const historyTasks = cbTasks.filter((t: any) => (v.payments || []).some((p: any) => p.relatedTaskId === t.id));
+                                    )}
+                                </div>
+                                
+                                {(() => {
+                                    const cbTasks = v.crossBorder?.tasks || [];
+                                    const pendingTasks = cbTasks.filter((t: any) => !(v.payments || []).some((p: any) => p.relatedTaskId === t.id));
+                                    const historyTasks = cbTasks.filter((t: any) => (v.payments || []).some((p: any) => p.relatedTaskId === t.id));
 
-                                            const historyByDate: Record<string, any[]> = {};
-                                            historyTasks.forEach((t: any) => {
-                                                if (!historyByDate[t.date]) historyByDate[t.date] = [];
-                                                historyByDate[t.date].push(t);
-                                            });
+                                    const duplicateTasks = (tasksToCopy: any[]) => {
+                                        if (!confirm(`確定要複製這 ${tasksToCopy.length} 個項目為「全新未繳費」的待辦事項嗎？`)) return;
+                                        const newItems = tasksToCopy.map((t, i) => ({ ...t, id: Date.now().toString() + '_' + i, date: new Date().toISOString().split('T')[0] }));
+                                        updateSubItem(v.id!, 'crossBorder', [...cbTasks, ...newItems]);
+                                    };
 
-                                            const duplicateTasks = (tasksToCopy: any[]) => {
-                                                if (!confirm(`確定要複製這 ${tasksToCopy.length} 個項目為「全新未繳費」的待辦事項嗎？\n(系統將自動把新項目的日期設為今日)`)) return;
-                                                const newItems = tasksToCopy.map((t, i) => ({
-                                                    ...t, id: Date.now().toString() + '_' + i, date: new Date().toISOString().split('T')[0]
-                                                }));
-                                                updateSubItem(v.id!, 'crossBorder', [...cbTasks, ...newItems]);
-                                            };
-
-                                            return (
-                                                <div className="w-full space-y-4">
-                                                    {/* 區塊 A：進行中 / 未繳費 */}
-                                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm w-full space-y-2">
-                                                        <div className="text-xs font-bold text-slate-500 mb-2 border-b pb-1">進行中 / 待繳費 ({pendingTasks.length})</div>
-                                                        {pendingTasks.length === 0 && <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">目前無待繳費項目</div>}
-                                                        
-                                                        {pendingTasks.map((t: any) => (
-                                                            <div key={t.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-3 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg transition-colors group gap-2">
-                                                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
-                                                                    <div className="flex items-center gap-3 shrink-0">
-                                                                        <span className="text-slate-400 font-mono text-xs">{t.date}</span>
-                                                                        <span className="font-bold text-slate-800 text-sm">{t.item}</span>
-                                                                    </div>
-                                                                    {/* ✅ 修復：將備註優雅地顯示在項目名稱旁邊 */}
-                                                                    {(t.remark || t.note) && (
-                                                                        <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate max-w-[200px]" title={t.remark || t.note}>
-                                                                            {t.remark || t.note}
-                                                                        </span>
-                                                                    )}
+                                    return (
+                                        <div className="bg-slate-50">
+                                            {/* 未繳費列表 */}
+                                            {pendingTasks.map((t: any) => (
+                                                <div key={t.id} className="flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors group">
+                                                    <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                                        <span className="text-[10px] font-mono text-slate-400 w-16">{t.date}</span>
+                                                        <span className="font-bold text-slate-800 text-xs truncate max-w-[120px]">{t.item}</span>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <span className="text-[9px] text-slate-500 truncate block w-full">{t.remark || t.note}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0 justify-end md:ml-auto">
+                                                        <span className="font-mono font-black text-blue-700 text-xs w-20 text-right mr-2">{formatCurrency(t.fee)}</span>
+                                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold border shadow-sm bg-red-50 text-red-600 border-red-200 animate-pulse">未繳費</span>
+                                                        <button type="button" onClick={() => duplicateTasks([t])} className="text-slate-300 hover:text-blue-500 p-1"><Share2 size={14}/></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {pendingTasks.length === 0 && <div className="text-center text-[10px] text-slate-400 py-4">無待繳費項目</div>}
+                                            
+                                            {/* 歷史歸檔 (摺疊) */}
+                                            {historyTasks.length > 0 && (
+                                                <details className="group border-t border-slate-200">
+                                                    <summary className="p-2 text-[10px] font-bold text-slate-500 cursor-pointer hover:bg-slate-100 list-none flex items-center justify-between outline-none">
+                                                        <span className="flex items-center"><History size={12} className="mr-1"/> 查看歷史歸檔 ({historyTasks.length})</span>
+                                                        <ChevronDown size={14} className="transition-transform group-open:rotate-180"/>
+                                                    </summary>
+                                                    <div className="p-2 bg-slate-100 space-y-1">
+                                                        {historyTasks.map((t: any) => (
+                                                            <div key={t.id} className="flex justify-between items-center bg-white p-1.5 rounded border border-slate-200">
+                                                                <div className="flex items-center gap-2 overflow-hidden">
+                                                                    <span className="font-bold text-slate-700 text-[10px] truncate">{t.item}</span>
+                                                                    <span className="text-[9px] text-slate-400 truncate hidden sm:block">({t.remark || t.note})</span>
                                                                 </div>
-                                                                <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto mt-1 sm:mt-0">
-                                                                    <span className="font-mono font-black text-blue-700">{formatCurrency(t.fee)}</span>
-                                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold border shadow-sm bg-red-50 text-red-600 border-red-200 animate-pulse">未繳費</span>
-                                                                    <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-xs bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="複製此單一項目">📋 複製</button>
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    <span className="font-mono font-bold text-slate-500 text-[10px]">{formatCurrency(t.fee)}</span>
+                                                                    <button type="button" onClick={() => duplicateTasks([t])} className="text-slate-300 hover:text-blue-500" title="複製此單"><Share2 size={12}/></button>
                                                                 </div>
                                                             </div>
                                                         ))}
                                                     </div>
-
-                                                    {/* 區塊 B：歷史歸檔 (已繳費) */}
-                                                    {historyTasks.length > 0 && (
-                                                        <details className="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden w-full">
-                                                            <summary className="p-3 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 list-none flex items-center justify-between outline-none">
-                                                                <span className="flex items-center"><History size={14} className="mr-2"/> 查看歷史歸檔紀錄 ({historyTasks.length} 筆)</span>
-                                                                <ChevronDown size={16} className="transition-transform group-open:rotate-180"/>
-                                                            </summary>
-                                                            <div className="p-3 pt-0 space-y-4 border-t border-slate-200 mt-2">
-                                                                {Object.entries(historyByDate).sort((a,b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([date, tasks]) => (
-                                                                    <div key={date} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
-                                                                        <div className="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
-                                                                            <span className="text-xs font-bold text-slate-600 font-mono">📅 {date} 批次</span>
-                                                                            <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks(tasks); }} className="text-[10px] bg-white border border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 px-2 py-1 rounded shadow-sm font-bold transition-colors">📋 批量複製此批項目</button>
-                                                                        </div>
-                                                                        <div className="divide-y divide-slate-100">
-                                                                            {tasks.map((t: any) => (
-                                                                                <div key={t.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-2 hover:bg-slate-50 transition-colors group gap-1">
-                                                                                    <div className="flex flex-col sm:flex-row sm:items-center pl-2 min-w-0">
-                                                                                        <span className="font-bold text-slate-700 text-xs shrink-0">{t.item}</span>
-                                                                                        {/* ✅ 修復：將備註顯示在歷史紀錄中 */}
-                                                                                        {(t.remark || t.note) && (
-                                                                                            <span className="text-[9px] text-slate-400 sm:ml-2 truncate max-w-[150px]" title={t.remark || t.note}>({t.remark || t.note})</span>
-                                                                                        )}
-                                                                                    </div>
-                                                                                    <div className="flex items-center gap-3 pr-2 self-end sm:self-auto">
-                                                                                        <span className="font-mono font-bold text-slate-500 text-xs">{formatCurrency(t.fee)}</span>
-                                                                                        <span className="px-2 py-0.5 rounded text-[9px] font-bold border bg-green-50 text-green-600 border-green-200">已付款</span>
-                                                                                        <button type="button" onClick={(e) => { e.preventDefault(); duplicateTasks([t]); }} className="text-[10px] bg-white border border-slate-300 text-slate-400 hover:text-blue-600 hover:border-blue-300 px-1.5 py-0.5 rounded shadow-sm font-bold transition-colors opacity-0 group-hover:opacity-100" title="單獨複製">📋</button>
-                                                                                    </div>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </details>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                {/* ★★★ 新增：中港業務專屬支出 (成本/應付) ★★★ */}
-                                    <div className="col-span-1 sm:col-span-2 md:col-span-4 mt-6 pt-5 border-t-2 border-dashed border-red-200 w-full min-w-0">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <label className="text-sm md:text-xs text-red-900 font-black flex items-center bg-red-100 w-fit px-3 py-1 rounded-full shadow-sm">
-                                                <DollarSign size={16} className="mr-1.5"/> 中港業務支出 (Cross-Border Payables)
-                                            </label>
-                                            {(() => {
-                                                const cbExpTotal = (v.expenses || []).filter((e:any) => e.isCrossBorder).reduce((s:number, e:any) => s + (e.amount || 0), 0);
-                                                return <span className="text-xs font-bold text-red-700 bg-white border border-red-200 px-3 py-1 rounded-full shadow-sm">中港總成本: {formatCurrency(cbExpTotal)}</span>
-                                            })()}
+                                                </details>
+                                            )}
                                         </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
 
-                                        <div className="bg-white p-4 rounded-xl border border-red-200 shadow-sm w-full space-y-4">
-                                            
-                                            {/* 歷史支出列表 */}
-                                            <div className="space-y-2">
-                                                {(v.expenses || []).filter((e:any) => e.isCrossBorder).map((exp: any) => (
-                                                    <div key={exp.id} className={`flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-2 text-sm md:text-xs p-3 md:p-2.5 bg-slate-50 border rounded-lg shadow-sm transition-colors ${exp.status === 'Transferred' ? 'border-indigo-300 bg-indigo-50/20' : 'border-slate-200'}`}>
-                                                        <div className="flex flex-wrap items-center gap-3 md:flex-1 min-w-0">
-                                                            <span className="text-gray-400 font-mono font-bold">{exp.date}</span>
-                                                            <span className="font-black text-red-800 bg-red-100 px-2 py-1 rounded-md">{exp.type}</span>
-                                                            <span className="text-gray-600 font-medium truncate flex-1 min-w-[100px]">{exp.company || '未指定對象'}</span>
-                                                            {exp.status === 'Paid' && (
-                                                                <select 
-                                                                    value={exp.paymentMethod || 'Transfer'}
-                                                                    onChange={(e) => {
-                                                                        if (v.id) updateSubItem(v.id, 'expenses', (v.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: e.target.value} : ex));
-                                                                    }}
-                                                                    className="px-2 py-1 rounded-md text-[10px] font-bold border outline-none cursor-pointer bg-white text-slate-600 border-slate-200"
-                                                                >
-                                                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
-                                                                    <option value="Transfer">轉帳 (Transfer)</option>
-                                                                    <option value="Cash">現金 (Cash)</option>
-                                                                    <option value="Cheque">支票 (Cheque)</option>
-                                                                </select>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto">
-                                                            <span className="font-mono font-black text-lg md:text-base text-red-600">{formatCurrency(exp.amount)}</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <button type="button" onClick={() => handleToggleExpenseStatus(exp)} className={`px-3 py-1 md:py-1 rounded-md text-[10px] md:text-[9px] font-black border shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : (exp.status === 'Transferred' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 cursor-help' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100')}`}>
-                                                                    {exp.status === 'Paid' ? '已付' : (exp.status === 'Transferred' ? '已轉總帳' : '未付')}
-                                                                </button>
-                                                                {exp.status !== 'Transferred' && (
-                                                                    <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-gray-400 hover:text-red-500 bg-white border border-gray-200 hover:border-red-200 p-1.5 rounded-md transition-colors"><X size={16}/></button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {(v.expenses || []).filter((e:any) => e.isCrossBorder).length === 0 && (
-                                                    <div className="text-center text-slate-400 text-xs py-4 border border-dashed rounded-lg bg-slate-50">目前無中港相關支出紀錄</div>
+                        {/* 📌 中港業務支出 (Cross-Border Payables) */}
+                        {cbEnabled && (
+                            <div className="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden mb-5">
+                                <div className="px-3.5 py-2 bg-red-50/50 border-b border-red-100 flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className="font-bold text-red-800 text-xs flex items-center"><DollarSign size={14} className="mr-1"/> 中港業務支出 (Payables)</h3>
+                                    {(() => {
+                                        const cbExpTotal = (v.expenses || []).filter((e:any) => e.isCrossBorder).reduce((s:number, e:any) => s + (e.amount || 0), 0);
+                                        return <span className="text-[10px] font-bold text-red-700 bg-white border border-red-200 px-2 py-0.5 rounded shadow-sm">總成本: {formatCurrency(cbExpTotal)}</span>
+                                    })()}
+                                </div>
+
+                                {/* 歷史支出列表 */}
+                                <div className="bg-slate-50">
+                                    {(v.expenses || []).filter((e:any) => e.isCrossBorder).map((exp: any) => (
+                                        <div key={exp.id} className={`flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors ${exp.status === 'Transferred' ? 'bg-indigo-50/20' : ''}`}>
+                                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                                <span className="text-gray-400 font-mono text-[10px] font-bold w-16">{exp.date}</span>
+                                                <span className="font-black text-red-800 bg-red-100 px-1.5 py-0.5 rounded text-[10px] truncate max-w-[80px]">{exp.type}</span>
+                                                {exp.status === 'Paid' && (
+                                                    <select 
+                                                        value={exp.paymentMethod || 'Transfer'}
+                                                        onChange={(e) => { if (v.id) updateSubItem(v.id, 'expenses', (v.expenses || []).map((ex: any) => ex.id === exp.id ? {...ex, paymentMethod: e.target.value} : ex)); }}
+                                                        className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-[9px] font-bold text-slate-600 outline-none cursor-pointer ml-1"
+                                                    >
+                                                        <option value="Staff_Advance">代墊</option><option value="Transfer">轉帳</option><option value="Cash">現金</option><option value="Cheque">支票</option>
+                                                    </select>
                                                 )}
                                             </div>
+                                            
+                                            <div className="flex-1 w-full md:w-auto min-w-0 flex items-center">
+                                                <span className="text-gray-600 text-xs font-medium truncate flex-1">{exp.company || '未指定對象'}</span>
+                                            </div>
 
-                                            {/* 新增支出表單 */}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex gap-3 md:gap-2 pt-4 border-t border-red-100 w-full">
-                                                <input type="date" value={newCbExpense.date} onChange={e => setNewCbExpense({...newCbExpense, date: e.target.value})} className="w-full lg:w-32 text-sm md:text-xs p-3 md:p-2 border border-red-100 rounded-lg outline-none bg-slate-50 font-bold text-slate-700 min-w-0"/>
-                                                
-                                                <div className="w-full lg:w-36 relative min-w-0">
-                                                    <input list="cb_expense_type_list" placeholder="選擇支出項目..." value={newCbExpense.type} onChange={e => setNewCbExpense({...newCbExpense, type: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold text-slate-800"/>
-                                                    <datalist id="cb_expense_type_list">
-                                                        <option value="指標租金">指標租金</option>
-                                                        <option value="內地保險費">內地保險費</option>
-                                                        <option value="代辦手續費">代辦手續費</option>
-                                                        <option value="內地驗車費">內地驗車費</option>
-                                                        <option value="其他雜費">其他雜費</option>
-                                                    </datalist>
-                                                </div>
-                                                
-                                                <div className="w-full sm:col-span-2 lg:flex-1 relative min-w-0 flex items-center gap-1">
-                                                    <div className="relative flex-1">
-                                                        <input list="cb_expense_company_list" placeholder="對象 (行家/代辦/指標主)..." value={newCbExpense.company} onChange={e => setNewCbExpense({...newCbExpense, company: e.target.value})} className="w-full text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-bold text-slate-700 pr-8"/>
-                                                        <button 
-                                                            type="button" 
-                                                            onClick={handleSearchRelatedCbPartners}
-                                                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-red-400 hover:text-red-600"
-                                                            title="尋找與本車相關的行家"
-                                                        >
-                                                            <Search size={16} />
-                                                        </button>
-                                                        <datalist id="cb_expense_company_list">
-                                                            {settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}
-                                                        </datalist>
-                                                    </div>
-                                                    
-                                                    {/* 相關行家選擇彈窗 */}
-                                                    {showCbPartnerSearch && (
-                                                        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-red-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                                                            <div className="p-2 bg-red-50 text-xs font-bold text-red-800 flex justify-between items-center border-b border-red-100">
-                                                                關聯行家快速選擇
-                                                                <button type="button" onClick={() => setShowCbPartnerSearch(false)}><X size={14}/></button>
-                                                            </div>
-                                                            <div className="max-h-40 overflow-y-auto">
-                                                                {cbPartnerSearchResults.map((p, idx) => (
-                                                                    <div 
-                                                                        key={idx} 
-                                                                        className="p-2 text-sm hover:bg-red-50 cursor-pointer border-b last:border-0 border-slate-100 font-medium"
-                                                                        onClick={() => {
-                                                                            setNewCbExpense({...newCbExpense, company: p});
-                                                                            setShowCbPartnerSearch(false);
-                                                                        }}
-                                                                    >
-                                                                        {p}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                <select value={newCbExpense.paymentMethod || 'Unpaid'} onChange={e => setNewCbExpense({...newCbExpense, paymentMethod: e.target.value})} className="w-full lg:w-36 text-sm md:text-xs p-3 md:p-2 border border-red-200 rounded-lg outline-none bg-white font-black text-slate-700 min-w-0 cursor-pointer">
-                                                    <option value="Unpaid">未付 (Unpaid)</option>
-                                                    <option value="Staff_Advance">🙋‍♂️ 員工代墊 (Advance)</option>
-                                                    <option value="Cash">現金 (Cash)</option>
-                                                    <option value="Transfer">轉帳 (Transfer)</option>
-                                                    <option value="Cheque">支票 (Cheque)</option>
-                                                </select>
-                                                
-                                                <div className="w-full sm:col-span-2 lg:w-auto lg:flex-none flex flex-col sm:flex-row gap-3 md:gap-2 mt-1 sm:mt-0">
-                                                    <input type="text" placeholder="$ 金額" value={newCbExpense.amount} onChange={e => setNewCbExpense({...newCbExpense, amount: formatNumberInput(e.target.value)})} className="w-full sm:flex-1 lg:w-32 text-lg md:text-sm p-3 md:p-2 border border-red-300 rounded-lg outline-none bg-red-50 text-right font-mono font-bold text-red-600 shadow-inner min-w-0"/>
-                                                    <button type="button" onClick={handleAddCbExpenseClick} className="w-full sm:w-auto bg-red-700 text-white text-sm md:text-xs p-3 md:px-5 rounded-lg hover:bg-red-800 font-bold active:scale-95 transition-transform whitespace-nowrap shadow-md">記一筆支出</button>
-                                                </div>
+                                            <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end md:ml-auto">
+                                                <span className="font-mono font-black text-xs text-red-600 w-20 md:w-24 text-right mr-2">{formatCurrency(exp.amount)}</span>
+                                                <button type="button" onClick={() => handleToggleExpenseStatus(exp)} className={`px-2 py-0.5 rounded text-[9px] font-black border shadow-sm ${exp.status === 'Paid' ? 'bg-green-100 text-green-800 border-green-300' : (exp.status === 'Transferred' ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100')}`}>
+                                                    {exp.status === 'Paid' ? '已付' : (exp.status === 'Transferred' ? '已轉總帳' : '未付')}
+                                                </button>
+                                                {exp.status !== 'Transferred' && <button type="button" onClick={() => handleDeleteExpenseClick(exp.id)} className="text-slate-300 hover:text-red-500 p-1"><X size={14}/></button>}
                                             </div>
                                         </div>
-                                    </div>    
+                                    ))}
                                 </div>
-                            ) : (
-                                <div className="p-12 text-center text-blue-400/60 bg-slate-50 flex flex-col items-center w-full">
-                                    <Globe size={64} className="mb-4 opacity-50"/>
-                                    <p className="text-lg font-black text-blue-900/50 mb-2">中港車管家目前處於停用狀態</p>
-                                    <p className="text-sm text-blue-800/40">如需管理兩地牌、司機及通關口岸，請勾選上方的「啟用」按鈕</p>
+
+                                {/* 新增支出操作列 */}
+                                <div className="p-2 flex flex-col md:flex-row gap-2 items-center bg-white border-t border-slate-100">
+                                    <div className="flex w-full md:w-auto gap-2 shrink-0">
+                                        <input type="date" value={newCbExpense.date} onChange={e => setNewCbExpense({...newCbExpense, date: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28 font-mono"}/>
+                                        <input list="cb_expense_type_list" placeholder="選擇支出項目..." value={newCbExpense.type} onChange={e => setNewCbExpense({...newCbExpense, type: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28"}/>
+                                        <datalist id="cb_expense_type_list"><option value="指標租金">指標租金</option><option value="內地保險費">內地保險費</option><option value="代辦手續費">代辦手續費</option><option value="內地驗車費">內地驗車費</option><option value="其他雜費">其他雜費</option></datalist>
+                                    </div>
+                                    
+                                    <div className="flex-1 w-full min-w-0 flex gap-2 relative">
+                                        <input list="cb_expense_company_list" placeholder="對象 (行家/代辦/指標主)..." value={newCbExpense.company} onChange={e => setNewCbExpense({...newCbExpense, company: e.target.value})} className={COMPACT_INPUT + " flex-1 pr-6"}/>
+                                        <button type="button" onClick={handleSearchRelatedCbPartners} className="absolute right-12 top-1.5 text-red-400 hover:text-red-600"><Search size={14} /></button>
+                                        <datalist id="cb_expense_company_list">{settings.expenseCompanies?.map((c: string)=><option key={c} value={c}>{c}</option>)}</datalist>
+                                        <select value={newCbExpense.paymentMethod || 'Unpaid'} onChange={e => setNewCbExpense({...newCbExpense, paymentMethod: e.target.value})} className={COMPACT_INPUT + " w-24 shrink-0"}>
+                                            <option value="Unpaid">未付 (Unpaid)</option><option value="Staff_Advance">代墊</option><option value="Cash">現金</option><option value="Transfer">轉帳</option><option value="Cheque">支票</option>
+                                        </select>
+                                    </div>
+
+                                    {/* 相關行家選擇彈窗 */}
+                                    {showCbPartnerSearch && (
+                                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 bg-white border border-red-200 rounded-lg shadow-2xl z-50 overflow-hidden">
+                                            <div className="p-2 bg-red-50 text-xs font-bold text-red-800 flex justify-between items-center border-b border-red-100">
+                                                關聯行家快速選擇
+                                                <button type="button" onClick={() => setShowCbPartnerSearch(false)}><X size={14}/></button>
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto">
+                                                {cbPartnerSearchResults.map((p, idx) => (
+                                                    <div key={idx} className="p-2 text-[10px] hover:bg-red-50 cursor-pointer border-b last:border-0 border-slate-100 font-bold" onClick={() => { setNewCbExpense({...newCbExpense, company: p}); setShowCbPartnerSearch(false); }}>{p}</div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+                                        <span className="text-[10px] font-bold text-slate-400 hidden md:inline">$</span>
+                                        <input value={newCbExpense.amount} onChange={e => setNewCbExpense({...newCbExpense, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " flex-1 md:w-24 text-right font-mono font-black text-red-600"} placeholder="金額"/>
+                                        <button type="button" onClick={handleAddCbExpenseClick} className="h-8 px-4 bg-red-700 hover:bg-red-800 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">記一筆支出</button>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 
 
                 {/* ===== Tab 5: 上會計數機 (Finance & Insurance) ===== */}
                     <div className={`${rightTab === 'finance' ? 'block' : 'hidden'} animate-fade-in pb-28 w-full`}>
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-                            
-                            <h3 className="font-bold text-lg mb-6 flex items-center border-b border-slate-100 pb-3 text-slate-800">
-                                <Calculator className="mr-2 text-blue-600" size={24}/> OCBC 汽車貸款智能試算
+                        <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                            <h3 className="font-bold text-sm mb-4 flex items-center border-b border-slate-100 pb-2 text-slate-800">
+                                <Calculator className="mr-2 text-blue-600" size={18}/> 汽車貸款智能試算
                             </h3>
 
                             {(() => {
@@ -3107,204 +3042,132 @@ const VehicleFormModal = ({
                                 const displayFinDep = financeDepositInput !== '' ? Number(financeDepositInput.replace(/,/g, '')) : currentPaid;
 
                                 const isUsedCar = v.purchaseType === 'Used' || v.purchaseType === 'Consignment';
-                                
-                                // ★ 呼叫全新引擎
                                 const calcResult = calculateAutoLoan(displayFinPrice, displayFinDep, financeMonths, financeRate, true, isUsedCar, financeType, settings.commissionTables, financeAdvanceMonths);
-
-                                // 贖會計算
-                                const settleResult = calcResult.error ? null : calculateRuleOf78Settlement(
-                                    calcResult.totalInterest || 0, 
-                                    calcResult.monthlyInstallment || 0, 
-                                    financeMonths, 
-                                    settleMonthsPaid
-                                );
+                                const settleResult = calcResult.error ? null : calculateRuleOf78Settlement(calcResult.totalInterest || 0, calcResult.monthlyInstallment || 0, financeMonths, settleMonthsPaid);
+                                
                                 return (
-                                    <div className="space-y-5 relative z-10">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
-                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">車價總額 (Price)</label>
-                                                <div className="relative">
-                                                    <span className="absolute left-2 top-1 text-slate-400 font-bold">$</span>
-                                                    <input 
-                                                        type="text" 
-                                                        value={financePriceInput !== '' ? financePriceInput : formatNumberInput(String(currentPrice))} 
-                                                        onChange={e => setFinancePriceInput(formatNumberInput(e.target.value))} 
-                                                        className="w-full bg-transparent pl-5 font-mono font-black text-xl text-slate-800 outline-none focus:border-b-2 focus:border-blue-400 transition-colors"
-                                                    />
+                                    <div className="space-y-4 relative z-10">
+                                        
+                                        {/* 📌 緊湊的輸入網格 */}
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-x-px gap-y-px bg-slate-100 p-px rounded-xl overflow-hidden border border-slate-200">
+                                            <div className="bg-white p-2.5 focus-within:bg-blue-50/20 md:col-span-2">
+                                                <label className={COMPACT_LABEL}>車價總額 (Price)</label>
+                                                <div className="flex items-center gap-1 border-b border-transparent focus-within:border-blue-300 transition-colors px-1">
+                                                    <span className="text-slate-400 font-bold">$</span>
+                                                    <input type="text" value={financePriceInput !== '' ? financePriceInput : formatNumberInput(String(currentPrice))} onChange={e => setFinancePriceInput(formatNumberInput(e.target.value))} className="w-full bg-transparent font-mono font-black text-lg text-slate-800 outline-none"/>
                                                 </div>
                                             </div>
-                                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 shadow-inner">
-                                                <label className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1 block">
-                                                    {financeType === 'Lease' ? '首期預繳金額' : '已付首期/訂金'}
-                                                </label>
-                                                <div className="relative">
-                                                    <span className="absolute left-2 top-1 text-emerald-500 font-bold">$</span>
-                                                    <input 
-                                                        type="text" 
-                                                        value={financeDepositInput !== '' ? financeDepositInput : formatNumberInput(String(currentPaid))} 
-                                                        onChange={e => setFinanceDepositInput(formatNumberInput(e.target.value))} 
-                                                        disabled={financeType === 'Lease'} // Lease 時由期數自動推算
-                                                        className="w-full bg-transparent pl-5 font-mono font-black text-xl text-emerald-700 outline-none focus:border-b-2 focus:border-emerald-500 disabled:opacity-50"
-                                                    />
+                                            <div className="bg-emerald-50/30 p-2.5 focus-within:bg-emerald-50/50 md:col-span-2">
+                                                <div className="flex justify-between items-center mb-0.5">
+                                                    <label className={COMPACT_LABEL + " !mb-0 text-emerald-600"}>{financeType === 'Lease' ? '首期預繳金額' : '已付首期/訂金'}</label>
+                                                    {financeType === 'Lease' && <span className="text-[8px] text-emerald-500 font-bold">(供款 x {financeAdvanceMonths}期)</span>}
                                                 </div>
-                                                {financeType === 'Lease' && <span className="text-[9px] text-emerald-600 mt-1 block font-bold">自動計算: (供款 x {financeAdvanceMonths}期)</span>}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                                            <div>
-                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">上會模式</label>
-                                                <div className="flex bg-slate-100 p-1 rounded-lg border shadow-inner">
-                                                    <button type="button" onClick={() => setFinanceType('HP')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${financeType === 'HP' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>HP (租購)</button>
-                                                    <button type="button" onClick={() => setFinanceType('Lease')} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${financeType === 'Lease' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}>Lease (租賃)</button>
+                                                <div className="flex items-center gap-1 border-b border-transparent focus-within:border-emerald-400 transition-colors px-1">
+                                                    <span className="text-emerald-400 font-bold">$</span>
+                                                    <input type="text" value={financeDepositInput !== '' ? financeDepositInput : formatNumberInput(String(currentPaid))} onChange={e => setFinanceDepositInput(formatNumberInput(e.target.value))} disabled={financeType === 'Lease'} className="w-full bg-transparent font-mono font-black text-lg text-emerald-700 outline-none disabled:opacity-50"/>
                                                 </div>
                                             </div>
-                                            <div>
-                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">總期數</label>
-                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 outline-none text-sm font-bold font-mono text-slate-800 focus:ring-2 ring-blue-100 shadow-sm">
-                                                    <option value="24">24 個月</option>
-                                                    <option value="36">36 個月</option>
-                                                    <option value="48">48 個月</option>
-                                                    <option value="60">60 個月</option>
+                                            
+                                            <div className="bg-white p-2 flex items-center gap-2">
+                                                <label className={COMPACT_LABEL + " !mb-0 w-12 shrink-0"}>模式</label>
+                                                <select value={financeType} onChange={e => setFinanceType(e.target.value as any)} className={COMPACT_INPUT}>
+                                                    <option value="HP">HP (租購)</option><option value="Lease">Lease (租賃)</option>
                                                 </select>
                                             </div>
-                                            {financeType === 'Lease' && (
-                                                <div>
-                                                    <label className="text-[10px] text-blue-500 font-bold uppercase tracking-wider mb-1 block">首期預繳期數</label>
-                                                    <select value={financeAdvanceMonths} onChange={e => setFinanceAdvanceMonths(Number(e.target.value))} className="w-full bg-blue-50 border border-blue-200 rounded-lg p-2.5 outline-none text-sm font-bold font-mono text-blue-800 focus:ring-2 ring-blue-300 shadow-sm">
-                                                        <option value="3">3 期</option>
-                                                        <option value="6">6 期</option>
+                                            <div className="bg-white p-2 flex items-center gap-2">
+                                                <label className={COMPACT_LABEL + " !mb-0 w-12 shrink-0"}>期數</label>
+                                                <select value={financeMonths} onChange={e => setFinanceMonths(Number(e.target.value))} className={COMPACT_INPUT}>
+                                                    <option value="24">24 個月</option><option value="36">36 個月</option><option value="48">48 個月</option><option value="60">60 個月</option>
+                                                </select>
+                                            </div>
+                                            {financeType === 'Lease' ? (
+                                                <div className="bg-blue-50/30 p-2 flex items-center gap-2">
+                                                    <label className={COMPACT_LABEL + " !mb-0 w-16 shrink-0 text-blue-500"}>首期預繳</label>
+                                                    <select value={financeAdvanceMonths} onChange={e => setFinanceAdvanceMonths(Number(e.target.value))} className={COMPACT_INPUT + " border-blue-200 text-blue-700"}>
+                                                        <option value="3">3 期</option><option value="6">6 期</option>
                                                     </select>
                                                 </div>
+                                            ) : (
+                                                <div className="bg-white p-2 hidden md:block"></div> /* Empty filler */
                                             )}
-                                            <div className={financeType === 'HP' ? 'md:col-span-2' : ''}>
-                                                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1 block">平息 (Flat Rate %)</label>
-                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg p-2.5 outline-none text-sm font-bold font-mono text-slate-800 focus:ring-2 ring-blue-100 shadow-sm" />
+                                            <div className="bg-white p-2 flex items-center gap-2">
+                                                <label className={COMPACT_LABEL + " !mb-0 w-12 shrink-0"}>平息%</label>
+                                                <input type="number" step="0.01" value={financeRate} onChange={e => setFinanceRate(Number(e.target.value))} className={COMPACT_INPUT + " font-mono text-center"} />
                                             </div>
                                         </div>
 
                                         {calcResult.error ? (
-                                            <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-600 text-sm text-center font-bold flex items-center justify-center">
-                                                <AlertTriangle size={18} className="mr-2"/> {calcResult.error}
-                                            </div>
+                                            <div className="bg-red-50 border border-red-200 p-3 rounded-lg text-red-600 text-[11px] text-center font-bold flex items-center justify-center"><AlertTriangle size={14} className="mr-1.5"/> {calcResult.error}</div>
                                         ) : (
                                             <>
-                                                <div className="bg-blue-50/50 rounded-xl p-5 border border-blue-100 shadow-sm mt-4">
-                                                    <div className="flex flex-col sm:flex-row justify-between sm:items-end border-b border-blue-200 pb-4 mb-4 gap-2">
-                                                        <div>
-                                                            <span className="font-black text-blue-900 text-lg">每月輕鬆供款</span>
-                                                            <span className="block text-[10px] font-bold text-blue-500 uppercase mt-0.5">Monthly Installment</span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="text-4xl font-black text-red-600 font-mono tracking-tighter drop-shadow-sm">
-                                                                ${calcResult.monthlyInstallment?.toLocaleString()}
-                                                            </span>
-                                                            {financeType === 'Lease' && (
-                                                                <div className="text-[10px] text-slate-500 font-bold mt-1">
-                                                                    扣除首期後，剩餘需供期數: <span className="text-red-500 font-black">{financeMonths - financeAdvanceMonths}</span> 期
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                {/* 📌 結果展示區 (緊湊化) */}
+                                                <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100 shadow-sm flex flex-col md:flex-row justify-between md:items-center gap-4">
+                                                    <div className="flex-1">
+                                                        <span className="font-black text-blue-900 text-sm">每月輕鬆供款</span>
+                                                        <span className="text-2xl md:text-3xl font-black text-red-600 font-mono tracking-tighter block mt-1">${calcResult.monthlyInstallment?.toLocaleString()}</span>
+                                                        {financeType === 'Lease' && <div className="text-[9px] text-slate-500 font-bold mt-1">扣除預繳，剩餘需供期數: <span className="text-red-500 font-black">{financeMonths - financeAdvanceMonths}</span> 期</div>}
                                                     </div>
-                                                    <div className="flex flex-wrap justify-between items-center text-sm font-mono font-bold text-slate-600 gap-2">
-                                                        <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex-1 text-center">銀行放款額: ${calcResult.loanAmount?.toLocaleString()}</span>
-                                                        <span className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm flex-1 text-center">總利息: ${calcResult.totalInterest?.toLocaleString()}</span>
+                                                    <div className="flex md:flex-col gap-2 shrink-0 w-full md:w-auto">
+                                                        <span className="bg-white px-3 py-1.5 rounded text-xs font-mono font-bold text-slate-600 border shadow-sm flex-1 md:flex-none text-center">放款額: ${calcResult.loanAmount?.toLocaleString()}</span>
+                                                        <span className="bg-white px-3 py-1.5 rounded text-xs font-mono font-bold text-slate-600 border shadow-sm flex-1 md:flex-none text-center">總利息: ${calcResult.totalInterest?.toLocaleString()}</span>
                                                     </div>
                                                 </div>
 
-                                                {/* ✅ 升級：上會執行與入帳控制台 */}
-                                                <div className="mt-5 border-t border-blue-200 pt-5">
-                                                    <h4 className="font-bold text-blue-900 mb-3 flex items-center">
-                                                        <CheckCircle size={18} className="mr-2"/> 上會狀態與放款入帳
-                                                    </h4>
-                                                    <div className="flex flex-wrap items-end gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                                        <div>
-                                                            <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">上會狀態</label>
-                                                            <select value={financeStatus} onChange={e => setFinanceStatus(e.target.value as any)} className={`p-2 rounded-lg text-sm font-bold outline-none border ${financeStatus === 'Confirmed' ? 'bg-green-50 text-green-700 border-green-300' : 'bg-slate-50 text-slate-600 border-slate-300'}`}>
-                                                                <option value="Pending">📝 試算中 (Pending)</option>
-                                                                <option value="Confirmed">✅ 已確定上會 (Confirmed)</option>
-                                                            </select>
-                                                        </div>
-                                                        
-                                                        {financeStatus === 'Confirmed' && (
-                                                            <>
-                                                                <div>
-                                                                    <label className="text-[10px] text-slate-500 font-bold uppercase mb-1 block">銀行放款日 / 起供日</label>
-                                                                    <input type="date" value={financeStartDate} onChange={e => setFinanceStartDate(e.target.value)} className="p-2 border border-slate-300 rounded-lg text-sm font-mono font-bold text-slate-700 outline-none" />
-                                                                </div>
-                                                                <button 
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.preventDefault();
-                                                                        // 智能防呆：檢查是否已經入過帳
-                                                                        const isAlreadyAdded = (v.payments || []).some((p:any) => p.note === '銀行貸款放款');
-                                                                        if (isAlreadyAdded) {
-                                                                            alert('⚠️ 系統提示：此車輛已存在「銀行貸款放款」的收款紀錄，請勿重複入帳。');
-                                                                            return;
-                                                                        }
-                                                                        const obj = { 
-                                                                            id: `loan_${Date.now()}`, 
-                                                                            date: financeStartDate, 
-                                                                            type: 'Bank Loan (銀行放款)', 
-                                                                            method: 'Transfer', 
-                                                                            amount: calcResult.loanAmount || 0, // ✅ 加上預設值
-                                                                            note: `銀行貸款放款` 
-                                                                        };
-                                                                        if (v.id) { addPayment(v.id, obj as any); } 
-                                                                        else { setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] })); }
-                                                                        // ✅ 加上括號與預設值
-                                                                        alert(`✅ 銀行放款金額 ($${(calcResult.loanAmount || 0).toLocaleString()}) 已成功轉入「銷售與收款」分頁中，抵扣客人尾數！\n請記得點擊右下角「儲存變更」。`);
-                                                                    }}
-                                                                    className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs uppercase font-black hover:bg-slate-700 shadow-sm active:scale-95 transition-transform flex items-center h-[38px]"
-                                                                >
-                                                                    <DollarSign size={14} className="mr-1"/> 轉入收款抵銷尾數
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
+                                                {/* 📌 上會執行與入帳 (高度縮減) */}
+                                                <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 shadow-sm mt-4">
+                                                    <span className="text-[10px] font-bold text-slate-500 flex items-center shrink-0 w-full md:w-auto mb-1 md:mb-0"><CheckCircle size={14} className="mr-1"/> 狀態:</span>
+                                                    <select value={financeStatus} onChange={e => setFinanceStatus(e.target.value as any)} className={COMPACT_INPUT + ` md:w-32 ${financeStatus === 'Confirmed' ? 'bg-green-50 text-green-700 border-green-300' : ''}`}>
+                                                        <option value="Pending">📝 試算中</option><option value="Confirmed">✅ 已確定上會</option>
+                                                    </select>
+                                                    {financeStatus === 'Confirmed' && (
+                                                        <>
+                                                            <input type="date" value={financeStartDate} onChange={e => setFinanceStartDate(e.target.value)} className={COMPACT_INPUT + " md:w-32 font-mono shrink-0"} title="起供日/放款日" />
+                                                            <button 
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    const isAlreadyAdded = (v.payments || []).some((p:any) => p.note === '銀行貸款放款');
+                                                                    if (isAlreadyAdded) return alert('⚠️ 此車輛已存在「銀行貸款放款」紀錄。');
+                                                                    const obj = { id: `loan_${Date.now()}`, date: financeStartDate, type: 'Bank Loan (銀行放款)', method: 'Transfer', amount: calcResult.loanAmount || 0, note: `銀行貸款放款` };
+                                                                    if (v.id) addPayment(v.id, obj as any); else setEditingVehicle((prev: any) => ({ ...prev, payments: [...(prev.payments || []), obj] }));
+                                                                    alert(`✅ 銀行放款金額 ($${(calcResult.loanAmount || 0).toLocaleString()}) 已轉入「銷售與收款」分頁中！`);
+                                                                }}
+                                                                className="h-8 px-3 bg-slate-800 text-white rounded-lg text-[10px] font-bold hover:bg-slate-700 shadow-sm active:scale-95 flex items-center flex-1 md:flex-none justify-center whitespace-nowrap"
+                                                            ><DollarSign size={12} className="mr-0.5"/> 轉入收款抵尾數</button>
+                                                        </>
+                                                    )}
                                                 </div>
 
-                                                {/* ★ 七十八法則 贖會試算引擎 (下方代碼保持不變) */}
-
-                                                {/* ★ 七十八法則 贖會試算引擎 */}
-                                                <div className="bg-orange-50/50 p-4 rounded-xl border border-orange-200 mt-4 shadow-sm">
-                                                    <h4 className="text-orange-800 font-bold text-sm mb-3 flex items-center">
-                                                        <History size={16} className="mr-2"/> 提早贖會試算 (Rule of 78)
-                                                    </h4>
-                                                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                                                        <div className="flex-1 w-full relative">
-                                                            <span className="absolute top-[-10px] left-2 bg-orange-50 px-1 text-[10px] text-orange-600 font-bold">假設已供期數</span>
-                                                            <input type="range" min="1" max={financeMonths - 1} value={settleMonthsPaid} onChange={e => setSettledMonthsPaid(Number(e.target.value))} className="w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer accent-orange-600"/>
-                                                            <div className="text-center mt-2 font-mono font-black text-orange-700">{settleMonthsPaid} 個月</div>
+                                                {/* 📌 七十八法則 (緊湊版) */}
+                                                <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-200 shadow-sm flex flex-col md:flex-row items-center gap-3 mt-4">
+                                                    <div className="w-full md:w-1/3 flex flex-col justify-center">
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <span className="text-[9px] text-orange-600 font-bold flex items-center"><History size={10} className="mr-1"/> 已供期數</span>
+                                                            <span className="font-mono font-black text-orange-700 text-xs">{settleMonthsPaid} 個月</span>
                                                         </div>
-                                                        <div className="flex-1 w-full bg-white p-3 rounded-lg border border-orange-200 text-center">
-                                                            <div className="text-[10px] text-slate-500 font-bold mb-1">未到期利息回贈</div>
-                                                            <div className="text-lg font-mono font-bold text-green-600">-${(settleResult?.interestRebate || 0).toLocaleString()}</div>
+                                                        <input type="range" min="1" max={financeMonths - 1} value={settleMonthsPaid} onChange={e => setSettledMonthsPaid(Number(e.target.value))} className="w-full h-1.5 bg-orange-200 rounded-lg appearance-none cursor-pointer accent-orange-600"/>
+                                                    </div>
+                                                    <div className="flex flex-1 gap-2 w-full">
+                                                        <div className="bg-white p-2 rounded border border-orange-200 text-center flex-1">
+                                                            <div className="text-[9px] text-slate-500 font-bold">未到期利息回贈</div>
+                                                            <div className="text-sm font-mono font-bold text-green-600">-${(settleResult?.interestRebate || 0).toLocaleString()}</div>
                                                         </div>
-                                                        <div className="flex-1 w-full bg-orange-600 p-3 rounded-lg shadow-md text-center text-white">
-                                                            <div className="text-[10px] font-bold opacity-80 mb-1">預估結清金額 (未計手續費)</div>
-                                                            <div className="text-xl font-mono font-black">${(settleResult?.settlementAmount || 0).toLocaleString()}</div>
+                                                        <div className="bg-orange-600 p-2 rounded shadow-sm text-center text-white flex-1">
+                                                            <div className="text-[9px] font-bold opacity-90">預估結清(未計手續)</div>
+                                                            <div className="text-sm font-mono font-black">${(settleResult?.settlementAmount || 0).toLocaleString()}</div>
                                                         </div>
                                                     </div>
                                                 </div>
 
-                                                {/* 內部佣金區塊 */}
+                                                {/* 📌 內部佣金區塊 (緊湊化) */}
                                                 {(staffId === 'BOSS' || currentUser?.modules?.includes('all') || currentUser?.dataAccess === 'all') && (
-                                                    <div className="bg-slate-800 border border-slate-700 p-5 rounded-xl mt-6 shadow-lg relative overflow-hidden">
-                                                        <Building2 size={100} className="absolute right-0 bottom-0 opacity-5 -translate-y-4 translate-x-4"/>
-                                                        <div className="flex justify-between items-center relative z-10">
-                                                            <div>
-                                                                <h4 className="text-sm font-black text-yellow-500 uppercase tracking-widest flex items-center">
-                                                                    <Building2 size={16} className="mr-2"/> 內部機密 (佣金預估)
-                                                                </h4>
-                                                                <p className="text-[10px] text-slate-400 mt-1 font-mono">
-                                                                    {isUsedCar ? '二手車表' : '新車表'} | 利率 {financeRate.toFixed(2)}% | 回佣率: {calcResult.commissionRate}%
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-3xl font-black text-green-400 font-mono">
-                                                                ${calcResult.dealerCommission?.toLocaleString()}
-                                                            </div>
+                                                    <div className="bg-slate-800 p-3 rounded-xl mt-4 shadow-sm flex justify-between items-center relative overflow-hidden">
+                                                        <Building2 size={60} className="absolute right-0 opacity-[0.03] translate-x-2 -translate-y-2"/>
+                                                        <div className="relative z-10 flex flex-col">
+                                                            <span className="text-[10px] font-black text-yellow-500 uppercase flex items-center"><Building2 size={12} className="mr-1"/> 內部佣金預估</span>
+                                                            <span className="text-[9px] text-slate-400 font-mono mt-0.5">{isUsedCar ? '二手表' : '新車表'} | 回佣: {calcResult.commissionRate}%</span>
                                                         </div>
+                                                        <div className="text-xl font-black text-green-400 font-mono relative z-10">${calcResult.dealerCommission?.toLocaleString()}</div>
                                                     </div>
                                                 )}
                                             </>
