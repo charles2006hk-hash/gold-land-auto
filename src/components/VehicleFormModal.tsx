@@ -2652,42 +2652,40 @@ const VehicleFormModal = ({
                                     })()}
                                 </div>
 
-                                {/* 新增維修 */}
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 w-full">
-                                    <div className="text-xs font-bold text-slate-600 mb-3">新增紀錄 (New Service)</div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-                                        <input type="date" value={newMaintenance.date} onChange={e => setNewMaintenance({...newMaintenance, date: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-700"/>
+                                {/* 📌 新增維修紀錄 (New Service) */}
+                                <div className="bg-slate-100/50 p-2.5 rounded-xl border border-slate-200 w-full mt-4">
+                                    <div className="flex flex-col md:flex-row gap-2 items-center">
+                                        <div className="flex w-full md:w-auto gap-2 shrink-0">
+                                            <input type="date" value={newMaintenance.date} onChange={e => setNewMaintenance({...newMaintenance, date: e.target.value})} className={COMPACT_INPUT + " md:w-28 font-mono"}/>
+                                        </div>
                                         
-                                        {/* ★ 維修項目下拉與手動輸入 */}
-                                        <div className="w-full lg:col-span-2">
-                                            <input list="maint_item_list" placeholder="維修/服務項目 (下拉選擇或手動輸入)..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white font-bold text-slate-800"/>
+                                        <div className="flex-1 w-full flex flex-col sm:flex-row gap-2 min-w-0">
+                                            <input list="maint_item_list" placeholder="維修/服務項目..." value={newMaintenance.item} onChange={e => setNewMaintenance({...newMaintenance, item: e.target.value})} className={COMPACT_INPUT + " flex-1"}/>
                                             <datalist id="maint_item_list">
                                                 {settings.expenseTypes.map((t: any, i: number) => { const name = typeof t === 'string' ? t : t.name; return <option key={i} value={name}>{name}</option>; })}
                                             </datalist>
-                                        </div>
-                                        
-                                        {/* ★ 車房下拉與手動輸入 */}
-                                        <div className="w-full">
-                                            <input list="maint_vendor_list" placeholder="車房 / 代理名稱" value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className="w-full text-sm p-2 border rounded-lg outline-none bg-white"/>
+                                            <input list="maint_vendor_list" placeholder="車房 / 代理名稱..." value={newMaintenance.vendor} onChange={e => setNewMaintenance({...newMaintenance, vendor: e.target.value})} className={COMPACT_INPUT + " flex-1"}/>
                                             <datalist id="maint_vendor_list">
                                                 {settings.expenseCompanies?.map((c: string) => <option key={c} value={c}>{c}</option>)}
                                             </datalist>
                                         </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-                                        <div className="lg:col-span-2 relative">
-                                            <span className="absolute top-[-16px] left-1 text-[10px] text-red-500 font-bold uppercase">成本 (給車房)</span>
-                                            <input type="text" placeholder="$ 成本金額" value={newMaintenance.cost} onChange={e => setNewMaintenance({...newMaintenance, cost: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-red-200 rounded-lg outline-none bg-red-50/50 text-right font-mono font-bold text-red-600"/>
+
+                                        <div className="flex w-full md:w-auto gap-2 shrink-0 items-end">
+                                            <div className="relative flex-1 md:flex-none">
+                                                <span className="absolute -top-1.5 left-2 bg-slate-100 px-1 text-[8px] text-red-500 font-bold uppercase z-10">成本(OUT)</span>
+                                                <input type="text" placeholder="$0" value={newMaintenance.cost} onChange={e => setNewMaintenance({...newMaintenance, cost: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " w-full md:w-24 text-right font-mono font-bold text-red-600"}/>
+                                            </div>
+                                            <div className="relative flex-1 md:flex-none">
+                                                <span className="absolute -top-1.5 left-2 bg-slate-100 px-1 text-[8px] text-blue-500 font-bold uppercase z-10">收費(IN)</span>
+                                                <input type="text" placeholder="$0" value={newMaintenance.charge} onChange={e => setNewMaintenance({...newMaintenance, charge: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " w-full md:w-24 text-right font-mono font-bold text-blue-700"}/>
+                                            </div>
+                                            <button type="button" onClick={handleAddMaintenance} className="h-8 px-4 bg-slate-800 text-white text-[10px] rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform shadow-sm">新增</button>
                                         </div>
-                                        <div className="lg:col-span-2 relative">
-                                            <span className="absolute top-[-16px] left-1 text-[10px] text-blue-500 font-bold uppercase">收費 (對客收)</span>
-                                            <input type="text" placeholder="$ 收費金額" value={newMaintenance.charge} onChange={e => setNewMaintenance({...newMaintenance, charge: formatNumberInput(e.target.value)})} className="w-full text-sm p-2 border border-blue-200 rounded-lg outline-none bg-blue-50/50 text-right font-mono font-bold text-blue-700"/>
-                                        </div>
-                                        <button type="button" onClick={handleAddMaintenance} className="w-full bg-slate-800 text-white text-sm py-2 px-4 rounded-lg hover:bg-slate-900 font-bold active:scale-95 transition-transform shadow-md">新增紀錄</button>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
                     
                     {/* ===== Tab 3: 中港車管家 (Cross-Border) ===== */}
                     <div className={`${rightTab === 'cb' ? 'block' : 'hidden'} animate-fade-in pb-10 w-full`}>
