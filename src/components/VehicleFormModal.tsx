@@ -2110,36 +2110,45 @@ const VehicleFormModal = ({
                             {/* 已加入項目列表 */}
                             <div className="bg-slate-50">
                                 {((v as any).salesAddons || []).map((addon: any) => (
-                                    <div key={addon.id} className="flex items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors group">
-                                        <input 
-                                            type="text" value={addon.name} onChange={(e) => handleUpdateAddon(addon.id, 'name', e.target.value)}
-                                            className="flex-1 bg-transparent text-xs font-bold text-slate-700 outline-none border-b border-transparent focus:border-indigo-300"
-                                        />
-                                        <label className="flex items-center gap-1 cursor-pointer">
-                                            <input type="checkbox" checked={addon.isFree || false} onChange={(e) => handleUpdateAddon(addon.id, 'isFree', e.target.checked)} className="accent-indigo-600 w-3 h-3"/>
-                                            <span className="text-[9px] font-bold text-slate-400 select-none">贈送</span>
-                                        </label>
-                                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 rounded-md h-7 focus-within:border-indigo-400">
-                                            <span className="text-[10px] font-bold text-slate-400">$</span>
+                                    <div key={addon.id} className="flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors group">
+                                        <div className="flex-1 relative min-w-0">
                                             <input 
-                                                disabled={addon.isFree} value={formatNumberInput(String(addon.amount))}
-                                                onChange={(e) => handleUpdateAddon(addon.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)}
-                                                className={`w-16 text-right bg-transparent text-xs font-mono font-bold outline-none ${addon.isFree ? 'text-slate-400 line-through' : 'text-indigo-600'}`}
+                                                type="text" value={addon.name} onChange={(e) => handleUpdateAddon(addon.id, 'name', e.target.value)}
+                                                className="w-full bg-transparent text-xs font-bold text-slate-700 outline-none border border-transparent hover:border-slate-200 focus:border-indigo-300 focus:bg-white rounded px-2 py-1 transition-colors"
                                             />
                                         </div>
-                                        <button type="button" onClick={() => handleDeleteAddonClick(addon.id)} className="text-slate-300 hover:text-red-500 p-1"><X size={14}/></button>
+                                        <div className="flex items-center gap-2 justify-end shrink-0">
+                                            <label className="flex items-center gap-1 cursor-pointer mr-2">
+                                                <input type="checkbox" checked={addon.isFree || false} onChange={(e) => handleUpdateAddon(addon.id, 'isFree', e.target.checked)} className="accent-indigo-600 w-3 h-3"/>
+                                                <span className="text-[9px] font-bold text-slate-400 select-none">贈送</span>
+                                            </label>
+                                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 rounded-md h-7 focus-within:border-indigo-400">
+                                                <span className="text-[10px] font-bold text-slate-400">$</span>
+                                                <input 
+                                                    disabled={addon.isFree} value={formatNumberInput(String(addon.amount))}
+                                                    onChange={(e) => handleUpdateAddon(addon.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)}
+                                                    className={`w-20 md:w-24 text-right bg-transparent text-xs font-mono font-bold outline-none ${addon.isFree ? 'text-slate-400 line-through' : 'text-indigo-600'}`}
+                                                />
+                                            </div>
+                                            <button type="button" onClick={() => handleDeleteAddonClick(addon.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 size={14}/></button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
 
                             {/* 新增操作列 */}
-                            <div className="p-2 flex gap-2 items-center bg-white">
-                                <input list="smart_addon_list" value={newAddon.name} onChange={e => setNewAddon({...newAddon, name: e.target.value})} className={COMPACT_INPUT} placeholder="項目名稱..."/>
-                                <datalist id="smart_addon_list">
-                                    {Array.from(new Set(['文件費', '轉名費', '過戶費', '上會手續費', '驗車費', ...(settings.salesAddonItems || [])])).map((item: any, idx: number) => <option key={idx} value={item}>{item}</option>)}
-                                </datalist>
-                                <input value={newAddon.amount} onChange={e => setNewAddon({...newAddon, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " w-24 text-right font-mono text-indigo-600"} placeholder="$ 金額"/>
-                                <button type="button" onClick={handleAddAddonClick} className="h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">加入</button>
+                            <div className="p-2 flex flex-col md:flex-row gap-2 items-center bg-white border-t border-slate-100">
+                                <div className="flex-1 w-full relative min-w-0">
+                                    <input list="smart_addon_list" value={newAddon.name} onChange={e => setNewAddon({...newAddon, name: e.target.value})} className={COMPACT_INPUT} placeholder="收費項目 (下拉選擇或搜尋)..."/>
+                                    <datalist id="smart_addon_list">
+                                        {Array.from(new Set(['文件費', '轉名費', '過戶費', '上會手續費', '驗車費', ...(settings.salesAddonItems || [])])).map((item: any, idx: number) => <option key={idx} value={item}>{item}</option>)}
+                                    </datalist>
+                                </div>
+                                <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+                                    <span className="text-[10px] font-bold text-slate-400 hidden md:inline">$</span>
+                                    <input value={newAddon.amount} onChange={e => setNewAddon({...newAddon, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " flex-1 md:w-24 text-right font-mono text-indigo-600"} placeholder="金額"/>
+                                    <button type="button" onClick={handleAddAddonClick} className="h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">加入收費</button>
+                                </div>
                             </div>
                         </div>
 
@@ -2153,92 +2162,99 @@ const VehicleFormModal = ({
                             {/* 歷史收款列表 */}
                             <div className="bg-slate-50">
                                 {(v.payments || []).map((p: any) => (
-                                    <div key={p.id} className="flex flex-wrap items-center gap-1.5 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors">
-                                        <input type="date" value={p.date} onChange={(e) => handleUpdatePayment(p.id, 'date', e.target.value)} className="w-24 bg-slate-100 border border-transparent focus:border-slate-300 rounded px-1 py-1 text-[10px] font-mono font-bold text-slate-600 outline-none cursor-pointer" />
+                                    <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-2 p-2 border-b border-slate-100 bg-white hover:bg-slate-50 transition-colors">
+                                        <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                                            <input type="date" value={p.date} onChange={(e) => handleUpdatePayment(p.id, 'date', e.target.value)} className="flex-1 md:w-28 bg-slate-100 hover:bg-white border border-transparent focus:border-slate-300 rounded px-2 py-1 text-[10px] font-mono font-bold text-slate-600 outline-none cursor-pointer transition-colors" />
+                                            <select value={p.type} onChange={(e) => handleUpdatePayment(p.id, 'type', e.target.value)} className="flex-1 md:w-24 bg-slate-100 hover:bg-white border border-transparent focus:border-slate-300 rounded px-2 py-1 text-[10px] font-bold text-slate-800 outline-none cursor-pointer truncate transition-colors">
+                                                {(settings.paymentTypes || ['Deposit', 'Balance']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}
+                                            </select>
+                                            <select value={p.method || 'Cash'} onChange={(e) => {
+                                                const method = e.target.value;
+                                                if (v.id) updateSubItem(v.id, 'payments', (v.payments || []).map((ex: any) => ex.id === p.id ? {...ex, method, note: method === 'Trade-in' ? '' : ex.note, tradeInVehicleId: method === 'Trade-in' ? ex.tradeInVehicleId : ''} : ex));
+                                                else setEditingVehicle((prev: any) => prev ? ({...prev, payments: (prev.payments || []).map((ex: any) => ex.id === p.id ? {...ex, method, note: method === 'Trade-in' ? '' : ex.note, tradeInVehicleId: method === 'Trade-in' ? ex.tradeInVehicleId : ''} : ex)}) : null);
+                                            }} className={`flex-1 md:w-24 border px-2 py-1 rounded text-[10px] font-bold outline-none cursor-pointer transition-colors ${p.method === 'Trade-in' ? 'bg-orange-50 text-orange-700 border-orange-200 focus:border-orange-400' : 'bg-blue-50 text-blue-700 border-blue-200 focus:border-blue-400'}`}>
+                                                <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數(Trade-in)</option><option value="Third-Party">直付</option>
+                                            </select>
+                                        </div>
                                         
-                                        <select value={p.type} onChange={(e) => handleUpdatePayment(p.id, 'type', e.target.value)} className="w-20 bg-slate-100 border border-transparent focus:border-slate-300 rounded px-1 py-1 text-[10px] font-bold text-slate-800 outline-none cursor-pointer truncate">
-                                            {(settings.paymentTypes || ['Deposit', 'Balance']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}
-                                        </select>
-                                        
-                                        <select value={p.method || 'Cash'} onChange={(e) => {
-                                            const method = e.target.value;
-                                            if (v.id) updateSubItem(v.id, 'payments', (v.payments || []).map((ex: any) => ex.id === p.id ? {...ex, method, note: method === 'Trade-in' ? '' : ex.note, tradeInVehicleId: method === 'Trade-in' ? ex.tradeInVehicleId : ''} : ex));
-                                            else setEditingVehicle((prev: any) => prev ? ({...prev, payments: (prev.payments || []).map((ex: any) => ex.id === p.id ? {...ex, method, note: method === 'Trade-in' ? '' : ex.note, tradeInVehicleId: method === 'Trade-in' ? ex.tradeInVehicleId : ''} : ex)}) : null);
-                                        }} className={`w-20 border px-1 py-1 rounded text-[10px] font-bold outline-none cursor-pointer ${p.method === 'Trade-in' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                                            <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數(Trade-in)</option><option value="Third-Party">直付</option>
-                                        </select>
-                                        
-                                        {/* 備註與Trade-in邏輯 */}
-                                        <div className="flex-1 min-w-[120px]">
+                                        <div className="flex-1 w-full md:w-auto min-w-0">
                                             {p.method === 'Trade-in' ? (
                                                 <input
-                                                    list={`trade_in_history_${p.id}`} value={(p.note || '').replace(/^Trade-in:\s*/, '')}
+                                                    list={`trade_in_history_${p.id}`} value={(p.note || '').replace(/^Trade-in:\s*/, '')} placeholder="搜尋舊車..."
                                                     onChange={(e) => {
                                                         const searchStr = e.target.value;
                                                         const tradeInCar = inventory?.find((car: any) => `${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}` === searchStr);
                                                         const newArr = (v.payments || []).map((ex: any) =>
                                                             ex.id === p.id ? { 
-                                                                ...ex, 
-                                                                tradeInVehicleId: tradeInCar ? tradeInCar.id : '', 
-                                                                amount: tradeInCar ? (tradeInCar.costPrice || 0) : ex.amount,
-                                                                note: tradeInCar ? `Trade-in: ${searchStr}` : searchStr 
+                                                                ...ex, tradeInVehicleId: tradeInCar ? tradeInCar.id : '', amount: tradeInCar ? (tradeInCar.costPrice || 0) : ex.amount, note: tradeInCar ? `Trade-in: ${searchStr}` : searchStr 
                                                             } : ex
                                                         );
                                                         if (v.id) updateSubItem(v.id, 'payments', newArr); else setEditingVehicle((prev: any) => prev ? { ...prev, payments: newArr } : null);
                                                     }}
-                                                    className="w-full bg-orange-50/50 border border-orange-200 rounded px-1.5 py-1 text-[10px] font-bold text-orange-700 outline-none focus:border-orange-400"
+                                                    className="w-full bg-orange-50/50 hover:bg-white border border-orange-200 rounded px-2 py-1 text-[10px] font-bold text-orange-700 outline-none focus:border-orange-400 transition-colors"
                                                 />
                                             ) : (
-                                                <input type="text" value={p.note || ''} onChange={(e) => handleUpdatePayment(p.id, 'note', e.target.value)} placeholder="備註..." className="w-full bg-transparent border-b border-transparent hover:border-slate-200 focus:border-slate-400 px-1 py-1 text-xs outline-none" />
+                                                <input type="text" value={p.note || ''} onChange={(e) => handleUpdatePayment(p.id, 'note', e.target.value)} placeholder="備註..." className="w-full bg-transparent border border-transparent hover:border-slate-200 focus:border-slate-400 focus:bg-white rounded px-2 py-1 text-xs outline-none transition-colors" />
                                             )}
                                         </div>
 
-                                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-1.5 rounded-md h-7 focus-within:border-blue-400 ml-auto">
-                                            <span className="text-[10px] font-bold text-slate-400">$</span>
-                                            <input 
-                                                value={formatNumberInput(String(p.amount))}
-                                                onChange={(e) => handleUpdatePayment(p.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)}
-                                                className="w-20 text-right bg-transparent text-xs font-mono font-black text-blue-700 outline-none"
-                                            />
+                                        <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end md:ml-auto">
+                                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 rounded-md h-7 focus-within:border-blue-400">
+                                                <span className="text-[10px] font-bold text-slate-400">$</span>
+                                                <input 
+                                                    value={formatNumberInput(String(p.amount))}
+                                                    onChange={(e) => handleUpdatePayment(p.id, 'amount', Number(e.target.value.replace(/,/g, '')) || 0)}
+                                                    className="w-20 md:w-24 text-right bg-transparent text-xs font-mono font-black text-blue-700 outline-none"
+                                                />
+                                            </div>
+                                            {!p.relatedTaskId && <button type="button" onClick={() => handleDeletePaymentClick(p.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 size={14}/></button>}
                                         </div>
-                                        
-                                        {!p.relatedTaskId && <button type="button" onClick={() => handleDeletePaymentClick(p.id)} className="text-slate-300 hover:text-red-500 p-1"><X size={14}/></button>}
                                     </div>
                                 ))}
                             </div>
 
                             {/* 新增收款操作列 */}
-                            <div className="p-2 flex flex-wrap gap-2 items-center bg-white border-t border-slate-100">
-                                <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className={COMPACT_INPUT + " w-auto font-mono"}/>
-                                <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className={COMPACT_INPUT + " w-24 cursor-pointer"}>{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
-                                <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value, note: '', tradeInVehicleId: '', amount: ''})} className={`${COMPACT_INPUT} w-24 cursor-pointer ${newPayment.method === 'Trade-in' ? 'text-orange-700' : ''}`}>
-                                    <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數</option><option value="Third-Party">直付</option>
-                                </select>
+                            <div className="p-2 flex flex-col md:flex-row gap-2 items-center bg-white border-t border-slate-100">
+                                <div className="flex w-full md:w-auto gap-2">
+                                    <input type="date" value={newPayment.date} onChange={e => setNewPayment({...newPayment, date: e.target.value})} className={COMPACT_INPUT + " flex-1 md:w-28 font-mono shrink-0"}/>
+                                    <select value={newPayment.type} onChange={e => setNewPayment({...newPayment, type: e.target.value as any})} className={COMPACT_INPUT + " flex-1 md:w-24 cursor-pointer shrink-0"}>{(settings.paymentTypes || ['Deposit']).map((pt: string) => <option key={pt} value={pt}>{pt}</option>)}</select>
+                                    <select value={newPayment.method} onChange={e => setNewPayment({...newPayment, method: e.target.value, note: '', tradeInVehicleId: '', amount: ''})} className={`${COMPACT_INPUT} flex-1 md:w-24 cursor-pointer shrink-0 ${newPayment.method === 'Trade-in' ? 'text-orange-700 focus:border-orange-400 focus:ring-orange-100' : ''}`}>
+                                        <option value="Cash">現金</option><option value="Cheque">支票</option><option value="Transfer">轉帳</option><option value="USDT">USDT</option><option value="Trade-in">對數(Trade-in)</option><option value="Third-Party">直付</option>
+                                    </select>
+                                </div>
                                 
-                                <div className="flex-1 min-w-[120px]">
+                                <div className="flex-1 w-full min-w-0 relative">
                                     {newPayment.method === 'Trade-in' ? (
-                                        <input list="trade_in_list_new" placeholder="搜尋舊車..." value={newPayment.note.replace(/^Trade-in:\s*/, '')}
-                                            onChange={e => {
-                                                const searchStr = e.target.value;
-                                                const tradeInCar = inventory?.find((car: any) => `${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}` === searchStr);
-                                                if (tradeInCar) setNewPayment({...newPayment, tradeInVehicleId: tradeInCar.id, amount: formatNumberInput(String(tradeInCar.costPrice || 0)), note: `Trade-in: ${searchStr}`});
-                                                else setNewPayment({...newPayment, tradeInVehicleId: '', amount: '', note: searchStr});
-                                            }}
-                                            className={`${COMPACT_INPUT} bg-orange-50 focus:bg-white text-orange-700 border-orange-200 focus:border-orange-400`}
-                                        />
+                                        <>
+                                            <input list="trade_in_list_new" placeholder="搜尋舊車..." value={newPayment.note.replace(/^Trade-in:\s*/, '')}
+                                                onChange={e => {
+                                                    const searchStr = e.target.value;
+                                                    const tradeInCar = inventory?.find((car: any) => `${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}` === searchStr);
+                                                    if (tradeInCar) setNewPayment({...newPayment, tradeInVehicleId: tradeInCar.id, amount: formatNumberInput(String(tradeInCar.costPrice || 0)), note: `Trade-in: ${searchStr}`});
+                                                    else setNewPayment({...newPayment, tradeInVehicleId: '', amount: '', note: searchStr});
+                                                }}
+                                                className={`${COMPACT_INPUT} bg-orange-50 focus:bg-white text-orange-700 border-orange-200 focus:border-orange-400 focus:ring-orange-100`}
+                                            />
+                                            <datalist id="trade_in_list_new">
+                                                {inventory?.filter((car: any) => car.id !== v.id).map((car: any) => (
+                                                    <option key={car.id} value={`${car.regMark || '未出牌'} - ${car.make || ''} ${car.model || ''}`}>收車本金: {formatCurrency(car.costPrice || 0)}</option>
+                                                ))}
+                                            </datalist>
+                                        </>
                                     ) : (
                                         <input type="text" placeholder="備註..." value={newPayment.note} onChange={e => setNewPayment({...newPayment, note: e.target.value})} className={COMPACT_INPUT}/>
                                     )}
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <input value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " w-24 text-right font-mono font-black text-blue-700"} placeholder="$ 金額"/>
+                                <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
+                                    <span className="text-[10px] font-bold text-slate-400 hidden md:inline">$</span>
+                                    <input value={newPayment.amount} onChange={e => setNewPayment({...newPayment, amount: formatNumberInput(e.target.value)})} className={COMPACT_INPUT + " flex-1 md:w-28 text-right font-mono font-black text-blue-700"} placeholder="金額"/>
                                     <button type="button" onClick={handleAddPaymentClick} className="h-8 px-4 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-lg shadow-sm whitespace-nowrap active:scale-95 transition-transform">收款</button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
+
                     {/* ===== Tab 2: 進貨與成本 (Acquisition & Costs) ===== */}
                     <div className={`${rightTab === 'cost' ? 'block' : 'hidden'} space-y-6 animate-fade-in w-full`}>
 
